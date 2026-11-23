@@ -1014,17 +1014,17 @@ static void *g_race250_sel17_fn(void *arg) {
     IOServiceOpen(g_race250_svc, mach_task_self(), 0, &my_conn);
     if (!my_conn) return NULL;
     uint64_t inp[3] = {1, 2, 3};
+    mach_port_t wp = MACH_PORT_NULL;
+    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+    mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
     while (g_race250_run) {
-        mach_port_t wp = MACH_PORT_NULL;
-        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
-        mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
         uint64_t ref = 0xD250;
         kern_return_t kr = IOConnectCallAsyncMethod(my_conn, 17, wp, &ref, 1,
             NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
         if (kr == 0) __sync_fetch_and_add(&g_race250_reg_ok, 1);
         else __sync_fetch_and_add(&g_race250_reg_fail, 1);
-        mach_port_deallocate(mach_task_self(), wp);
     }
+    mach_port_deallocate(mach_task_self(), wp);
     IOServiceClose(my_conn);
     return NULL;
 }
