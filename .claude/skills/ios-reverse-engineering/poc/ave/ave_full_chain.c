@@ -1742,6 +1742,230 @@ static volatile int r264_probed = 0;
  * Operations must go through traps, shared memory, or different client types. */
 static volatile int r265_probed = 0;
 
+/* r270: IOSurfaceClient* APIs + SetCFProperty + ExclusiveAccess investigation.
+ * r269 found: SetCFProperties returns kIOReturnExclusiveAccess (0xe00002e2)
+ *   — kernel setProperties() IS IMPLEMENTED but locked.
+ * Also found: IOSurfaceClientCreate/Release/Lookup/Lock exist.
+ * Also: IOSurfaceCopyDataValueBytes, IOSurfaceFlushProcessorCaches.
+ * This round explores these new API surfaces. */
+static volatile int r270_probed = 0;
+
+static void r270_probe(IOSurfaceRef surf) {
+    uint32_t sid = IOSurfaceGetID(surf);
+    kern_return_t kr;
+
+    rlog("\n=== r270: IOSurfaceClient APIs + SetCFProperty + ExclusiveAccess ===\n");
+    fflush(stdout);
+
+    mach_port_t sp = IOSurfaceCreateMachPort(surf);
+    rlog("  surfMachPort=%u surfID=%u\n", sp, sid);
+    fflush(stdout);
+
+    io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    io_connect_t conn = IO_OBJECT_NULL;
+    IOServiceOpen(svc, mach_task_self(), 0, &conn);
+    rlog("  conn=%u\n", conn);
+    fflush(stdout);
+
+    void *iosfc = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_LAZY);
+    void *iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY);
+
+    /* Part 1: IOSurfaceClientCreate/Lookup/Lock */
+    rlog("\n  --- Part 1: IOSurfaceClient APIs ---\n"); fflush(stdout);
+    {
+        typedef void* (*clientcreate_t)(uint32_t);
+        typedef void (*clientrelease_t)(void*);
+        typedef void* (*clientlookup_t)(uint32_t);
+        typedef kern_return_t (*clientlock_t)(void*, uint32_t, uint32_t*);
+
+        clientcreate_t clientCreate = (clientcreate_t)dlsym(iosfc, "IOSurfaceClientCreate");
+        clientrelease_t clientRelease = (clientrelease_t)dlsym(iosfc, "IOSurfaceClientRelease");
+        clientlookup_t clientLookup = (clientlookup_t)dlsym(iosfc, "IOSurfaceClientLookup");
+        clientlock_t clientLock = (clientlock_t)dlsym(iosfc, "IOSurfaceClientLock");
+
+        rlog("    ClientCreate=%p ClientRelease=%p ClientLookup=%p ClientLock=%p\n",
+            clientCreate, clientRelease, clientLookup, clientLock);
+        fflush(stdout);
+
+        if (clientCreate) {
+            void *client = clientCreate(sid);
+            rlog("    ClientCreate(%u) = %p\n", sid, client);
+            fflush(stdout);
+
+            if (client && clientLock) {
+                uint32_t seed = 0;
+                kr = clientLock(client, 0, &seed);
+                rlog("    ClientLock(client, 0, &seed): kr=0x%x seed=%u\n", kr, seed);
+                fflush(stdout);
+            }
+
+            if (client && clientRelease) {
+                clientRelease(client);
+                rlog("    ClientRelease(client) done\n"); fflush(stdout);
+            }
+        }
+
+        if (clientLookup) {
+            void *client2 = clientLookup(sid);
+            rlog("    ClientLookup(%u) = %p\n", sid, client2);
+            fflush(stdout);
+            if (client2 && clientRelease) {
+                clientRelease(client2);
+            }
+        }
+    }
+
+    /* Part 2: IOSurfaceCopyDataValueBytes */
+    rlog("\n  --- Part 2: IOSurfaceCopyDataValueBytes ---\n"); fflush(stdout);
+    {
+        typedef CFDataRef (*copydatabytes_t)(IOSurfaceRef, CFStringRef);
+        copydatabytes_t copyDataBytes = (copydatabytes_t)dlsym(iosfc, "IOSurfaceCopyDataValueBytes");
+        if (copyDataBytes) {
+            CFDataRef data = copyDataBytes(surf, CFSTR("IOSurfaceAllocSize"));
+            rlog("    CopyDataValueBytes(IOSurfaceAllocSize) = %p", data);
+            if (data) {
+                rlog(" len=%ld", CFDataGetLength(data));
+                CFRelease(data);
+            }
+            rlog("\n"); fflush(stdout);
+        }
+
+        typedef void (*setdatabytes_t)(IOSurfaceRef, CFStringRef, const void*, size_t);
+        setdatabytes_t setDataBytes = (setdatabytes_t)dlsym(iosfc, "IOSurfaceSetDataValueBytes");
+        if (setDataBytes) {
+            rlog("    FOUND: IOSurfaceSetDataValueBytes = %p\n", setDataBytes);
+            fflush(stdout);
+        }
+    }
+
+    /* Part 3: IOSurfaceCopyAllValues + manipulation */
+    rlog("\n  --- Part 3: IOSurfaceCopyAllValues ---\n"); fflush(stdout);
+    {
+        typedef CFDictionaryRef (*copyall_t)(IOSurfaceRef);
+        typedef void (*removeall_t)(IOSurfaceRef);
+        copyall_t copyAll = (copyall_t)dlsym(iosfc, "IOSurfaceCopyAllValues");
+        removeall_t removeAll = (removeall_t)dlsym(iosfc, "IOSurfaceRemoveAllValues");
+
+        if (copyAll) {
+            CFDictionaryRef all = copyAll(surf);
+            rlog("    CopyAllValues = %p", all);
+            if (all) {
+                rlog(" count=%ld", CFDictionaryGetCount(all));
+                CFRelease(all);
+            }
+            rlog("\n"); fflush(stdout);
+        }
+    }
+
+    /* Part 4: IOConnectSetCFProperty (single property) — maybe different access? */
+    rlog("\n  --- Part 4: IOConnectSetCFProperty (single) ---\n"); fflush(stdout);
+    {
+        typedef kern_return_t (*setcfprop_t)(io_connect_t, CFStringRef, CFTypeRef);
+        setcfprop_t setCFProp = (setcfprop_t)dlsym(iokit, "IOConnectSetCFProperty");
+        if (setCFProp) {
+            CFNumberRef sidNum = CFNumberCreate(NULL, kCFNumberIntType, &sid);
+            kr = setCFProp(conn, CFSTR("IOSurfaceID"), sidNum);
+            rlog("    SetCFProperty(IOSurfaceID, %u): 0x%x\n", sid, kr); fflush(stdout);
+            CFRelease(sidNum);
+
+            int spInt = (int)sp;
+            CFNumberRef spNum = CFNumberCreate(NULL, kCFNumberIntType, &spInt);
+            kr = setCFProp(conn, CFSTR("IOSurfacePort"), spNum);
+            rlog("    SetCFProperty(IOSurfacePort, %u): 0x%x\n", sp, kr); fflush(stdout);
+            CFRelease(spNum);
+
+            int cmd = 1;
+            CFNumberRef cmdNum = CFNumberCreate(NULL, kCFNumberIntType, &cmd);
+            kr = setCFProp(conn, CFSTR("IOSurfaceReleaseID"), cmdNum);
+            rlog("    SetCFProperty(IOSurfaceReleaseID, 1): 0x%x\n", kr); fflush(stdout);
+            CFRelease(cmdNum);
+
+            CFNumberRef sidNum2 = CFNumberCreate(NULL, kCFNumberIntType, &sid);
+            kr = setCFProp(conn, CFSTR("IOSurfaceLookupID"), sidNum2);
+            rlog("    SetCFProperty(IOSurfaceLookupID, %u): 0x%x\n", sid, kr); fflush(stdout);
+            CFRelease(sidNum2);
+        }
+    }
+
+    /* Part 5: IOSurfaceFlushProcessorCaches */
+    rlog("\n  --- Part 5: IOSurfaceFlushProcessorCaches ---\n"); fflush(stdout);
+    {
+        typedef kern_return_t (*flushcaches_t)(IOSurfaceRef);
+        flushcaches_t flushCaches = (flushcaches_t)dlsym(iosfc, "IOSurfaceFlushProcessorCaches");
+        if (flushCaches) {
+            kr = flushCaches(surf);
+            rlog("    FlushProcessorCaches: 0x%x\n", kr); fflush(stdout);
+        }
+    }
+
+    /* Part 6: IORegistryEntryGetProperty on IOSurfaceRoot service */
+    rlog("\n  --- Part 6: IORegistry property read ---\n"); fflush(stdout);
+    {
+        typedef kern_return_t (*reggetprop_t)(io_registry_entry_t, const char*, char*, uint32_t*);
+        reggetprop_t regGetProp = (reggetprop_t)dlsym(iokit, "IORegistryEntryGetProperty");
+
+        CFMutableDictionaryRef svcProps = NULL;
+        kr = IORegistryEntryCreateCFProperties(svc, &svcProps, kCFAllocatorDefault, 0);
+        rlog("    IORegistryEntryCreateCFProperties(svc): 0x%x", kr);
+        if (svcProps) {
+            rlog(" count=%ld", CFDictionaryGetCount(svcProps));
+            /* Log some key names */
+            CFIndex cnt = CFDictionaryGetCount(svcProps);
+            if (cnt > 0 && cnt < 50) {
+                const void **keys = (const void**)malloc(sizeof(void*) * cnt);
+                CFDictionaryGetKeysAndValues(svcProps, keys, NULL);
+                for (CFIndex i = 0; i < cnt && i < 10; i++) {
+                    char buf[128] = {0};
+                    CFStringGetCString((CFStringRef)keys[i], buf, sizeof(buf), kCFStringEncodingUTF8);
+                    rlog("\n      key[%ld]: %s", i, buf);
+                }
+                free(keys);
+            }
+            CFRelease(svcProps);
+        }
+        rlog("\n"); fflush(stdout);
+
+        /* Also check the connection's properties */
+        io_service_t connSvc = IO_OBJECT_NULL;
+        kr = IOConnectGetService(conn, &connSvc);
+        rlog("    IOConnectGetService(conn): 0x%x svc=%u\n", kr, connSvc);
+        fflush(stdout);
+        if (connSvc) IOObjectRelease(connSvc);
+    }
+
+    /* Part 7: Scan more IOSurface private symbols */
+    rlog("\n  --- Part 7: Extended symbol scan ---\n"); fflush(stdout);
+    {
+        const char *more_syms[] = {
+            "IOSurfaceBindAccelerator", "IOSurfaceUnbindAccelerator",
+            "IOSurfaceGetSeed", "IOSurfaceSetOwnership",
+            "IOSurfaceGetBulkAttachments", "IOSurfaceSetBulkAttachments",
+            "_IOSurfaceRootConnect", "_IOSurfaceRootDisconnect",
+            "IOSurfaceNotificationCreate", "IOSurfaceNotificationGetRunLoopSource",
+            "_IOSurfaceGetConnection", "_IOSurfaceMachPortSend",
+            "IOSurfaceAlignProperty", "IOSurfaceGetPropertyAlignment",
+            "IOSurfaceGetPropertyMaximum", "IOSurfaceGetSubsampling",
+            "IOSurfaceSetPurgeWhenNotInUse",
+            NULL
+        };
+        for (int i = 0; more_syms[i]; i++) {
+            void *p = dlsym(iosfc, more_syms[i]);
+            if (p) rlog("    FOUND: %s = %p\n", more_syms[i], p);
+        }
+        fflush(stdout);
+    }
+
+    if (iosfc) dlclose(iosfc);
+    if (iokit) dlclose(iokit);
+    IOServiceClose(conn);
+    IOObjectRelease(svc);
+    mach_port_deallocate(mach_task_self(), sp);
+    __sync_fetch_and_add(&r270_probed, 1);
+    rlog("\n*** r270 probe complete ***\n");
+    fflush(stdout);
+}
+
 /* r269: IOConnectCallMethod with port descriptors + io_connect_method raw MIG.
  * r268 confirmed: ALL trap indices return BadArgument with surfMachPort as arg.
  * mach_msg to IOSurface port = EXC_GUARD (guarded port, app killed).
@@ -22463,6 +22687,41 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 270) {
+            rlog("*** rounds=270: IOSurfaceClient APIs + SetCFProperty + ExclusiveAccess ***\n");
+            rlog("  r269: SetCFProperties=ExclusiveAccess, found IOSurfaceClient* + data APIs\n\n");
+            fflush(stdout);
+
+            int w = 64, h = 64, bpe = 4, bpr = w * bpe, pf = 0x42475241;
+            int alloc_sz = bpr * h;
+            CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+            CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFNumberRef asn = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), rn);
+            CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), asn);
+            CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn); CFRelease(asn);
+
+            IOSurfaceRef surf = IOSurfaceCreate(props);
+            rlog("  surf=%p id=%u\n", surf, surf ? IOSurfaceGetID(surf) : 0);
+            fflush(stdout);
+            if (surf) {
+                r270_probe(surf);
+                CFRelease(surf);
+            }
+            CFRelease(props);
+            rlog("\n*** r270 complete ***\n");
+            fflush(stdout);
             goto done;
         }
         if (rounds == 269) {
