@@ -1806,58 +1806,72 @@ static void *r262_gpu_fn(void *arg) {
         CFRelease(props);
         if (!surf) continue;
 
-        /* Create MTLTextureDescriptor */
+        /* Use texture2DDescriptorWithPixelFormat:width:height:mipmapped: */
         Class descClass = objc_getClass("MTLTextureDescriptor");
-        id desc = send_id((id)descClass, sel_registerName("new"));
-        if (desc) {
-            /* setPixelFormat: 80 = MTLPixelFormatBGRA8Unorm */
-            send_void_ulong(desc, sel_registerName("setPixelFormat:"), 80);
-            send_void_ulong(desc, sel_registerName("setWidth:"), w);
-            send_void_ulong(desc, sel_registerName("setHeight:"), h);
-            /* setUsage: 1=ShaderRead | 2=ShaderWrite | 4=RenderTarget */
-            send_void_ulong(desc, sel_registerName("setUsage:"), 1 | 2);
-            send_void_ulong(desc, sel_registerName("setStorageMode:"), 1); /* shared */
+        if (!descClass && r262_tex_ok == 0 && r262_tex_fail == 0) {
+            rlog("  [t%d] FAIL: no MTLTextureDescriptor class\n", tid);
+            CFRelease(surf);
+            break;
+        }
 
-            /* newTextureWithDescriptor:iosurface:plane:level: */
-            id texture = send_id_ptr_uu(device,
-                sel_registerName("newTextureWithDescriptor:iosurface:plane:level:"),
-                desc, (void *)surf, 0, 0);
+        /* texture2DDescriptorWithPixelFormat:width:height:mipmapped: */
+        typedef id (*desc_factory_t)(id, SEL, unsigned long, unsigned long, unsigned long, int);
+        desc_factory_t make_desc = (desc_factory_t)msgSend;
+        id desc = make_desc((id)descClass,
+            sel_registerName("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"),
+            80 /* MTLPixelFormatBGRA8Unorm */, (unsigned long)w, (unsigned long)h, 0);
 
+        if (!desc) {
             if (r262_tex_ok == 0 && r262_tex_fail == 0) {
-                rlog("  [t%d] first texture attempt: %p (desc=%p surf=%p)\n",
-                     tid, (void*)texture, (void*)desc, (void*)surf);
+                rlog("  [t%d] FAIL: texture2DDescriptor returned nil\n", tid);
                 fflush(stdout);
             }
+            __sync_fetch_and_add(&r262_tex_fail, 1);
+            CFRelease(surf);
+            continue;
+        }
 
-            if (texture) {
-                __sync_fetch_and_add(&r262_tex_ok, 1);
+        /* Set usage and storage mode for IOSurface backing */
+        send_void_ulong(desc, sel_registerName("setUsage:"), 1 | 2); /* ShaderRead|Write */
+        send_void_ulong(desc, sel_registerName("setStorageMode:"), 0); /* Shared (0) for IOSurface */
 
-                /* Create command buffer */
-                id cmdBuf = send_id(cmdQueue, sel_registerName("commandBuffer"));
-                if (cmdBuf) {
-                    /* Create blit command encoder */
-                    id blit = send_id(cmdBuf, sel_registerName("blitCommandEncoder"));
-                    if (blit) {
-                        /* fillBuffer/copyFromTexture — just do a texture read operation.
-                           synchronizeTexture:slice:level: (iOS may not have this)
-                           Instead: generateMipmapsForTexture: */
-                        send_void_id(blit, sel_registerName("generateMipmapsForTexture:"), texture);
-                        send_void(blit, sel_registerName("endEncoding"));
-                        __sync_fetch_and_add(&r262_blit_ok, 1);
-                    }
+        if (r262_tex_ok == 0 && r262_tex_fail == 0) {
+            rlog("  [t%d] desc=%p, calling newTextureWithDescriptor...\n", tid, (void*)desc);
+            fflush(stdout);
+        }
 
-                    /* Commit — submits to GPU hardware */
-                    send_void(cmdBuf, sel_registerName("commit"));
+        /* newTextureWithDescriptor:iosurface:plane:level: */
+        id texture = send_id_ptr_uu(device,
+            sel_registerName("newTextureWithDescriptor:iosurface:plane:level:"),
+            desc, (void *)surf, 0, 0);
 
-                    /* DON'T waitUntilCompleted — let GPU run while we free */
+        if (r262_tex_ok == 0 && r262_tex_fail == 0) {
+            rlog("  [t%d] texture=%p\n", tid, (void*)texture);
+            fflush(stdout);
+        }
+
+        if (texture) {
+            __sync_fetch_and_add(&r262_tex_ok, 1);
+
+            /* Create command buffer */
+            id cmdBuf = send_id(cmdQueue, sel_registerName("commandBuffer"));
+            if (cmdBuf) {
+                /* Create blit command encoder */
+                id blit = send_id(cmdBuf, sel_registerName("blitCommandEncoder"));
+                if (blit) {
+                    send_void_id(blit, sel_registerName("generateMipmapsForTexture:"), texture);
+                    send_void(blit, sel_registerName("endEncoding"));
+                    __sync_fetch_and_add(&r262_blit_ok, 1);
                 }
 
-                /* Release texture reference — but GPU command buffer still references the IOSurface */
-                send_void(texture, sel_registerName("release"));
-            } else {
-                __sync_fetch_and_add(&r262_tex_fail, 1);
+                /* Commit — submits to GPU hardware */
+                send_void(cmdBuf, sel_registerName("commit"));
             }
-            send_void(desc, sel_registerName("release"));
+
+            /* Release texture — but GPU command buffer still references IOSurface */
+            send_void(texture, sel_registerName("release"));
+        } else {
+            __sync_fetch_and_add(&r262_tex_fail, 1);
         }
 
         /* Free the IOSurface while GPU might still be processing */
