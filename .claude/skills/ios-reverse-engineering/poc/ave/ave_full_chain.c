@@ -1830,7 +1830,8 @@ static void *r262_gpu_fn(void *arg) {
     rlog("  [t%d] Metal ready, entering loop\n", tid);
     fflush(stdout);
 
-    int w = 128, h = 128, bpe = 4, bpr = w * bpe, pf = 0x42475241;
+    /* Use large texture to increase GPU DMA duration */
+    int w = 2048, h = 2048, bpe = 4, bpr = w * bpe, pf = 0x42475241;
 
     /* Pre-cache selectors outside loop */
     SEL selNewTex = sel_registerName("newTextureWithDescriptor:iosurface:plane:slice:");
@@ -1850,103 +1851,8 @@ static void *r262_gpu_fn(void *arg) {
         return NULL;
     }
 
-    /* First, test basic texture creation WITHOUT IOSurface to verify Metal works */
-    {
-        void *testPool = poolPush();
-        typedef id (*desc_factory_t)(id, SEL, unsigned long, unsigned long, unsigned long, int);
-        desc_factory_t make_desc = (desc_factory_t)msgSend;
-        id testDesc = make_desc((id)descClass, selDescFactory,
-            80 /* MTLPixelFormatBGRA8Unorm */, 64UL, 64UL, 0);
-        rlog("  [t%d] test desc=%p\n", tid, (void*)testDesc);
-
-        if (testDesc) {
-            /* Try newTextureWithDescriptor: (no IOSurface) first */
-            id testTex = send_id_id(device, sel_registerName("newTextureWithDescriptor:"), testDesc);
-            rlog("  [t%d] test texture (no IOSurf)=%p\n", tid, (void*)testTex);
-            if (testTex) send_void(testTex, selRelease);
-        }
-        poolPop(testPool);
-        rlog("  [t%d] basic Metal texture OK\n", tid);
-        fflush(stdout);
-    }
-
-    /* Probe device class for IOSurface texture methods */
-    if (tid == 0) {
-        typedef BOOL (*msg_bool_sel_t)(id, SEL, SEL);
-        msg_bool_sel_t responds = (msg_bool_sel_t)msgSend;
-
-        const char *sel_names[] = {
-            "newTextureWithDescriptor:iosurface:plane:slice:",
-            "newTextureWithDescriptor:iosurface:plane:",
-            "newTextureWithDescriptor:iosurface:plane:level:",
-            "newTextureWithDescriptor:",
-            "newBufferWithIOSurface:",
-            NULL
-        };
-        for (int i = 0; sel_names[i]; i++) {
-            SEL s = sel_registerName(sel_names[i]);
-            BOOL r = responds(device, sel_registerName("respondsToSelector:"), s);
-            rlog("  [t%d] respondsTo '%s' = %d\n", tid, sel_names[i], (int)r);
-        }
-
-        /* Walk entire class hierarchy dumping texture/surface methods */
-        Class devClass = object_getClass(device);
-        Class cls = devClass;
-        int depth = 0;
-        while (cls && depth < 10) {
-            const char *className = class_getName(cls);
-            unsigned int methodCount = 0;
-            Method *methods = class_copyMethodList(cls, &methodCount);
-            int found = 0;
-            for (unsigned int m = 0; m < methodCount; m++) {
-                const char *name = sel_getName(method_getName(methods[m]));
-                if (strstr(name, "exture") || strstr(name, "urface") ||
-                    strstr(name, "Surface") || strstr(name, "esource")) {
-                    rlog("  [t%d] [%s] %s\n", tid, className, name);
-                    found++;
-                }
-            }
-            if (found == 0 && methodCount > 0)
-                rlog("  [t%d] [%s] %u methods, 0 texture/surface\n", tid, className, methodCount);
-
-            /* Check protocols at each level */
-            unsigned int protoCount = 0;
-            Protocol **protos = class_copyProtocolList(cls, &protoCount);
-            for (unsigned int p = 0; p < protoCount; p++) {
-                const char *pname = protocol_getName(protos[p]);
-                rlog("  [t%d] [%s] proto: %s\n", tid, className, pname);
-
-                /* Dump protocol methods containing texture/surface */
-                unsigned int pmCount = 0;
-                struct objc_method_description *pms = protocol_copyMethodDescriptionList(
-                    protos[p], YES, YES, &pmCount);
-                for (unsigned int pm = 0; pm < pmCount; pm++) {
-                    const char *pmname = sel_getName(pms[pm].name);
-                    if (strstr(pmname, "exture") || strstr(pmname, "urface") ||
-                        strstr(pmname, "Surface") || strstr(pmname, "esource")) {
-                        rlog("  [t%d]   proto-method: %s\n", tid, pmname);
-                    }
-                }
-                if (pms) free(pms);
-                /* Also optional methods */
-                pms = protocol_copyMethodDescriptionList(protos[p], NO, YES, &pmCount);
-                for (unsigned int pm = 0; pm < pmCount; pm++) {
-                    const char *pmname = sel_getName(pms[pm].name);
-                    if (strstr(pmname, "exture") || strstr(pmname, "urface") ||
-                        strstr(pmname, "Surface") || strstr(pmname, "esource")) {
-                        rlog("  [t%d]   proto-opt: %s\n", tid, pmname);
-                    }
-                }
-                if (pms) free(pms);
-            }
-            if (protos) free(protos);
-            if (methods) free(methods);
-
-            cls = class_getSuperclass(cls);
-            depth++;
-        }
-        fflush(stdout);
-    }
+    rlog("  [t%d] ready\n", tid);
+    fflush(stdout);
 
     while (r262_run) {
         void *pool = poolPush();
@@ -1993,49 +1899,9 @@ static void *r262_gpu_fn(void *arg) {
         send_void_ulong(desc, selSetUsage, 1 | 2); /* ShaderRead|Write */
         send_void_ulong(desc, selSetStorage, 0); /* Shared (0) for IOSurface */
 
-        if (r262_tex_ok == 0 && r262_tex_fail == 0) {
-            rlog("  [t%d] desc=%p surf=%p surfID=%u, calling newTextureWithDescriptor:iosurface:...\n",
-                 tid, (void*)desc, (void*)surf, IOSurfaceGetID(surf));
-            fflush(stdout);
-        }
-
-        /* Check if device responds to our selector — skip if not */
-        typedef BOOL (*msg_bool_sel_t)(id, SEL, SEL);
-        msg_bool_sel_t responds = (msg_bool_sel_t)msgSend;
-        if (!responds(device, sel_registerName("respondsToSelector:"), selNewTex)) {
-            /* Try alternate selector names */
-            SEL alts[] = {
-                sel_registerName("newTextureWithDescriptor:iosurface:plane:"),
-                sel_registerName("newTextureWithDescriptor:iosurface:plane:level:"),
-                (SEL)0
-            };
-            int found_alt = 0;
-            for (int a = 0; alts[a]; a++) {
-                if (responds(device, sel_registerName("respondsToSelector:"), alts[a])) {
-                    selNewTex = alts[a];
-                    found_alt = 1;
-                    break;
-                }
-            }
-            if (!found_alt) {
-                if (r262_tex_ok == 0 && r262_tex_fail == 0)
-                    rlog("  [t%d] device does NOT respond to IOSurface texture selectors\n", tid);
-                __sync_fetch_and_add(&r262_tex_fail, 1);
-                CFRelease(surf);
-                poolPop(pool);
-                continue;
-            }
-        }
-
-        /* newTextureWithDescriptor:iosurface:plane:level:
-           On arm64e, IOSurfaceRef is a CFTypeRef (pointer) — same ABI as void* */
+        /* newTextureWithDescriptor:iosurface:plane:slice: */
         id texture = send_id_ptr_uu(device, selNewTex,
             desc, (void *)surf, 0, 0);
-
-        if (r262_tex_ok == 0 && r262_tex_fail == 0) {
-            rlog("  [t%d] texture=%p\n", tid, (void*)texture);
-            fflush(stdout);
-        }
 
         if (texture) {
             __sync_fetch_and_add(&r262_tex_ok, 1);
@@ -2051,11 +1917,14 @@ static void *r262_gpu_fn(void *arg) {
                     __sync_fetch_and_add(&r262_blit_ok, 1);
                 }
 
-                /* Commit — submits to GPU hardware */
+                /* Commit — submits to GPU hardware DMA */
                 send_void(cmdBuf, selCommit);
+
+                /* Wait until GPU has actually started processing (DMA in flight) */
+                send_void(cmdBuf, sel_registerName("waitUntilScheduled"));
             }
 
-            /* Release texture — but GPU command buffer still references IOSurface */
+            /* Release texture — drops userspace IOSurface retain */
             send_void(texture, selRelease);
         } else {
             __sync_fetch_and_add(&r262_tex_fail, 1);
