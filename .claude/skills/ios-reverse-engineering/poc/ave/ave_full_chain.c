@@ -4458,35 +4458,39 @@ static void r302_probe(void) {
     io_registry_entry_t nvram2 = IORegistryEntryFromPath(
         kIOMasterPortDefault, "IODeviceTree:/options");
     if (nvram2) {
-        /* Try to set a property using IORegistryEntrySetCFProperties
-         * (note: plural, different from singular) */
-        CFMutableDictionaryRef dict = CFDictionaryCreateMutable(
-            kCFAllocatorDefault, 1,
-            &kCFTypeDictionaryKeyCallBacks,
-            &kCFTypeDictionaryValueCallBacks);
-        CFStringRef key = CFSTR("research-test");
-        CFDataRef val = CFDataCreate(kCFAllocatorDefault, (const UInt8*)"t", 1);
-        CFDictionarySetValue(dict, key, val);
+        typedef kern_return_t (*SetCFProps_t)(io_registry_entry_t, CFTypeRef);
+        SetCFProps_t setProps = (SetCFProps_t)dlsym(RTLD_DEFAULT, "IORegistryEntrySetCFProperties");
+        rlog("  IORegistryEntrySetCFProperties via dlsym: %p\n", (void*)setProps);
 
-        /* IORegistryEntrySetCFProperties is available on iOS! */
-        kr = IORegistryEntrySetCFProperties(nvram2, dict);
-        rlog("  IORegistryEntrySetCFProperties(test): kr=0x%x\n", kr);
+        if (setProps) {
+            CFMutableDictionaryRef dict = CFDictionaryCreateMutable(
+                kCFAllocatorDefault, 1,
+                &kCFTypeDictionaryKeyCallBacks,
+                &kCFTypeDictionaryValueCallBacks);
+            CFStringRef key = CFSTR("research-test");
+            CFDataRef val = CFDataCreate(kCFAllocatorDefault, (const UInt8*)"t", 1);
+            CFDictionarySetValue(dict, key, val);
 
-        /* Try LDM key */
-        CFMutableDictionaryRef dict2 = CFDictionaryCreateMutable(
-            kCFAllocatorDefault, 1,
-            &kCFTypeDictionaryKeyCallBacks,
-            &kCFTypeDictionaryValueCallBacks);
-        CFStringRef ldmKey = CFSTR("40A0DDD2-77F8-4392-B4A3-1E7304206516:ldm");
-        CFDataRef ldmVal = CFDataCreate(kCFAllocatorDefault, (const UInt8*)"\x01", 1);
-        CFDictionarySetValue(dict2, ldmKey, ldmVal);
-        kr = IORegistryEntrySetCFProperties(nvram2, dict2);
-        rlog("  IORegistryEntrySetCFProperties(LDM): kr=0x%x\n", kr);
+            kr = setProps(nvram2, dict);
+            rlog("  SetCFProperties(test): kr=0x%x\n", kr);
 
-        CFRelease(val);
-        CFRelease(dict);
-        CFRelease(ldmVal);
-        CFRelease(dict2);
+            CFMutableDictionaryRef dict2 = CFDictionaryCreateMutable(
+                kCFAllocatorDefault, 1,
+                &kCFTypeDictionaryKeyCallBacks,
+                &kCFTypeDictionaryValueCallBacks);
+            CFStringRef ldmKey = CFSTR("40A0DDD2-77F8-4392-B4A3-1E7304206516:ldm");
+            CFDataRef ldmVal = CFDataCreate(kCFAllocatorDefault, (const UInt8*)"\x01", 1);
+            CFDictionarySetValue(dict2, ldmKey, ldmVal);
+            kr = setProps(nvram2, dict2);
+            rlog("  SetCFProperties(LDM): kr=0x%x\n", kr);
+
+            CFRelease(val);
+            CFRelease(dict);
+            CFRelease(ldmVal);
+            CFRelease(dict2);
+        } else {
+            rlog("  dlsym failed - symbol not exported\n");
+        }
         IOObjectRelease(nvram2);
     }
     fflush(stdout);
