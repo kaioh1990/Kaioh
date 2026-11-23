@@ -26023,7 +26023,29 @@ new_modes:
             rlog("  Testing: SetOwnership, lifecycle/refcount, client-after-release,\n");
             rlog("           destruction notifications, BulkAttachments formats.\n\n");
             fflush(stdout);
-            r282_probe(surf);
+            {
+                int w=64,h=64,bpe=4,bpr=64*4,pf=0x42475241,as=64*64*4;
+                CFMutableDictionaryRef pp = CFDictionaryCreateMutable(NULL,0,
+                    &kCFTypeDictionaryKeyCallBacks,&kCFTypeDictionaryValueCallBacks);
+                CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+                CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+                CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+                CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+                CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+                CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+                CFDictionarySetValue(pp,CFSTR("IOSurfaceWidth"),wn);
+                CFDictionarySetValue(pp,CFSTR("IOSurfaceHeight"),hn);
+                CFDictionarySetValue(pp,CFSTR("IOSurfaceBytesPerElement"),bn);
+                CFDictionarySetValue(pp,CFSTR("IOSurfaceBytesPerRow"),rn);
+                CFDictionarySetValue(pp,CFSTR("IOSurfacePixelFormat"),pfn);
+                CFDictionarySetValue(pp,CFSTR("IOSurfaceAllocSize"),asn);
+                CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+                IOSurfaceRef r282_surf = IOSurfaceCreate(pp);
+                CFRelease(pp);
+                rlog("  surf=%p id=%u\n\n", (void*)r282_surf, IOSurfaceGetID(r282_surf));
+                r282_probe(r282_surf);
+                CFRelease(r282_surf);
+            }
             goto done;
         }
         if (rounds == 281) {
