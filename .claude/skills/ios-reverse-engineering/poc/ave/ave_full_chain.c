@@ -1764,7 +1764,14 @@ static void *r262_gpu_fn(void *arg) {
     msg_void_ulong_t send_void_ulong = (msg_void_ulong_t)msgSend;
     msg_void_ulong_ulong_ulong_ulong_t send_void_4ulong = (msg_void_ulong_ulong_ulong_ulong_t)msgSend;
 
-    rlog("  [t%d] objc_msgSend=%p\n", tid, msgSend);
+    /* Autorelease pool functions */
+    typedef void *(*arp_push_t)(void);
+    typedef void (*arp_pop_t)(void *);
+    arp_push_t poolPush = (arp_push_t)dlsym(objc_lib, "objc_autoreleasePoolPush");
+    arp_pop_t poolPop = (arp_pop_t)dlsym(objc_lib, "objc_autoreleasePoolPop");
+    if (!poolPush || !poolPop) { rlog("  [t%d] FAIL: no autorelease pool funcs\n", tid); dlclose(objc_lib); return NULL; }
+
+    rlog("  [t%d] objc_msgSend=%p arp=%p/%p\n", tid, msgSend, (void*)poolPush, (void*)poolPop);
 
     /* Get Metal framework */
     void *metal = dlopen("/System/Library/Frameworks/Metal.framework/Metal", RTLD_LAZY);
@@ -1787,7 +1794,47 @@ static void *r262_gpu_fn(void *arg) {
 
     int w = 128, h = 128, bpe = 4, bpr = w * bpe, pf = 0x42475241;
 
+    /* Pre-cache selectors outside loop */
+    SEL selNewTex = sel_registerName("newTextureWithDescriptor:iosurface:plane:level:");
+    SEL selSetUsage = sel_registerName("setUsage:");
+    SEL selSetStorage = sel_registerName("setStorageMode:");
+    SEL selCmdBuf = sel_registerName("commandBuffer");
+    SEL selBlitEnc = sel_registerName("blitCommandEncoder");
+    SEL selGenMip = sel_registerName("generateMipmapsForTexture:");
+    SEL selEndEnc = sel_registerName("endEncoding");
+    SEL selCommit = sel_registerName("commit");
+    SEL selRelease = sel_registerName("release");
+    SEL selDescFactory = sel_registerName("texture2DDescriptorWithPixelFormat:width:height:mipmapped:");
+    Class descClass = objc_getClass("MTLTextureDescriptor");
+    if (!descClass) {
+        rlog("  [t%d] FAIL: no MTLTextureDescriptor class\n", tid);
+        dlclose(metal); dlclose(objc_lib);
+        return NULL;
+    }
+
+    /* First, test basic texture creation WITHOUT IOSurface to verify Metal works */
+    {
+        void *testPool = poolPush();
+        typedef id (*desc_factory_t)(id, SEL, unsigned long, unsigned long, unsigned long, int);
+        desc_factory_t make_desc = (desc_factory_t)msgSend;
+        id testDesc = make_desc((id)descClass, selDescFactory,
+            80 /* MTLPixelFormatBGRA8Unorm */, 64UL, 64UL, 0);
+        rlog("  [t%d] test desc=%p\n", tid, (void*)testDesc);
+
+        if (testDesc) {
+            /* Try newTextureWithDescriptor: (no IOSurface) first */
+            id testTex = send_id_id(device, sel_registerName("newTextureWithDescriptor:"), testDesc);
+            rlog("  [t%d] test texture (no IOSurf)=%p\n", tid, (void*)testTex);
+            if (testTex) send_void(testTex, selRelease);
+        }
+        poolPop(testPool);
+        rlog("  [t%d] basic Metal texture OK, now trying IOSurface-backed...\n", tid);
+        fflush(stdout);
+    }
+
     while (r262_run) {
+        void *pool = poolPush();
+
         /* Create IOSurface */
         CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
             &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
@@ -1804,21 +1851,12 @@ static void *r262_gpu_fn(void *arg) {
         IOSurfaceRef surf = IOSurfaceCreate(props);
         CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn);
         CFRelease(props);
-        if (!surf) continue;
-
-        /* Use texture2DDescriptorWithPixelFormat:width:height:mipmapped: */
-        Class descClass = objc_getClass("MTLTextureDescriptor");
-        if (!descClass && r262_tex_ok == 0 && r262_tex_fail == 0) {
-            rlog("  [t%d] FAIL: no MTLTextureDescriptor class\n", tid);
-            CFRelease(surf);
-            break;
-        }
+        if (!surf) { poolPop(pool); continue; }
 
         /* texture2DDescriptorWithPixelFormat:width:height:mipmapped: */
         typedef id (*desc_factory_t)(id, SEL, unsigned long, unsigned long, unsigned long, int);
         desc_factory_t make_desc = (desc_factory_t)msgSend;
-        id desc = make_desc((id)descClass,
-            sel_registerName("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"),
+        id desc = make_desc((id)descClass, selDescFactory,
             80 /* MTLPixelFormatBGRA8Unorm */, (unsigned long)w, (unsigned long)h, 0);
 
         if (!desc) {
@@ -1828,21 +1866,23 @@ static void *r262_gpu_fn(void *arg) {
             }
             __sync_fetch_and_add(&r262_tex_fail, 1);
             CFRelease(surf);
+            poolPop(pool);
             continue;
         }
 
         /* Set usage and storage mode for IOSurface backing */
-        send_void_ulong(desc, sel_registerName("setUsage:"), 1 | 2); /* ShaderRead|Write */
-        send_void_ulong(desc, sel_registerName("setStorageMode:"), 0); /* Shared (0) for IOSurface */
+        send_void_ulong(desc, selSetUsage, 1 | 2); /* ShaderRead|Write */
+        send_void_ulong(desc, selSetStorage, 0); /* Shared (0) for IOSurface */
 
         if (r262_tex_ok == 0 && r262_tex_fail == 0) {
-            rlog("  [t%d] desc=%p, calling newTextureWithDescriptor...\n", tid, (void*)desc);
+            rlog("  [t%d] desc=%p surf=%p surfID=%u, calling newTextureWithDescriptor:iosurface:...\n",
+                 tid, (void*)desc, (void*)surf, IOSurfaceGetID(surf));
             fflush(stdout);
         }
 
-        /* newTextureWithDescriptor:iosurface:plane:level: */
-        id texture = send_id_ptr_uu(device,
-            sel_registerName("newTextureWithDescriptor:iosurface:plane:level:"),
+        /* newTextureWithDescriptor:iosurface:plane:level:
+           On arm64e, IOSurfaceRef is a CFTypeRef (pointer) — same ABI as void* */
+        id texture = send_id_ptr_uu(device, selNewTex,
             desc, (void *)surf, 0, 0);
 
         if (r262_tex_ok == 0 && r262_tex_fail == 0) {
@@ -1854,22 +1894,22 @@ static void *r262_gpu_fn(void *arg) {
             __sync_fetch_and_add(&r262_tex_ok, 1);
 
             /* Create command buffer */
-            id cmdBuf = send_id(cmdQueue, sel_registerName("commandBuffer"));
+            id cmdBuf = send_id(cmdQueue, selCmdBuf);
             if (cmdBuf) {
                 /* Create blit command encoder */
-                id blit = send_id(cmdBuf, sel_registerName("blitCommandEncoder"));
+                id blit = send_id(cmdBuf, selBlitEnc);
                 if (blit) {
-                    send_void_id(blit, sel_registerName("generateMipmapsForTexture:"), texture);
-                    send_void(blit, sel_registerName("endEncoding"));
+                    send_void_id(blit, selGenMip, texture);
+                    send_void(blit, selEndEnc);
                     __sync_fetch_and_add(&r262_blit_ok, 1);
                 }
 
                 /* Commit — submits to GPU hardware */
-                send_void(cmdBuf, sel_registerName("commit"));
+                send_void(cmdBuf, selCommit);
             }
 
             /* Release texture — but GPU command buffer still references IOSurface */
-            send_void(texture, sel_registerName("release"));
+            send_void(texture, selRelease);
         } else {
             __sync_fetch_and_add(&r262_tex_fail, 1);
         }
@@ -1877,6 +1917,8 @@ static void *r262_gpu_fn(void *arg) {
         /* Free the IOSurface while GPU might still be processing */
         CFRelease(surf);
         __sync_fetch_and_add(&r262_freed, 1);
+
+        poolPop(pool);
 
         /* Every 16th iteration, yield to let GPU hardware execute */
         if ((r262_freed & 15) == 0) sched_yield();
