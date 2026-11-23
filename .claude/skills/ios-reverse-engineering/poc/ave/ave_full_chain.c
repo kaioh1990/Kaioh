@@ -23524,7 +23524,7 @@ new_modes:
                         _exit(42);
                     });
 
-                #define BSS_MID_DEFAULT 0x047FA208ULL /* middle of 1.3MB zero run (build 24A94425) */
+                #define BSS_MID_DEFAULT 0x04AB22C2ULL /* middle of 15KB terminal zero run in __LINKEDIT */
                 #define R198_KC_BASE    0xFFFFFE0007004000ULL
 
                 uint64_t r198_slide = 0;
