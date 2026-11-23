@@ -1736,6 +1736,125 @@ static void *r259_unreg_fn(void *arg) {
 static volatile int r264_run = 0;
 static volatile int r264_probed = 0;
 
+/* r265: Probe IOConnectTrap + different user client types + IOConnectMapMemory
+ * IOSurfaceRoot external methods all return BadArgument on iOS 27.1.
+ * Operations must go through traps, shared memory, or different client types. */
+static volatile int r265_probed = 0;
+
+static void r265_probe_traps_and_types(IOSurfaceRef surf) {
+    uint32_t sid = IOSurfaceGetID(surf);
+    kern_return_t kr;
+
+    rlog("\n=== r265: Probing IOConnectTrap + user client types ===\n");
+
+    /* 1) Try opening IOSurfaceRoot with different user client types */
+    io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    if (!svc) { rlog("  IOSurfaceRoot not found!\n"); return; }
+
+    for (int type = 0; type <= 5; type++) {
+        io_connect_t c = IO_OBJECT_NULL;
+        kr = IOServiceOpen(svc, mach_task_self(), type, &c);
+        rlog("  IOSurfaceRoot type=%d: kr=0x%x conn=%u\n", type, kr, c);
+        if (kr == 0 && c) {
+            /* Try sel0 and sel17 on this connection type */
+            uint64_t sc[2] = {sid, 0};
+            kr = IOConnectCallScalarMethod(c, 17, sc, 1, NULL, NULL);
+            rlog("    sel17 scalar[surfID]: kr=0x%x\n", kr);
+            kr = IOConnectCallScalarMethod(c, 0, NULL, 0, NULL, NULL);
+            rlog("    sel0 no-args: kr=0x%x\n", kr);
+            IOServiceClose(c);
+        }
+    }
+
+    /* 2) Probe IOConnectTrap functions */
+    io_connect_t conn = IO_OBJECT_NULL;
+    IOServiceOpen(svc, mach_task_self(), 0, &conn);
+    if (!conn) { IOObjectRelease(svc); return; }
+
+    rlog("\n  === IOConnectTrap probe (conn=%u, surfID=%u) ===\n", conn, sid);
+
+    /* IOConnectTrap0(conn, index) */
+    for (uint32_t idx = 0; idx <= 10; idx++) {
+        kr = IOConnectTrap0(conn, idx);
+        rlog("    Trap0(idx=%u): kr=0x%x\n", idx, kr);
+    }
+
+    /* IOConnectTrap1(conn, index, p1) */
+    rlog("\n  IOConnectTrap1 with surfID:\n");
+    for (uint32_t idx = 0; idx <= 10; idx++) {
+        kr = IOConnectTrap1(conn, idx, (uintptr_t)sid);
+        rlog("    Trap1(idx=%u, surfID): kr=0x%x\n", idx, kr);
+    }
+
+    /* IOConnectTrap2(conn, index, p1, p2) */
+    rlog("\n  IOConnectTrap2:\n");
+    for (uint32_t idx = 0; idx <= 5; idx++) {
+        kr = IOConnectTrap2(conn, idx, (uintptr_t)sid, 0);
+        rlog("    Trap2(idx=%u, surfID, 0): kr=0x%x\n", idx, kr);
+    }
+
+    /* 3) Probe IOConnectMapMemory */
+    rlog("\n  === IOConnectMapMemory probe ===\n");
+    for (uint32_t memtype = 0; memtype <= 5; memtype++) {
+        mach_vm_address_t addr = 0;
+        mach_vm_size_t size = 0;
+        kr = IOConnectMapMemory64(conn, memtype, mach_task_self(),
+            &addr, &size, kIOMapAnywhere);
+        rlog("    MapMemory(type=%u): kr=0x%x", memtype, kr);
+        if (kr == 0) rlog(" addr=0x%llx size=0x%llx", (uint64_t)addr, (uint64_t)size);
+        rlog("\n");
+        if (kr == 0 && addr) {
+            /* Dump first 64 bytes of mapped memory */
+            uint64_t *p = (uint64_t *)addr;
+            for (int i = 0; i < 8; i++)
+                rlog("      [%d] 0x%016llx\n", i, p[i]);
+            IOConnectUnmapMemory64(conn, memtype, mach_task_self(), addr);
+        }
+    }
+
+    /* 4) Try IOSurface framework internal functions as race targets */
+    rlog("\n  === IOSurface API race targets ===\n");
+
+    /* IOSurfaceSetValue — goes through kernel */
+    kr = 0; /* reset */
+    IOSurfaceSetValue(surf, CFSTR("test_key"), CFSTR("test_value"));
+    rlog("    IOSurfaceSetValue: OK\n");
+
+    CFTypeRef val = IOSurfaceCopyValue(surf, CFSTR("test_key"));
+    rlog("    IOSurfaceCopyValue: %s\n", val ? "OK (got value)" : "NULL");
+    if (val) CFRelease(val);
+
+    IOSurfaceRemoveValue(surf, CFSTR("test_key"));
+    rlog("    IOSurfaceRemoveValue: OK\n");
+
+    /* IOSurfaceLock/Unlock — may go through kernel */
+    IOSurfaceLock(surf, 0, NULL);
+    rlog("    IOSurfaceLock(0): OK\n");
+    void *base = IOSurfaceGetBaseAddress(surf);
+    rlog("    IOSurfaceGetBaseAddress: %p\n", base);
+    IOSurfaceUnlock(surf, 0, NULL);
+    rlog("    IOSurfaceUnlock(0): OK\n");
+
+    /* IOSurfaceSetPurgeable */
+    uint32_t old_state = 0;
+    kr = IOSurfaceSetPurgeable(surf, 1, &old_state); /* Volatile */
+    rlog("    IOSurfaceSetPurgeable(Volatile): kr=0x%x old=%u\n", kr, old_state);
+    kr = IOSurfaceSetPurgeable(surf, 0, &old_state); /* NonVolatile */
+    rlog("    IOSurfaceSetPurgeable(NonVolatile): kr=0x%x old=%u\n", kr, old_state);
+
+    /* UseCount manipulation */
+    IOSurfaceIncrementUseCount(surf);
+    rlog("    IncrementUseCount: OK, isInUse=%d\n", IOSurfaceIsInUse(surf));
+    IOSurfaceDecrementUseCount(surf);
+    rlog("    DecrementUseCount: OK, isInUse=%d\n", IOSurfaceIsInUse(surf));
+
+    IOServiceClose(conn);
+    IOObjectRelease(svc);
+    __sync_fetch_and_add(&r265_probed, 1);
+    fflush(stdout);
+}
+
 static void r264_probe_sel17(io_connect_t conn, IOSurfaceRef surf) {
     uint32_t sid = IOSurfaceGetID(surf);
     kern_return_t kr;
@@ -21099,6 +21218,42 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 265) {
+            rlog("*** rounds=265: IOConnectTrap + user client types + MapMemory probe ***\n");
+            rlog("  Probing alternative interfaces since all IOConnectCallMethod selectors\n");
+            rlog("  return BadArgument on iOS 27.1\n\n");
+
+            int w = 64, h = 64, bpe = 4, bpr = w * bpe, pf = 0x42475241;
+            int alloc_sz = bpr * h;
+            CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+            CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFNumberRef asn = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), rn);
+            CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), asn);
+            IOSurfaceRef surf = IOSurfaceCreate(props);
+            CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn); CFRelease(asn);
+            CFRelease(props);
+
+            if (surf) {
+                rlog("  Created test IOSurface: id=%u\n", IOSurfaceGetID(surf));
+                r265_probe_traps_and_types(surf);
+                CFRelease(surf);
+            } else {
+                rlog("  FAIL: could not create test IOSurface\n");
+            }
+
+            rlog("*** r=265 complete ***\n");
             goto done;
         }
         if (rounds == 264) {
