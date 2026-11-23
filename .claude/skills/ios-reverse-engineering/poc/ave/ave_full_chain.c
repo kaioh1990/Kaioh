@@ -80,7 +80,7 @@ extern kern_return_t mach_make_memory_entry_64(
 #include <setjmp.h>
 #include <sched.h>
 #include <sys/mman.h>
-#include <servers/bootstrap.h>
+extern kern_return_t bootstrap_look_up(mach_port_t bp, const char *service_name, mach_port_t *sp);
 #include <objc/runtime.h>
 #include <objc/message.h>
 
