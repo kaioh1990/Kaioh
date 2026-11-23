@@ -31023,6 +31023,14 @@ new_modes:
             r301_probe();
             goto done;
         }
+        if (rounds == 301) {
+            rlog("*** rounds=301: Deep Lockdown class enum + kernel stale-ID ***\n");
+            rlog("  r300: LDM.framework loads, Darwin notifs work, ACM denied.\n");
+            rlog("  Probe: ALL lockdown classes, effectiveRestrictions, stale ID.\n\n");
+            fflush(stdout);
+            r301_probe();
+            goto done;
+        }
         if (rounds == 300) {
             rlog("*** rounds=300: Lockdown Mode toggle & ACM kernel control ***\n");
             rlog("  r299: LDM=OFF, MCProfileConnection works.\n");
@@ -32681,7 +32689,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -42523,7 +42531,7 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
             if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227 || rounds == 228) goto r220_block;
 
