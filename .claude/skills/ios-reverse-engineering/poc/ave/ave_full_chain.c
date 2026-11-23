@@ -1851,15 +1851,7 @@ static void r271_probe(IOSurfaceRef surf) {
             rlog("  SetBulkAttachments(1 entry)=0x%x\n", kr);
             CFRelease(bd);
 
-            if (getBulk) {
-                uintptr_t raw2 = (uintptr_t)getBulk(surf);
-                rlog("  GetBulkAttachments after set raw=0x%lx", (unsigned long)raw2);
-                if (raw2 > 0x100000000UL) {
-                    rlog(" count=%ld\n", CFDictionaryGetCount((CFDictionaryRef)raw2));
-                } else {
-                    rlog(" (kern_return_t=0x%x)\n", (uint32_t)raw2);
-                }
-            }
+            rlog("  (skipping second GetBulk — first returned error code, may crash)\n");
         } else {
             rlog("  IOSurfaceSetBulkAttachments not found\n");
         }
