@@ -86,7 +86,7 @@ extern kern_return_t bootstrap_look_up(mach_port_t bp, const char *service_name,
 #include <mach-o/dyld.h>
 #include <notify.h>
 
-extern kern_return_t host_zone_info(host_priv_t host,
+typedef kern_return_t (*host_zone_info_fn)(host_priv_t host,
     mach_zone_name_t **names, mach_msg_type_number_t *namesCnt,
     mach_zone_info_t **info, mach_msg_type_number_t *infoCnt);
 extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
@@ -4385,7 +4385,10 @@ static void r305_probe(void) {
         mach_zone_info_t *info = NULL;
         mach_msg_type_number_t namesCnt = 0, infoCnt = 0;
 
-        kr = host_zone_info(host, &names, &namesCnt, &info, &infoCnt);
+        host_zone_info_fn hzi = (host_zone_info_fn)dlsym(RTLD_DEFAULT, "host_zone_info");
+        rlog("  host_zone_info: %p\n", (void*)hzi);
+        if (hzi) kr = hzi(host, &names, &namesCnt, &info, &infoCnt);
+        else kr = KERN_NOT_SUPPORTED;
         rlog("  host_zone_info: kr=0x%x namesCnt=%u infoCnt=%u\n",
              kr, namesCnt, infoCnt);
         if (kr == KERN_SUCCESS && namesCnt > 0) {
