@@ -1742,6 +1742,420 @@ static volatile int r264_probed = 0;
  * Operations must go through traps, shared memory, or different client types. */
 static volatile int r265_probed = 0;
 
+/* r271: Explore newly discovered private APIs from r270 Part 7 symbol scan.
+ * r270 found: IOSurfaceGetSeed, IOSurfaceSetOwnership, Get/SetBulkAttachments,
+ *   AlignProperty, GetPropertyAlignment, GetPropertyMaximum, GetSubsampling.
+ * Also: ExclusiveAccess from SetCFProperties — investigate second connection,
+ *   second surface, and specific property keys that might unlock access.
+ * Goal: find a path to controlled kernel memory corruption. */
+static volatile int r271_probed = 0;
+
+static void r271_probe(IOSurfaceRef surf) {
+    uint32_t sid = IOSurfaceGetID(surf);
+    kern_return_t kr;
+
+    rlog("\n=== r271: Private API Exploration + ExclusiveAccess Bypass ===\n");
+    fflush(stdout);
+
+    mach_port_t sp = IOSurfaceCreateMachPort(surf);
+    rlog("  surfMachPort=%u surfID=%u\n", sp, sid);
+    fflush(stdout);
+
+    void *iosfc = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_LAZY);
+    void *iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY);
+
+    /* Part 1: IOSurfaceGetSeed — compare with ClientLock seed */
+    rlog("\n--- Part 1: IOSurfaceGetSeed ---\n");
+    {
+        typedef uint32_t (*IOSurfaceGetSeed_t)(IOSurfaceRef);
+        IOSurfaceGetSeed_t getSeed = NULL;
+        if (iosfc) getSeed = (IOSurfaceGetSeed_t)dlsym(iosfc, "IOSurfaceGetSeed");
+        if (getSeed) {
+            uint32_t seed_before = getSeed(surf);
+            rlog("  GetSeed before lock: %u\n", seed_before);
+
+            IOSurfaceLock(surf, 0, NULL);
+            uint32_t seed_locked = getSeed(surf);
+            rlog("  GetSeed while locked (type 0): %u\n", seed_locked);
+            IOSurfaceUnlock(surf, 0, NULL);
+
+            uint32_t seed_after = getSeed(surf);
+            rlog("  GetSeed after unlock: %u\n", seed_after);
+
+            IOSurfaceSetValue(surf, CFSTR("test_key"), CFSTR("test_val"));
+            uint32_t seed_modified = getSeed(surf);
+            rlog("  GetSeed after SetValue: %u\n", seed_modified);
+            IOSurfaceRemoveValue(surf, CFSTR("test_key"));
+
+            uint32_t seed_removed = getSeed(surf);
+            rlog("  GetSeed after RemoveValue: %u\n", seed_removed);
+        } else {
+            rlog("  IOSurfaceGetSeed not found\n");
+        }
+        fflush(stdout);
+    }
+
+    /* Part 2: IOSurfaceSetOwnership */
+    rlog("\n--- Part 2: IOSurfaceSetOwnership ---\n");
+    {
+        typedef kern_return_t (*IOSurfaceSetOwnership_t)(IOSurfaceRef, task_t, int, int);
+        IOSurfaceSetOwnership_t setOwn = NULL;
+        if (iosfc) setOwn = (IOSurfaceSetOwnership_t)dlsym(iosfc, "IOSurfaceSetOwnership");
+        if (setOwn) {
+            kr = setOwn(surf, mach_task_self(), 0, 0);
+            rlog("  SetOwnership(self,0,0)=0x%x\n", kr);
+
+            kr = setOwn(surf, mach_task_self(), 1, 0);
+            rlog("  SetOwnership(self,1,0)=0x%x\n", kr);
+
+            kr = setOwn(surf, mach_task_self(), 0, 1);
+            rlog("  SetOwnership(self,0,1)=0x%x\n", kr);
+
+            kr = setOwn(surf, MACH_PORT_NULL, 0, 0);
+            rlog("  SetOwnership(NULL,0,0)=0x%x\n", kr);
+        } else {
+            rlog("  IOSurfaceSetOwnership not found\n");
+        }
+        fflush(stdout);
+    }
+
+    /* Part 3: IOSurfaceGet/SetBulkAttachments */
+    rlog("\n--- Part 3: IOSurfaceGet/SetBulkAttachments ---\n");
+    {
+        typedef kern_return_t (*SetBulk_t)(IOSurfaceRef, CFDictionaryRef);
+        typedef CFDictionaryRef (*GetBulk_t)(IOSurfaceRef);
+        SetBulk_t setBulk = NULL;
+        GetBulk_t getBulk = NULL;
+        if (iosfc) {
+            setBulk = (SetBulk_t)dlsym(iosfc, "IOSurfaceSetBulkAttachments");
+            getBulk = (GetBulk_t)dlsym(iosfc, "IOSurfaceGetBulkAttachments");
+        }
+
+        if (getBulk) {
+            CFDictionaryRef existing = getBulk(surf);
+            rlog("  GetBulkAttachments=%p", existing);
+            if (existing) {
+                rlog(" count=%ld\n", CFDictionaryGetCount(existing));
+            } else {
+                rlog(" (NULL)\n");
+            }
+        } else {
+            rlog("  IOSurfaceGetBulkAttachments not found\n");
+        }
+
+        if (setBulk) {
+            CFMutableDictionaryRef bd = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(bd, CFSTR("test_attach"), CFSTR("val"));
+            kr = setBulk(surf, bd);
+            rlog("  SetBulkAttachments(1 entry)=0x%x\n", kr);
+            CFRelease(bd);
+
+            if (getBulk) {
+                CFDictionaryRef after = getBulk(surf);
+                rlog("  GetBulkAttachments after set=%p", after);
+                if (after) rlog(" count=%ld\n", CFDictionaryGetCount(after));
+                else rlog(" (NULL)\n");
+            }
+        } else {
+            rlog("  IOSurfaceSetBulkAttachments not found\n");
+        }
+        fflush(stdout);
+    }
+
+    /* Part 4: Property alignment/maximum/subsampling */
+    rlog("\n--- Part 4: AlignProperty/GetPropertyAlignment/Maximum/Subsampling ---\n");
+    {
+        typedef size_t (*AlignProp_t)(IOSurfaceRef, CFStringRef, size_t);
+        typedef size_t (*GetAlign_t)(IOSurfaceRef, CFStringRef);
+        typedef size_t (*GetMax_t)(IOSurfaceRef, CFStringRef);
+        typedef uint32_t (*GetSub_t)(IOSurfaceRef);
+        AlignProp_t alignProp = NULL;
+        GetAlign_t getAlign = NULL;
+        GetMax_t getMax = NULL;
+        GetSub_t getSub = NULL;
+        if (iosfc) {
+            alignProp = (AlignProp_t)dlsym(iosfc, "IOSurfaceAlignProperty");
+            getAlign = (GetAlign_t)dlsym(iosfc, "IOSurfaceGetPropertyAlignment");
+            getMax = (GetMax_t)dlsym(iosfc, "IOSurfaceGetPropertyMaximum");
+            getSub = (GetSub_t)dlsym(iosfc, "IOSurfaceGetSubsampling");
+        }
+
+        CFStringRef propKeys[] = {
+            CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+            CFSTR("IOSurfaceBytesPerRow"), CFSTR("IOSurfaceAllocSize"),
+            CFSTR("IOSurfaceBytesPerElement"), CFSTR("IOSurfacePixelFormat")
+        };
+        int nk = 6;
+
+        if (getAlign) {
+            for (int i = 0; i < nk; i++) {
+                char buf[64]; CFStringGetCString(propKeys[i], buf, 64, kCFStringEncodingUTF8);
+                size_t a = getAlign(surf, propKeys[i]);
+                rlog("  GetPropertyAlignment(%s)=%zu\n", buf, a);
+            }
+        } else rlog("  GetPropertyAlignment not found\n");
+
+        if (getMax) {
+            for (int i = 0; i < nk; i++) {
+                char buf[64]; CFStringGetCString(propKeys[i], buf, 64, kCFStringEncodingUTF8);
+                size_t m = getMax(surf, propKeys[i]);
+                rlog("  GetPropertyMaximum(%s)=%zu\n", buf, m);
+            }
+        } else rlog("  GetPropertyMaximum not found\n");
+
+        if (alignProp) {
+            size_t a1 = alignProp(surf, CFSTR("IOSurfaceBytesPerRow"), 100);
+            size_t a2 = alignProp(surf, CFSTR("IOSurfaceBytesPerRow"), 256);
+            size_t a3 = alignProp(surf, CFSTR("IOSurfaceBytesPerRow"), 4096);
+            rlog("  AlignProperty(BPR,100)=%zu (256)=%zu (4096)=%zu\n", a1, a2, a3);
+        } else rlog("  AlignProperty not found\n");
+
+        if (getSub) {
+            uint32_t sub = getSub(surf);
+            rlog("  GetSubsampling=%u\n", sub);
+        } else rlog("  GetSubsampling not found\n");
+        fflush(stdout);
+    }
+
+    /* Part 5: Try SetCFProperties from SECOND connection */
+    rlog("\n--- Part 5: SetCFProperties from second connection ---\n");
+    {
+        io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("IOSurfaceRoot"));
+        io_connect_t conn1 = IO_OBJECT_NULL, conn2 = IO_OBJECT_NULL;
+        IOServiceOpen(svc, mach_task_self(), 0, &conn1);
+        IOServiceOpen(svc, mach_task_self(), 0, &conn2);
+        rlog("  conn1=%u conn2=%u\n", conn1, conn2);
+
+        typedef kern_return_t (*SetCFProps_t)(io_connect_t, CFTypeRef);
+        typedef kern_return_t (*SetCFProp_t)(io_connect_t, CFStringRef, CFTypeRef);
+        SetCFProps_t setCFProps = NULL;
+        SetCFProp_t setCFProp = NULL;
+        if (iokit) {
+            setCFProps = (SetCFProps_t)dlsym(iokit, "IOConnectSetCFProperties");
+            setCFProp = (SetCFProp_t)dlsym(iokit, "IOConnectSetCFProperty");
+        }
+
+        if (setCFProps) {
+            CFMutableDictionaryRef d = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(d, CFSTR("test"), CFSTR("val"));
+
+            kr = setCFProps(conn1, d);
+            rlog("  SetCFProperties(conn1,dict)=0x%x\n", kr);
+            kr = setCFProps(conn2, d);
+            rlog("  SetCFProperties(conn2,dict)=0x%x\n", kr);
+            CFRelease(d);
+        }
+
+        /* Try specific IOSurface-related keys */
+        if (setCFProp) {
+            CFStringRef keys[] = {
+                CFSTR("IOSurfaceRootUserClient"),
+                CFSTR("IOSurfaceExclusiveAccess"),
+                CFSTR("IOSurfaceLockMode"),
+                CFSTR("IOSurfaceGlobalLock"),
+                CFSTR("exclusive"),
+                CFSTR("lock"),
+                CFSTR("unlock"),
+                CFSTR("IOSurfaceID")
+            };
+            int nkeys = 8;
+            CFNumberRef zero = CFNumberCreate(NULL, kCFNumberIntType, &(int){0});
+            CFNumberRef one = CFNumberCreate(NULL, kCFNumberIntType, &(int){1});
+            CFNumberRef sidNum = CFNumberCreate(NULL, kCFNumberIntType, &(int){sid});
+
+            for (int i = 0; i < nkeys; i++) {
+                char buf[64]; CFStringGetCString(keys[i], buf, 64, kCFStringEncodingUTF8);
+                kr = setCFProp(conn1, keys[i], zero);
+                rlog("  SetCFProperty(conn1,'%s',0)=0x%x\n", buf, kr);
+                kr = setCFProp(conn1, keys[i], one);
+                rlog("  SetCFProperty(conn1,'%s',1)=0x%x\n", buf, kr);
+            }
+            kr = setCFProp(conn1, CFSTR("IOSurfaceID"), sidNum);
+            rlog("  SetCFProperty(conn1,'IOSurfaceID',sid=%u)=0x%x\n", sid, kr);
+
+            CFRelease(zero); CFRelease(one); CFRelease(sidNum);
+        }
+
+        IOServiceClose(conn1);
+        IOServiceClose(conn2);
+        IOObjectRelease(svc);
+        fflush(stdout);
+    }
+
+    /* Part 6: SetCFProperties on SECOND surface */
+    rlog("\n--- Part 6: SetCFProperties on second surface ---\n");
+    {
+        int w2 = 32, h2 = 32, bpe2 = 4, bpr2 = w2*bpe2, pf2 = 0x42475241;
+        int as2 = bpr2*h2;
+        CFMutableDictionaryRef p2 = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef wn2 = CFNumberCreate(NULL, kCFNumberIntType, &w2);
+        CFNumberRef hn2 = CFNumberCreate(NULL, kCFNumberIntType, &h2);
+        CFNumberRef bn2 = CFNumberCreate(NULL, kCFNumberIntType, &bpe2);
+        CFNumberRef rn2 = CFNumberCreate(NULL, kCFNumberIntType, &bpr2);
+        CFNumberRef pfn2 = CFNumberCreate(NULL, kCFNumberIntType, &pf2);
+        CFNumberRef asn2 = CFNumberCreate(NULL, kCFNumberIntType, &as2);
+        CFDictionarySetValue(p2, CFSTR("IOSurfaceWidth"), wn2);
+        CFDictionarySetValue(p2, CFSTR("IOSurfaceHeight"), hn2);
+        CFDictionarySetValue(p2, CFSTR("IOSurfaceBytesPerElement"), bn2);
+        CFDictionarySetValue(p2, CFSTR("IOSurfaceBytesPerRow"), rn2);
+        CFDictionarySetValue(p2, CFSTR("IOSurfacePixelFormat"), pfn2);
+        CFDictionarySetValue(p2, CFSTR("IOSurfaceAllocSize"), asn2);
+        CFRelease(wn2); CFRelease(hn2); CFRelease(bn2); CFRelease(rn2); CFRelease(pfn2); CFRelease(asn2);
+
+        IOSurfaceRef surf2 = IOSurfaceCreate(p2);
+        rlog("  surf2=%p id=%u\n", surf2, surf2 ? IOSurfaceGetID(surf2) : 0);
+        CFRelease(p2);
+
+        if (surf2) {
+            io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            io_connect_t c3 = IO_OBJECT_NULL;
+            IOServiceOpen(svc, mach_task_self(), 0, &c3);
+
+            typedef kern_return_t (*SetCFProps_t)(io_connect_t, CFTypeRef);
+            SetCFProps_t setCFProps = NULL;
+            if (iokit) setCFProps = (SetCFProps_t)dlsym(iokit, "IOConnectSetCFProperties");
+
+            if (setCFProps) {
+                CFMutableDictionaryRef d2 = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                uint32_t sid2 = IOSurfaceGetID(surf2);
+                CFNumberRef sidN = CFNumberCreate(NULL, kCFNumberIntType, &(int){sid2});
+                CFDictionarySetValue(d2, CFSTR("IOSurfaceID"), sidN);
+                CFDictionarySetValue(d2, CFSTR("test"), CFSTR("val"));
+
+                kr = setCFProps(c3, d2);
+                rlog("  SetCFProperties(conn3,{ID=%u,test})=0x%x\n", sid2, kr);
+                CFRelease(d2); CFRelease(sidN);
+
+                /* Try with just one key */
+                CFMutableDictionaryRef d3 = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                CFDictionarySetValue(d3, CFSTR("IOSurfaceID"), CFNumberCreate(NULL, kCFNumberIntType, &(int){sid2}));
+                kr = setCFProps(c3, d3);
+                rlog("  SetCFProperties(conn3,{ID=%u only})=0x%x\n", sid2, kr);
+                CFRelease(d3);
+            }
+
+            IOServiceClose(c3);
+            IOObjectRelease(svc);
+            CFRelease(surf2);
+        }
+        fflush(stdout);
+    }
+
+    /* Part 7: IOSurfaceSetValue with large/special values */
+    rlog("\n--- Part 7: SetValue with large/special values + seed tracking ---\n");
+    {
+        typedef uint32_t (*IOSurfaceGetSeed_t)(IOSurfaceRef);
+        IOSurfaceGetSeed_t getSeed = NULL;
+        if (iosfc) getSeed = (IOSurfaceGetSeed_t)dlsym(iosfc, "IOSurfaceGetSeed");
+
+        uint32_t s0 = getSeed ? getSeed(surf) : 0;
+        rlog("  seed start=%u\n", s0);
+
+        /* Large data value */
+        uint8_t bigbuf[4096];
+        memset(bigbuf, 0x41, sizeof(bigbuf));
+        CFDataRef bigData = CFDataCreate(NULL, bigbuf, sizeof(bigbuf));
+        IOSurfaceSetValue(surf, CFSTR("big_data"), bigData);
+        uint32_t s1 = getSeed ? getSeed(surf) : 0;
+        rlog("  after SetValue(big_data, 4096 bytes) seed=%u\n", s1);
+
+        CFTypeRef got = IOSurfaceCopyValue(surf, CFSTR("big_data"));
+        if (got && CFGetTypeID(got) == CFDataGetTypeID()) {
+            rlog("  CopyValue(big_data) len=%ld\n", CFDataGetLength((CFDataRef)got));
+            CFRelease(got);
+        } else {
+            rlog("  CopyValue(big_data) = %p\n", got);
+        }
+        CFRelease(bigData);
+        IOSurfaceRemoveValue(surf, CFSTR("big_data"));
+
+        /* Overwrite standard property names */
+        CFNumberRef fakeW = CFNumberCreate(NULL, kCFNumberIntType, &(int){9999});
+        IOSurfaceSetValue(surf, CFSTR("IOSurfaceWidth"), fakeW);
+        uint32_t realW = (uint32_t)IOSurfaceGetWidth(surf);
+        uint32_t s2 = getSeed ? getSeed(surf) : 0;
+        rlog("  after SetValue('IOSurfaceWidth',9999) actual width=%u seed=%u\n", realW, s2);
+        IOSurfaceRemoveValue(surf, CFSTR("IOSurfaceWidth"));
+        CFRelease(fakeW);
+
+        /* Set many properties rapidly */
+        for (int i = 0; i < 50; i++) {
+            char kbuf[32];
+            snprintf(kbuf, sizeof(kbuf), "rapid_%d", i);
+            CFStringRef k = CFStringCreateWithCString(NULL, kbuf, kCFStringEncodingUTF8);
+            CFNumberRef v = CFNumberCreate(NULL, kCFNumberIntType, &i);
+            IOSurfaceSetValue(surf, k, v);
+            CFRelease(k); CFRelease(v);
+        }
+        uint32_t s3 = getSeed ? getSeed(surf) : 0;
+        rlog("  after 50 rapid SetValues seed=%u (delta from start=%u)\n", s3, s3 - s0);
+
+        /* Clean up rapid props */
+        for (int i = 0; i < 50; i++) {
+            char kbuf[32];
+            snprintf(kbuf, sizeof(kbuf), "rapid_%d", i);
+            CFStringRef k = CFStringCreateWithCString(NULL, kbuf, kCFStringEncodingUTF8);
+            IOSurfaceRemoveValue(surf, k);
+            CFRelease(k);
+        }
+        uint32_t s4 = getSeed ? getSeed(surf) : 0;
+        rlog("  after removing 50 props seed=%u (delta from start=%u)\n", s4, s4 - s0);
+        fflush(stdout);
+    }
+
+    /* Part 8: Extended private symbol scan for more APIs */
+    rlog("\n--- Part 8: Extended symbol scan ---\n");
+    {
+        const char *syms[] = {
+            "IOSurfaceGetAllocSize", "IOSurfaceGetBaseAddressOfPlane",
+            "IOSurfaceGetPlaneCount", "IOSurfaceGetWidthOfPlane",
+            "IOSurfaceGetHeightOfPlane", "IOSurfaceGetBytesPerRowOfPlane",
+            "IOSurfaceGetBytesPerElementOfPlane", "IOSurfaceGetElementWidthOfPlane",
+            "IOSurfaceGetElementHeightOfPlane", "IOSurfaceGetNumberOfComponentsOfPlane",
+            "IOSurfaceSetPurgeableState", "IOSurfaceGetUseCount",
+            "IOSurfaceCopyAllValues", "IOSurfaceRemoveAllValues",
+            "IOSurfaceSetDataValueBytes", "IOSurfaceCopyDataValueBytes",
+            "IOSurfaceCreateXPCObject", "IOSurfaceLookupFromXPCObject",
+            "IOSurfaceSetNotificationPort", "IOSurfaceGetNotificationPort",
+            "IOSurfaceCreateMachPort", "IOSurfaceLookupFromMachPort",
+            "IOSurfaceCreateImage", "IOSurfaceSetCompletionNotification",
+            "IOSurfaceClientCreate", "IOSurfaceClientRelease",
+            "IOSurfaceClientLookup", "IOSurfaceClientLock",
+            "IOSurfaceClientUnlock", "IOSurfaceClientAlign",
+            "IOSurfaceClientGetSurfaceID", "IOSurfaceClientGetPlaneCount",
+            "IOSurfaceClientSetYCbCrMatrix", "IOSurfaceGetYCbCrMatrix",
+            "IOSurfaceClientSetColorSpace", "IOSurfaceGetColorSpace",
+            "IOSurfaceClientIncrementUseCount", "IOSurfaceClientDecrementUseCount",
+            "IOSurfaceClientSetPurgeable", "IOSurfaceSetCacheMode",
+            "IOSurfaceGetCacheMode", "IOSurfaceClientSetCacheMode",
+            "IOSurfaceSetProtectionOptions", "IOSurfaceGetProtectionOptions",
+            "IOSurfaceClientSetProtectionOptions",
+            "IOSurfaceSetGenerationCount", "IOSurfaceGetGenerationCount",
+            "IOSurfaceSetResidentCount", "IOSurfaceGetResidentCount",
+            NULL
+        };
+        for (int i = 0; syms[i]; i++) {
+            void *p = dlsym(iosfc, syms[i]);
+            if (p) rlog("    FOUND: %s = %p\n", syms[i], p);
+        }
+        fflush(stdout);
+    }
+
+    if (iosfc) dlclose(iosfc);
+    if (iokit) dlclose(iokit);
+    mach_port_deallocate(mach_task_self(), sp);
+    __sync_fetch_and_add(&r271_probed, 1);
+    rlog("\n*** r271 probe complete ***\n");
+    fflush(stdout);
+}
+
 /* r270: IOSurfaceClient* APIs + SetCFProperty + ExclusiveAccess investigation.
  * r269 found: SetCFProperties returns kIOReturnExclusiveAccess (0xe00002e2)
  *   — kernel setProperties() IS IMPLEMENTED but locked.
@@ -22724,6 +23138,42 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 271) {
+            rlog("*** rounds=271: Private API Exploration + ExclusiveAccess Bypass ***\n");
+            rlog("  r270: ClientLookup/Lock work, ExclusiveAccess on SetCFProps.\n");
+            rlog("  Found: GetSeed, SetOwnership, BulkAttachments, Align/Max, Subsampling.\n\n");
+            fflush(stdout);
+
+            int w = 64, h = 64, bpe = 4, bpr = w * bpe, pf = 0x42475241;
+            int alloc_sz = bpr * h;
+            CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+            CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFNumberRef asn = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), rn);
+            CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), asn);
+            CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn); CFRelease(asn);
+
+            IOSurfaceRef surf = IOSurfaceCreate(props);
+            rlog("  surf=%p id=%u\n", surf, surf ? IOSurfaceGetID(surf) : 0);
+            fflush(stdout);
+            if (surf) {
+                r271_probe(surf);
+                CFRelease(surf);
+            }
+            CFRelease(props);
+            rlog("\n*** r271 complete ***\n");
+            fflush(stdout);
             goto done;
         }
         if (rounds == 270) {
