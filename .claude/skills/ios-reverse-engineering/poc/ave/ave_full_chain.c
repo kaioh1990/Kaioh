@@ -2735,10 +2735,13 @@ static void *r291_bulk_thread(void *arg) {
 
 static void *r291_flush_thread(void *arg) {
     struct r291_ctx *ctx = (struct r291_ctx *)arg;
+    void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+    typedef kern_return_t (*flushCaches_t)(IOSurfaceRef);
+    flushCaches_t flushFn = (flushCaches_t)dlsym(iosurfH, "IOSurfaceFlushProcessorCaches");
     while (!r291_go) { /* spin */ }
     int idx = 0;
     while (!r291_done && idx < 200) {
-        ctx->flush_results[idx] = (int)IOSurfaceFlushProcessorCaches(ctx->surf);
+        ctx->flush_results[idx] = flushFn ? (int)flushFn(ctx->surf) : -999;
         idx++;
     }
     ctx->flush_count = idx;
@@ -2832,8 +2835,10 @@ static void r291_probe(void) {
         }
 
         /* Test FlushProcessorCaches baseline */
-        kern_return_t fr = IOSurfaceFlushProcessorCaches(s);
-        rlog("  FlushProcessorCaches: 0x%x\n", fr);
+        typedef kern_return_t (*flushCaches_t)(IOSurfaceRef);
+        flushCaches_t flushFn = (flushCaches_t)dlsym(iosurfH, "IOSurfaceFlushProcessorCaches");
+        kern_return_t fr = flushFn ? flushFn(s) : -1;
+        rlog("  FlushProcessorCaches=%p ret=0x%x\n", (void*)flushFn, fr);
 
         /* Test IncrementUseCount */
         int uc0 = (int)IOSurfaceGetUseCount(s);
