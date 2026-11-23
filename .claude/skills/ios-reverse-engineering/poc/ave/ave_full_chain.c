@@ -1749,13 +1749,12 @@ typedef void (*msg_void_ulong_ulong_ulong_ulong_t)(id, SEL, unsigned long, unsig
 
 static void *r262_gpu_fn(void *arg) {
     int tid = (int)(uintptr_t)arg;
-    (void)tid;
 
     /* Get objc_msgSend */
     void *objc_lib = dlopen("/usr/lib/libobjc.A.dylib", RTLD_LAZY);
-    if (!objc_lib) return NULL;
+    if (!objc_lib) { rlog("  [t%d] FAIL: dlopen libobjc\n", tid); return NULL; }
     void *msgSend = dlsym(objc_lib, "objc_msgSend");
-    if (!msgSend) { dlclose(objc_lib); return NULL; }
+    if (!msgSend) { rlog("  [t%d] FAIL: dlsym objc_msgSend\n", tid); dlclose(objc_lib); return NULL; }
 
     msg_id_t send_id = (msg_id_t)msgSend;
     msg_id_id_t send_id_id = (msg_id_id_t)msgSend;
@@ -1765,20 +1764,26 @@ static void *r262_gpu_fn(void *arg) {
     msg_void_ulong_t send_void_ulong = (msg_void_ulong_t)msgSend;
     msg_void_ulong_ulong_ulong_ulong_t send_void_4ulong = (msg_void_ulong_ulong_ulong_ulong_t)msgSend;
 
+    rlog("  [t%d] objc_msgSend=%p\n", tid, msgSend);
+
     /* Get Metal framework */
     void *metal = dlopen("/System/Library/Frameworks/Metal.framework/Metal", RTLD_LAZY);
-    if (!metal) { dlclose(objc_lib); return NULL; }
+    if (!metal) { rlog("  [t%d] FAIL: dlopen Metal\n", tid); dlclose(objc_lib); return NULL; }
 
     typedef id (*CreateDev_t)(void);
     CreateDev_t createDev = (CreateDev_t)dlsym(metal, "MTLCreateSystemDefaultDevice");
-    if (!createDev) { dlclose(metal); dlclose(objc_lib); return NULL; }
+    if (!createDev) { rlog("  [t%d] FAIL: dlsym MTLCreateSystemDefaultDevice\n", tid); dlclose(metal); dlclose(objc_lib); return NULL; }
 
     id device = createDev();
-    if (!device) { dlclose(metal); dlclose(objc_lib); return NULL; }
+    rlog("  [t%d] MTLDevice=%p\n", tid, (void*)device);
+    if (!device) { rlog("  [t%d] FAIL: no Metal device\n", tid); dlclose(metal); dlclose(objc_lib); return NULL; }
 
     /* Create a command queue */
     id cmdQueue = send_id(device, sel_registerName("newCommandQueue"));
-    if (!cmdQueue) { dlclose(metal); dlclose(objc_lib); return NULL; }
+    rlog("  [t%d] cmdQueue=%p\n", tid, (void*)cmdQueue);
+    if (!cmdQueue) { rlog("  [t%d] FAIL: no command queue\n", tid); dlclose(metal); dlclose(objc_lib); return NULL; }
+    rlog("  [t%d] Metal ready, entering loop\n", tid);
+    fflush(stdout);
 
     int w = 128, h = 128, bpe = 4, bpr = w * bpe, pf = 0x42475241;
 
@@ -1817,6 +1822,12 @@ static void *r262_gpu_fn(void *arg) {
             id texture = send_id_ptr_uu(device,
                 sel_registerName("newTextureWithDescriptor:iosurface:plane:level:"),
                 desc, (void *)surf, 0, 0);
+
+            if (r262_tex_ok == 0 && r262_tex_fail == 0) {
+                rlog("  [t%d] first texture attempt: %p (desc=%p surf=%p)\n",
+                     tid, (void*)texture, (void*)desc, (void*)surf);
+                fflush(stdout);
+            }
 
             if (texture) {
                 __sync_fetch_and_add(&r262_tex_ok, 1);
