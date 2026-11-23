@@ -23,7 +23,6 @@
 #include <mach/mach.h>
 #include <mach/mach_error.h>
 #include <mach/mach_port.h>
-#include <mach/mach_vm.h>
 #include <mach/host_info.h>
 #include <mach/task_info.h>
 #include <mach/thread_act.h>
@@ -33,10 +32,29 @@
 #include <mach/processor_set.h>
 
 #include <IOKit/IOKitLib.h>
-#include <IOSurface/IOSurface.h>
 #include <CoreFoundation/CoreFoundation.h>
 
-#include <libproc.h>
+#include <sys/proc_info.h>
+
+/* IOSurface extern declarations (linked via -framework IOSurface) */
+typedef struct __IOSurface *IOSurfaceRef;
+typedef uint32_t IOSurfaceID;
+extern IOSurfaceRef IOSurfaceCreate(CFDictionaryRef properties);
+extern IOSurfaceID IOSurfaceGetID(IOSurfaceRef surface);
+extern void *IOSurfaceGetBaseAddress(IOSurfaceRef surface);
+extern kern_return_t IOSurfaceLock(IOSurfaceRef surface, uint32_t options, uint32_t *seed);
+extern kern_return_t IOSurfaceUnlock(IOSurfaceRef surface, uint32_t options, uint32_t *seed);
+extern size_t IOSurfaceGetAllocSize(IOSurfaceRef surface);
+extern uint32_t IOSurfaceGetSeed(IOSurfaceRef surface);
+extern CFDictionaryRef IOSurfaceCopyAllValues(IOSurfaceRef surface);
+
+/* mach_vm types — iOS SDK doesn't expose mach_vm.h */
+typedef uint64_t mach_vm_address_t;
+typedef uint64_t mach_vm_size_t;
+
+/* proc_pidinfo / proc_pidfdinfo — declared here for iOS compatibility */
+extern int proc_pidinfo(int pid, int flavor, uint64_t arg, void *buffer, int buffersize);
+extern int proc_pidfdinfo(int pid, int fd, int flavor, void *buffer, int buffersize);
 
 /* ========================================================================== */
 /* Helpers                                                                     */
@@ -771,9 +789,13 @@ static void scan_vm_regions(void) {
         vm_region_submap_info_data_64_t info;
         mach_msg_type_number_t cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
 
-        kern_return_t kr = mach_vm_region_recurse(
-            mach_task_self(), &addr, &size, &depth,
+        vm_address_t addr32 = (vm_address_t)addr;
+        vm_size_t size32 = 0;
+        kern_return_t kr = vm_region_recurse_64(
+            mach_task_self(), &addr32, &size32, &depth,
             (vm_region_recurse_info_t)&info, &cnt);
+        addr = addr32;
+        size = size32;
         if (kr != KERN_SUCCESS) break;
 
         /* scan info struct for kptrs */
