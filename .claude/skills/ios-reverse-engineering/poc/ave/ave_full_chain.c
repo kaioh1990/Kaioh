@@ -40,9 +40,18 @@
 #include <pthread.h>
 #include <dispatch/dispatch.h>
 #include <mach/mach.h>
-#include <mach/mach_vm.h>
 #include <mach_debug/mach_debug.h>
 #include <mach/mach_time.h>
+
+/* mach_vm.h is unavailable on iOS SDK, declare manually */
+extern kern_return_t mach_vm_region_recurse(
+    vm_map_t target_task, mach_vm_address_t *address,
+    mach_vm_size_t *size, natural_t *nesting_depth,
+    vm_region_recurse_info_t info, mach_msg_type_number_t *infoCnt);
+extern kern_return_t mach_make_memory_entry_64(
+    vm_map_t target_task, memory_object_size_t *size,
+    memory_object_offset_t offset, vm_prot_t permission,
+    mach_port_t *object_handle, mem_entry_name_port_t parent_entry);
 #include <CoreFoundation/CoreFoundation.h>
 #include <VideoToolbox/VideoToolbox.h>
 #include <CoreVideo/CoreVideo.h>
