@@ -4278,6 +4278,272 @@ static void r297_probe(void) {
  *   5. Probe com.apple.lockdownd (different from lockdownmoded)
  *   6. Check if we can write to NVRAM via IOKit
  */
+
+/*
+ * r302: AppleKeyStore deep probe + AMFI Mach message + NVRAM via syscall
+ * r301 BREAKTHROUGH:
+ *   - AppleKeyStore user client OPENS (kr=0x0)
+ *   - sandbox_check(nvram-set/get) = 0 (sandbox allows NVRAM)
+ *   - MobileFileIntegrity, trustd, securityd Mach ports accessible
+ *   - XPC connection to lockdownmoded created (can't send yet)
+ *
+ * AppleKeyStore handles encryption keys + Secure Enclave comms.
+ * Probe ALL its external methods, trap handlers, and properties.
+ * Also try NVRAM via syscall (not IOKit) since sandbox allows it.
+ * Also try AMFI Mach message to query lockdown mode state.
+ */
+static void r302_probe(void) {
+    rlog("\n=== r302: AppleKeyStore Deep Probe ===\n\n");
+    fflush(stdout);
+
+    /* ---- Part 1: Open AppleKeyStore and enumerate methods ---- */
+    rlog("--- Part 1: AppleKeyStore external methods ---\n");
+    io_service_t aksSvc = IOServiceGetMatchingService(
+        kIOMasterPortDefault, IOServiceMatching("AppleKeyStore"));
+    rlog("  AppleKeyStore service: 0x%x\n", aksSvc);
+
+    io_connect_t aksConn = IO_OBJECT_NULL;
+    kern_return_t kr = KERN_SUCCESS;
+
+    if (aksSvc) {
+        /* Try different user client types */
+        for (uint32_t type = 0; type < 4; type++) {
+            kr = IOServiceOpen(aksSvc, mach_task_self(), type, &aksConn);
+            rlog("  IOServiceOpen type=%u: kr=0x%x conn=0x%x\n", type, kr, aksConn);
+            if (kr == KERN_SUCCESS) break;
+        }
+    }
+
+    if (aksConn != IO_OBJECT_NULL) {
+        rlog("\n  ** AppleKeyStore user client opened! Probing methods... **\n\n");
+
+        /* Probe all scalar methods 0-63 */
+        rlog("  --- ScalarMethod probe (selectors 0-63) ---\n");
+        for (uint32_t sel = 0; sel < 64; sel++) {
+            uint64_t out[16] = {0};
+            uint32_t outCnt = 16;
+            kr = IOConnectCallScalarMethod(aksConn, sel, NULL, 0, out, &outCnt);
+            if (kr != 0xe00002c2 && kr != 0xe00002bc) {
+                /* 0xe00002c2 = kIOReturnBadArgument, 0xe00002bc = kIOReturnUnsupported */
+                rlog("  sel=%u: kr=0x%x outCnt=%u", sel, kr, outCnt);
+                if (outCnt > 0) rlog(" out[0]=0x%llx", out[0]);
+                if (outCnt > 1) rlog(" out[1]=0x%llx", out[1]);
+                rlog("\n");
+            }
+        }
+        fflush(stdout);
+
+        /* Probe struct methods 0-63 */
+        rlog("\n  --- StructMethod probe (selectors 0-63) ---\n");
+        for (uint32_t sel = 0; sel < 64; sel++) {
+            char inBuf[256] = {0};
+            char outBuf[4096] = {0};
+            size_t outSize = sizeof(outBuf);
+            kr = IOConnectCallStructMethod(aksConn, sel,
+                inBuf, 0, outBuf, &outSize);
+            if (kr != 0xe00002c2 && kr != 0xe00002bc) {
+                rlog("  sel=%u: kr=0x%x outSize=%zu", sel, kr, outSize);
+                if (outSize > 0 && outSize <= 32) {
+                    rlog(" data=");
+                    for (size_t j = 0; j < outSize && j < 32; j++)
+                        rlog("%02x", (unsigned char)outBuf[j]);
+                }
+                rlog("\n");
+            }
+        }
+        fflush(stdout);
+
+        /* Try some struct methods with small input */
+        rlog("\n  --- StructMethod with 8-byte input (sel 0-31) ---\n");
+        for (uint32_t sel = 0; sel < 32; sel++) {
+            uint64_t inVal = 0;
+            char outBuf[4096] = {0};
+            size_t outSize = sizeof(outBuf);
+            kr = IOConnectCallStructMethod(aksConn, sel,
+                &inVal, 8, outBuf, &outSize);
+            if (kr != 0xe00002c2 && kr != 0xe00002bc &&
+                kr != 0xe00002c7 /* notPermitted */) {
+                rlog("  sel=%u(in=8): kr=0x%x outSize=%zu", sel, kr, outSize);
+                if (outSize > 0 && outSize <= 32) {
+                    rlog(" data=");
+                    for (size_t j = 0; j < outSize && j < 32; j++)
+                        rlog("%02x", (unsigned char)outBuf[j]);
+                }
+                rlog("\n");
+            }
+        }
+        fflush(stdout);
+
+        /* Read AppleKeyStore properties */
+        rlog("\n  --- AppleKeyStore properties ---\n");
+        CFMutableDictionaryRef props = NULL;
+        kr = IORegistryEntryCreateCFProperties(aksSvc, &props, kCFAllocatorDefault, 0);
+        if (kr == KERN_SUCCESS && props) {
+            CFIndex count = CFDictionaryGetCount(props);
+            rlog("  Properties: %ld keys\n", count);
+            const void **keys = malloc(sizeof(void*) * count);
+            const void **vals = malloc(sizeof(void*) * count);
+            CFDictionaryGetKeysAndValues(props, keys, vals);
+            for (CFIndex i = 0; i < count && i < 40; i++) {
+                char kbuf[256] = {0};
+                if (CFGetTypeID(keys[i]) == CFStringGetTypeID())
+                    CFStringGetCString(keys[i], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+                rlog("  [%ld] %s = ", i, kbuf);
+                if (CFGetTypeID(vals[i]) == CFNumberGetTypeID()) {
+                    long long v = 0;
+                    CFNumberGetValue(vals[i], kCFNumberLongLongType, &v);
+                    rlog("0x%llx (%lld)\n", v, v);
+                } else if (CFGetTypeID(vals[i]) == CFBooleanGetTypeID()) {
+                    rlog("%s\n", CFBooleanGetValue(vals[i]) ? "true" : "false");
+                } else if (CFGetTypeID(vals[i]) == CFStringGetTypeID()) {
+                    char vbuf[256] = {0};
+                    CFStringGetCString(vals[i], vbuf, sizeof(vbuf), kCFStringEncodingUTF8);
+                    rlog("\"%s\"\n", vbuf);
+                } else if (CFGetTypeID(vals[i]) == CFDataGetTypeID()) {
+                    rlog("<data len=%ld>\n", CFDataGetLength(vals[i]));
+                } else {
+                    rlog("<type=%lu>\n", CFGetTypeID(vals[i]));
+                }
+            }
+            free(keys);
+            free(vals);
+            CFRelease(props);
+        }
+        fflush(stdout);
+
+        /* Try async methods */
+        rlog("\n  --- AsyncMethod probe (sel 0-15) ---\n");
+        for (uint32_t sel = 0; sel < 16; sel++) {
+            uint64_t out[8] = {0};
+            uint32_t outCnt = 8;
+            /* IOConnectCallAsyncScalarMethod needs a notification port */
+            mach_port_t notifyPort = MACH_PORT_NULL;
+            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &notifyPort);
+            uint64_t refcon[1] = {0};
+            kr = IOConnectCallAsyncScalarMethod(aksConn, sel,
+                notifyPort, refcon, 1, NULL, 0, out, &outCnt);
+            if (kr != 0xe00002c2 && kr != 0xe00002bc) {
+                rlog("  async sel=%u: kr=0x%x outCnt=%u\n", sel, kr, outCnt);
+            }
+            mach_port_deallocate(mach_task_self(), notifyPort);
+        }
+        fflush(stdout);
+
+        /* Map memory */
+        rlog("\n  --- IOConnectMapMemory probe ---\n");
+        for (uint32_t memType = 0; memType < 8; memType++) {
+            mach_vm_address_t addr = 0;
+            mach_vm_size_t size = 0;
+            kr = IOConnectMapMemory64(aksConn, memType, mach_task_self(),
+                &addr, &size, kIOMapAnywhere);
+            if (kr == KERN_SUCCESS) {
+                rlog("  ** MapMemory type=%u: addr=0x%llx size=0x%llx **\n",
+                     memType, (uint64_t)addr, (uint64_t)size);
+            } else if (kr != 0xe00002c2 && kr != 0xe00002bc) {
+                rlog("  MapMemory type=%u: kr=0x%x\n", memType, kr);
+            }
+        }
+        fflush(stdout);
+
+        IOServiceClose(aksConn);
+    }
+
+    if (aksSvc) IOObjectRelease(aksSvc);
+
+    /* ---- Part 2: NVRAM via io_registry_entry_set_properties syscall ---- */
+    rlog("\n--- Part 2: NVRAM via direct Mach trap ---\n");
+    /* io_registry_entry_set_properties is the underlying Mach call.
+     * On iOS, IORegistryEntrySetCFProperty is marked unavailable but
+     * the underlying MIG call might still work */
+    io_registry_entry_t nvram2 = IORegistryEntryFromPath(
+        kIOMasterPortDefault, "IODeviceTree:/options");
+    if (nvram2) {
+        /* Try to set a property using IORegistryEntrySetCFProperties
+         * (note: plural, different from singular) */
+        CFMutableDictionaryRef dict = CFDictionaryCreateMutable(
+            kCFAllocatorDefault, 1,
+            &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+        CFStringRef key = CFSTR("research-test");
+        CFDataRef val = CFDataCreate(kCFAllocatorDefault, (const UInt8*)"t", 1);
+        CFDictionarySetValue(dict, key, val);
+
+        /* IORegistryEntrySetCFProperties is available on iOS! */
+        kr = IORegistryEntrySetCFProperties(nvram2, dict);
+        rlog("  IORegistryEntrySetCFProperties(test): kr=0x%x\n", kr);
+
+        /* Try LDM key */
+        CFMutableDictionaryRef dict2 = CFDictionaryCreateMutable(
+            kCFAllocatorDefault, 1,
+            &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+        CFStringRef ldmKey = CFSTR("40A0DDD2-77F8-4392-B4A3-1E7304206516:ldm");
+        CFDataRef ldmVal = CFDataCreate(kCFAllocatorDefault, (const UInt8*)"\x01", 1);
+        CFDictionarySetValue(dict2, ldmKey, ldmVal);
+        kr = IORegistryEntrySetCFProperties(nvram2, dict2);
+        rlog("  IORegistryEntrySetCFProperties(LDM): kr=0x%x\n", kr);
+
+        CFRelease(val);
+        CFRelease(dict);
+        CFRelease(ldmVal);
+        CFRelease(dict2);
+        IOObjectRelease(nvram2);
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: AMFI Mach message ---- */
+    rlog("\n--- Part 3: AMFI Mach port message ---\n");
+    mach_port_t bp = MACH_PORT_NULL;
+    task_get_bootstrap_port(mach_task_self(), &bp);
+    mach_port_t amfiPort = MACH_PORT_NULL;
+    kr = bootstrap_look_up(bp, "com.apple.MobileFileIntegrity", &amfiPort);
+    rlog("  AMFI port: 0x%x (kr=0x%x)\n", amfiPort, kr);
+    if (amfiPort != MACH_PORT_NULL) {
+        /* Try to send a simple Mach message */
+        struct {
+            mach_msg_header_t header;
+            mach_msg_body_t body;
+            uint64_t data[4];
+        } msg = {0};
+        msg.header.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, MACH_MSG_TYPE_MAKE_SEND_ONCE);
+        msg.header.msgh_size = sizeof(msg);
+        msg.header.msgh_remote_port = amfiPort;
+
+        mach_port_t replyPort = MACH_PORT_NULL;
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &replyPort);
+        msg.header.msgh_local_port = replyPort;
+        msg.header.msgh_id = 0x1000; /* Probe message ID */
+
+        kr = mach_msg(&msg.header, MACH_SEND_MSG | MACH_SEND_TIMEOUT,
+                      sizeof(msg), 0, MACH_PORT_NULL, 100, MACH_PORT_NULL);
+        rlog("  mach_msg send to AMFI: kr=0x%x\n", kr);
+
+        if (kr == KERN_SUCCESS) {
+            /* Try to receive reply */
+            struct {
+                mach_msg_header_t header;
+                uint64_t data[16];
+            } reply = {0};
+            reply.header.msgh_size = sizeof(reply);
+            reply.header.msgh_local_port = replyPort;
+            kr = mach_msg(&reply.header, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                          0, sizeof(reply), replyPort, 500, MACH_PORT_NULL);
+            rlog("  mach_msg recv from AMFI: kr=0x%x", kr);
+            if (kr == KERN_SUCCESS) {
+                rlog(" id=0x%x size=%u", reply.header.msgh_id, reply.header.msgh_size);
+            }
+            rlog("\n");
+        }
+
+        mach_port_deallocate(mach_task_self(), replyPort);
+        mach_port_deallocate(mach_task_self(), amfiPort);
+    }
+    fflush(stdout);
+
+    rlog("\n=== r302 complete ===\n");
+    fflush(stdout);
+}
+
 static void r301_probe(void) {
     rlog("\n=== r301: NVRAM + Sandbox MAC + LDM Notification Race ===\n\n");
     fflush(stdout);
@@ -30731,6 +30997,14 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 302) {
+            rlog("*** rounds=302: AppleKeyStore deep probe + NVRAM write ***\n");
+            rlog("  r301: AKS opens! sandbox allows nvram-set/get!\n");
+            rlog("  Probe: AKS methods 0-63, MapMemory, NVRAM SetCFProperties.\n\n");
+            fflush(stdout);
+            r302_probe();
             goto done;
         }
         if (rounds == 301) {
