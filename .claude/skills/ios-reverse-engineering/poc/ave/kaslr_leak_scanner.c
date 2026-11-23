@@ -552,13 +552,17 @@ static void scan_zone_info(void) {
                mach_error_string(kr));
     }
 
-    /* try host_zone_info if available (iOS sometimes has it) */
-    /* also try mach_memory_info */
+    /* try mach_memory_info */
+    mach_zone_name_array_t mzn2 = NULL;
+    mach_msg_type_number_t mzn2_cnt = 0;
+    mach_zone_info_array_t mzi2 = NULL;
+    mach_msg_type_number_t mzi2_cnt = 0;
     mach_memory_info_t *minfo = NULL;
     mach_msg_type_number_t mcnt = 0;
     kr = mach_memory_info(mach_host_self(),
-                          (mach_zone_name_array_t *)&minfo, &mcnt,
-                          NULL, NULL);
+                          &mzn2, &mzn2_cnt,
+                          &mzi2, &mzi2_cnt,
+                          &minfo, &mcnt);
     if (kr == KERN_SUCCESS) {
         printf("  mach_memory_info: %u entries — scanning for kptrs\n", mcnt);
         uint64_t *raw = (uint64_t *)minfo;
@@ -1060,16 +1064,21 @@ static void scan_iokit_traps(void) {
        The return is typically 0 for unused traps, but some drivers
        return function pointers (which would be kernel addresses). */
     for (uint32_t idx = 0; idx < 8; idx++) {
-        /* There's no direct API to call traps by index from userspace
-           in a way that returns the function pointer. But we can try
-           IOConnectTrap0..6 and observe results. */
-        /* On arm64, IOConnectTrap uses a Mach trap that goes:
-           iokit_user_client_trap(connect, index, p1..p6)
-           It calls the trap function and returns its result. */
-        uint64_t result = IOConnectTrap0(uc, idx);
-        if (result != 0 && result != (uint64_t)-1) {
-            printf("  Trap %u returned: 0x%llx\n", idx, (unsigned long long)result);
-            check_val("iokit_trap", result);
+        /* Use IOConnectCallScalarMethod with no inputs/outputs as a safe
+           way to probe selectors — IOConnectTrap is unavailable on iOS */
+        uint64_t scal_out[4] = {0};
+        uint32_t scal_out_cnt = 4;
+        uint64_t scal_in[1] = { idx };
+        kern_return_t tkr = IOConnectCallScalarMethod(uc, idx,
+            scal_in, 1, scal_out, &scal_out_cnt);
+        if (tkr == KERN_SUCCESS && scal_out_cnt > 0) {
+            for (uint32_t j = 0; j < scal_out_cnt; j++) {
+                if (scal_out[j] != 0) {
+                    printf("  Trap-probe sel%u[%u]: 0x%llx\n", idx, j,
+                           (unsigned long long)scal_out[j]);
+                    check_val("iokit_trap_probe", scal_out[j]);
+                }
+            }
         }
     }
 
