@@ -1788,31 +1788,26 @@ static void r270_probe(IOSurfaceRef surf) {
             clientCreate, clientRelease, clientLookup, clientLock);
         fflush(stdout);
 
-        if (clientCreate) {
-            void *client = clientCreate(sid);
-            rlog("    ClientCreate(%u) = %p\n", sid, client);
-            fflush(stdout);
-
-            if (client && clientLock) {
-                uint32_t seed = 0;
-                kr = clientLock(client, 0, &seed);
-                rlog("    ClientLock(client, 0, &seed): kr=0x%x seed=%u\n", kr, seed);
-                fflush(stdout);
-            }
-
-            if (client && clientRelease) {
-                clientRelease(client);
-                rlog("    ClientRelease(client) done\n"); fflush(stdout);
-            }
-        }
-
+        /* IOSurfaceClientCreate likely takes (task, surfaceID) or (connection, surfaceID)
+         * — calling with wrong signature crashes due to PAC or bad args.
+         * Try IOSurfaceClientLookup first (safer — just a lookup). */
         if (clientLookup) {
+            rlog("    Trying ClientLookup(%u)...\n", sid); fflush(stdout);
             void *client2 = clientLookup(sid);
             rlog("    ClientLookup(%u) = %p\n", sid, client2);
             fflush(stdout);
             if (client2 && clientRelease) {
                 clientRelease(client2);
+                rlog("    ClientRelease done\n"); fflush(stdout);
             }
+        }
+
+        /* Try ClientCreate with different arg patterns */
+        if (clientCreate) {
+            rlog("    Trying ClientCreate(0)...\n"); fflush(stdout);
+            void *client = clientCreate(0);
+            rlog("    ClientCreate(0) = %p\n", client); fflush(stdout);
+            if (client && clientRelease) clientRelease(client);
         }
     }
 
