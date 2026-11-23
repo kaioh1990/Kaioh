@@ -1633,6 +1633,7 @@ static void *p13_render_loop(void *arg) {
     CFRelease(props);
     if (metal_lib) dlclose(metal_lib);
     return NULL;
+}
 
 /* r253: aggressive render loops — per-thread frame counters, no sleep, varied sizes */
 static volatile int r253_render_run = 0;
