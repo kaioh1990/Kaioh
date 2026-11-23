@@ -1744,7 +1744,112 @@ static void r264_probe_sel17(io_connect_t conn, IOSurfaceRef surf) {
     mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
     uint64_t ref = 0x1234;
 
-    rlog("  Probing sel17 with surfaceID=%u port=%u\n", sid, wp);
+    /* Dump IOSurfaceRef internal structure to find connection handle */
+    rlog("  IOSurfaceRef memory dump (first 32 words):\n");
+    uint64_t *raw = (uint64_t *)surf;
+    for (int i = 0; i < 32; i++) {
+        rlog("    [%2d] 0x%016llx", i, raw[i]);
+        if (raw[i] == sid) rlog(" <-- surfaceID!");
+        if (raw[i] > 0 && raw[i] < 0x10000) rlog(" (small=%llu)", raw[i]);
+        rlog("\n");
+    }
+    fflush(stdout);
+
+    /* Also try to find IOSurface framework's internal connection */
+    rlog("  Mach port from IOSurfaceCreateMachPort: ");
+    mach_port_t sp = IOSurfaceCreateMachPort(surf);
+    rlog("port=%u\n", sp);
+
+    /* Try sel0 (create_surface) on our connection to get OUR handle */
+    rlog("\n  === Trying sel0 (create_surface) on our connection ===\n");
+    /* Format: struct input = serialized properties. Try minimal binary plist */
+    {
+        /* Try with the IOSurface properties as a simple struct */
+        uint32_t props_data[8] = {64, 64, 4, 256, 0x42475241, 16384, 0, 0};
+        char struct_out[1024] = {0};
+        size_t so_sz = 1024;
+        uint64_t sc_out[8] = {0};
+        uint32_t sc_out_cnt = 8;
+        kr = IOConnectCallMethod(conn, 0, NULL, 0, props_data, 32,
+            sc_out, &sc_out_cnt, struct_out, &so_sz);
+        rlog("    sel0 raw32: kr=0x%x sc_out_cnt=%u so_sz=%zu\n", kr, sc_out_cnt, so_sz);
+        if (kr == 0) {
+            for (uint32_t i = 0; i < sc_out_cnt; i++)
+                rlog("      sc_out[%u]=0x%llx\n", i, sc_out[i]);
+        }
+    }
+    {
+        /* Try sel0 with a CF serialized plist (XML) */
+        const char *xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+            "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n"
+            "<plist version=\"1.0\"><dict>"
+            "<key>IOSurfaceWidth</key><integer>64</integer>"
+            "<key>IOSurfaceHeight</key><integer>64</integer>"
+            "<key>IOSurfaceBytesPerElement</key><integer>4</integer>"
+            "<key>IOSurfaceBytesPerRow</key><integer>256</integer>"
+            "<key>IOSurfacePixelFormat</key><integer>1111970369</integer>"
+            "<key>IOSurfaceAllocSize</key><integer>16384</integer>"
+            "</dict></plist>";
+        size_t xml_len = strlen(xml);
+        char struct_out[1024] = {0};
+        size_t so_sz = 1024;
+        uint64_t sc_out[8] = {0};
+        uint32_t sc_out_cnt = 8;
+        kr = IOConnectCallMethod(conn, 0, NULL, 0, xml, xml_len,
+            sc_out, &sc_out_cnt, struct_out, &so_sz);
+        rlog("    sel0 xml: kr=0x%x sc_out_cnt=%u so_sz=%zu\n", kr, sc_out_cnt, so_sz);
+        if (kr == 0) {
+            for (uint32_t i = 0; i < sc_out_cnt; i++)
+                rlog("      sc_out[%u]=0x%llx\n", i, sc_out[i]);
+        }
+    }
+    {
+        /* Try sel0 with IOSurface binary serialization (OSSerialize format) */
+        /* Start with surface ID as scalar, properties as struct */
+        uint64_t sc_in[1] = {0}; /* no surface yet */
+        char struct_out[1024] = {0};
+        size_t so_sz = 1024;
+        uint64_t sc_out[8] = {0};
+        uint32_t sc_out_cnt = 8;
+        kr = IOConnectCallMethod(conn, 0, sc_in, 1, NULL, 0,
+            sc_out, &sc_out_cnt, struct_out, &so_sz);
+        rlog("    sel0 scalar[0]: kr=0x%x sc_out_cnt=%u so_sz=%zu\n", kr, sc_out_cnt, so_sz);
+    }
+
+    /* Now try sel17 with the Mach port as the surface ID arg
+     * (maybe sel17 takes a Mach port, not a surface ID?) */
+    rlog("\n  === sel17 with Mach port as arg ===\n");
+    {
+        uint64_t sc[1] = {sp};
+        kr = IOConnectCallAsyncMethod(conn, 17, wp, &ref, 1, sc, 1, NULL, 0, NULL, NULL, NULL, NULL);
+        rlog("    sel17 scalar[machPort]: kr=0x%x\n", kr);
+    }
+    {
+        uint64_t sc[2] = {sp, 0};
+        kr = IOConnectCallAsyncMethod(conn, 17, wp, &ref, 1, sc, 2, NULL, 0, NULL, NULL, NULL, NULL);
+        rlog("    sel17 scalar[machPort,0]: kr=0x%x\n", kr);
+    }
+
+    /* Try with 3 and 4 scalar args */
+    rlog("\n  === sel17 with 3-4 scalar args ===\n");
+    {
+        uint64_t sc[3] = {sid, 0xFFFFFFFF, 0};
+        kr = IOConnectCallAsyncMethod(conn, 17, wp, &ref, 1, sc, 3, NULL, 0, NULL, NULL, NULL, NULL);
+        rlog("    sel17 scalar[surfID,0xFFFFFFFF,0]: kr=0x%x\n", kr);
+    }
+    {
+        uint64_t sc[4] = {sid, 1, 0, 0};
+        kr = IOConnectCallAsyncMethod(conn, 17, wp, &ref, 1, sc, 4, NULL, 0, NULL, NULL, NULL, NULL);
+        rlog("    sel17 scalar[surfID,1,0,0]: kr=0x%x\n", kr);
+    }
+    {
+        /* Try just the wake port as scalar */
+        uint64_t sc[2] = {sid, (uint64_t)wp};
+        kr = IOConnectCallAsyncMethod(conn, 17, wp, &ref, 1, sc, 2, NULL, 0, NULL, NULL, NULL, NULL);
+        rlog("    sel17 scalar[surfID,wakePort]: kr=0x%x\n", kr);
+    }
+
+    rlog("\n  Probing sel17 with surfaceID=%u port=%u\n", sid, wp);
 
     /* Format A: scalar[0]=surfaceID, no struct */
     {
