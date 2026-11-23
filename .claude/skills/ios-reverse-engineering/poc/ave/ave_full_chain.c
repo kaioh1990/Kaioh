@@ -4264,6 +4264,297 @@ static void r297_probe(void) {
  * memory — potential for confusion attacks.
  */
 /*
+ * r301: NVRAM direct access + Sandbox MAC deep probe + LDM notification race
+ * r300 confirmed: lockdownmoded XPC denied, ACM IOServiceOpen denied,
+ * Darwin notifications work (state=0), LockdownMode.framework loads but empty.
+ *
+ * Attack surface map: Settings → lockdownmoded → ACM driver → NVRAM → reboot
+ * This probe:
+ *   1. Try IOKit NVRAM access (AppleEFIRuntime, IODTNVRAM, IODTNVRAMVariables)
+ *   2. Sandbox MAC syscall with proper struct args (check/set operations)
+ *   3. Register for LDM stateDidChange notification + try to trigger it
+ *   4. Try to open other kernel drivers (AppleSEP, AppleKeyStore)
+ *   5. Probe com.apple.lockdownd (different from lockdownmoded)
+ *   6. Check if we can write to NVRAM via IOKit
+ */
+static void r301_probe(void) {
+    rlog("\n=== r301: NVRAM + Sandbox MAC + LDM Notification Race ===\n\n");
+    fflush(stdout);
+
+    /* ---- Part 1: NVRAM IOKit access ---- */
+    rlog("--- Part 1: NVRAM IOKit access ---\n");
+
+    /* Try IODTNVRAM - the main NVRAM service */
+    io_registry_entry_t nvram = IORegistryEntryFromPath(
+        kIOMasterPortDefault, "IODeviceTree:/options");
+    rlog("  IODeviceTree:/options: 0x%x\n", nvram);
+
+    if (nvram) {
+        /* Read all NVRAM properties */
+        CFMutableDictionaryRef nvprops = NULL;
+        kern_return_t kr = IORegistryEntryCreateCFProperties(
+            nvram, &nvprops, kCFAllocatorDefault, 0);
+        if (kr == KERN_SUCCESS && nvprops) {
+            CFIndex count = CFDictionaryGetCount(nvprops);
+            rlog("  NVRAM properties: %ld total\n", count);
+
+            /* Look for LDM-related keys */
+            const char *ldm_keys[] = {
+                "40A0DDD2-77F8-4392-B4A3-1E7304206516:ldm",
+                "ldm",
+                "lockdown-mode",
+                "LockdownMode",
+                "com.apple.System.ldm",
+                "boot-args",
+                "csr-active-config",
+                NULL
+            };
+            for (int i = 0; ldm_keys[i]; i++) {
+                CFStringRef key = CFStringCreateWithCString(
+                    kCFAllocatorDefault, ldm_keys[i], kCFStringEncodingUTF8);
+                CFTypeRef val = CFDictionaryGetValue(nvprops, key);
+                if (val) {
+                    rlog("  NVRAM['%s'] = ", ldm_keys[i]);
+                    if (CFGetTypeID(val) == CFDataGetTypeID()) {
+                        CFIndex len = CFDataGetLength(val);
+                        const UInt8 *bytes = CFDataGetBytePtr(val);
+                        rlog("<data len=%ld>: ", len);
+                        for (CFIndex j = 0; j < len && j < 32; j++)
+                            rlog("%02x ", bytes[j]);
+                        rlog("\n");
+                    } else if (CFGetTypeID(val) == CFStringGetTypeID()) {
+                        char buf[512] = {0};
+                        CFStringGetCString(val, buf, sizeof(buf), kCFStringEncodingUTF8);
+                        rlog("\"%s\"\n", buf);
+                    } else {
+                        rlog("<type=%lu>\n", CFGetTypeID(val));
+                    }
+                } else {
+                    rlog("  NVRAM['%s'] = <not found>\n", ldm_keys[i]);
+                }
+                CFRelease(key);
+            }
+
+            /* Dump first 30 NVRAM keys to find anything interesting */
+            rlog("\n  All NVRAM keys (first 30):\n");
+            CFIndex numKeys = CFDictionaryGetCount(nvprops);
+            const void **allKeys = malloc(sizeof(void*) * numKeys);
+            CFDictionaryGetKeysAndValues(nvprops, allKeys, NULL);
+            for (CFIndex i = 0; i < numKeys && i < 30; i++) {
+                char kbuf[256] = {0};
+                if (CFGetTypeID(allKeys[i]) == CFStringGetTypeID()) {
+                    CFStringGetCString(allKeys[i], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+                    rlog("  [%ld] %s\n", i, kbuf);
+                }
+            }
+            free(allKeys);
+            CFRelease(nvprops);
+        } else {
+            rlog("  NVRAM CreateCFProperties: kr=0x%x\n", kr);
+        }
+
+        /* Try to WRITE to NVRAM - the key test */
+        rlog("\n  Attempting NVRAM write test...\n");
+        CFStringRef testKey = CFSTR("research-test-key");
+        CFDataRef testVal = CFDataCreate(kCFAllocatorDefault, (const UInt8*)"test", 4);
+        kr = IORegistryEntrySetCFProperty(nvram, testKey, testVal);
+        rlog("  IORegistryEntrySetCFProperty: kr=0x%x\n", kr);
+        CFRelease(testVal);
+
+        /* Try the LDM NVRAM key specifically */
+        CFStringRef ldmKey = CFSTR("40A0DDD2-77F8-4392-B4A3-1E7304206516:ldm");
+        CFDataRef ldmVal = CFDataCreate(kCFAllocatorDefault, (const UInt8*)"\x01", 1);
+        kr = IORegistryEntrySetCFProperty(nvram, ldmKey, ldmVal);
+        rlog("  NVRAM write LDM key: kr=0x%x\n", kr);
+        CFRelease(ldmVal);
+
+        IOObjectRelease(nvram);
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: IODTNVRAM service directly ---- */
+    rlog("\n--- Part 2: IODTNVRAM matching ---\n");
+    io_service_t nvramSvc = IOServiceGetMatchingService(
+        kIOMasterPortDefault, IOServiceMatching("IODTNVRAM"));
+    rlog("  IODTNVRAM service: 0x%x\n", nvramSvc);
+    if (nvramSvc) {
+        io_connect_t nvConn = IO_OBJECT_NULL;
+        kern_return_t kr = IOServiceOpen(nvramSvc, mach_task_self(), 0, &nvConn);
+        rlog("  IOServiceOpen: kr=0x%x conn=0x%x\n", kr, nvConn);
+        if (nvConn != IO_OBJECT_NULL) {
+            rlog("  ** NVRAM user client opened! **\n");
+            IOServiceClose(nvConn);
+        }
+        IOObjectRelease(nvramSvc);
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: Kernel driver enumeration ---- */
+    rlog("\n--- Part 3: Security-critical kernel services ---\n");
+    const char *svc_names[] = {
+        "AppleSEPManager", "AppleKeyStore", "AppleAPFSContainer",
+        "AppleFirmwareUpdateKext", "AppleSMC", "AppleT8160PMGR",
+        "IOUserEthernet", "AppleSSE", "AppleUSBDeviceNCM",
+        "AppleAVE2Driver", "AppleSPU", "IOSurfaceRoot",
+        "AppleSPTMManager", "AppleTXMManager", "ApplePPLManager",
+        NULL
+    };
+    for (int i = 0; svc_names[i]; i++) {
+        io_service_t svc = IOServiceGetMatchingService(
+            kIOMasterPortDefault, IOServiceMatching(svc_names[i]));
+        if (svc) {
+            rlog("  %s: found (0x%x)", svc_names[i], svc);
+            io_connect_t conn = IO_OBJECT_NULL;
+            kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+            rlog(" open=%s(0x%x)", kr == KERN_SUCCESS ? "OK" : "DENIED", kr);
+            if (conn != IO_OBJECT_NULL) {
+                rlog(" ** OPENED **");
+                IOServiceClose(conn);
+            }
+            rlog("\n");
+            IOObjectRelease(svc);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: lockdownd (not lockdownmoded) ---- */
+    rlog("\n--- Part 4: lockdownd and other Mach services ---\n");
+    mach_port_t bp = MACH_PORT_NULL;
+    task_get_bootstrap_port(mach_task_self(), &bp);
+    const char *mach_svc[] = {
+        "com.apple.lockdownd",
+        "com.apple.lockdown.agent",
+        "com.apple.mobile.lockdown",
+        "com.apple.MobileFileIntegrity",
+        "com.apple.amfi.xpc",
+        "com.apple.security.cryptexd",
+        "com.apple.trustd",
+        "com.apple.securityd",
+        "com.apple.containermanagerd",
+        "com.apple.sptm",
+        "com.apple.txm",
+        NULL
+    };
+    for (int i = 0; mach_svc[i]; i++) {
+        mach_port_t sp = MACH_PORT_NULL;
+        kern_return_t kr = bootstrap_look_up(bp, mach_svc[i], &sp);
+        rlog("  '%s': kr=0x%x port=0x%x\n", mach_svc[i], kr, sp);
+        if (sp != MACH_PORT_NULL) mach_port_deallocate(mach_task_self(), sp);
+    }
+    fflush(stdout);
+
+    /* ---- Part 5: Sandbox MAC syscall with proper args ---- */
+    rlog("\n--- Part 5: Sandbox MAC syscall deep probe ---\n");
+    typedef int (*mac_syscall_t)(const char *, int, void *);
+    mac_syscall_t mac_syscall_fn = (mac_syscall_t)dlsym(RTLD_DEFAULT, "__mac_syscall");
+    if (mac_syscall_fn) {
+        /* Sandbox call=2 is sandbox_check_by_audit_token
+         * call=0 is sandbox_ms (sandbox_apply/sandbox_set_container)
+         * Let's try with string arguments */
+
+        /* Try to check our own sandbox profile */
+        const char *profile_ops[] = {
+            "lockdown-mode", "mach-lookup", "nvram-set", "nvram-get",
+            "iokit-open", "system-privilege", "file-write*",
+            NULL
+        };
+        for (int i = 0; profile_ops[i]; i++) {
+            /* sandbox_check takes pid, operation, type, ... */
+            typedef int (*sandbox_check_t)(pid_t, const char*, int, ...);
+            sandbox_check_t sbcheck = (sandbox_check_t)dlsym(RTLD_DEFAULT, "sandbox_check");
+            if (sbcheck) {
+                int ret = sbcheck(getpid(), profile_ops[i], 0);
+                rlog("  sandbox_check(%s): ret=%d errno=%d\n",
+                     profile_ops[i], ret, errno);
+            }
+        }
+
+        /* Try sandbox_extension_consume for lockdown mode */
+        typedef int64_t (*sb_ext_issue_t)(const char *, uint32_t, const char *, uint32_t);
+        sb_ext_issue_t sb_issue = (sb_ext_issue_t)dlsym(RTLD_DEFAULT, "sandbox_extension_issue_file");
+        rlog("  sandbox_extension_issue_file: %p\n", (void*)sb_issue);
+
+        typedef int (*sb_ext_consume_t)(const char *);
+        sb_ext_consume_t sb_consume = (sb_ext_consume_t)dlsym(RTLD_DEFAULT, "sandbox_extension_consume");
+        rlog("  sandbox_extension_consume: %p\n", (void*)sb_consume);
+    }
+    fflush(stdout);
+
+    /* ---- Part 6: Try xpc_connection to lockdownmoded ---- */
+    rlog("\n--- Part 6: XPC connection attempts ---\n");
+    /* Use libxpc directly */
+    void *libxpc = dlopen("/usr/lib/system/libxpc.dylib", RTLD_NOW);
+    if (libxpc) {
+        rlog("  libxpc loaded\n");
+        /* Try xpc_connection_create_mach_service */
+        typedef void* (*xpc_conn_create_t)(const char *, void *, uint64_t);
+        typedef void (*xpc_conn_set_handler_t)(void *, void *);
+        typedef void (*xpc_conn_resume_t)(void *);
+        typedef void* (*xpc_dict_create_t)(const char **, void **, size_t);
+        typedef void (*xpc_dict_set_bool_t)(void *, const char *, _Bool);
+        typedef void (*xpc_dict_set_string_t)(void *, const char *, const char *);
+        typedef void (*xpc_conn_send_t)(void *, void *);
+
+        xpc_conn_create_t xpc_create = dlsym(libxpc, "xpc_connection_create_mach_service");
+        rlog("  xpc_connection_create_mach_service: %p\n", (void*)xpc_create);
+
+        if (xpc_create) {
+            void *conn = xpc_create("com.apple.lockdownmoded", NULL, 0);
+            rlog("  xpc_connection to lockdownmoded: %p\n", conn);
+            if (conn) {
+                /* Set event handler (noop) and resume */
+                xpc_conn_set_handler_t set_handler = dlsym(libxpc, "xpc_connection_set_event_handler");
+                xpc_conn_resume_t resume = dlsym(libxpc, "xpc_connection_resume");
+
+                /* Create a simple "get state" message */
+                xpc_dict_create_t dict_create = dlsym(libxpc, "xpc_dictionary_create");
+                xpc_dict_set_bool_t set_bool = dlsym(libxpc, "xpc_dictionary_set_bool");
+                xpc_dict_set_string_t set_str = dlsym(libxpc, "xpc_dictionary_set_string");
+                xpc_conn_send_t send_msg = dlsym(libxpc, "xpc_connection_send_message");
+
+                /* We can't easily set a block handler in C, so just log the connection */
+                rlog("  XPC connection created (can't send without block handler in C)\n");
+
+                /* Try the synchronous send */
+                typedef void* (*xpc_conn_send_sync_t)(void *, void *);
+                xpc_conn_send_sync_t send_sync = dlsym(libxpc, "xpc_connection_send_message_with_reply_sync");
+                rlog("  send_message_with_reply_sync: %p\n", (void*)send_sync);
+
+                if (dict_create && set_str && resume && send_sync) {
+                    /* Resume connection first */
+                    if (set_handler) {
+                        /* Need to set a handler - use a null handler */
+                        typedef void (*xpc_handler_t)(void *);
+                        /* Can't create blocks in pure C easily, skip handler */
+                    }
+                    resume(conn);
+
+                    void *msg = dict_create(NULL, NULL, 0);
+                    if (msg && set_str) {
+                        set_str(msg, "operation", "getState");
+                        rlog("  Sending getState to lockdownmoded...\n");
+                        void *reply = send_sync(conn, msg);
+                        rlog("  Reply: %p\n", reply);
+                        if (reply) {
+                            typedef const char* (*xpc_desc_t)(void *);
+                            xpc_desc_t desc = dlsym(libxpc, "xpc_copy_description");
+                            if (desc) {
+                                const char *d = desc(reply);
+                                rlog("  Reply desc: %.200s\n", d ? d : "<null>");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r301 complete ===\n");
+    fflush(stdout);
+}
+
+/*
  * r300: Lockdown Mode toggle & ACM kernel control probe
  * r299 confirmed: MCProfileConnection.isLockdownModeEnabled works, LDM=0.
  * Now probe:
@@ -30448,6 +30739,14 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 301) {
+            rlog("*** rounds=301: NVRAM + Sandbox MAC + LDM notification race ***\n");
+            rlog("  r300: XPC denied, ACM denied, notifications work.\n");
+            rlog("  Probe: NVRAM IOKit, sandbox_check, XPC direct, kernel drivers.\n\n");
+            fflush(stdout);
+            r301_probe();
             goto done;
         }
         if (rounds == 300) {
