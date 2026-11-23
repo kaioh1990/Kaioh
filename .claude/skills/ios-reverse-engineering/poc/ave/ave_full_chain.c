@@ -4298,6 +4298,244 @@ static void r297_probe(void) {
  *   3. Try sel 0,1,16 with crafted input payloads
  *   4. Try trustd/securityd XPC to query entitlements and keybag state
  */
+static void r308_probe(void) {
+    rlog("\n=== r308: AGX Deep Probe + JPEG Selectors + GPU SharedMem ===\n\n");
+    fflush(stdout);
+    kern_return_t kr;
+
+    /* ---- Part 1: AGX external method enumeration ---- */
+    rlog("--- Part 1: AGXAccelerator selector enumeration ---\n");
+    {
+        io_service_t agx = IOServiceGetMatchingService(
+            kIOMasterPortDefault, IOServiceMatching("AGXAccelerator"));
+        io_connect_t conn = 0;
+        if (agx) {
+            kr = IOServiceOpen(agx, mach_task_self(), 1, &conn);
+            rlog("  AGX open type=1: kr=0x%x conn=0x%x\n", kr, conn);
+        }
+        if (conn) {
+            /* Try selectors 0-99 with minimal input */
+            rlog("  Probing selectors 0-99:\n");
+            for (uint32_t sel = 0; sel < 100; sel++) {
+                uint64_t sin[8] = {0};
+                uint64_t sout[8] = {0};
+                uint32_t soutCnt = 8;
+                uint8_t oob_in[64] = {0};
+                uint8_t oob_out[4096] = {0};
+                size_t oob_outSz = sizeof(oob_out);
+
+                kr = IOConnectCallMethod(conn, sel,
+                    sin, 1, oob_in, 0,
+                    sout, &soutCnt, oob_out, &oob_outSz);
+
+                if (kr == KERN_SUCCESS) {
+                    rlog("    sel=%u: SUCCESS soutCnt=%u oobOutSz=%zu\n",
+                         sel, soutCnt, oob_outSz);
+                    if (soutCnt > 0) {
+                        rlog("      sout: ");
+                        for (uint32_t i = 0; i < soutCnt && i < 4; i++)
+                            rlog("0x%llx ", sout[i]);
+                        rlog("\n");
+                        for (uint32_t i = 0; i < soutCnt; i++) {
+                            if ((sout[i] >> 36) == 0xfffffff) {
+                                rlog("      ** KPTR in sout[%u]: 0x%llx **\n",
+                                     i, sout[i]);
+                            }
+                        }
+                    }
+                    if (oob_outSz > 0) {
+                        rlog("      oob_out[0..31]: ");
+                        for (int i = 0; i < 32 && i < (int)oob_outSz; i++)
+                            rlog("%02x", oob_out[i]);
+                        rlog("\n");
+                        for (size_t off = 0; off + 8 <= oob_outSz; off += 8) {
+                            uint64_t v;
+                            memcpy(&v, oob_out + off, 8);
+                            if ((v >> 36) == 0xfffffff) {
+                                rlog("      ** KPTR in oob+0x%zx: 0x%llx **\n",
+                                     off, v);
+                            }
+                        }
+                    }
+                } else if (kr != 0xe00002c1 && kr != 0xe00002bc &&
+                           kr != 0xe00002c2) {
+                    /* Log unusual errors (not NotPrivileged/Unsupported/BadArg) */
+                    if (kr == 0xe00002c7 || kr == 0xe00002f0 ||
+                        kr == 0xe00002ed || kr == 0xe00002bd ||
+                        kr == 0x5 || kr == 0x4 || kr == 0xe00002e9) {
+                        rlog("    sel=%u: kr=0x%x\n", sel, kr);
+                    }
+                }
+            }
+
+            /* ---- Part 1b: AGX IOConnectMapMemory ---- */
+            rlog("\n  AGX IOConnectMapMemory:\n");
+            for (uint32_t memtype = 0; memtype < 16; memtype++) {
+                mach_vm_address_t addr = 0;
+                mach_vm_size_t size = 0;
+                kr = IOConnectMapMemory64(conn, memtype, mach_task_self(),
+                    &addr, &size, kIOMapAnywhere);
+                if (kr == KERN_SUCCESS) {
+                    rlog("    ** MAPPED type=%u addr=0x%llx size=0x%llx **\n",
+                         memtype, (uint64_t)addr, (uint64_t)size);
+                    /* Scan mapped memory for kernel pointers */
+                    uint8_t *p = (uint8_t*)(uintptr_t)addr;
+                    for (uint64_t off = 0; off + 8 <= size && off < 4096; off += 8) {
+                        uint64_t v;
+                        memcpy(&v, p + off, 8);
+                        if ((v >> 36) == 0xfffffff) {
+                            rlog("      KPTR at map+0x%llx: 0x%llx\n", off, v);
+                        }
+                    }
+                } else if (kr != 0xe00002c1 && kr != 0xe00002bc) {
+                    rlog("    type=%u: kr=0x%x\n", memtype, kr);
+                }
+            }
+
+            /* ---- Part 1c: AGX notification ports ---- */
+            rlog("\n  AGX notification ports:\n");
+            for (uint32_t ntype = 0; ntype < 16; ntype++) {
+                mach_port_t np = MACH_PORT_NULL;
+                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &np);
+                kr = IOConnectSetNotificationPort(conn, ntype, np, 0);
+                rlog("    type=%u: kr=0x%x\n", ntype, kr);
+                mach_port_deallocate(mach_task_self(), np);
+            }
+
+            IOServiceClose(conn);
+        }
+        if (agx) IOObjectRelease(agx);
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: AppleJPEGDriver selector enumeration ---- */
+    rlog("\n--- Part 2: AppleJPEGDriver selector enumeration ---\n");
+    {
+        io_service_t jpeg = IOServiceGetMatchingService(
+            kIOMasterPortDefault, IOServiceMatching("AppleJPEGDriver"));
+        if (jpeg) {
+            /* Try type 0 (most common) */
+            io_connect_t conn = 0;
+            kr = IOServiceOpen(jpeg, mach_task_self(), 0, &conn);
+            rlog("  JPEG open type=0: kr=0x%x conn=0x%x\n", kr, conn);
+            if (conn) {
+                rlog("  Probing selectors 0-49:\n");
+                for (uint32_t sel = 0; sel < 50; sel++) {
+                    uint64_t sin[8] = {0};
+                    uint64_t sout[8] = {0};
+                    uint32_t soutCnt = 8;
+                    uint8_t oob_out[4096] = {0};
+                    size_t oob_outSz = sizeof(oob_out);
+
+                    kr = IOConnectCallMethod(conn, sel,
+                        sin, 0, NULL, 0,
+                        sout, &soutCnt, oob_out, &oob_outSz);
+
+                    if (kr == KERN_SUCCESS) {
+                        rlog("    sel=%u: SUCCESS soutCnt=%u oobSz=%zu\n",
+                             sel, soutCnt, oob_outSz);
+                        for (uint32_t i = 0; i < soutCnt; i++) {
+                            if ((sout[i] >> 36) == 0xfffffff)
+                                rlog("      ** KPTR sout[%u]=0x%llx **\n",
+                                     i, sout[i]);
+                        }
+                    } else if (kr != 0xe00002c1 && kr != 0xe00002bc &&
+                               kr != 0xe00002c2) {
+                        rlog("    sel=%u: kr=0x%x\n", sel, kr);
+                    }
+                }
+
+                /* JPEG MapMemory */
+                rlog("\n  JPEG IOConnectMapMemory:\n");
+                for (uint32_t memtype = 0; memtype < 8; memtype++) {
+                    mach_vm_address_t addr = 0;
+                    mach_vm_size_t size = 0;
+                    kr = IOConnectMapMemory64(conn, memtype, mach_task_self(),
+                        &addr, &size, kIOMapAnywhere);
+                    if (kr == KERN_SUCCESS) {
+                        rlog("    ** MAPPED type=%u addr=0x%llx size=0x%llx **\n",
+                             memtype, (uint64_t)addr, (uint64_t)size);
+                    } else if (kr != 0xe00002c1 && kr != 0xe00002bc) {
+                        rlog("    type=%u: kr=0x%x\n", memtype, kr);
+                    }
+                }
+
+                IOServiceClose(conn);
+            }
+            IOObjectRelease(jpeg);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: IOGPU selector enumeration ---- */
+    rlog("\n--- Part 3: IOGPU selector enumeration ---\n");
+    {
+        io_service_t gpu = IOServiceGetMatchingService(
+            kIOMasterPortDefault, IOServiceMatching("IOGPU"));
+        if (gpu) {
+            io_connect_t conn = 0;
+            kr = IOServiceOpen(gpu, mach_task_self(), 1, &conn);
+            rlog("  IOGPU open type=1: kr=0x%x conn=0x%x\n", kr, conn);
+            if (conn) {
+                rlog("  Probing selectors 0-49:\n");
+                for (uint32_t sel = 0; sel < 50; sel++) {
+                    uint64_t sin[8] = {0};
+                    uint64_t sout[8] = {0};
+                    uint32_t soutCnt = 8;
+
+                    kr = IOConnectCallMethod(conn, sel,
+                        sin, 0, NULL, 0,
+                        sout, &soutCnt, NULL, NULL);
+
+                    if (kr == KERN_SUCCESS) {
+                        rlog("    sel=%u: SUCCESS soutCnt=%u", sel, soutCnt);
+                        for (uint32_t i = 0; i < soutCnt; i++)
+                            rlog(" [%u]=0x%llx", i, sout[i]);
+                        rlog("\n");
+                        for (uint32_t i = 0; i < soutCnt; i++) {
+                            if ((sout[i] >> 36) == 0xfffffff)
+                                rlog("      ** KPTR sout[%u]=0x%llx **\n",
+                                     i, sout[i]);
+                        }
+                    } else if (kr != 0xe00002c1 && kr != 0xe00002bc &&
+                               kr != 0xe00002c2 && kr != 0xe00002c7) {
+                        rlog("    sel=%u: kr=0x%x\n", sel, kr);
+                    }
+                }
+
+                /* IOGPU MapMemory */
+                rlog("\n  IOGPU IOConnectMapMemory:\n");
+                for (uint32_t memtype = 0; memtype < 16; memtype++) {
+                    mach_vm_address_t addr = 0;
+                    mach_vm_size_t size = 0;
+                    kr = IOConnectMapMemory64(conn, memtype, mach_task_self(),
+                        &addr, &size, kIOMapAnywhere);
+                    if (kr == KERN_SUCCESS) {
+                        rlog("    ** MAPPED type=%u addr=0x%llx size=0x%llx **\n",
+                             memtype, (uint64_t)addr, (uint64_t)size);
+                        uint8_t *p = (uint8_t*)(uintptr_t)addr;
+                        for (uint64_t off = 0; off + 8 <= size && off < 4096; off += 8) {
+                            uint64_t v;
+                            memcpy(&v, p + off, 8);
+                            if ((v >> 36) == 0xfffffff)
+                                rlog("      KPTR at +0x%llx: 0x%llx\n", off, v);
+                        }
+                    } else if (kr != 0xe00002c1 && kr != 0xe00002bc) {
+                        rlog("    type=%u: kr=0x%x\n", memtype, kr);
+                    }
+                }
+
+                IOServiceClose(conn);
+            }
+            IOObjectRelease(gpu);
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r308 complete ===\n");
+    fflush(stdout);
+}
+
 static void r307_probe(void) {
     rlog("\n=== r307: GPU Driver + Port Kobject + Sysctl + Deep Memory Scan ===\n\n");
     fflush(stdout);
@@ -32242,6 +32480,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 308) {
+            rlog("*** rounds=308: AGX Deep Probe + JPEG Selectors + GPU SharedMem ***\n");
+            rlog("  r307: AGX/IOGPU/JPEG open! GPU=type1, JPEG=type0-7.\n");
+            rlog("  Probe: AGX selectors, MapMemory, notif ports, JPEG+IOGPU selectors.\n\n");
+            r308_probe();
             goto done;
         }
         if (rounds == 307) {
