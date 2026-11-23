@@ -4512,15 +4512,23 @@ static void r306_probe(void) {
 
         /* Read thread state */
         thread_port_t thread = mach_thread_self();
-        arm_thread_state64_t state;
-        mach_msg_type_number_t count = ARM_THREAD_STATE64_COUNT;
+        uint8_t state_buf[1024];
+        mach_msg_type_number_t count = sizeof(state_buf) / sizeof(uint32_t);
         kr = thread_get_state(thread, ARM_THREAD_STATE64,
-            (thread_state_t)&state, &count);
+            (thread_state_t)state_buf, &count);
         rlog("  thread_get_state: kr=0x%x count=%u\n", kr, count);
-        if (kr == KERN_SUCCESS) {
-            rlog("  pc=0x%llx lr=0x%llx sp=0x%llx fp=0x%llx\n",
-                 (uint64_t)state.__pc, (uint64_t)state.__lr,
-                 (uint64_t)state.__sp, (uint64_t)state.__fp);
+        if (kr == KERN_SUCCESS && count >= 68) {
+            /* ARM_THREAD_STATE64: x0-x28 at offset 0, fp=x29, lr=x30, sp, pc, cpsr */
+            uint64_t *regs = (uint64_t*)state_buf;
+            rlog("  x29(fp)=0x%llx x30(lr)=0x%llx\n", regs[29], regs[30]);
+            /* sp at offset 31*8, pc at offset 32*8 */
+            rlog("  sp=0x%llx pc=0x%llx\n", regs[31], regs[32]);
+            /* Scan all registers for kernel pointers */
+            for (int r = 0; r < 33; r++) {
+                if ((regs[r] >> 36) == 0xfffffff) {
+                    rlog("    ** KPTR in x%d: 0x%llx **\n", r, regs[r]);
+                }
+            }
         }
         mach_port_deallocate(mach_task_self(), thread);
     }
