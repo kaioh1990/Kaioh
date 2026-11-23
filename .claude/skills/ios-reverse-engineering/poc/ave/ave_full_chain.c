@@ -19348,24 +19348,34 @@ new_modes:
                     getenv("HOME") ? getenv("HOME") : "/var/mobile");
                 /* State file layout: [attempt(4)] [crash_count(4)] [survived_last(4)] */
                 int r229_survived_last = 1;
-                FILE *sf = fopen(state_path, "rb");
-                if (sf) {
-                    fread(&r229_attempt, sizeof(int), 1, sf);
-                    fread(&r229_crash_count, sizeof(int), 1, sf);
-                    fread(&r229_survived_last, sizeof(int), 1, sf);
-                    fclose(sf);
+                int rfd = open(state_path, O_RDONLY);
+                if (rfd >= 0) {
+                    struct stat st;
+                    fstat(rfd, &st);
+                    if (st.st_size >= 12) {
+                        read(rfd, &r229_attempt, sizeof(int));
+                        read(rfd, &r229_crash_count, sizeof(int));
+                        read(rfd, &r229_survived_last, sizeof(int));
+                    } else if (st.st_size >= 4) {
+                        read(rfd, &r229_attempt, sizeof(int));
+                        r229_crash_count = 0;
+                        r229_survived_last = 0;
+                    }
+                    close(rfd);
                 }
                 if (!r229_survived_last) r229_crash_count++;
                 r229_attempt++;
-                /* Write state with survived=0; set to 1 only after surviving */
+                /* Write state with survived=0; force sync to survive kernel panics */
                 int zero = 0;
-                sf = fopen(state_path, "wb");
-                if (sf) {
-                    fwrite(&r229_attempt, sizeof(int), 1, sf);
-                    fwrite(&r229_crash_count, sizeof(int), 1, sf);
-                    fwrite(&zero, sizeof(int), 1, sf);
-                    fclose(sf);
+                int state_fd = open(state_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                if (state_fd >= 0) {
+                    write(state_fd, &r229_attempt, sizeof(int));
+                    write(state_fd, &r229_crash_count, sizeof(int));
+                    write(state_fd, &zero, sizeof(int));
+                    fsync(state_fd);
+                    close(state_fd);
                 }
+                sync();
                 rlog("  r=229: MTE brute-force attempt #%d (crashes=%d, 1/16 per race win)\n",
                     r229_attempt, r229_crash_count);
 
@@ -19744,12 +19754,13 @@ new_modes:
                     snprintf(state_path, sizeof(state_path), "%s/Documents/r229_state.bin",
                         getenv("HOME") ? getenv("HOME") : "/var/mobile");
                     int one = 1;
-                    FILE *sf = fopen(state_path, "wb");
-                    if (sf) {
-                        fwrite(&r229_attempt, sizeof(int), 1, sf);
-                        fwrite(&r229_crash_count, sizeof(int), 1, sf);
-                        fwrite(&one, sizeof(int), 1, sf);
-                        fclose(sf);
+                    int sfd = open(state_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                    if (sfd >= 0) {
+                        write(sfd, &r229_attempt, sizeof(int));
+                        write(sfd, &r229_crash_count, sizeof(int));
+                        write(sfd, &one, sizeof(int));
+                        fsync(sfd);
+                        close(sfd);
                     }
                 }
 
@@ -19777,14 +19788,14 @@ new_modes:
                         char crash_path[512];
                         snprintf(crash_path, sizeof(crash_path), "%s/Documents/r229_state.bin",
                             getenv("HOME") ? getenv("HOME") : "/var/mobile");
-                        int zero = 0;
-                        FILE *cf = fopen(crash_path, "wb");
-                        if (cf) {
-                            fwrite(&r229_attempt, sizeof(int), 1, cf);
-                            fwrite(&zero, sizeof(int), 1, cf);
-                            int one = 1;
-                            fwrite(&one, sizeof(int), 1, cf);
-                            fclose(cf);
+                        int zz = 0, one = 1;
+                        int cfd = open(crash_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                        if (cfd >= 0) {
+                            write(cfd, &r229_attempt, sizeof(int));
+                            write(cfd, &zz, sizeof(int));
+                            write(cfd, &one, sizeof(int));
+                            fsync(cfd);
+                            close(cfd);
                         }
                     }
 
