@@ -1866,7 +1866,63 @@ static void *r262_gpu_fn(void *arg) {
             if (testTex) send_void(testTex, selRelease);
         }
         poolPop(testPool);
-        rlog("  [t%d] basic Metal texture OK, now trying IOSurface-backed...\n", tid);
+        rlog("  [t%d] basic Metal texture OK\n", tid);
+        fflush(stdout);
+    }
+
+    /* Probe device class for IOSurface texture methods */
+    if (tid == 0) {
+        typedef BOOL (*msg_bool_sel_t)(id, SEL, SEL);
+        msg_bool_sel_t responds = (msg_bool_sel_t)msgSend;
+
+        const char *sel_names[] = {
+            "newTextureWithDescriptor:iosurface:plane:level:",
+            "newTextureWithDescriptor:ioSurface:plane:level:",
+            "newTextureWithDescriptor:IOSurface:plane:level:",
+            "newTextureWithDescriptor:surface:plane:level:",
+            "newTextureWithDescriptor:fromIOSurface:plane:level:",
+            "newTextureWithIOSurface:descriptor:plane:level:",
+            "makeTextureWithDescriptor:iosurface:plane:level:",
+            "makeTextureWithDescriptor:ioSurface:plane:level:",
+            "newTextureWithDescriptor:",
+            NULL
+        };
+        for (int i = 0; sel_names[i]; i++) {
+            SEL s = sel_registerName(sel_names[i]);
+            BOOL r = responds(device, sel_registerName("respondsToSelector:"), s);
+            rlog("  [t%d] respondsTo '%s' = %d\n", tid, sel_names[i], (int)r);
+        }
+
+        /* Get the class name and list methods containing "texture" or "Texture" */
+        Class devClass = object_getClass(device);
+        const char *className = class_getName(devClass);
+        rlog("  [t%d] device class: %s\n", tid, className);
+
+        unsigned int methodCount = 0;
+        Method *methods = class_copyMethodList(devClass, &methodCount);
+        rlog("  [t%d] %u methods on %s, scanning for texture/surface methods...\n",
+             tid, methodCount, className);
+        int found = 0;
+        for (unsigned int m = 0; m < methodCount && found < 30; m++) {
+            const char *name = sel_getName(method_getName(methods[m]));
+            if (strstr(name, "exture") || strstr(name, "urface") || strstr(name, "IOSurface")) {
+                rlog("  [t%d]   method: %s\n", tid, name);
+                found++;
+            }
+        }
+        if (methods) free(methods);
+
+        /* Also check protocols */
+        unsigned int protoCount = 0;
+        Protocol **protos = class_copyProtocolList(devClass, &protoCount);
+        rlog("  [t%d] %u protocols on %s\n", tid, protoCount, className);
+        for (unsigned int p = 0; p < protoCount; p++) {
+            const char *pname = protocol_getName(protos[p]);
+            if (strstr(pname, "etal") || strstr(pname, "evice") || strstr(pname, "exture")) {
+                rlog("  [t%d]   proto: %s\n", tid, pname);
+            }
+        }
+        if (protos) free(protos);
         fflush(stdout);
     }
 
@@ -1919,6 +1975,24 @@ static void *r262_gpu_fn(void *arg) {
             rlog("  [t%d] desc=%p surf=%p surfID=%u, calling newTextureWithDescriptor:iosurface:...\n",
                  tid, (void*)desc, (void*)surf, IOSurfaceGetID(surf));
             fflush(stdout);
+        }
+
+        /* Check if device responds to our selector — skip if not */
+        typedef BOOL (*msg_bool_sel_t)(id, SEL, SEL);
+        msg_bool_sel_t responds = (msg_bool_sel_t)msgSend;
+        if (!responds(device, sel_registerName("respondsToSelector:"), selNewTex)) {
+            /* Try alternate selector names */
+            SEL altSel = sel_registerName("newTextureWithDescriptor:ioSurface:plane:level:");
+            if (responds(device, sel_registerName("respondsToSelector:"), altSel)) {
+                selNewTex = altSel;
+            } else {
+                if (r262_tex_ok == 0 && r262_tex_fail == 0)
+                    rlog("  [t%d] device does NOT respond to IOSurface texture selectors\n", tid);
+                __sync_fetch_and_add(&r262_tex_fail, 1);
+                CFRelease(surf);
+                poolPop(pool);
+                continue;
+            }
         }
 
         /* newTextureWithDescriptor:iosurface:plane:level:
