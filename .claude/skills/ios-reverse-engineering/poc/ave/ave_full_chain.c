@@ -17066,7 +17066,7 @@ new_modes:
             rlog("*** rounds=%d: fast-path to Phase 16 ***\n", rounds);
             goto phase15_done;
         }
-        if (rounds >= 170 && rounds <= 210) {
+        if (rounds >= 170) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -20163,7 +20163,7 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds <= 210) {
+        if (rounds >= 170) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
 
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 60 * NSEC_PER_SEC),
