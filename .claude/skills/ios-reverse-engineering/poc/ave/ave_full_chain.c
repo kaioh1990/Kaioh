@@ -4526,8 +4526,7 @@ static void r303_probe(void) {
  * Also try NVRAM via syscall (not IOKit) since sandbox allows it.
  * Also try AMFI Mach message to query lockdown mode state.
  */
-static void r303_probe(void) {
-    rlog("\n=== r303: AppleKeyStore Output Data Dump + Kernel Pointer Scan ===\n\n");
+/* NOTE: r303_probe is defined above, before this r302 comment block */
     fflush(stdout);
 
     kern_return_t kr;
@@ -31486,13 +31485,6 @@ new_modes:
             rlog("*** rounds=303: AKS buffer dump + extended scan ***\n");
             rlog("  r302: sel 0,1,16 succeed! Dumping buffers for kernel ptrs.\n");
             rlog("  Probe: full buffer dump, sel 64-255, keybag ops, XPC.\n\n");
-            r303_probe();
-            goto done;
-        }
-        if (rounds == 303) {
-            rlog("*** rounds=303: AKS output dump + kernel pointer scan ***\n");
-            rlog("  r302: sel=0,1,16 succeed with 4096b output!\n");
-            rlog("  Probe: dump output buffers, scan for kptrs.\n\n");
             r303_probe();
             goto done;
         }
