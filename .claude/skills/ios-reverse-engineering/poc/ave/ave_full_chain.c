@@ -1743,6 +1743,267 @@ static volatile int r264_probed = 0;
  * Operations must go through traps, shared memory, or different client types. */
 static volatile int r265_probed = 0;
 
+typedef void* IOSurfaceClientRef;
+
+/* r273: Purgeable+Lock race, SetDataValueBytes, ClientAlign, concurrent purge.
+ * r272: UseCount clamped (no underflow), Purgeable state machine works,
+ *   double-unlock rejected, XPC round-trip works. No protection flags.
+ * Key targets: purgeable race (purge surface memory while locked/in use),
+ *   SetDataValueBytes (raw byte writes to surface property store),
+ *   ClientAlign (unknown function). */
+static volatile int r273_probed = 0;
+static volatile int r273_purge_stop = 0;
+
+struct r273_purge_ctx {
+    IOSurfaceRef surf;
+    int iterations;
+};
+
+static void *r273_purge_thread(void *arg) {
+    struct r273_purge_ctx *ctx = (struct r273_purge_ctx *)arg;
+    for (int i = 0; i < ctx->iterations && !r273_purge_stop; i++) {
+        IOSurfaceSetPurgeable(ctx->surf, 2, NULL);
+        IOSurfaceSetPurgeable(ctx->surf, 0, NULL);
+    }
+    return NULL;
+}
+
+static void *r273_lock_thread(void *arg) {
+    struct r273_purge_ctx *ctx = (struct r273_purge_ctx *)arg;
+    for (int i = 0; i < ctx->iterations && !r273_purge_stop; i++) {
+        IOSurfaceLock(ctx->surf, 0, NULL);
+        volatile uint8_t *base = IOSurfaceGetBaseAddress(ctx->surf);
+        if (base) {
+            base[0] = 0x42;
+            base[1] = 0x43;
+        }
+        IOSurfaceUnlock(ctx->surf, 0, NULL);
+    }
+    return NULL;
+}
+
+static void r273_probe(IOSurfaceRef surf) {
+    uint32_t sid = IOSurfaceGetID(surf);
+    kern_return_t kr;
+
+    rlog("\n=== r273: Purgeable+Lock Race + SetDataValueBytes + ClientAlign ===\n");
+    fflush(stdout);
+
+    void *iosfc = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_LAZY);
+
+    /* Part 1: IOSurfaceSetDataValueBytes */
+    rlog("\n--- Part 1: IOSurfaceSetDataValueBytes ---\n");
+    {
+        typedef kern_return_t (*SetDVB_t)(IOSurfaceRef, CFStringRef, const void*, size_t);
+        typedef kern_return_t (*CopyDVB_t)(IOSurfaceRef, CFStringRef, void*, size_t*);
+        SetDVB_t setDVB = NULL;
+        CopyDVB_t copyDVB = NULL;
+        if (iosfc) {
+            setDVB = (SetDVB_t)dlsym(iosfc, "IOSurfaceSetDataValueBytes");
+            copyDVB = (CopyDVB_t)dlsym(iosfc, "IOSurfaceCopyDataValueBytes");
+        }
+
+        if (setDVB) {
+            uint8_t testdata[256];
+            for (int i = 0; i < 256; i++) testdata[i] = (uint8_t)i;
+
+            kr = setDVB(surf, CFSTR("raw_test"), testdata, 256);
+            rlog("  SetDataValueBytes('raw_test', 256 bytes)=0x%x\n", kr);
+
+            if (copyDVB && kr == 0) {
+                uint8_t readback[256];
+                size_t readlen = 256;
+                memset(readback, 0, 256);
+                kr = copyDVB(surf, CFSTR("raw_test"), readback, &readlen);
+                rlog("  CopyDataValueBytes('raw_test')=0x%x len=%zu\n", kr, readlen);
+                if (kr == 0 && readlen == 256) {
+                    int match = (memcmp(testdata, readback, 256) == 0);
+                    rlog("  round-trip match=%d\n", match);
+                }
+            }
+
+            /* Try large data */
+            uint8_t bigdata[65536];
+            memset(bigdata, 0xAA, sizeof(bigdata));
+            kr = setDVB(surf, CFSTR("big_raw"), bigdata, 65536);
+            rlog("  SetDataValueBytes('big_raw', 64KB)=0x%x\n", kr);
+
+            /* Try overwriting a built-in key */
+            uint8_t fake[4] = {0xFF, 0xFF, 0x00, 0x00};
+            kr = setDVB(surf, CFSTR("IOSurfaceWidth"), fake, 4);
+            rlog("  SetDataValueBytes('IOSurfaceWidth', 4 bytes)=0x%x\n", kr);
+            uint32_t realW = (uint32_t)IOSurfaceGetWidth(surf);
+            rlog("  actual width after overwrite=%u\n", realW);
+
+            /* Try zero-length */
+            kr = setDVB(surf, CFSTR("empty"), NULL, 0);
+            rlog("  SetDataValueBytes('empty', 0 bytes)=0x%x\n", kr);
+        } else {
+            rlog("  SetDataValueBytes not found\n");
+        }
+        fflush(stdout);
+    }
+
+    /* Part 2: IOSurfaceClientAlign */
+    rlog("\n--- Part 2: IOSurfaceClientAlign ---\n");
+    {
+        typedef IOSurfaceClientRef (*ClientLookup_t)(uint32_t);
+        typedef kern_return_t (*ClientAlign_t)(IOSurfaceClientRef, uint32_t);
+        ClientLookup_t cLookup = NULL;
+        ClientAlign_t cAlign = NULL;
+        if (iosfc) {
+            cLookup = (ClientLookup_t)dlsym(iosfc, "IOSurfaceClientLookup");
+            cAlign = (ClientAlign_t)dlsym(iosfc, "IOSurfaceClientAlign");
+        }
+
+        if (cAlign && cLookup) {
+            IOSurfaceClientRef client = cLookup(sid);
+            rlog("  client=%p\n", client);
+            if (client) {
+                for (uint32_t align = 0; align <= 16; align++) {
+                    kr = cAlign(client, align);
+                    rlog("  ClientAlign(%u)=0x%x\n", align, kr);
+                    if (kr != 0 && align > 0) break;
+                }
+                typedef void (*ClientRelease_t)(IOSurfaceClientRef);
+                ClientRelease_t cRelease = (ClientRelease_t)dlsym(iosfc, "IOSurfaceClientRelease");
+                if (cRelease) cRelease(client);
+            }
+        } else {
+            rlog("  ClientAlign or ClientLookup not found\n");
+        }
+        fflush(stdout);
+    }
+
+    /* Part 3: Purgeable + Lock race */
+    rlog("\n--- Part 3: Purgeable + Lock race (2 threads, 500 iterations) ---\n");
+    {
+        IOSurfaceLock(surf, 0, NULL);
+        volatile uint8_t *base = IOSurfaceGetBaseAddress(surf);
+        if (base) {
+            memset((void*)base, 0x42, 64*64*4);
+        }
+        IOSurfaceUnlock(surf, 0, NULL);
+        rlog("  surface initialized with 0x42\n");
+
+        r273_purge_stop = 0;
+        struct r273_purge_ctx pctx = { surf, 500 };
+        struct r273_purge_ctx lctx = { surf, 500 };
+        pthread_t pt, lt;
+        pthread_create(&pt, NULL, r273_purge_thread, &pctx);
+        pthread_create(&lt, NULL, r273_lock_thread, &lctx);
+        pthread_join(pt, NULL);
+        pthread_join(lt, NULL);
+
+        IOSurfaceLock(surf, 0, NULL);
+        base = IOSurfaceGetBaseAddress(surf);
+        int zeroed = 0;
+        if (base) {
+            for (int i = 0; i < 64*64*4; i++) {
+                if (base[i] == 0) { zeroed++; }
+            }
+        }
+        IOSurfaceUnlock(surf, 0, NULL);
+        rlog("  post-race: %d/%d bytes zeroed (purge effect)\n", zeroed, 64*64*4);
+        if (zeroed > 0) {
+            rlog("  *** PURGE RACE EFFECT: memory was zeroed while in use ***\n");
+        }
+        fflush(stdout);
+    }
+
+    /* Part 4: Create many surfaces, purge rapidly, check for stale pointers */
+    rlog("\n--- Part 4: Rapid create/purge/destroy cycle ---\n");
+    {
+        IOSurfaceRef surfs[20];
+        int w2 = 32, h2 = 32, bpe2 = 4, bpr2 = w2*bpe2, pf2 = 0x42475241, as2 = bpr2*h2;
+        for (int i = 0; i < 20; i++) {
+            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w2);
+            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h2);
+            CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe2);
+            CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr2);
+            CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf2);
+            CFNumberRef asn = CFNumberCreate(NULL, kCFNumberIntType, &as2);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), wn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), hn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerElement"), bn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerRow"), rn);
+            CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), pfn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceAllocSize"), asn);
+            CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn); CFRelease(asn);
+            surfs[i] = IOSurfaceCreate(p);
+            CFRelease(p);
+        }
+        rlog("  created 20 surfaces\n");
+
+        for (int i = 0; i < 20; i++) {
+            if (surfs[i]) {
+                IOSurfaceSetPurgeable(surfs[i], 2, NULL);
+            }
+        }
+        rlog("  all set purgeable=volatile\n");
+
+        for (int i = 0; i < 20; i += 2) {
+            if (surfs[i]) CFRelease(surfs[i]);
+            surfs[i] = NULL;
+        }
+        rlog("  released even-numbered surfaces\n");
+
+        int stale = 0;
+        for (int i = 1; i < 20; i += 2) {
+            if (surfs[i]) {
+                uint32_t oldState = 99;
+                IOSurfaceSetPurgeable(surfs[i], 0, &oldState);
+                if (oldState == 3) stale++;
+                rlog("  surf[%d] id=%u purgeable oldState=%u\n", i, IOSurfaceGetID(surfs[i]), oldState);
+                CFRelease(surfs[i]);
+            }
+        }
+        rlog("  stale (purged) surfaces: %d/10\n", stale);
+        fflush(stdout);
+    }
+
+    /* Part 5: IOSurfaceGetSurfaceID from ClientRef — check if leaks kernel ptr */
+    rlog("\n--- Part 5: ClientGetSurfaceID ---\n");
+    {
+        typedef IOSurfaceClientRef (*ClientLookup_t)(uint32_t);
+        typedef uint32_t (*ClientGetSID_t)(IOSurfaceClientRef);
+        typedef void (*ClientRelease_t)(IOSurfaceClientRef);
+        ClientLookup_t cLookup = (ClientLookup_t)dlsym(iosfc, "IOSurfaceClientLookup");
+        ClientGetSID_t cGetSID = (ClientGetSID_t)dlsym(iosfc, "IOSurfaceClientGetSurfaceID");
+        ClientRelease_t cRelease = (ClientRelease_t)dlsym(iosfc, "IOSurfaceClientRelease");
+
+        if (cGetSID && cLookup) {
+            IOSurfaceClientRef client = cLookup(sid);
+            if (client) {
+                uint32_t csid = cGetSID(client);
+                rlog("  ClientGetSurfaceID=%u (expected %u)\n", csid, sid);
+                if (cRelease) cRelease(client);
+            }
+        } else rlog("  not found\n");
+
+        /* Try with invalid/freed surface IDs */
+        if (cLookup) {
+            for (uint32_t testid = 1; testid <= 5; testid++) {
+                IOSurfaceClientRef client = cLookup(testid);
+                rlog("  ClientLookup(id=%u)=%p\n", testid, client);
+                if (client && cGetSID) {
+                    uint32_t csid = cGetSID(client);
+                    rlog("    GetSurfaceID=%u\n", csid);
+                    if (cRelease) cRelease(client);
+                }
+            }
+        }
+        fflush(stdout);
+    }
+
+    if (iosfc) dlclose(iosfc);
+    __sync_fetch_and_add(&r273_probed, 1);
+    rlog("\n*** r273 probe complete ***\n");
+    fflush(stdout);
+}
+
 /* r272: Deep probe of Client UseCount race, ProtectionOptions, CacheMode,
  * Purgeable, YCbCrMatrix, XPC round-trip, RemoveAllValues, double-unlock.
  * r271 found: ExclusiveAccess is absolute (all keys/connections blocked).
@@ -1751,7 +2012,6 @@ static volatile int r265_probed = 0;
 static volatile int r272_probed = 0;
 static volatile int r272_race_stop = 0;
 
-typedef void* IOSurfaceClientRef;
 typedef IOSurfaceClientRef (*ClientLookup_t)(uint32_t);
 typedef kern_return_t (*ClientDecUC_t)(IOSurfaceClientRef);
 typedef kern_return_t (*ClientIncUC_t)(IOSurfaceClientRef);
@@ -23411,6 +23671,41 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 273) {
+            rlog("*** rounds=273: Purgeable+Lock Race + SetDataValueBytes + ClientAlign ***\n");
+            rlog("  r272: UseCount clamped, purgeable works, double-unlock rejected.\n\n");
+            fflush(stdout);
+
+            int w = 64, h = 64, bpe = 4, bpr = w * bpe, pf = 0x42475241;
+            int alloc_sz = bpr * h;
+            CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+            CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFNumberRef asn = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), rn);
+            CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), asn);
+            CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn); CFRelease(asn);
+
+            IOSurfaceRef surf = IOSurfaceCreate(props);
+            rlog("  surf=%p id=%u\n", surf, surf ? IOSurfaceGetID(surf) : 0);
+            fflush(stdout);
+            if (surf) {
+                r273_probe(surf);
+                CFRelease(surf);
+            }
+            CFRelease(props);
+            rlog("\n*** r273 complete ***\n");
+            fflush(stdout);
             goto done;
         }
         if (rounds == 272) {
