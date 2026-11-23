@@ -1833,7 +1833,7 @@ static void *r262_gpu_fn(void *arg) {
     int w = 128, h = 128, bpe = 4, bpr = w * bpe, pf = 0x42475241;
 
     /* Pre-cache selectors outside loop */
-    SEL selNewTex = sel_registerName("newTextureWithDescriptor:iosurface:plane:level:");
+    SEL selNewTex = sel_registerName("newTextureWithDescriptor:iosurface:plane:slice:");
     SEL selSetUsage = sel_registerName("setUsage:");
     SEL selSetStorage = sel_registerName("setStorageMode:");
     SEL selCmdBuf = sel_registerName("commandBuffer");
@@ -1876,15 +1876,11 @@ static void *r262_gpu_fn(void *arg) {
         msg_bool_sel_t responds = (msg_bool_sel_t)msgSend;
 
         const char *sel_names[] = {
+            "newTextureWithDescriptor:iosurface:plane:slice:",
+            "newTextureWithDescriptor:iosurface:plane:",
             "newTextureWithDescriptor:iosurface:plane:level:",
-            "newTextureWithDescriptor:ioSurface:plane:level:",
-            "newTextureWithDescriptor:IOSurface:plane:level:",
-            "newTextureWithDescriptor:surface:plane:level:",
-            "newTextureWithDescriptor:fromIOSurface:plane:level:",
-            "newTextureWithIOSurface:descriptor:plane:level:",
-            "makeTextureWithDescriptor:iosurface:plane:level:",
-            "makeTextureWithDescriptor:ioSurface:plane:level:",
             "newTextureWithDescriptor:",
+            "newBufferWithIOSurface:",
             NULL
         };
         for (int i = 0; sel_names[i]; i++) {
@@ -2008,10 +2004,20 @@ static void *r262_gpu_fn(void *arg) {
         msg_bool_sel_t responds = (msg_bool_sel_t)msgSend;
         if (!responds(device, sel_registerName("respondsToSelector:"), selNewTex)) {
             /* Try alternate selector names */
-            SEL altSel = sel_registerName("newTextureWithDescriptor:ioSurface:plane:level:");
-            if (responds(device, sel_registerName("respondsToSelector:"), altSel)) {
-                selNewTex = altSel;
-            } else {
+            SEL alts[] = {
+                sel_registerName("newTextureWithDescriptor:iosurface:plane:"),
+                sel_registerName("newTextureWithDescriptor:iosurface:plane:level:"),
+                (SEL)0
+            };
+            int found_alt = 0;
+            for (int a = 0; alts[a]; a++) {
+                if (responds(device, sel_registerName("respondsToSelector:"), alts[a])) {
+                    selNewTex = alts[a];
+                    found_alt = 1;
+                    break;
+                }
+            }
+            if (!found_alt) {
                 if (r262_tex_ok == 0 && r262_tex_fail == 0)
                     rlog("  [t%d] device does NOT respond to IOSurface texture selectors\n", tid);
                 __sync_fetch_and_add(&r262_tex_fail, 1);
@@ -20784,9 +20790,9 @@ new_modes:
             r262_run = 1;
             r262_tex_ok = 0; r262_tex_fail = 0; r262_blit_ok = 0; r262_freed = 0;
 
-            /* 1 GPU thread for debugging (isolate threading issues) */
+            /* 2 GPU threads for the race */
             pthread_t r262_th[2];
-            int r262_nthreads = 1;
+            int r262_nthreads = 2;
             for (int i = 0; i < r262_nthreads; i++)
                 pthread_create(&r262_th[i], NULL, r262_gpu_fn, (void*)(uintptr_t)i);
 
