@@ -81,7 +81,8 @@ extern kern_return_t mach_make_memory_entry_64(
 #include <sched.h>
 #include <sys/mman.h>
 #include <servers/bootstrap.h>
-/* objc/message.h not needed — pure C */
+#include <objc/runtime.h>
+#include <objc/message.h>
 
 extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
 extern int proc_pidinfo(int pid, int flavor, uint64_t arg, void *buffer, int buffersize);
@@ -30788,6 +30789,14 @@ new_modes:
             rlog("  Pivot: r293-298 cross-ref = no kernel corruption.\n");
             rlog("  New direction: Lockdown Mode transitions as attack vector.\n");
             rlog("  Enumerate: sysctls, IOKit, MobileGestalt, files, sandbox.\n\n");
+            fflush(stdout);
+            r299_probe();
+            goto done;
+        }
+        if (rounds == 299) {
+            rlog("*** rounds=299: Lockdown Mode reconnaissance ***\n");
+            rlog("  Probe: sysctls, NVRAM, MTE state, CS flags, IOKit services,\n");
+            rlog("  preferences, SPTM indicators, ManagedConfiguration APIs.\n\n");
             fflush(stdout);
             r299_probe();
             goto done;
