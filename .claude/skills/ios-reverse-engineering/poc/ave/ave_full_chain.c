@@ -4298,6 +4298,246 @@ static void r297_probe(void) {
  *   3. Try sel 0,1,16 with crafted input payloads
  *   4. Try trustd/securityd XPC to query entitlements and keybag state
  */
+static void r311_probe(void) {
+    rlog("\n=== r311: IOService Interest Notifs + ANE/DCP + Writable Props ===\n\n");
+    fflush(stdout);
+    kern_return_t kr;
+
+    /* ---- Part 1: Unexplored driver probing ---- */
+    rlog("--- Part 1: ANE/DCP/Audio/Sensor driver access ---\n");
+    {
+        const char *drivers[] = {
+            "AppleH16ANEDevice", "AppleH16ANEInterface",
+            "AppleANEHALService", "AppleNeuralEngine",
+            "AppleDCP", "AppleDCPWrangler", "IOMobileFramebuffer",
+            "IOAudioDevice", "AppleAudioDevice",
+            "AppleSPU", "AppleSPUProfileDriver",
+            "AppleT8160PMGR", "AppleT8160DART",
+            "IOHIDEventService", "IOHIDEventDriver",
+            "AppleBCMWLANCore", "IO80211Interface",
+            "AppleUSBDevice", "IOUSBHostDevice",
+            "AppleSMC", "AppleEmbeddedTempSensor",
+            "IOTimeSyncClockManager", "AppleTimeSyncDaemon",
+            "AppleConvergedIPCOLEHAL", "ApplePPM",
+            NULL
+        };
+        for (int i = 0; drivers[i]; i++) {
+            io_service_t svc = IOServiceGetMatchingService(
+                kIOMasterPortDefault, IOServiceMatching(drivers[i]));
+            if (svc) {
+                rlog("  FOUND: %s\n", drivers[i]);
+                for (uint32_t type = 0; type < 4; type++) {
+                    io_connect_t conn = 0;
+                    kr = IOServiceOpen(svc, mach_task_self(), type, &conn);
+                    if (kr == KERN_SUCCESS) {
+                        rlog("    ** OPENED type=%u conn=0x%x **\n", type, conn);
+                        /* Quick selector scan */
+                        for (uint32_t sel = 0; sel < 20; sel++) {
+                            uint64_t sout[8] = {0};
+                            uint32_t soutCnt = 8;
+                            kr = IOConnectCallMethod(conn, sel,
+                                NULL, 0, NULL, 0,
+                                sout, &soutCnt, NULL, NULL);
+                            if (kr == KERN_SUCCESS) {
+                                rlog("      sel=%u: SUCCESS soutCnt=%u", sel, soutCnt);
+                                for (uint32_t j = 0; j < soutCnt; j++) {
+                                    rlog(" [%u]=0x%llx", j, sout[j]);
+                                    if ((sout[j] >> 36) == 0xfffffff)
+                                        rlog("**KPTR**");
+                                }
+                                rlog("\n");
+                            }
+                        }
+                        IOServiceClose(conn);
+                    } else if (kr != 0xe00002e2 && kr != 0xe00002c1 &&
+                               kr != 0xe00002c7 && kr != 0xe00002bc) {
+                        rlog("    type=%u: kr=0x%x\n", type, kr);
+                    }
+                }
+                IOObjectRelease(svc);
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: IOService interest notifications ---- */
+    rlog("\n--- Part 2: IOService interest notifications ---\n");
+    {
+        IONotificationPortRef notifyPort = IONotificationPortCreate(kIOMasterPortDefault);
+        if (notifyPort) {
+            CFRunLoopSourceRef rls = IONotificationPortGetRunLoopSource(notifyPort);
+            rlog("  NotifyPort: %p RunLoopSrc: %p\n", (void*)notifyPort, (void*)rls);
+
+            /* Register for general interest on IOSurfaceRoot */
+            io_service_t isr = IOServiceGetMatchingService(
+                kIOMasterPortDefault, IOServiceMatching("IOSurfaceRoot"));
+            if (isr) {
+                io_object_t notifier = 0;
+                kr = IOServiceAddInterestNotification(notifyPort, isr,
+                    kIOGeneralInterest, NULL, NULL, &notifier);
+                rlog("  IOSurfaceRoot general interest: kr=0x%x notifier=0x%x\n",
+                     kr, notifier);
+                if (notifier) IOObjectRelease(notifier);
+
+                kr = IOServiceAddInterestNotification(notifyPort, isr,
+                    kIOBusyInterest, NULL, NULL, &notifier);
+                rlog("  IOSurfaceRoot busy interest: kr=0x%x notifier=0x%x\n",
+                     kr, notifier);
+                if (notifier) IOObjectRelease(notifier);
+                IOObjectRelease(isr);
+            }
+
+            /* Register for AGX interest */
+            io_service_t agx = IOServiceGetMatchingService(
+                kIOMasterPortDefault, IOServiceMatching("AGXAccelerator"));
+            if (agx) {
+                io_object_t notifier = 0;
+                kr = IOServiceAddInterestNotification(notifyPort, agx,
+                    kIOGeneralInterest, NULL, NULL, &notifier);
+                rlog("  AGX general interest: kr=0x%x notifier=0x%x\n",
+                     kr, notifier);
+                if (notifier) IOObjectRelease(notifier);
+                IOObjectRelease(agx);
+            }
+
+            IONotificationPortDestroy(notifyPort);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: IOKit matching notification ---- */
+    rlog("\n--- Part 3: IOKit matching notification for service registration ---\n");
+    {
+        IONotificationPortRef notifyPort = IONotificationPortCreate(kIOMasterPortDefault);
+        if (notifyPort) {
+            io_iterator_t iter = 0;
+            kr = IOServiceAddMatchingNotification(notifyPort,
+                kIOMatchedNotification,
+                IOServiceMatching("IOSurface"),
+                NULL, NULL, &iter);
+            rlog("  IOSurface matching notif: kr=0x%x iter=0x%x\n", kr, iter);
+
+            /* Drain existing matches */
+            if (iter) {
+                io_object_t obj;
+                int count = 0;
+                while ((obj = IOIteratorNext(iter)) != 0) {
+                    count++;
+                    /* Check the object for kernel info */
+                    uint64_t regID = 0;
+                    IORegistryEntryGetRegistryEntryID(obj, &regID);
+                    rlog("    matched obj 0x%x regID=0x%llx\n", obj, regID);
+                    IOObjectRelease(obj);
+                }
+                rlog("  Drained %d existing matches\n", count);
+                IOObjectRelease(iter);
+            }
+            IONotificationPortDestroy(notifyPort);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: IOKit property write attempts ---- */
+    rlog("\n--- Part 4: IOKit property write attempts ---\n");
+    {
+        /* Try setting properties on IOSurfaceRoot */
+        io_service_t isr = IOServiceGetMatchingService(
+            kIOMasterPortDefault, IOServiceMatching("IOSurfaceRoot"));
+        if (isr) {
+            /* Try IORegistryEntrySetCFProperty (singular) */
+            typedef kern_return_t (*set_prop_fn)(io_registry_entry_t,
+                CFStringRef, CFTypeRef);
+            set_prop_fn sp = (set_prop_fn)dlsym(RTLD_DEFAULT,
+                "IORegistryEntrySetCFProperty");
+            rlog("  IORegistryEntrySetCFProperty: %p\n", (void*)sp);
+            if (sp) {
+                int val = 42;
+                CFNumberRef num = CFNumberCreate(NULL, kCFNumberIntType, &val);
+                kr = sp(isr, CFSTR("TestProperty"), num);
+                rlog("  Set 'TestProperty' on IOSurfaceRoot: kr=0x%x\n", kr);
+                CFRelease(num);
+            }
+
+            /* Try setting on AGX */
+            io_service_t agx = IOServiceGetMatchingService(
+                kIOMasterPortDefault, IOServiceMatching("AGXAccelerator"));
+            if (agx && sp) {
+                int val = 1;
+                CFNumberRef num = CFNumberCreate(NULL, kCFNumberIntType, &val);
+                kr = sp(agx, CFSTR("IOPMIsPowerManaged"), num);
+                rlog("  Set 'IOPMIsPowerManaged' on AGX: kr=0x%x\n", kr);
+                CFRelease(num);
+                IOObjectRelease(agx);
+            }
+            IOObjectRelease(isr);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 5: sandbox_check for interesting operations ---- */
+    rlog("\n--- Part 5: sandbox capability checks ---\n");
+    {
+        typedef int (*sb_check_fn)(pid_t, const char*, int, ...);
+        sb_check_fn sbc = (sb_check_fn)dlsym(RTLD_DEFAULT, "sandbox_check");
+        if (sbc) {
+            const char *ops[] = {
+                "mach-lookup", "mach-register",
+                "file-read-data", "file-write-data",
+                "process-fork", "process-exec",
+                "iokit-open", "iokit-set-properties",
+                "nvram-get", "nvram-set", "nvram-delete",
+                "system-privilege", "system-sysctl",
+                "device-microphone", "device-camera",
+                "network-outbound", "network-inbound",
+                "user-preference-read", "user-preference-write",
+                "job-creation", "ipc-posix-shm-read-data",
+                "ipc-posix-shm-write-create",
+                "process-info-pidinfo",
+                "dynamic-code-generation",
+                NULL
+            };
+            for (int i = 0; ops[i]; i++) {
+                int rc = sbc(getpid(), ops[i], 0);
+                if (rc == 0) {
+                    rlog("  ALLOWED: %s\n", ops[i]);
+                }
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 6: Mach service connectivity ---- */
+    rlog("\n--- Part 6: Mach service probes ---\n");
+    {
+        const char *services[] = {
+            "com.apple.iohideventsystem",
+            "com.apple.backboard.TouchDeliveryPolicyServer",
+            "com.apple.gpumemd.source",
+            "com.apple.mobileassetd",
+            "com.apple.networkd",
+            "com.apple.symptom_analytics",
+            "com.apple.distributed_notifications_server",
+            "com.apple.cfprefsd.daemon",
+            "com.apple.runningboard",
+            "com.apple.fairplayd",
+            "com.apple.mediaserverd",
+            "com.apple.avfaudio.AVFAudioSessionMediaServiceServerPort",
+            NULL
+        };
+        for (int i = 0; services[i]; i++) {
+            mach_port_t port = MACH_PORT_NULL;
+            kr = bootstrap_look_up(bootstrap_port, services[i], &port);
+            if (kr == KERN_SUCCESS) {
+                rlog("  FOUND: %s port=0x%x\n", services[i], port);
+            }
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r311 complete ===\n");
+    fflush(stdout);
+}
+
 static void r310_probe(void) {
     rlog("\n=== r310: Metal GPU Work + IOSurface Struct Methods + Timing ===\n\n");
     fflush(stdout);
@@ -33093,6 +33333,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 311) {
+            rlog("*** rounds=311: IOService Interest + ANE/DCP + Writable Props ***\n");
+            rlog("  r310: Metal works! AGX notifs still empty, all addrs zeroed.\n");
+            rlog("  Probe: New drivers, IOService notifs, property writes, sandbox.\n\n");
+            r311_probe();
             goto done;
         }
         if (rounds == 310) {
