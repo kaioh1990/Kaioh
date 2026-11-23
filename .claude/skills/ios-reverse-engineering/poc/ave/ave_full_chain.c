@@ -25248,7 +25248,8 @@ new_modes:
                 }
             }
 
-            /* ---- 22h: Aggressive TL=16463 panic test (1080p, multi-frame) ---- */
+            /* ---- 22h: SKIPPED — superseded by 22i single-frame sweep ---- */
+            if (0) {
             rlog("\n--- 22h: TL=16463 aggressive OOB write (1080p) ---\n");
             rlog("Replicating public PoC conditions for CVE-2026-112705\n");
             {
@@ -25375,6 +25376,7 @@ new_modes:
                     }
                 }
             }
+            } /* end if(0) skip 22h */
 
             /* ---- 22i: Controlled single-frame OOB write sweep (1080p) ---- */
             rlog("\n--- 22i: Controlled CVE-2026-112705 single-frame sweep (1080p) ---\n");
