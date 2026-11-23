@@ -4263,6 +4263,298 @@ static void r297_probe(void) {
  * memory — potential for confusion attacks.
  */
 /*
+ * r300: Lockdown Mode toggle & ACM kernel control probe
+ * r299 confirmed: MCProfileConnection.isLockdownModeEnabled works, LDM=0.
+ * Now probe:
+ *   1. Full MCProfileConnection method enumeration (find setLockdownMode*)
+ *   2. lockdownmoded XPC service connection attempt
+ *   3. AppleCredentialManager IOKit user client open attempt
+ *   4. Darwin notify for com.apple.LockdownMode.stateDidChange
+ *   5. IOConnectCallMethod on ACM user client (if opened)
+ *   6. system_mac_syscall for lockdown mode MAC policy
+ */
+static void r300_probe(void) {
+    rlog("\n=== r300: Lockdown Mode Toggle & ACM Probe ===\n\n");
+    fflush(stdout);
+
+    /* ---- Part 1: Enumerate ALL MCProfileConnection methods ---- */
+    rlog("--- Part 1: MCProfileConnection method enumeration ---\n");
+    void *mcfg = dlopen("/System/Library/PrivateFrameworks/ManagedConfiguration.framework/ManagedConfiguration", RTLD_NOW);
+    if (!mcfg) {
+        rlog("  FAILED to load ManagedConfiguration: %s\n", dlerror());
+    } else {
+        void *cls = objc_getClass("MCProfileConnection");
+        if (!cls) {
+            rlog("  MCProfileConnection class NOT found\n");
+        } else {
+            unsigned int methodCount = 0;
+            Method *methods = class_copyMethodList((Class)cls, &methodCount);
+            rlog("  MCProfileConnection: %u instance methods\n", methodCount);
+            int lockdown_count = 0;
+            for (unsigned int i = 0; i < methodCount; i++) {
+                const char *name = sel_getName(method_getName(methods[i]));
+                if (strcasestr(name, "lockdown") || strcasestr(name, "LDM") ||
+                    strcasestr(name, "restriction") || strcasestr(name, "managed")) {
+                    rlog("  [%u] %s\n", i, name);
+                    lockdown_count++;
+                }
+            }
+            rlog("  Found %d lockdown/restriction-related methods\n", lockdown_count);
+
+            /* Also check class methods */
+            Class meta = object_getClass((id)cls);
+            unsigned int cmCount = 0;
+            Method *cmethods = class_copyMethodList(meta, &cmCount);
+            rlog("  MCProfileConnection: %u class methods\n", cmCount);
+            for (unsigned int i = 0; i < cmCount; i++) {
+                const char *name = sel_getName(method_getName(cmethods[i]));
+                if (strcasestr(name, "lockdown") || strcasestr(name, "LDM") ||
+                    strcasestr(name, "restriction")) {
+                    rlog("  [class][%u] %s\n", i, name);
+                }
+            }
+            if (cmethods) free(cmethods);
+            if (methods) free(methods);
+
+            /* Try to get the shared connection and call every lockdown method */
+            SEL sharedSel = sel_registerName("sharedConnection");
+            id conn = ((id(*)(id, SEL))objc_msgSend)((id)cls, sharedSel);
+            if (conn) {
+                rlog("  sharedConnection: %p\n", conn);
+                /* Check for set/toggle methods */
+                const char *try_sels[] = {
+                    "setLockdownModeEnabled:",
+                    "enableLockdownMode",
+                    "disableLockdownMode",
+                    "toggleLockdownMode",
+                    "requestLockdownModeChange:",
+                    "setLockdownModeEnabled:withCompletion:",
+                    "setManagedLockdownModeEnabled:",
+                    "lockdownModeState",
+                    "lockdownModeRestriction",
+                    "isLockdownModeManaged",
+                    "lockdownModeExemptions",
+                    "effectiveSettings",
+                    "effectiveRestrictions",
+                    "activeLockdownRestrictions",
+                    NULL
+                };
+                SEL respSel = sel_registerName("respondsToSelector:");
+                for (int i = 0; try_sels[i]; i++) {
+                    SEL s = sel_registerName(try_sels[i]);
+                    BOOL resp = ((BOOL(*)(id, SEL, SEL))objc_msgSend)(conn, respSel, s);
+                    rlog("  responds '%s': %d\n", try_sels[i], resp);
+                }
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: LockdownMode.framework direct load ---- */
+    rlog("\n--- Part 2: LockdownMode.framework ---\n");
+    void *ldmFW = dlopen("/System/Library/PrivateFrameworks/LockdownMode.framework/LockdownMode", RTLD_NOW);
+    if (!ldmFW) {
+        rlog("  LockdownMode.framework: %s\n", dlerror());
+        /* Try alternate path */
+        ldmFW = dlopen("/System/Library/PrivateFrameworks/LockdownMode.framework/Versions/A/LockdownMode", RTLD_NOW);
+        if (!ldmFW) rlog("  Alternate path also failed: %s\n", dlerror());
+    }
+    if (ldmFW) {
+        rlog("  LockdownMode.framework loaded!\n");
+        /* Enumerate classes */
+        const char *ldm_classes[] = {
+            "LDMManager", "LDMLockdownMode", "LDMState", "LDMService",
+            "LDMClient", "LDMConfiguration", "LDMRestriction",
+            "LDMExemptionManager", "LockdownModeServer", "LockdownModeDaemon",
+            NULL
+        };
+        for (int i = 0; ldm_classes[i]; i++) {
+            void *c = objc_getClass(ldm_classes[i]);
+            if (c) {
+                rlog("  Found class: %s\n", ldm_classes[i]);
+                unsigned int mc = 0;
+                Method *ms = class_copyMethodList((Class)c, &mc);
+                rlog("    %u methods\n", mc);
+                for (unsigned int j = 0; j < mc && j < 30; j++) {
+                    rlog("    [%u] %s\n", j, sel_getName(method_getName(ms[j])));
+                }
+                if (ms) free(ms);
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: lockdownmoded XPC connection ---- */
+    rlog("\n--- Part 3: lockdownmoded XPC service ---\n");
+    mach_port_t bp = MACH_PORT_NULL;
+    task_get_bootstrap_port(mach_task_self(), &bp);
+    rlog("  bootstrap port: 0x%x\n", bp);
+
+    const char *xpc_names[] = {
+        "com.apple.lockdownmoded",
+        "com.apple.lockdownmoded.updateState",
+        "com.apple.lockdownmoded.events",
+        "com.apple.lockdownmoded.exemptions-manager",
+        "com.apple.lockdownmoded.notifications",
+        "com.apple.lockdownmoded.updateManagedConfiguration",
+        NULL
+    };
+    for (int i = 0; xpc_names[i]; i++) {
+        mach_port_t sp = MACH_PORT_NULL;
+        kern_return_t kr = bootstrap_look_up(bp, xpc_names[i], &sp);
+        rlog("  bootstrap_look_up('%s'): kr=0x%x port=0x%x\n",
+             xpc_names[i], kr, sp);
+        if (sp != MACH_PORT_NULL) mach_port_deallocate(mach_task_self(), sp);
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: AppleCredentialManager IOKit ---- */
+    rlog("\n--- Part 4: AppleCredentialManager IOKit ---\n");
+    io_service_t acmSvc = IOServiceGetMatchingService(
+        kIOMasterPortDefault,
+        IOServiceMatching("AppleCredentialManager"));
+    rlog("  AppleCredentialManager service: 0x%x\n", acmSvc);
+    if (acmSvc) {
+        io_connect_t acmConn = IO_OBJECT_NULL;
+        kern_return_t kr = IOServiceOpen(acmSvc, mach_task_self(), 0, &acmConn);
+        rlog("  IOServiceOpen type=0: kr=0x%x conn=0x%x\n", kr, acmConn);
+        if (kr != KERN_SUCCESS) {
+            /* Try type 1 */
+            kr = IOServiceOpen(acmSvc, mach_task_self(), 1, &acmConn);
+            rlog("  IOServiceOpen type=1: kr=0x%x conn=0x%x\n", kr, acmConn);
+        }
+        if (acmConn != IO_OBJECT_NULL) {
+            rlog("  ** ACM user client opened! **\n");
+            /* Try external methods */
+            for (uint32_t sel = 0; sel < 16; sel++) {
+                uint64_t out[8] = {0};
+                uint32_t outCnt = 8;
+                kr = IOConnectCallScalarMethod(acmConn, sel, NULL, 0, out, &outCnt);
+                rlog("  sel=%u: kr=0x%x outCnt=%u", sel, kr, outCnt);
+                if (kr == KERN_SUCCESS && outCnt > 0) {
+                    rlog(" out[0]=0x%llx", out[0]);
+                }
+                rlog("\n");
+            }
+            IOServiceClose(acmConn);
+        }
+        IOObjectRelease(acmSvc);
+    }
+    fflush(stdout);
+
+    /* ---- Part 5: Darwin notify registration ---- */
+    rlog("\n--- Part 5: Darwin notifications ---\n");
+    int notify_token = 0;
+    uint32_t nstatus;
+    const char *notify_names[] = {
+        "com.apple.LockdownMode.stateDidChange",
+        "com.apple.LockdownMode",
+        "com.apple.security.lockdownmode.status",
+        "com.apple.lockdownmoded",
+        "com.apple.amfi.lockdown",
+        NULL
+    };
+    for (int i = 0; notify_names[i]; i++) {
+        nstatus = notify_register_check(notify_names[i], &notify_token);
+        int check_val = -1;
+        if (nstatus == 0) {
+            notify_get_state(notify_token, (uint64_t*)&check_val);
+            rlog("  notify '%s': token=%d state=%d (0x%x)\n",
+                 notify_names[i], notify_token, check_val, check_val);
+            notify_cancel(notify_token);
+        } else {
+            rlog("  notify '%s': register FAILED status=%u\n",
+                 notify_names[i], nstatus);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 6: MAC policy syscall for lockdown ---- */
+    rlog("\n--- Part 6: system MAC policy probing ---\n");
+    /* __mac_syscall takes: policy_name, call_number, arg */
+    /* Try AMFI and sandbox policy calls */
+    typedef int (*mac_syscall_t)(const char *, int, void *);
+    mac_syscall_t mac_syscall_fn = (mac_syscall_t)dlsym(RTLD_DEFAULT, "__mac_syscall");
+    if (mac_syscall_fn) {
+        rlog("  __mac_syscall found at %p\n", (void*)mac_syscall_fn);
+        /* AMFI policy - try various call numbers */
+        for (int call = 0; call < 16; call++) {
+            int ret = mac_syscall_fn("AMFI", call, NULL);
+            if (ret != -1 || errno != ENOSYS) {
+                rlog("  AMFI call=%d: ret=%d errno=%d (%s)\n",
+                     call, ret, errno, strerror(errno));
+            }
+        }
+        /* Sandbox policy */
+        for (int call = 0; call < 8; call++) {
+            int ret = mac_syscall_fn("Sandbox", call, NULL);
+            if (ret != -1 || errno != ENOSYS) {
+                rlog("  Sandbox call=%d: ret=%d errno=%d (%s)\n",
+                     call, ret, errno, strerror(errno));
+            }
+        }
+    } else {
+        rlog("  __mac_syscall not found\n");
+    }
+    fflush(stdout);
+
+    /* ---- Part 7: IOKit AppleMobileFileIntegrity ---- */
+    rlog("\n--- Part 7: AMFI IOKit ---\n");
+    io_service_t amfiSvc = IOServiceGetMatchingService(
+        kIOMasterPortDefault,
+        IOServiceMatching("AppleMobileFileIntegrity"));
+    rlog("  AMFI service: 0x%x\n", amfiSvc);
+    if (amfiSvc) {
+        /* Read properties */
+        CFMutableDictionaryRef props = NULL;
+        kern_return_t kr = IORegistryEntryCreateCFProperties(
+            amfiSvc, &props, kCFAllocatorDefault, 0);
+        if (kr == KERN_SUCCESS && props) {
+            CFIndex count = CFDictionaryGetCount(props);
+            rlog("  AMFI properties: %ld keys\n", count);
+            const void **keys = malloc(sizeof(void*) * count);
+            const void **vals = malloc(sizeof(void*) * count);
+            CFDictionaryGetKeysAndValues(props, keys, vals);
+            for (CFIndex i = 0; i < count && i < 30; i++) {
+                char kbuf[256] = {0};
+                if (CFGetTypeID(keys[i]) == CFStringGetTypeID()) {
+                    CFStringGetCString(keys[i], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+                }
+                rlog("  [%ld] %s = ", i, kbuf);
+                if (CFGetTypeID(vals[i]) == CFNumberGetTypeID()) {
+                    long long v = 0;
+                    CFNumberGetValue(vals[i], kCFNumberLongLongType, &v);
+                    rlog("0x%llx (%lld)\n", v, v);
+                } else if (CFGetTypeID(vals[i]) == CFBooleanGetTypeID()) {
+                    rlog("%s\n", CFBooleanGetValue(vals[i]) ? "true" : "false");
+                } else if (CFGetTypeID(vals[i]) == CFStringGetTypeID()) {
+                    char vbuf[256] = {0};
+                    CFStringGetCString(vals[i], vbuf, sizeof(vbuf), kCFStringEncodingUTF8);
+                    rlog("\"%s\"\n", vbuf);
+                } else if (CFGetTypeID(vals[i]) == CFDataGetTypeID()) {
+                    rlog("<data len=%ld>\n", CFDataGetLength(vals[i]));
+                } else {
+                    rlog("<type=%lu>\n", CFGetTypeID(vals[i]));
+                }
+            }
+            free(keys);
+            free(vals);
+            CFRelease(props);
+        }
+        /* Try to open user client */
+        io_connect_t amfiConn = IO_OBJECT_NULL;
+        kern_return_t kr2 = IOServiceOpen(amfiSvc, mach_task_self(), 0, &amfiConn);
+        rlog("  AMFI IOServiceOpen: kr=0x%x conn=0x%x\n", kr2, amfiConn);
+        if (amfiConn != IO_OBJECT_NULL) IOServiceClose(amfiConn);
+        IOObjectRelease(amfiSvc);
+    }
+    fflush(stdout);
+
+    rlog("\n=== r300 complete ===\n");
+    fflush(stdout);
+}
+
+/*
  * r299: Lockdown Mode reconnaissance
  * Probe device for Lockdown Mode state, MTE config, SPTM indicators,
  * boot args, and any kernel state that changes with the toggle.
@@ -30155,6 +30447,14 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 300) {
+            rlog("*** rounds=300: Lockdown Mode toggle & ACM kernel control ***\n");
+            rlog("  r299: LDM=OFF, MCProfileConnection works.\n");
+            rlog("  Probe: methods, XPC, ACM IOKit, notifications, MAC syscall.\n\n");
+            fflush(stdout);
+            r300_probe();
             goto done;
         }
         if (rounds == 299) {
