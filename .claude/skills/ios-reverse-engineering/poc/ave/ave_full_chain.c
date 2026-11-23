@@ -26571,9 +26571,9 @@ new_modes:
         if (rounds == 222 || rounds == 229) {
             rlog("\n=== Phase 24c: Multi-frame OOB temporal ref leak ===\n");
 
-            /* 24c-A: Two-frame encode at moderate TL values.
-             * Frame 0 may output normally, Frame 1 uses temporal
-             * layer config that overflows. */
+            /* 24c-A: DISABLED — OOB TL always NAL=0, Frame 1 hangs.
+             * See ave_846.txt: TL=9,10 F0 NAL=0, F1 cb timeout. */
+            if (0) {
             rlog("\n--- 24c-A: Two-frame encode with OOB TL ---\n");
             {
                 int p24c_tl_vals[] = {9, 10, 16, 32};
@@ -26673,6 +26673,7 @@ new_modes:
                     usleep(50000);
                 }
             }
+            } /* end if(0) for 24c-A */
 
             /* 24c-B: Encode F0 at TL=1 (outputs data), then change
              * TL mid-session to large value and encode F1.
