@@ -1767,32 +1767,52 @@ static void r265_probe_traps_and_types(IOSurfaceRef surf) {
         }
     }
 
-    /* 2) Probe IOConnectTrap functions */
+    /* 2) Probe IOConnectTrap functions via dlsym (unavailable in iOS SDK) */
     io_connect_t conn = IO_OBJECT_NULL;
     IOServiceOpen(svc, mach_task_self(), 0, &conn);
     if (!conn) { IOObjectRelease(svc); return; }
 
     rlog("\n  === IOConnectTrap probe (conn=%u, surfID=%u) ===\n", conn, sid);
 
-    /* IOConnectTrap0(conn, index) */
-    for (uint32_t idx = 0; idx <= 10; idx++) {
-        kr = IOConnectTrap0(conn, idx);
-        rlog("    Trap0(idx=%u): kr=0x%x\n", idx, kr);
+    typedef kern_return_t (*trap0_t)(io_connect_t, uint32_t);
+    typedef kern_return_t (*trap1_t)(io_connect_t, uint32_t, uintptr_t);
+    typedef kern_return_t (*trap2_t)(io_connect_t, uint32_t, uintptr_t, uintptr_t);
+    typedef kern_return_t (*trap6_t)(io_connect_t, uint32_t, uintptr_t, uintptr_t,
+        uintptr_t, uintptr_t, uintptr_t, uintptr_t);
+
+    void *iokit = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_LAZY);
+    trap0_t t0 = iokit ? (trap0_t)dlsym(iokit, "IOConnectTrap0") : NULL;
+    trap1_t t1 = iokit ? (trap1_t)dlsym(iokit, "IOConnectTrap1") : NULL;
+    trap2_t t2 = iokit ? (trap2_t)dlsym(iokit, "IOConnectTrap2") : NULL;
+    trap6_t t6 = iokit ? (trap6_t)dlsym(iokit, "IOConnectTrap6") : NULL;
+    rlog("  dlsym: Trap0=%p Trap1=%p Trap2=%p Trap6=%p\n",
+        (void*)t0, (void*)t1, (void*)t2, (void*)t6);
+
+    if (t0) {
+        for (uint32_t idx = 0; idx <= 10; idx++) {
+            kr = t0(conn, idx);
+            rlog("    Trap0(idx=%u): kr=0x%x\n", idx, kr);
+        }
+    } else {
+        rlog("    IOConnectTrap0 not found in IOKit\n");
     }
 
-    /* IOConnectTrap1(conn, index, p1) */
-    rlog("\n  IOConnectTrap1 with surfID:\n");
-    for (uint32_t idx = 0; idx <= 10; idx++) {
-        kr = IOConnectTrap1(conn, idx, (uintptr_t)sid);
-        rlog("    Trap1(idx=%u, surfID): kr=0x%x\n", idx, kr);
+    if (t1) {
+        rlog("\n  IOConnectTrap1 with surfID:\n");
+        for (uint32_t idx = 0; idx <= 10; idx++) {
+            kr = t1(conn, idx, (uintptr_t)sid);
+            rlog("    Trap1(idx=%u, surfID): kr=0x%x\n", idx, kr);
+        }
     }
 
-    /* IOConnectTrap2(conn, index, p1, p2) */
-    rlog("\n  IOConnectTrap2:\n");
-    for (uint32_t idx = 0; idx <= 5; idx++) {
-        kr = IOConnectTrap2(conn, idx, (uintptr_t)sid, 0);
-        rlog("    Trap2(idx=%u, surfID, 0): kr=0x%x\n", idx, kr);
+    if (t2) {
+        rlog("\n  IOConnectTrap2:\n");
+        for (uint32_t idx = 0; idx <= 5; idx++) {
+            kr = t2(conn, idx, (uintptr_t)sid, 0);
+            rlog("    Trap2(idx=%u, surfID, 0): kr=0x%x\n", idx, kr);
+        }
     }
+    if (iokit) dlclose(iokit);
 
     /* 3) Probe IOConnectMapMemory */
     rlog("\n  === IOConnectMapMemory probe ===\n");
