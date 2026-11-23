@@ -1731,12 +1731,50 @@ static void *r259_unreg_fn(void *arg) {
 /* r262: Metal GPU race with proper objc_msgSend casting for arm64e */
 #include <objc/runtime.h>
 #include <objc/message.h>
+#include <signal.h>
 
 static volatile int r262_run = 0;
 static volatile int r262_tex_ok = 0;
 static volatile int r262_tex_fail = 0;
 static volatile int r262_blit_ok = 0;
 static volatile int r262_freed = 0;
+
+/* Signal/exception handler for debugging Metal crashes */
+static void r262_signal_handler(int sig) {
+    const char *name = "UNKNOWN";
+    if (sig == SIGABRT) name = "SIGABRT";
+    else if (sig == SIGBUS) name = "SIGBUS";
+    else if (sig == SIGSEGV) name = "SIGSEGV";
+    else if (sig == SIGILL) name = "SIGILL";
+    else if (sig == SIGTRAP) name = "SIGTRAP";
+    rlog("  *** CAUGHT SIGNAL %d (%s) in GPU thread ***\n", sig, name);
+    rlog("  tex_ok=%d tex_fail=%d blit=%d freed=%d\n",
+         r262_tex_ok, r262_tex_fail, r262_blit_ok, r262_freed);
+    fflush(stdout);
+    /* Re-raise to get default handling */
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
+
+/* ObjC uncaught exception handler */
+typedef void (*NSUncaughtExceptionHandler_t)(id);
+static void r262_exception_handler(id exception) {
+    void *objc_lib = dlopen("/usr/lib/libobjc.A.dylib", RTLD_LAZY);
+    if (!objc_lib) return;
+    typedef id (*msg_id_t)(id, SEL);
+    msg_id_t send = (msg_id_t)dlsym(objc_lib, "objc_msgSend");
+    if (!send) { dlclose(objc_lib); return; }
+
+    id reason = send(exception, sel_registerName("reason"));
+    id name = send(exception, sel_registerName("name"));
+    typedef const char *(*msg_cstr_t)(id, SEL);
+    msg_cstr_t send_cstr = (msg_cstr_t)dlsym(objc_lib, "objc_msgSend");
+    const char *r = send_cstr(reason, sel_registerName("UTF8String"));
+    const char *n = send_cstr(name, sel_registerName("UTF8String"));
+    rlog("  *** UNCAUGHT OBJC EXCEPTION: %s: %s ***\n", n ? n : "?", r ? r : "?");
+    fflush(stdout);
+    dlclose(objc_lib);
+}
 
 /* Properly typed objc_msgSend variants for arm64e PAC */
 typedef id (*msg_id_t)(id, SEL);
@@ -1835,7 +1873,8 @@ static void *r262_gpu_fn(void *arg) {
     while (r262_run) {
         void *pool = poolPush();
 
-        /* Create IOSurface */
+        /* Create IOSurface with all required Metal properties */
+        int allocSize = bpr * h;
         CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
             &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
         CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
@@ -1843,13 +1882,15 @@ static void *r262_gpu_fn(void *arg) {
         CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
         CFNumberRef rn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
         CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        CFNumberRef asn = CFNumberCreate(NULL, kCFNumberIntType, &allocSize);
         CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
         CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
         CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
         CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), rn);
         CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), asn);
         IOSurfaceRef surf = IOSurfaceCreate(props);
-        CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn);
+        CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn); CFRelease(pfn); CFRelease(asn);
         CFRelease(props);
         if (!surf) { poolPop(pool); continue; }
 
@@ -20622,12 +20663,31 @@ new_modes:
             rlog("  Duration: %d seconds\n", r262_secs);
             fflush(stdout);
 
+            /* Install signal/exception handlers for debugging */
+            signal(SIGABRT, r262_signal_handler);
+            signal(SIGBUS, r262_signal_handler);
+            signal(SIGSEGV, r262_signal_handler);
+            signal(SIGILL, r262_signal_handler);
+            signal(SIGTRAP, r262_signal_handler);
+            /* Install NSUncaughtExceptionHandler */
+            {
+                void *fnd = dlopen("/System/Library/Frameworks/Foundation.framework/Foundation", RTLD_LAZY);
+                if (fnd) {
+                    typedef void (*SetHandler_t)(NSUncaughtExceptionHandler_t);
+                    SetHandler_t setH = (SetHandler_t)dlsym(fnd, "NSSetUncaughtExceptionHandler");
+                    if (setH) { setH(r262_exception_handler); rlog("  Installed ObjC exception handler\n"); }
+                    dlclose(fnd);
+                }
+            }
+            fflush(stdout);
+
             r262_run = 1;
             r262_tex_ok = 0; r262_tex_fail = 0; r262_blit_ok = 0; r262_freed = 0;
 
-            /* 2 GPU threads */
+            /* 1 GPU thread for debugging (isolate threading issues) */
             pthread_t r262_th[2];
-            for (int i = 0; i < 2; i++)
+            int r262_nthreads = 1;
+            for (int i = 0; i < r262_nthreads; i++)
                 pthread_create(&r262_th[i], NULL, r262_gpu_fn, (void*)(uintptr_t)i);
 
             /* sel17/18 churn */
@@ -20654,7 +20714,7 @@ new_modes:
 
             r262_run = 0;
             g_race250_run = 0;
-            for (int i = 0; i < 2; i++) pthread_join(r262_th[i], NULL);
+            for (int i = 0; i < r262_nthreads; i++) pthread_join(r262_th[i], NULL);
             if (r262_conn) {
                 pthread_join(r262_t17, NULL);
                 pthread_join(r262_t18, NULL);
