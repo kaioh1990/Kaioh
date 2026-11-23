@@ -1745,6 +1745,237 @@ static volatile int r265_probed = 0;
 
 typedef void* IOSurfaceClientRef;
 
+/* r278: Explore IOSurfaceRoot user client types + structured input + API race.
+ * r277: ALL selectors return errors with scalar surface ID (0/13.3M success).
+ * IOSurface framework passes surface IDs in structured input, not scalars.
+ * This round:
+ * Part 1: Try IOServiceOpen with types 0-10 to find other user client types
+ * Part 2: Sniff the actual IOConnectCallMethod traffic by hooking IOSurfaceLock
+ * Part 3: Race IOSurfaceLock/Unlock vs CFRelease with tight timing
+ * Part 4: Race IOSurfaceLookup vs CFRelease with different surface counts */
+static volatile int r278_stop = 0;
+static volatile uint64_t r278_lock_ok = 0, r278_lock_fail = 0;
+
+static void *r278_locker_fn(void *arg) {
+    IOSurfaceRef *psurf = (IOSurfaceRef *)arg;
+    while (!r278_stop) {
+        IOSurfaceRef s = *psurf;
+        if (!s) continue;
+        kern_return_t kr = IOSurfaceLock(s, 1, NULL);
+        if (kr == 0) {
+            __sync_fetch_and_add(&r278_lock_ok, 1);
+            IOSurfaceUnlock(s, 1, NULL);
+        } else {
+            __sync_fetch_and_add(&r278_lock_fail, 1);
+        }
+    }
+    return NULL;
+}
+
+static void r278_probe(void) {
+    rlog("\n=== r278: IOSurfaceRoot User Client Types + API Race ===\n");
+    fflush(stdout);
+
+    io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    rlog("  IOSurfaceRoot svc=%u\n", svc);
+
+    /* Part 1: Try different user client types */
+    rlog("\n--- Part 1: User client types 0-10 ---\n");
+    for (uint32_t t = 0; t <= 10; t++) {
+        io_connect_t c = 0;
+        kern_return_t kr = IOServiceOpen(svc, mach_task_self(), t, &c);
+        rlog("  type=%u: kr=0x%x conn=%u\n", t, kr, c);
+        if (kr == 0 && c != 0) {
+            uint64_t in_scalars[4] = {0};
+            uint64_t out_scalars[4] = {0};
+            uint32_t out_cnt = 4;
+            for (uint32_t sel = 0; sel < 10; sel++) {
+                in_scalars[0] = 0;
+                out_cnt = 4;
+                kern_return_t skr = IOConnectCallMethod(c, sel,
+                    in_scalars, 1, NULL, 0, out_scalars, &out_cnt, NULL, NULL);
+                if (skr != 0xe00002c2 && skr != 0xe00002c7 && skr != 0xe00002bc) {
+                    rlog("    type=%u sel%u: kr=0x%x\n", t, sel, skr);
+                }
+            }
+            IOServiceClose(c);
+        }
+    }
+    fflush(stdout);
+
+    /* Part 2: Probe structured input — try passing surface ID as 4-byte struct */
+    rlog("\n--- Part 2: Structured input with surface ID ---\n");
+    {
+        io_connect_t conn = 0;
+        IOServiceOpen(svc, mach_task_self(), 0, &conn);
+
+        CFMutableDictionaryRef tp = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int tw=64, th=64, tbpe=4, tbpr=64*4, tpf=0x42475241, tas=64*64*4;
+        CFNumberRef twn=CFNumberCreate(NULL,kCFNumberIntType,&tw);
+        CFNumberRef thn=CFNumberCreate(NULL,kCFNumberIntType,&th);
+        CFNumberRef tbn=CFNumberCreate(NULL,kCFNumberIntType,&tbpe);
+        CFNumberRef trn=CFNumberCreate(NULL,kCFNumberIntType,&tbpr);
+        CFNumberRef tpn=CFNumberCreate(NULL,kCFNumberIntType,&tpf);
+        CFNumberRef tan=CFNumberCreate(NULL,kCFNumberIntType,&tas);
+        CFDictionarySetValue(tp,CFSTR("IOSurfaceWidth"),twn);
+        CFDictionarySetValue(tp,CFSTR("IOSurfaceHeight"),thn);
+        CFDictionarySetValue(tp,CFSTR("IOSurfaceBytesPerElement"),tbn);
+        CFDictionarySetValue(tp,CFSTR("IOSurfaceBytesPerRow"),trn);
+        CFDictionarySetValue(tp,CFSTR("IOSurfacePixelFormat"),tpn);
+        CFDictionarySetValue(tp,CFSTR("IOSurfaceAllocSize"),tan);
+        CFRelease(twn);CFRelease(thn);CFRelease(tbn);CFRelease(trn);CFRelease(tpn);CFRelease(tan);
+        IOSurfaceRef test_surf = IOSurfaceCreate(tp);
+        CFRelease(tp);
+        uint32_t sid = IOSurfaceGetID(test_surf);
+        rlog("  test surface id=%u\n", sid);
+
+        for (uint32_t sel = 0; sel < 30; sel++) {
+            uint32_t struct_in[8] = {0};
+            struct_in[0] = sid;
+            uint8_t struct_out[256] = {0};
+            size_t struct_out_sz = sizeof(struct_out);
+
+            kern_return_t kr = IOConnectCallMethod(conn, sel,
+                NULL, 0, struct_in, sizeof(uint32_t),
+                NULL, NULL, struct_out, &struct_out_sz);
+            if (kr != 0xe00002c2 && kr != 0xe00002c7 && kr != 0xe00002bc
+                && kr != 0xe00002bf) {
+                rlog("  sel%u(struct4): kr=0x%x out_sz=%zu\n", sel, kr, struct_out_sz);
+            }
+
+            struct_out_sz = sizeof(struct_out);
+            kr = IOConnectCallMethod(conn, sel,
+                NULL, 0, struct_in, 2*sizeof(uint32_t),
+                NULL, NULL, struct_out, &struct_out_sz);
+            if (kr != 0xe00002c2 && kr != 0xe00002c7 && kr != 0xe00002bc
+                && kr != 0xe00002bf) {
+                rlog("  sel%u(struct8): kr=0x%x out_sz=%zu\n", sel, kr, struct_out_sz);
+            }
+
+            struct_out_sz = sizeof(struct_out);
+            kr = IOConnectCallMethod(conn, sel,
+                NULL, 0, struct_in, 4*sizeof(uint32_t),
+                NULL, NULL, struct_out, &struct_out_sz);
+            if (kr != 0xe00002c2 && kr != 0xe00002c7 && kr != 0xe00002bc
+                && kr != 0xe00002bf) {
+                rlog("  sel%u(struct16): kr=0x%x out_sz=%zu\n", sel, kr, struct_out_sz);
+            }
+        }
+
+        CFRelease(test_surf);
+        IOServiceClose(conn);
+        fflush(stdout);
+    }
+
+    /* Part 3: Race IOSurfaceLock/Unlock vs CFRelease */
+    rlog("\n--- Part 3: IOSurfaceLock vs CFRelease race (1000 iterations) ---\n");
+    {
+        int crashed = 0;
+        uint64_t total_locks = 0, total_lock_fails = 0;
+
+        for (int iter = 0; iter < 1000 && !crashed; iter++) {
+            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int w=64,h=64,bpe=4,bpr=64*4,pf=0x42475241,as=64*64*4;
+            CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+            CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+            CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+            CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+            CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+            CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+            CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+            CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+            IOSurfaceRef s = IOSurfaceCreate(p);
+            CFRelease(p);
+            if (!s) continue;
+
+            CFRetain(s);
+            CFRetain(s);
+
+            r278_stop = 0;
+            r278_lock_ok = 0;
+            r278_lock_fail = 0;
+
+            IOSurfaceRef locker_surf = s;
+            pthread_t locker;
+            pthread_create(&locker, NULL, r278_locker_fn, &locker_surf);
+
+            usleep(10);
+            CFRelease(s);
+            usleep(1);
+            CFRelease(s);
+            usleep(1);
+            CFRelease(s);
+
+            r278_stop = 1;
+            pthread_join(locker, NULL);
+
+            total_locks += r278_lock_ok;
+            total_lock_fails += r278_lock_fail;
+        }
+
+        rlog("  1000 iterations: locks_ok=%llu lock_fails=%llu\n",
+             total_locks, total_lock_fails);
+        fflush(stdout);
+    }
+
+    /* Part 4: Race IOSurfaceLookup vs CFRelease */
+    rlog("\n--- Part 4: IOSurfaceLookup vs CFRelease race (1000 iterations) ---\n");
+    {
+        uint64_t lookup_ok = 0, lookup_null = 0;
+
+        for (int iter = 0; iter < 1000; iter++) {
+            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int w=64,h=64,bpe=4,bpr=64*4,pf=0x42475241,as=64*64*4;
+            CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+            CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+            CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+            CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+            CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+            CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+            CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+            CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+            IOSurfaceRef s = IOSurfaceCreate(p);
+            CFRelease(p);
+            if (!s) continue;
+
+            uint32_t sid = IOSurfaceGetID(s);
+            CFRelease(s);
+
+            IOSurfaceRef found = IOSurfaceLookup(sid);
+            if (found) {
+                lookup_ok++;
+                CFRelease(found);
+            } else {
+                lookup_null++;
+            }
+        }
+
+        rlog("  1000 iterations: lookup_ok=%llu lookup_null=%llu\n",
+             lookup_ok, lookup_null);
+        fflush(stdout);
+    }
+
+    IOObjectRelease(svc);
+    rlog("\n*** r278 probe complete ***\n");
+    fflush(stdout);
+}
+
 /* r277: IOConnectCallMethod + surface ID race with high-volume OOL spray.
  * r276: registry path doesn't touch individual surfaces (0 failures in 238K reads).
  * This round: use IOConnectCallMethod with surface IDs as scalar input on
@@ -24680,6 +24911,14 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 278) {
+            rlog("*** rounds=278: IOSurfaceRoot User Client Types + API Race ***\n");
+            rlog("  r277: ALL selectors fail with scalar ID (0/13.3M). Need struct input.\n");
+            rlog("  Testing: user client types, structured input, Lock/Release race, Lookup race.\n\n");
+            fflush(stdout);
+            r278_probe();
             goto done;
         }
         if (rounds == 277) {
