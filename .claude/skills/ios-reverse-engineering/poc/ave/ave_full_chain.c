@@ -30863,9 +30863,12 @@ static void pdf_put_bits(uint8_t *buf, int *byte_off, int *bit_off, uint32_t val
 }
 
 static CFDataRef pdf_build_shading_pdf(int vpr, int rows, int nout, int target_index, uint64_t target_bits, int use_cmyk) {
-    int ncomp = use_cmyk ? 4 : 1;
+    /* When /Function is present, stream always has 1 component per vertex —
+       the Function maps that 1 input to nout outputs. Colour space only
+       determines how many outputs are "colour" vs overflow. */
+    int ncomp = 1;
     int nvert = vpr * rows;
-    int bits_per_vertex = 32 + 32 + 8 * ncomp; /* BitsPerCoordinate=32 x2 + BitsPerComponent=8 x ncomp */
+    int bits_per_vertex = 32 + 32 + 8 * ncomp; /* BitsPerCoordinate=32 x2 + BitsPerComponent=8 x 1 */
     int stream_bytes = (nvert * bits_per_vertex + 7) / 8;
 
     uint8_t *stream = (uint8_t *)calloc(1, (size_t)(stream_bytes + 16));
@@ -30945,7 +30948,8 @@ static CFDataRef pdf_build_shading_pdf(int vpr, int rows, int nout, int target_i
     /* Object 5: Shading (Type 5) with stream data */
     int off5 = pdf_len;
     const char *cs_name = use_cmyk ? "/DeviceCMYK" : "/DeviceGray";
-    const char *decode = use_cmyk ? "0 200 0 200 0 1 0 1 0 1 0 1" : "0 200 0 200 0 1";
+    /* Decode is always 3 pairs: x, y, 1 component (Function input) */
+    const char *decode = "0 200 0 200 0 1";
     pdf_len += snprintf(pdf + pdf_len, pdf_cap - (size_t)pdf_len,
         "5 0 obj\n<< /ShadingType 5 /ColorSpace %s "
         "/BitsPerCoordinate 32 /BitsPerComponent 8 /VerticesPerRow %d "
