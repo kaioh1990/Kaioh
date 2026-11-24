@@ -16479,6 +16479,330 @@ static void r410_probe(void) {
 }
 
 /*
+ * r418: Thread state kernel trap + commpage + task_info.
+ *
+ * Key vectors:
+ * 1. Read thread state while thread is blocked in syscall -
+ *    saved registers may contain kernel PC/LR values
+ * 2. ARM64 commpage contents analysis
+ * 3. task_info(TASK_DYLD_INFO) shared cache slide
+ * 4. proc_pidinfo for kernel address leaks
+ */
+static volatile int g_r418_pipe_ready = 0;
+static int g_r418_pipe_fds[2] = {-1, -1};
+
+static void *r418_blocking_thread(void *arg) {
+    (void)arg;
+    char buf[16];
+    g_r418_pipe_ready = 1;
+    /* Block in kernel reading from empty pipe */
+    read(g_r418_pipe_fds[0], buf, sizeof(buf));
+    return NULL;
+}
+
+static void r418_probe(void) {
+    rlog("\n=== r418: Thread State + Commpage + task_info ===\n\n");
+    fflush(stdout);
+
+    /* ---- Vector 1: Thread state during kernel trap ---- */
+    rlog("  Vector 1: Thread register state during syscall\n");
+    {
+        if (pipe(g_r418_pipe_fds) == 0) {
+            pthread_t thr;
+            pthread_create(&thr, NULL, r418_blocking_thread, NULL);
+
+            /* Wait for thread to enter blocking read */
+            while (!g_r418_pipe_ready) usleep(1000);
+            usleep(50000); /* Extra time for thread to enter kernel */
+
+            /* Get the Mach thread port */
+            mach_port_t thrPort = pthread_mach_thread_np(thr);
+
+            /* Read ARM64 thread state */
+#ifdef __arm64__
+            arm_thread_state64_t state;
+            mach_msg_type_number_t count = ARM_THREAD_STATE64_COUNT;
+            kern_return_t kr = thread_get_state(thrPort,
+                ARM_THREAD_STATE64, (thread_state_t)&state, &count);
+
+            rlog("    thread_get_state: kr=%d(0x%x) count=%u\n",
+                kr, kr, count);
+
+            if (kr == KERN_SUCCESS) {
+                /* Dump all general-purpose registers */
+                rlog("    PC=0x%016llx LR=0x%016llx SP=0x%016llx FP=0x%016llx\n",
+                    (unsigned long long)__darwin_arm_thread_state64_get_pc(state),
+                    (unsigned long long)__darwin_arm_thread_state64_get_lr(state),
+                    (unsigned long long)__darwin_arm_thread_state64_get_sp(state),
+                    (unsigned long long)__darwin_arm_thread_state64_get_fp(state));
+
+                uint64_t pc = __darwin_arm_thread_state64_get_pc(state);
+                uint64_t lr = __darwin_arm_thread_state64_get_lr(state);
+
+                if ((pc >> 32) >= 0xFFFFFFF0ULL)
+                    rlog("    *** PC IN KERNEL RANGE: 0x%016llx ***\n",
+                        (unsigned long long)pc);
+                if ((lr >> 32) >= 0xFFFFFFF0ULL)
+                    rlog("    *** LR IN KERNEL RANGE: 0x%016llx ***\n",
+                        (unsigned long long)lr);
+
+                /* Dump x0-x28 looking for kernel range values */
+                rlog("    GPRs with high values:\n");
+                for (int r = 0; r <= 28; r++) {
+                    uint64_t rv = state.__x[r];
+                    if ((rv >> 32) >= 0xFFFFFFF0ULL) {
+                        rlog("      x%d=0x%016llx *** KERNEL RANGE ***\n",
+                            r, (unsigned long long)rv);
+                    }
+                }
+
+                /* Print first few GPRs for context */
+                rlog("    x0-x7: ");
+                for (int r = 0; r < 8; r++)
+                    rlog("0x%llx ", (unsigned long long)state.__x[r]);
+                rlog("\n");
+            }
+#endif
+
+            /* Unblock the thread */
+            write(g_r418_pipe_fds[1], "x", 1);
+            pthread_join(thr, NULL);
+            close(g_r418_pipe_fds[0]);
+            close(g_r418_pipe_fds[1]);
+        } else {
+            rlog("    pipe() failed: %s\n", strerror(errno));
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector 2: Commpage analysis ---- */
+    rlog("\n  Vector 2: ARM64 commpage contents\n");
+    {
+        /* ARM64 commpage is at 0x0000000FFFFC000 (64KB) */
+        uint64_t cpBase = 0x0000000FFFFC000ULL;
+
+        /* Try to read commpage */
+        uint64_t buf[8];
+        mach_vm_size_t outSize = 0;
+        kern_return_t kr = mach_vm_read_overwrite(mach_task_self(),
+            cpBase, 64, (mach_vm_address_t)buf, &outSize);
+        rlog("    commpage read at 0x%llx: kr=%d size=%llu\n",
+            (unsigned long long)cpBase, kr, (unsigned long long)outSize);
+
+        if (kr == KERN_SUCCESS) {
+            rlog("    First 64 bytes:\n");
+            for (int i = 0; i < 8; i++) {
+                rlog("      +%d: 0x%016llx", i * 8, (unsigned long long)buf[i]);
+                if ((buf[i] >> 32) >= 0xFFFFFFF0ULL)
+                    rlog(" *** KERNEL RANGE ***");
+                rlog("\n");
+            }
+
+            /* Scan more of the commpage for interesting values */
+            uint8_t cpData[4096];
+            outSize = 0;
+            kr = mach_vm_read_overwrite(mach_task_self(),
+                cpBase, 4096, (mach_vm_address_t)cpData, &outSize);
+            if (kr == KERN_SUCCESS) {
+                rlog("    Kernel-range values in commpage:\n");
+                int found = 0;
+                for (int off = 0; off < 4096; off += 8) {
+                    uint64_t v;
+                    memcpy(&v, cpData + off, 8);
+                    if ((v >> 32) >= 0xFFFFFFF0ULL && v != 0xFFFFFFFFFFFFFFFF) {
+                        rlog("      +0x%x: 0x%016llx\n", off, (unsigned long long)v);
+                        found++;
+                    }
+                }
+                if (!found) rlog("      (none found)\n");
+            }
+        }
+
+        /* Try alternate commpage addresses */
+        uint64_t altAddrs[] = {
+            0xFFFF000FFFFC000ULL,
+            0x00000FFFFFC000ULL,
+            0x0000000FFFF00000ULL
+        };
+        for (int a = 0; a < 3; a++) {
+            kr = mach_vm_read_overwrite(mach_task_self(),
+                altAddrs[a], 8, (mach_vm_address_t)buf, &outSize);
+            if (kr == KERN_SUCCESS) {
+                rlog("    Alt commpage 0x%llx: 0x%016llx\n",
+                    (unsigned long long)altAddrs[a],
+                    (unsigned long long)buf[0]);
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector 3: task_info analysis ---- */
+    rlog("\n  Vector 3: task_info analysis\n");
+    {
+        /* TASK_DYLD_INFO */
+        struct task_dyld_info dyld_info;
+        mach_msg_type_number_t cnt = TASK_DYLD_INFO_COUNT;
+        kern_return_t kr = task_info(mach_task_self(), TASK_DYLD_INFO,
+            (task_info_t)&dyld_info, &cnt);
+        rlog("    TASK_DYLD_INFO: kr=%d\n", kr);
+        if (kr == KERN_SUCCESS) {
+            rlog("      all_image_info_addr=0x%llx\n",
+                (unsigned long long)dyld_info.all_image_info_addr);
+            rlog("      all_image_info_size=%llu\n",
+                (unsigned long long)dyld_info.all_image_info_size);
+            rlog("      all_image_info_format=%d\n",
+                dyld_info.all_image_info_format);
+
+            if ((dyld_info.all_image_info_addr >> 32) >= 0xFFFFFFF0ULL)
+                rlog("      *** KERNEL RANGE ADDRESS ***\n");
+
+            /* Read the dyld_all_image_infos structure */
+            uint64_t infoData[32];
+            mach_vm_size_t outSz = 0;
+            kr = mach_vm_read_overwrite(mach_task_self(),
+                dyld_info.all_image_info_addr,
+                sizeof(infoData), (mach_vm_address_t)infoData, &outSz);
+            if (kr == KERN_SUCCESS) {
+                rlog("      dyld_all_image_infos dump:\n");
+                for (int i = 0; i < 16; i++) {
+                    rlog("        +%d: 0x%016llx", i * 8,
+                        (unsigned long long)infoData[i]);
+                    if ((infoData[i] >> 32) >= 0xFFFFFFF0ULL)
+                        rlog(" *** KERNEL ***");
+                    rlog("\n");
+                }
+
+                /* Field at offset 0x108 is sharedCacheSlide on some versions */
+                if (outSz >= 0x110) {
+                    uint64_t scSlide;
+                    memcpy(&scSlide, (uint8_t*)infoData + 0x108, 8);
+                    rlog("      sharedCacheSlide(@+0x108)=0x%llx\n",
+                        (unsigned long long)scSlide);
+                }
+            }
+        }
+
+        /* TASK_VM_INFO */
+        task_vm_info_data_t vminfo;
+        cnt = TASK_VM_INFO_COUNT;
+        kr = task_info(mach_task_self(), TASK_VM_INFO,
+            (task_info_t)&vminfo, &cnt);
+        rlog("    TASK_VM_INFO: kr=%d\n", kr);
+        if (kr == KERN_SUCCESS) {
+            rlog("      virtual_size=%llu phys_footprint=%llu\n",
+                (unsigned long long)vminfo.virtual_size,
+                (unsigned long long)vminfo.phys_footprint);
+            rlog("      min_address=0x%llx max_address=0x%llx\n",
+                (unsigned long long)vminfo.min_address,
+                (unsigned long long)vminfo.max_address);
+        }
+
+        /* TASK_BASIC_INFO */
+        struct task_basic_info basic;
+        cnt = TASK_BASIC_INFO_COUNT;
+        kr = task_info(mach_task_self(), TASK_BASIC_INFO,
+            (task_info_t)&basic, &cnt);
+        if (kr == KERN_SUCCESS) {
+            rlog("    TASK_BASIC_INFO: suspend_count=%d\n",
+                basic.suspend_count);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector 4: thread_info for kernel addresses ---- */
+    rlog("\n  Vector 4: thread_info analysis\n");
+    {
+        thread_array_t threads;
+        mach_msg_type_number_t threadCnt;
+        kern_return_t kr = task_threads(mach_task_self(),
+            &threads, &threadCnt);
+        rlog("    task_threads: kr=%d count=%u\n", kr, threadCnt);
+
+        if (kr == KERN_SUCCESS) {
+            for (mach_msg_type_number_t i = 0; i < threadCnt && i < 5; i++) {
+                thread_identifier_info_data_t idinfo;
+                mach_msg_type_number_t cnt = THREAD_IDENTIFIER_INFO_COUNT;
+                kr = thread_info(threads[i], THREAD_IDENTIFIER_INFO,
+                    (thread_info_t)&idinfo, &cnt);
+                if (kr == KERN_SUCCESS) {
+                    rlog("    thread[%u]: dispatch_qaddr=0x%llx thread_handle=0x%llx thread_id=0x%llx\n",
+                        i,
+                        (unsigned long long)idinfo.dispatch_qaddr,
+                        (unsigned long long)idinfo.thread_handle,
+                        (unsigned long long)idinfo.thread_id);
+
+                    if ((idinfo.thread_handle >> 32) >= 0xFFFFFFF0ULL)
+                        rlog("      *** thread_handle IN KERNEL RANGE ***\n");
+                    if ((idinfo.dispatch_qaddr >> 32) >= 0xFFFFFFF0ULL)
+                        rlog("      *** dispatch_qaddr IN KERNEL RANGE ***\n");
+                }
+
+                /* kobject on thread port */
+                unsigned int kotype = 0;
+                mach_vm_address_t koaddr = 0;
+                kr = mach_port_kobject(mach_task_self(), threads[i],
+                    &kotype, &koaddr);
+                rlog("    thread[%u] kobject: type=%u addr=0x%llx\n",
+                    i, kotype, (unsigned long long)koaddr);
+
+                mach_port_deallocate(mach_task_self(), threads[i]);
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector 5: sysctl probing for kernel info ---- */
+    rlog("\n  Vector 5: sysctl kernel info probes\n");
+    {
+        /* kern.bootargs */
+        char bootargs[512] = {0};
+        size_t bsz = sizeof(bootargs);
+        int r = sysctlbyname("kern.bootargs", bootargs, &bsz, NULL, 0);
+        rlog("    kern.bootargs: r=%d \"%s\"\n", r, r == 0 ? bootargs : "");
+
+        /* kern.bootsessionuuid */
+        char uuid[128] = {0};
+        size_t usz = sizeof(uuid);
+        r = sysctlbyname("kern.bootsessionuuid", uuid, &usz, NULL, 0);
+        rlog("    kern.bootsessionuuid: r=%d \"%s\"\n", r, r == 0 ? uuid : "");
+
+        /* kern.osversion */
+        char osver[64] = {0};
+        size_t osz = sizeof(osver);
+        sysctlbyname("kern.osversion", osver, &osz, NULL, 0);
+        rlog("    kern.osversion: \"%s\"\n", osver);
+
+        /* Various numeric sysctls that might leak info */
+        const char *numCtls[] = {
+            "kern.slide", "kern.kaslr_slide",
+            "vm.kernel_page_size", "hw.memsize",
+            "kern.memorystatus_level",
+            "kern.maxproc", "kern.argmax",
+            "machdep.cpu.address_bits.physical",
+            "machdep.cpu.address_bits.virtual"
+        };
+        for (int i = 0; i < 9; i++) {
+            uint64_t val = 0;
+            size_t vsz = sizeof(val);
+            r = sysctlbyname(numCtls[i], &val, &vsz, NULL, 0);
+            if (r == 0) {
+                rlog("    %s = %llu (0x%llx)\n",
+                    numCtls[i], (unsigned long long)val,
+                    (unsigned long long)val);
+                if ((val >> 32) >= 0xFFFFFFF0ULL)
+                    rlog("      *** KERNEL RANGE ***\n");
+            } else {
+                rlog("    %s: not available\n", numCtls[i]);
+            }
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r418 complete ===\n");
+    fflush(stdout);
+}
+
+/*
  * r417: Sub-structure decode + CopyAllValues kernel data check.
  *
  * The shared data has 448-byte repeating sub-structures containing
@@ -70218,6 +70542,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 421) {
+            rlog("*** rounds=421: Thread State + Commpage + task_info ***\n");
+            rlog("  Register state during syscall, commpage, dyld info, sysctl.\n\n");
+            fflush(stdout);
+            r418_probe();
+            goto done;
+        }
         if (rounds == 420) {
             rlog("*** rounds=420: Sub-structure Decode + CopyAllValues ***\n");
             rlog("  Chain ptr analysis, raw selector probe, memory entry.\n\n");
@@ -72750,7 +73081,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
