@@ -6967,6 +6967,251 @@ static void r321_probe(void) {
     fflush(stdout);
 }
 
+#include <signal.h>
+#include <setjmp.h>
+static sigjmp_buf g_jmp_env;
+static volatile int g_fault_caught = 0;
+static void fault_handler(int sig) {
+    g_fault_caught = 1;
+    siglongjmp(g_jmp_env, 1);
+}
+
+static void r322_probe(void) {
+    rlog("\n=== r322: Exception Probing + Sysctl + Timing Oracle ===\n");
+    rlog("  Strategy: Probe kernel address range via faults + sysctl mining\n\n");
+    fflush(stdout);
+    kern_return_t kr;
+
+    /* ---- Part 1: Sysctl mining for kernel info ---- */
+    rlog("--- Part 1: Sysctl kernel info mining ---\n");
+    fflush(stdout);
+    {
+        /* Try to read kern.slide directly */
+        uint64_t slide = 0;
+        size_t slideSz = sizeof(slide);
+        int ret = sysctlbyname("kern.slide", &slide, &slideSz, NULL, 0);
+        rlog("  kern.slide: ret=%d val=0x%llx\n", ret, slide);
+
+        /* kern.bootargs */
+        char bootargs[512] = {0};
+        size_t bootSz = sizeof(bootargs);
+        ret = sysctlbyname("kern.bootargs", bootargs, &bootSz, NULL, 0);
+        rlog("  kern.bootargs: ret=%d '%s'\n", ret, ret == 0 ? bootargs : "denied");
+
+        /* kern.bootsessionuuid */
+        char bootuuid[64] = {0};
+        size_t buuidSz = sizeof(bootuuid);
+        ret = sysctlbyname("kern.bootsessionuuid", bootuuid, &buuidSz, NULL, 0);
+        rlog("  kern.bootsessionuuid: ret=%d '%s'\n", ret, ret == 0 ? bootuuid : "denied");
+
+        /* kern.uuid */
+        char kernuuid[64] = {0};
+        size_t kuuidSz = sizeof(kernuuid);
+        ret = sysctlbyname("kern.uuid", kernuuid, &kuuidSz, NULL, 0);
+        rlog("  kern.uuid: ret=%d '%s'\n", ret, ret == 0 ? kernuuid : "denied");
+
+        /* kern.boottime */
+        struct timeval bt;
+        size_t btSz = sizeof(bt);
+        ret = sysctlbyname("kern.boottime", &bt, &btSz, NULL, 0);
+        rlog("  kern.boottime: ret=%d sec=%ld usec=%d\n", ret, bt.tv_sec, bt.tv_usec);
+
+        /* kern.osversion */
+        char osver[32] = {0};
+        size_t ovSz = sizeof(osver);
+        ret = sysctlbyname("kern.osversion", osver, &ovSz, NULL, 0);
+        rlog("  kern.osversion: '%s'\n", osver);
+
+        /* kern.version */
+        char kver[256] = {0};
+        size_t kvSz = sizeof(kver);
+        ret = sysctlbyname("kern.version", kver, &kvSz, NULL, 0);
+        rlog("  kern.version: '%s'\n", kver);
+
+        /* hw.memsize */
+        uint64_t memsize = 0;
+        size_t msSz = sizeof(memsize);
+        ret = sysctlbyname("hw.memsize", &memsize, &msSz, NULL, 0);
+        rlog("  hw.memsize: 0x%llx (%llu MB)\n", memsize, memsize / 1048576);
+
+        /* machdep.cpu sysctls */
+        char brand[128] = {0};
+        size_t bsz = sizeof(brand);
+        ret = sysctlbyname("machdep.cpu.brand_string", brand, &bsz, NULL, 0);
+        rlog("  machdep.cpu.brand_string: ret=%d '%s'\n", ret, ret == 0 ? brand : "denied");
+
+        /* Interesting kern.* probes */
+        const char *kern_keys[] = {
+            "kern.maxproc", "kern.maxfiles", "kern.argmax",
+            "kern.securelevel", "kern.hostname", "kern.sysv.shmmax",
+            "kern.usrstack64", "kern.shreg_private", "kern.tfp.policy",
+            "kern.memorystatus_level", "security.mac.amfi.developer_mode_status",
+            NULL
+        };
+        for (int i = 0; kern_keys[i]; i++) {
+            uint64_t val = 0;
+            size_t vsz = sizeof(val);
+            ret = sysctlbyname(kern_keys[i], &val, &vsz, NULL, 0);
+            if (ret == 0) {
+                rlog("  %s: 0x%llx (%lld)\n", kern_keys[i], val, (long long)val);
+                if ((val >> 28) == 0xfffffff0ULL)
+                    rlog("    !!! KPTR: 0x%llx !!!\n", val);
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: Signal-based kernel address probing ---- */
+    rlog("\n--- Part 2: Signal-based kernel address probing ---\n");
+    fflush(stdout);
+    {
+        struct sigaction sa, old_bus, old_segv;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_handler = fault_handler;
+        sa.sa_flags = 0;
+        sigaction(SIGBUS, &sa, &old_bus);
+        sigaction(SIGSEGV, &sa, &old_segv);
+
+        /* Probe kernel text range: 0xfffffff007000000 + slide
+           Typical slide range: 0 to 0x20000000 (512MB)
+           We probe different addresses and measure if the fault
+           behavior differs for mapped vs unmapped kernel memory */
+
+        uint64_t probe_addrs[] = {
+            0xfffffff007004000ULL,  /* kernel text base (no slide) */
+            0xfffffff027004000ULL,  /* +0x20000000 slide */
+            0xfffffff017004000ULL,  /* +0x10000000 slide */
+            0xfffffff00f004000ULL,  /* +0x08000000 slide */
+            0xfffffff037004000ULL,  /* +0x30000000 slide */
+            0xfffffff047004000ULL,  /* +0x40000000 slide */
+            0xDEADBEEF00000000ULL,  /* obviously unmapped */
+            0x0000000100000000ULL,  /* low unmapped */
+        };
+
+        for (int i = 0; i < 8; i++) {
+            g_fault_caught = 0;
+            if (sigsetjmp(g_jmp_env, 1) == 0) {
+                volatile uint64_t val = *(volatile uint64_t *)probe_addrs[i];
+                rlog("  probe 0x%llx: READ SUCCESS val=0x%llx !!!\n", probe_addrs[i], val);
+            } else {
+                rlog("  probe 0x%llx: FAULT (expected)\n", probe_addrs[i]);
+            }
+        }
+
+        sigaction(SIGBUS, &old_bus, NULL);
+        sigaction(SIGSEGV, &old_segv, NULL);
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: Mach trap timing oracle ---- */
+    rlog("\n--- Part 3: Mach trap timing oracle ---\n");
+    fflush(stdout);
+    {
+        /* Measure the latency of various Mach traps — if kernel addresses
+           differ, there might be a measurable timing difference */
+        uint64_t times[10];
+
+        /* mach_absolute_time for baseline */
+        for (int trial = 0; trial < 5; trial++) {
+            uint64_t start = mach_absolute_time();
+            for (int i = 0; i < 1000; i++) {
+                (void)mach_task_self();
+            }
+            uint64_t end = mach_absolute_time();
+            times[trial] = end - start;
+        }
+        rlog("  mach_task_self x1000: %llu %llu %llu %llu %llu ticks\n",
+             times[0], times[1], times[2], times[3], times[4]);
+
+        /* thread_self timing */
+        for (int trial = 0; trial < 5; trial++) {
+            uint64_t start = mach_absolute_time();
+            for (int i = 0; i < 1000; i++) {
+                mach_port_t th = mach_thread_self();
+                mach_port_deallocate(mach_task_self(), th);
+            }
+            uint64_t end = mach_absolute_time();
+            times[trial] = end - start;
+        }
+        rlog("  mach_thread_self x1000: %llu %llu %llu %llu %llu ticks\n",
+             times[0], times[1], times[2], times[3], times[4]);
+
+        /* Mach port send timing (create + send + destroy) */
+        for (int trial = 0; trial < 5; trial++) {
+            uint64_t start = mach_absolute_time();
+            for (int i = 0; i < 100; i++) {
+                mach_port_t p;
+                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &p);
+                mach_port_deallocate(mach_task_self(), p);
+            }
+            uint64_t end = mach_absolute_time();
+            times[trial] = end - start;
+        }
+        rlog("  port alloc+dealloc x100: %llu %llu %llu %llu %llu ticks\n",
+             times[0], times[1], times[2], times[3], times[4]);
+
+        /* IOSurface create timing */
+        typedef void* (*IOSurfaceCreate_t)(CFDictionaryRef);
+        IOSurfaceCreate_t surfCreate = (IOSurfaceCreate_t)dlsym(RTLD_DEFAULT, "IOSurfaceCreate");
+        int w = 16, h = 16, bpe = 4, pf = 0x42475241;
+        CFNumberRef wV = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef hV = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef bV = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef pV = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        const void *ks[] = {CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                            CFSTR("IOSurfaceBytesPerElement"), CFSTR("IOSurfacePixelFormat")};
+        const void *vs[] = {wV, hV, bV, pV};
+        CFDictionaryRef pr = CFDictionaryCreate(NULL, ks, vs, 4,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+        for (int trial = 0; trial < 5; trial++) {
+            uint64_t start = mach_absolute_time();
+            for (int i = 0; i < 50; i++) {
+                void *s = surfCreate ? surfCreate(pr) : NULL;
+                (void)s; /* leak intentionally to measure pure create time */
+            }
+            uint64_t end = mach_absolute_time();
+            times[trial] = end - start;
+        }
+        rlog("  IOSurfaceCreate x50: %llu %llu %llu %llu %llu ticks\n",
+             times[0], times[1], times[2], times[3], times[4]);
+
+        CFRelease(pr); CFRelease(wV); CFRelease(hV); CFRelease(bV); CFRelease(pV);
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: Allocation pattern analysis ---- */
+    rlog("\n--- Part 4: Allocation pattern analysis ---\n");
+    fflush(stdout);
+    {
+        /* Map the allocation address space — where do mach_vm_allocate addresses land? */
+        mach_vm_address_t addrs[20];
+        for (int i = 0; i < 20; i++) {
+            addrs[i] = 0;
+            kr = mach_vm_allocate(mach_task_self(), &addrs[i], 0x4000, VM_FLAGS_ANYWHERE);
+            if (kr != 0) { addrs[i] = 0; break; }
+        }
+        rlog("  Allocation addresses:\n");
+        for (int i = 0; i < 20 && addrs[i]; i++) {
+            rlog("    [%d] 0x%llx\n", i, addrs[i]);
+            mach_vm_deallocate(mach_task_self(), addrs[i], 0x4000);
+        }
+
+        /* Check for ASLR entropy */
+        mach_vm_address_t a1 = 0, a2 = 0;
+        mach_vm_allocate(mach_task_self(), &a1, 0x100000, VM_FLAGS_ANYWHERE);
+        mach_vm_allocate(mach_task_self(), &a2, 0x100000, VM_FLAGS_ANYWHERE);
+        rlog("  Large allocs: 0x%llx 0x%llx delta=0x%llx\n", a1, a2,
+             a2 > a1 ? a2 - a1 : a1 - a2);
+        if (a1) mach_vm_deallocate(mach_task_self(), a1, 0x100000);
+        if (a2) mach_vm_deallocate(mach_task_self(), a2, 0x100000);
+    }
+    fflush(stdout);
+
+    rlog("\n=== r322 complete ===\n");
+    fflush(stdout);
+}
+
 static void r317_probe(void) {
     rlog("\n=== r317: Deep AppleKeyStore + AppleJPEGDriver + CredentialManager ===\n\n");
     fflush(stdout);
@@ -37779,6 +38024,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 322) {
+            rlog("*** rounds=322: Exception Probing + Sysctl + Timing Oracle ***\n");
+            rlog("  r321: All mach APIs sanitized, IOKit registry clean, 638 zones empty.\n");
+            rlog("  Probe: kern.slide sysctl, signal fault probe, trap timing, alloc patterns.\n\n");
+            r322_probe();
             goto done;
         }
         if (rounds == 321) {
