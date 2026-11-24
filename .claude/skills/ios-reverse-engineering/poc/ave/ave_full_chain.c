@@ -12923,29 +12923,32 @@ static void r333_probe(void) {
             rlog("  notif port: kr=%d port=0x%x\n", kr, notif_port);
 
             if (kr == KERN_SUCCESS) {
-                const char *match_classes[] = {
-                    "IOService", "IOUserClient", "AppleSEPManager",
-                    "IOSurface", "AppleKeyStore", NULL
-                };
-                for (int i = 0; match_classes[i]; i++) {
-                    CFMutableDictionaryRef matching = IOServiceMatching(match_classes[i]);
-                    if (!matching) continue;
-                    kr = IOServiceAddMatchingNotification(
-                        IONotificationPortCreate(master_port),
-                        kIOFirstMatchNotification,
-                        matching,
-                        ^(io_iterator_t iter) { (void)iter; },
-                        NULL, &notif_iter);
-                    rlog("  notif '%s': kr=0x%x iter=0x%x\n", match_classes[i], kr, notif_iter);
-                    if (kr == KERN_SUCCESS && notif_iter) {
-                        io_object_t obj;
-                        int count = 0;
-                        while ((obj = IOIteratorNext(notif_iter)) && count < 5) {
-                            rlog("    matched obj=0x%x\n", obj);
-                            IOObjectRelease(obj);
-                            count++;
+                IONotificationPortRef notif_ref = IONotificationPortCreate(master_port);
+                rlog("  notif_ref=%p\n", (void*)notif_ref);
+                if (notif_ref) {
+                    const char *match_classes[] = {
+                        "IOService", "IOUserClient", "AppleSEPManager",
+                        "IOSurface", "AppleKeyStore", NULL
+                    };
+                    for (int i = 0; match_classes[i]; i++) {
+                        CFMutableDictionaryRef matching = IOServiceMatching(match_classes[i]);
+                        if (!matching) continue;
+                        notif_iter = 0;
+                        kr = IOServiceAddMatchingNotification(
+                            notif_ref, kIOFirstMatchNotification, matching,
+                            NULL, NULL, &notif_iter);
+                        rlog("  notif '%s': kr=0x%x iter=0x%x\n", match_classes[i], kr, notif_iter);
+                        if (kr == KERN_SUCCESS && notif_iter) {
+                            io_object_t obj;
+                            int count = 0;
+                            while ((obj = IOIteratorNext(notif_iter)) && count < 5) {
+                                rlog("    matched obj=0x%x\n", obj);
+                                IOObjectRelease(obj);
+                                count++;
+                            }
                         }
                     }
+                    IONotificationPortDestroy(notif_ref);
                 }
             }
         }
@@ -44095,6 +44098,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 335) {
+            rlog("*** rounds=335: Deep XPC Exploitation + proc_info Scan ***\n");
+            rlog("  r332: XPC two-way works! trustd=empty, securityd=-50.\n");
+            rlog("  Probe: targeted daemon ops, trust eval, container queries, proc_info.\n\n");
+            r333_probe();
             goto done;
         }
         if (rounds == 334) {
