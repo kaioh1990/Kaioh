@@ -14589,7 +14589,7 @@ static void r344_probe(void) {
 
         int ok = 0, err = 0;
         for (uint32_t ei = 0; ei < cnt; ei++) {
-            int r = encode_one_stereo_lid(enc, 64, 64, 3);
+            int r = encode_one_stereo_lid(enc, ei, 64, 64, 3);
             if (r == 0) ok++;
             else err++;
         }
