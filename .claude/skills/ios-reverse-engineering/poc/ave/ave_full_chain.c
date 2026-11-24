@@ -108,7 +108,21 @@ extern kern_return_t mach_vm_page_info(
 #include <sys/sysctl.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
-#include <sys/kern_control.h>
+/* kern_control.h not in iOS SDK — declare manually */
+#define CTLIOCGINFO 0xC0644E03
+#define AF_SYS_CONTROL 2
+struct ctl_info {
+    uint32_t ctl_id;
+    char ctl_name[96];
+};
+struct sockaddr_ctl {
+    uint8_t sc_len;
+    uint8_t sc_family;
+    uint16_t ss_sysaddr;
+    uint32_t sc_id;
+    uint32_t sc_unit;
+    uint32_t sc_reserved[5];
+};
 /* proc_pidinfo declarations for iOS (no libproc.h) */
 #define PROC_PIDLISTFDS 1
 #define PROC_PIDREGIONPATHINFO 7
