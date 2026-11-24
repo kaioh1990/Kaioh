@@ -16976,6 +16976,283 @@ static void *r445_thread_fn(void *arg) {
     return NULL;
 }
 
+static void r448_probe(void) {
+    rlog("\n=== r448: AGX external methods + extended MapMemory + KeyStore selectors ===\n\n");
+    fflush(stdout);
+
+    /* Vector A: AGXAccelerator external method probe */
+    rlog("  --- Vector A: AGXAccelerator external methods ---\n");
+    {
+        io_service_t agx_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("AGXAccelerator"));
+        if (agx_svc) {
+            io_connect_t conn = 0;
+            kern_return_t kr = IOServiceOpen(agx_svc, mach_task_self(), 1, &conn);
+            rlog("    AGXAccelerator type=1: kr=%d conn=0x%x\n", kr, conn);
+
+            if (kr == KERN_SUCCESS && conn) {
+                /* Try MapMemory types 0-15 */
+                rlog("    MapMemory scan (types 0-15):\n");
+                for (uint32_t mt = 0; mt < 16; mt++) {
+                    mach_vm_address_t shm_addr = 0;
+                    mach_vm_size_t shm_size = 0;
+                    kern_return_t kr2 = IOConnectMapMemory64(conn, mt,
+                        mach_task_self(), &shm_addr, &shm_size, kIOMapAnywhere);
+                    if (kr2 == KERN_SUCCESS && shm_addr && shm_size > 0) {
+                        rlog("      type=%u: addr=0x%llx size=0x%llx ***MAPPED***\n",
+                             mt, (unsigned long long)shm_addr, (unsigned long long)shm_size);
+                        /* Scan for kernel pointers */
+                        uint64_t *scan = (uint64_t*)shm_addr;
+                        uint64_t nqwords = shm_size / 8;
+                        if (nqwords > 8192) nqwords = 8192;
+                        int kf = 0;
+                        for (uint64_t q = 0; q < nqwords; q++) {
+                            if ((scan[q] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                rlog("        *** KPTR at +%llu: 0x%016llx ***\n",
+                                     (unsigned long long)(q*8), (unsigned long long)scan[q]);
+                                kf++;
+                                if (kf >= 30) break;
+                            }
+                        }
+                        if (kf == 0) rlog("        No kernel pointers\n");
+                        else rlog("        Found %d kernel pointer(s)!\n", kf);
+                        IOConnectUnmapMemory64(conn, mt, mach_task_self(), shm_addr);
+                    } else if (kr2 != 0xe00002c2) { /* Skip unsupported */
+                        rlog("      type=%u: kr=0x%x\n", mt, kr2);
+                    }
+                }
+
+                /* Probe scalar external methods — selectors 0-50 */
+                rlog("    Scalar method scan (selectors 0-50):\n");
+                for (uint32_t sel = 0; sel <= 50; sel++) {
+                    uint64_t out[16] = {0};
+                    uint32_t out_count = 16;
+                    uint64_t in[4] = {0, 0, 0, 0};
+                    kern_return_t kr2 = IOConnectCallScalarMethod(conn, sel,
+                        in, 0, out, &out_count);
+                    if (kr2 == KERN_SUCCESS && out_count > 0) {
+                        rlog("      sel=%u: kr=0 out_count=%u", sel, out_count);
+                        for (uint32_t i = 0; i < out_count && i < 8; i++) {
+                            rlog(" [%u]=0x%llx", i, (unsigned long long)out[i]);
+                            if ((out[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                rlog("***KPTR***");
+                            }
+                        }
+                        rlog("\n");
+                    } else if (kr2 != 0xe00002c2 && kr2 != 0xe00002bd && kr2 != 0xe00002c7) {
+                        rlog("      sel=%u: kr=0x%x\n", sel, kr2);
+                    }
+                }
+
+                /* Probe struct external methods — selectors 0-30 */
+                rlog("    Struct method scan (selectors 0-30):\n");
+                for (uint32_t sel = 0; sel <= 30; sel++) {
+                    uint8_t out_buf[512] = {0};
+                    size_t out_size = sizeof(out_buf);
+                    uint8_t in_buf[64] = {0};
+                    kern_return_t kr2 = IOConnectCallStructMethod(conn, sel,
+                        in_buf, 0, out_buf, &out_size);
+                    if (kr2 == KERN_SUCCESS && out_size > 0) {
+                        rlog("      sel=%u: kr=0 out_size=%zu", sel, out_size);
+                        /* Scan output for kernel pointers */
+                        int kf = 0;
+                        for (size_t i = 0; i + 8 <= out_size; i += 8) {
+                            uint64_t v;
+                            memcpy(&v, out_buf + i, 8);
+                            if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                rlog(" [+%zu]=0x%016llx***KPTR***", i, (unsigned long long)v);
+                                kf++;
+                            }
+                        }
+                        if (kf == 0) rlog(" (no kptrs)");
+                        rlog("\n");
+                    } else if (kr2 != 0xe00002c2 && kr2 != 0xe00002bd && kr2 != 0xe00002c7) {
+                        rlog("      sel=%u: kr=0x%x out_size=%zu\n", sel, kr2, out_size);
+                    }
+                }
+
+                IOServiceClose(conn);
+            }
+            IOObjectRelease(agx_svc);
+        } else {
+            rlog("    AGXAccelerator not found\n");
+        }
+    }
+    fflush(stdout);
+
+    /* Vector B: AGXFamilyAccelerator */
+    rlog("\n  --- Vector B: AGXFamilyAccelerator probe ---\n");
+    {
+        io_service_t agxf_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("AGXFamilyAccelerator"));
+        if (agxf_svc) {
+            io_connect_t conn = 0;
+            kern_return_t kr = IOServiceOpen(agxf_svc, mach_task_self(), 1, &conn);
+            rlog("    AGXFamilyAccelerator type=1: kr=%d conn=0x%x\n", kr, conn);
+
+            if (kr == KERN_SUCCESS && conn) {
+                /* Try MapMemory types 0-15 */
+                for (uint32_t mt = 0; mt < 16; mt++) {
+                    mach_vm_address_t shm_addr = 0;
+                    mach_vm_size_t shm_size = 0;
+                    kern_return_t kr2 = IOConnectMapMemory64(conn, mt,
+                        mach_task_self(), &shm_addr, &shm_size, kIOMapAnywhere);
+                    if (kr2 == KERN_SUCCESS && shm_addr && shm_size > 0) {
+                        rlog("      MapMemory type=%u: addr=0x%llx size=0x%llx ***MAPPED***\n",
+                             mt, (unsigned long long)shm_addr, (unsigned long long)shm_size);
+                        uint64_t *scan = (uint64_t*)shm_addr;
+                        uint64_t nqwords = shm_size / 8;
+                        if (nqwords > 8192) nqwords = 8192;
+                        int kf = 0;
+                        for (uint64_t q = 0; q < nqwords; q++) {
+                            if ((scan[q] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                rlog("        *** KPTR at +%llu: 0x%016llx ***\n",
+                                     (unsigned long long)(q*8), (unsigned long long)scan[q]);
+                                kf++;
+                                if (kf >= 30) break;
+                            }
+                        }
+                        if (kf == 0) rlog("        No kernel pointers\n");
+                        IOConnectUnmapMemory64(conn, mt, mach_task_self(), shm_addr);
+                    }
+                }
+
+                /* Scalar selectors 0-30 */
+                rlog("    Scalar scan (sel 0-30):\n");
+                for (uint32_t sel = 0; sel <= 30; sel++) {
+                    uint64_t out[16] = {0};
+                    uint32_t out_count = 16;
+                    kern_return_t kr2 = IOConnectCallScalarMethod(conn, sel,
+                        NULL, 0, out, &out_count);
+                    if (kr2 == KERN_SUCCESS && out_count > 0) {
+                        rlog("      sel=%u: out_count=%u", sel, out_count);
+                        for (uint32_t i = 0; i < out_count && i < 8; i++) {
+                            rlog(" 0x%llx", (unsigned long long)out[i]);
+                            if ((out[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                rlog("***KPTR***");
+                            }
+                        }
+                        rlog("\n");
+                    }
+                }
+
+                IOServiceClose(conn);
+            }
+            IOObjectRelease(agxf_svc);
+        }
+    }
+    fflush(stdout);
+
+    /* Vector C: AppleKeyStore selectors 0-100 */
+    rlog("\n  --- Vector C: AppleKeyStore external methods ---\n");
+    {
+        io_service_t ks_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("AppleKeyStore"));
+        if (ks_svc) {
+            /* Try type 0 and type 1 */
+            for (uint32_t utype = 0; utype < 2; utype++) {
+                io_connect_t conn = 0;
+                kern_return_t kr = IOServiceOpen(ks_svc, mach_task_self(), utype, &conn);
+                if (kr == KERN_SUCCESS && conn) {
+                    rlog("    KeyStore type=%u conn=0x%x\n", utype, conn);
+
+                    /* Scalar selectors 0-100 */
+                    int found = 0;
+                    for (uint32_t sel = 0; sel <= 100; sel++) {
+                        uint64_t out[16] = {0};
+                        uint32_t out_count = 16;
+                        kern_return_t kr2 = IOConnectCallScalarMethod(conn, sel,
+                            NULL, 0, out, &out_count);
+                        if (kr2 == KERN_SUCCESS) {
+                            rlog("      type=%u sel=%u: SUCCESS out_count=%u", utype, sel, out_count);
+                            for (uint32_t i = 0; i < out_count && i < 8; i++) {
+                                rlog(" 0x%llx", (unsigned long long)out[i]);
+                                if ((out[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                    rlog("***KPTR***");
+                                }
+                            }
+                            rlog("\n");
+                            found++;
+                        } else if (kr2 != 0xe00002c2 && kr2 != 0xe00002bd &&
+                                   kr2 != 0xe00002c7 && kr2 != 0xe00002be) {
+                            if (found < 20) {
+                                rlog("      type=%u sel=%u: kr=0x%x\n", utype, sel, kr2);
+                                found++;
+                            }
+                        }
+                    }
+
+                    /* Struct selectors with small input */
+                    rlog("    Struct scan (sel 0-30):\n");
+                    for (uint32_t sel = 0; sel <= 30; sel++) {
+                        uint8_t out_buf[512] = {0};
+                        size_t out_size = sizeof(out_buf);
+                        kern_return_t kr2 = IOConnectCallStructMethod(conn, sel,
+                            NULL, 0, out_buf, &out_size);
+                        if (kr2 == KERN_SUCCESS && out_size > 0) {
+                            rlog("      sel=%u: out_size=%zu", sel, out_size);
+                            int kf = 0;
+                            for (size_t i = 0; i + 8 <= out_size; i += 8) {
+                                uint64_t v;
+                                memcpy(&v, out_buf + i, 8);
+                                if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                    rlog(" ***KPTR+%zu=0x%016llx***", i, (unsigned long long)v);
+                                    kf++;
+                                }
+                            }
+                            if (kf == 0) rlog(" (no kptrs)");
+                            rlog("\n");
+                        }
+                    }
+
+                    IOServiceClose(conn);
+                }
+            }
+            IOObjectRelease(ks_svc);
+        }
+    }
+    fflush(stdout);
+
+    /* Vector D: IOHIDEventDriver type=2 external methods */
+    rlog("\n  --- Vector D: IOHIDEventDriver external methods ---\n");
+    {
+        io_service_t hid_drv = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("IOHIDEventDriver"));
+        if (hid_drv) {
+            io_connect_t conn = 0;
+            kern_return_t kr = IOServiceOpen(hid_drv, mach_task_self(), 2, &conn);
+            if (kr == KERN_SUCCESS && conn) {
+                rlog("    IOHIDEventDriver type=2 conn=0x%x\n", conn);
+                /* Scalar selectors 0-20 */
+                for (uint32_t sel = 0; sel <= 20; sel++) {
+                    uint64_t out[16] = {0};
+                    uint32_t out_count = 16;
+                    kern_return_t kr2 = IOConnectCallScalarMethod(conn, sel,
+                        NULL, 0, out, &out_count);
+                    if (kr2 == KERN_SUCCESS && out_count > 0) {
+                        rlog("      sel=%u: out_count=%u", sel, out_count);
+                        for (uint32_t i = 0; i < out_count && i < 8; i++) {
+                            rlog(" 0x%llx", (unsigned long long)out[i]);
+                            if ((out[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                rlog("***KPTR***");
+                            }
+                        }
+                        rlog("\n");
+                    } else if (kr2 != 0xe00002c2 && kr2 != 0xe00002bd) {
+                        rlog("      sel=%u: kr=0x%x\n", sel, kr2);
+                    }
+                }
+                IOServiceClose(conn);
+            }
+            IOObjectRelease(hid_drv);
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r448 complete ===\n");
+    fflush(stdout);
+}
+
 static void r447_probe(void) {
     rlog("\n=== r447: host_statistics + IOHIDFamily + host_processor_info ===\n\n");
     fflush(stdout);
@@ -79789,6 +80066,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 451) {
+            rlog("*** rounds=451: AGX + KeyStore + HID external methods ***\n\n");
+            fflush(stdout);
+            r448_probe();
+            goto done;
+        }
         if (rounds == 450) {
             rlog("*** rounds=450: host_statistics + IOHIDFamily + IOKit shared memory ***\n\n");
             fflush(stdout);
@@ -82515,7 +82798,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
