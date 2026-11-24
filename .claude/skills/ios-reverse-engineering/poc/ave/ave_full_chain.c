@@ -81661,7 +81661,7 @@ new_modes:
             goto done;
         }
         if (rounds == 454) {
-            rlog("*** rounds=454: AVE corruption CONTROL experiment ***\n\n");
+            rlog("*** rounds=454: IOSurface shared mem + kinfo_proc + ICMPv6 + kernel probing ***\n\n");
             fflush(stdout);
             r451_probe();
             goto done;
