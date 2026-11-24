@@ -5105,53 +5105,40 @@ static void r316_probe(void) {
         }
     }
 
-    /* Check for lockdownd XPC service */
-    void *xpc_h = dlopen("/usr/lib/libxpc.dylib", RTLD_LAZY);
-    rlog("  libxpc: %p\n", xpc_h);
-
-    /* Check CFPreferences for LDM */
-    Class nsd = objc_getClass("NSUserDefaults");
-    if (nsd) {
-        id defaults = objc_msg((id)nsd, sel_registerName("standardUserDefaults"));
-        if (defaults) {
-            id ldmKey = ((id (*)(Class, SEL, const char*))dlsym(RTLD_DEFAULT, "objc_msgSend"))(
-                objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"),
-                "LDMGlobalEnabled");
-            id val = objc_msg(defaults, sel_registerName("objectForKey:"), ldmKey);
-            rlog("  NSUserDefaults.LDMGlobalEnabled: %p\n", val);
-        }
-    }
-
-    /* Try cfprefsd for lockdown mode pref */
-    void *cf = dlopen("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation", RTLD_LAZY);
-    CFStringRef (*cfCopyPref)(CFStringRef, CFStringRef) =
-        (CFStringRef (*)(CFStringRef, CFStringRef))dlsym(RTLD_DEFAULT, "CFPreferencesCopyValue");
+    /* CFPreferencesCopyValue: key, appID, userName, hostName */
+    typedef CFPropertyListRef (*CFPrefCopy4_t)(CFStringRef, CFStringRef, CFStringRef, CFStringRef);
+    CFPrefCopy4_t cfCopyPref = (CFPrefCopy4_t)dlsym(RTLD_DEFAULT, "CFPreferencesCopyValue");
+    rlog("  CFPreferencesCopyValue: %p\n", cfCopyPref);
     if (cfCopyPref) {
-        CFStringRef ldmPrefKey = CFSTR("LDMGlobalEnabled");
+        const char *ldm_keys[] = {
+            "LDMGlobalEnabled", "LockdownModeEnabled", "lockdown-mode",
+            "isLockdownModeEnabled", "LDMEnabled",
+        };
         CFStringRef appIDs[] = {
             CFSTR("com.apple.security"),
             CFSTR("com.apple.managedconfiguration"),
             CFSTR("com.apple.lockdownmode"),
             CFSTR(".GlobalPreferences"),
-            CFSTR("kCFPreferencesAnyApplication"),
         };
-        for (int i = 0; i < 5; i++) {
-            CFTypeRef pval = cfCopyPref(ldmPrefKey, appIDs[i]);
-            if (pval) {
-                char pbuf[64] = {0};
-                if (CFGetTypeID(pval) == CFBooleanGetTypeID()) {
-                    snprintf(pbuf, sizeof(pbuf), "%s", CFBooleanGetValue(pval) ? "true" : "false");
-                } else if (CFGetTypeID(pval) == CFNumberGetTypeID()) {
-                    int64_t nv = 0;
-                    CFNumberGetValue(pval, kCFNumberSInt64Type, &nv);
-                    snprintf(pbuf, sizeof(pbuf), "%lld", nv);
+        CFStringRef anyUser = CFSTR("kCFPreferencesAnyUser");
+        CFStringRef curUser = CFSTR("kCFPreferencesCurrentUser");
+        CFStringRef anyHost = CFSTR("kCFPreferencesAnyHost");
+        for (int k = 0; k < 5; k++) {
+            CFStringRef key = CFStringCreateWithCString(NULL, ldm_keys[k], kCFStringEncodingUTF8);
+            for (int a = 0; a < 4; a++) {
+                CFPropertyListRef v1 = cfCopyPref(key, appIDs[a], curUser, anyHost);
+                CFPropertyListRef v2 = cfCopyPref(key, appIDs[a], anyUser, anyHost);
+                if (v1 || v2) {
+                    char aid[128];
+                    CFStringGetCString(appIDs[a], aid, sizeof(aid), kCFStringEncodingUTF8);
+                    rlog("  CFPref[%s].%s: cur=%p any=%p\n", aid, ldm_keys[k], v1, v2);
+                    if (v1) CFRelease(v1);
+                    if (v2) CFRelease(v2);
                 }
-                char aid[128];
-                CFStringGetCString(appIDs[i], aid, sizeof(aid), kCFStringEncodingUTF8);
-                rlog("  CFPref[%s].LDMGlobalEnabled: %s\n", aid, pbuf);
-                CFRelease(pval);
             }
+            CFRelease(key);
         }
+        rlog("  (no output = no LDM prefs found in any domain)\n");
     }
     fflush(stdout);
 
