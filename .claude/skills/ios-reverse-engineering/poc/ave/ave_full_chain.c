@@ -5035,28 +5035,24 @@ static void r315_probe(void) {
                 (id (*)(id, SEL, unsigned long, unsigned long))dlsym(RTLD_DEFAULT, "objc_msgSend");
             id buf = msg_buf(device, newBufSel, 16384, modes[m] << 4);
             if (buf) {
-                SEL contentsSel = sel_registerName("contents");
-                SEL gpuAddrSel = sel_registerName("gpuAddress");
-                SEL lengthSel = sel_registerName("length");
+                uint64_t gpuAddr = msg_u64(buf, sel_registerName("gpuAddress"));
+                unsigned long length = msg_nsu(buf, sel_registerName("length"));
+                void *contents = NULL;
+                if (modes[m] == 0) {
+                    contents = (void *)msg_nsu(buf, sel_registerName("contents"));
+                }
 
-                void *contents = (void *)msg_nsu(buf, contentsSel);
-                uint64_t gpuAddr = msg_u64(buf, gpuAddrSel);
-                unsigned long length = msg_nsu(buf, lengthSel);
+                rlog("  %s: buf=%p contents=%p gpuAddr=0x%llx len=%lu\n",
+                     mode_names[m], buf, contents, gpuAddr, length);
 
-                rlog("  %s: buf=%p contents=%p gpuAddr=0x%llx len=%zu\n",
-                     mode_names[m], buf, contents, gpuAddr, (size_t)length);
-
-                /* Check gpuAddress for kernel pointer patterns */
                 if ((gpuAddr & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
                     rlog("  *** KPTR in gpuAddress: 0x%llx ***\n", gpuAddr);
                     kptr_found++;
                 }
-                /* Also check if gpuAddress is in an interesting range */
                 if (gpuAddr > 0x100000000ULL) {
                     rlog("    gpuAddr is HIGH (potential GART mapping)\n");
                 }
 
-                /* Scan shared buffer contents for kernel pointers */
                 if (contents && modes[m] == 0) {
                     uint64_t *p = (uint64_t *)contents;
                     for (size_t j = 0; j < length/8; j++) {
@@ -5072,9 +5068,10 @@ static void r315_probe(void) {
         }
         fflush(stdout);
 
-        /* ---- Part 3: IOSurface-Metal interop ---- */
-        rlog("\n--- Part 3: IOSurface-Metal texture interop ---\n");
+        /* ---- Part 3: IOSurface-Metal interop (SKIPPED - crash-prone) ---- */
+        rlog("\n--- Part 3: IOSurface-Metal texture interop (SKIPPED) ---\n");
         fflush(stdout);
+        goto skip_part3;
 
         /* Create an IOSurface and wrap it as a Metal texture.
          * The GPU and CPU share the same physical backing.
@@ -5137,6 +5134,7 @@ static void r315_probe(void) {
         }
         fflush(stdout);
 
+        skip_part3:
         /* ---- Part 4: AGX driver probing ---- */
         rlog("\n--- Part 4: AGX/GPU driver connections ---\n");
         fflush(stdout);
@@ -5192,12 +5190,10 @@ static void r315_probe(void) {
         }
         fflush(stdout);
 
-        /* ---- Part 5: Metal command buffer + compute pipeline ---- */
-        rlog("\n--- Part 5: Metal compute shader memory scan ---\n");
+        /* ---- Part 5: Metal compute shader (SKIPPED - crash-prone) ---- */
+        rlog("\n--- Part 5: Metal compute shader (SKIPPED) ---\n");
         fflush(stdout);
-
-        /* Create a compute shader that writes the GPU's view of memory addresses
-         * into a results buffer we can read back on CPU side */
+        goto skip_part5;
 
         SEL newCmdQSel = sel_registerName("newCommandQueue");
         id cmdQ = objc_msg(device, newCmdQSel);
@@ -5327,6 +5323,7 @@ static void r315_probe(void) {
                 }
             }
         }
+        skip_part5:
         fflush(stdout);
     }
 
