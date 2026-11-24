@@ -26502,7 +26502,7 @@ static void r496_exploit(void) {
                     CFRelease(nsid);
 
                     CFDataRef pdata = CFPropertyListCreateData(kCFAllocatorDefault,
-                        sd, kCFPropertyListBinaryPlistV1_0, 0, NULL);
+                        sd, kCFPropertyListBinaryFormat_v1_0, 0, NULL);
                     CFRelease(sd);
 
                     if (pdata) {
