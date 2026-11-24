@@ -15950,8 +15950,7 @@ static void r388_probe(void) {
             else if (xtype == XPC_TYPE_INT64) tname = "int64";
             else if (xtype == XPC_TYPE_UINT64) tname = "uint64";
             else if (xtype == XPC_TYPE_STRING) tname = "string";
-            else if (xtype == XPC_TYPE_MACH_SEND) tname = "mach_send";
-            else if (xtype == XPC_TYPE_MACH_RECV) tname = "mach_recv";
+            /* XPC_TYPE_MACH_SEND/RECV not in public headers on iOS */
             else if (xtype == XPC_TYPE_FD) tname = "fd";
             else if (xtype == XPC_TYPE_SHMEM) tname = "shmem";
             rlog("    XPC type: %s\n", tname);
@@ -15993,9 +15992,9 @@ static void r388_probe(void) {
                             }
                         }
                     } else if (vt == XPC_TYPE_STRING) {
-                        rlog("      %s: (string) '%s'\n", key, xpc_string_get_value(val));
-                    } else if (vt == XPC_TYPE_MACH_SEND) {
-                        rlog("      %s: (mach_send) port=0x%x\n", key, xpc_mach_send_get_right(val));
+                        char *sd = xpc_copy_description(val);
+                        rlog("      %s: (string) %s\n", key, sd ? sd : "?");
+                        if (sd) free(sd);
                     } else {
                         char *d2 = xpc_copy_description(val);
                         rlog("      %s: (%p) %s\n", key, vt, d2 ? d2 : "?");
