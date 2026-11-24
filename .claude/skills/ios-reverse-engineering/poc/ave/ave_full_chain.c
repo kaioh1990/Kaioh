@@ -15920,12 +15920,19 @@ static void r373_probe(void) {
     mach_port_t host = mach_host_self();
     rlog("  mach_host_self = %u\n", host);
 
-    /* host_zone_info */
+    kern_return_t kr;
+
+    /* host_zone_info — declare manually since header may not export it */
+    extern kern_return_t host_zone_info(
+        host_priv_t host, mach_zone_name_t **names,
+        mach_msg_type_number_t *namesCnt,
+        mach_zone_info_t **info,
+        mach_msg_type_number_t *infoCnt);
+
     mach_zone_name_t *names = NULL;
     mach_msg_type_number_t nameCnt = 0;
     mach_zone_info_t *info = NULL;
     mach_msg_type_number_t infoCnt = 0;
-    kern_return_t kr;
 
     kr = host_zone_info(host, &names, &nameCnt, &info, &infoCnt);
     rlog("  host_zone_info: kr=0x%x nameCnt=%u infoCnt=%u\n", kr, nameCnt, infoCnt);
@@ -15937,7 +15944,6 @@ static void r373_probe(void) {
                 (unsigned long long)info[i].mzi_count,
                 (unsigned long long)info[i].mzi_max_size,
                 (unsigned long long)info[i].mzi_elem_size);
-            /* Check if any numeric field looks like a kptr */
             uint64_t fields[] = {info[i].mzi_count, info[i].mzi_cur_size,
                                  info[i].mzi_max_size, info[i].mzi_elem_size,
                                  info[i].mzi_alloc_size, info[i].mzi_sum_size};
@@ -15947,7 +15953,6 @@ static void r373_probe(void) {
                 }
             }
         }
-        /* Look for IOSurface-related zones */
         for (unsigned i = 0; i < nameCnt; i++) {
             if (strstr(names[i].mzn_name, "IOSurface") ||
                 strstr(names[i].mzn_name, "kalloc.448") ||
@@ -15962,10 +15967,20 @@ static void r373_probe(void) {
         }
     }
 
-    /* mach_memory_info */
+    /* mach_memory_info — takes additional params on newer SDKs */
+    extern kern_return_t mach_memory_info(
+        host_priv_t host,
+        mach_zone_name_t **names, mach_msg_type_number_t *namesCnt,
+        mach_zone_info_t **info, mach_msg_type_number_t *infoCnt,
+        mach_memory_info_t **meminfo, mach_msg_type_number_t *meminfoCnt);
+
+    mach_zone_name_t *mnames = NULL;
+    mach_msg_type_number_t mnameCnt = 0;
+    mach_zone_info_t *minfo = NULL;
+    mach_msg_type_number_t minfoCnt = 0;
     mach_memory_info_t *meminfo = NULL;
     mach_msg_type_number_t meminfoCnt = 0;
-    kr = mach_memory_info(host, (mach_memory_info_array_t*)&meminfo, &meminfoCnt);
+    kr = mach_memory_info(host, &mnames, &mnameCnt, &minfo, &minfoCnt, &meminfo, &meminfoCnt);
     rlog("  mach_memory_info: kr=0x%x cnt=%u\n", kr, meminfoCnt);
     if (kr == KERN_SUCCESS && meminfoCnt > 0) {
         int kptr_found = 0;
