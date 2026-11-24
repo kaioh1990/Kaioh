@@ -113,6 +113,11 @@ extern kern_return_t mach_vm_read_overwrite(vm_map_t target_task,
     mach_vm_address_t data, mach_vm_size_t *outsize);
 extern kern_return_t mach_vm_allocate(vm_map_t target_task,
     mach_vm_address_t *address, mach_vm_size_t size, int flags);
+extern kern_return_t mach_vm_map(vm_map_t target_task,
+    mach_vm_address_t *address, mach_vm_size_t size, mach_vm_offset_t mask,
+    int flags, mem_entry_name_port_t object, memory_object_offset_t offset,
+    boolean_t copy, vm_prot_t cur_protection, vm_prot_t max_protection,
+    vm_inherit_t inheritance);
 #ifndef PROC_PIDTASKINFO
 #define PROC_PIDTASKINFO 4
 struct proc_taskinfo {
@@ -9719,8 +9724,8 @@ static void r328_probe(void) {
    5) mach_make_memory_entry_64 behavior with IOSurface may differ
    6) host_processor_info per-CPU structures may have uninitialized data */
 
-static void r329_probe(void) {
-    rlog("\n=== r329: Trigon-Inspired KASLR Bypass Vectors ===\n");
+static void r329_trigon_probe(void) {
+    rlog("\n=== r329-trigon: Trigon-Inspired KASLR Bypass Vectors ===\n");
     rlog("  Strategy: host_info leaks, mach_port_kobject, PurpleGfxMem, memory entries\n");
     rlog("  Inspiration: Trigon (CVE-2023-32434), Calif MIE bypass, Project Zero KASLR\n\n");
     fflush(stdout);
@@ -10645,8 +10650,8 @@ static void r327_probe(void) {
    Run this, then toggle LDM on the device. 60-second monitoring loop captures
    Darwin notification state transitions during the toggle. */
 
-static void r329_probe(void) {
-    rlog("\n=== r329: LDM Toggle Monitor + Security Daemon Probe ===\n");
+static void r329_ldm_probe(void) {
+    rlog("\n=== r329-ldm: LDM Toggle Monitor + Security Daemon Probe ===\n");
     rlog("  Strategy: Register notif observers, poll 60s, probe securityd/trustd\n");
     rlog("  >>> TOGGLE LOCKDOWN MODE ON DEVICE WITHIN 60 SECONDS <<<\n\n");
     fflush(stdout);
@@ -41855,13 +41860,7 @@ new_modes:
             r328_probe();
             goto done;
         }
-        if (rounds == 329) {
-            rlog("*** rounds=329: LDM Toggle Monitor + Security Daemon Probe ***\n");
-            rlog("  r328: HENkaku uninit buffer + TIFF parser + GPU shared.\n");
-            rlog("  Probe: 60s notif monitor, securityd/trustd Mach, SEP tree.\n\n");
-            r329_probe();
-            goto done;
-        }
+        /* old r329 variants (renamed to r329_trigon_probe / r329_ldm_probe) superseded */
         if (rounds == 327) {
             rlog("*** rounds=327: Lockdown Mode Recon + Console Exploit Patterns ***\n");
             rlog("  r326: Heap shaping DETERMINISTIC, 30/31 contiguous, all freed reused.\n");
