@@ -15902,6 +15902,210 @@ static void r362_probe(void) {
     fflush(stdout);
 }
 
+/* r385: Mach port + IOSurface cross-reference for kernel address.
+ * r384 showed: client ref has NO kernel pointers, all PAC-signed userspace.
+ * IOSurfaceCreateMachPort returns a valid port (0x1703).
+ * IOSurfaceGetRegistryID returns 0.
+ *
+ * Strategy:
+ * 1. Create many surfaces + their Mach ports
+ * 2. Use mach_port_get_attributes for port info
+ * 3. Try task_info(TASK_DYLD_INFO) for dyld shared cache info
+ * 4. Look at thread state for kernel return addresses
+ * 5. Try exception port for kernel PC leak
+ */
+static void r385_probe(void) {
+    rlog("\n=== r385: Mach Port + Thread State KASLR Probe ===\n\n");
+    fflush(stdout);
+
+    /* Part 1: Thread state — check for kernel addresses in registers */
+    rlog("--- Part 1: Thread state kernel address check ---\n");
+
+    mach_port_t thread_port = mach_thread_self();
+    arm_thread_state64_t ts;
+    mach_msg_type_number_t ts_count = ARM_THREAD_STATE64_COUNT;
+    kern_return_t kr = thread_get_state(thread_port, ARM_THREAD_STATE64,
+        (thread_state_t)&ts, &ts_count);
+    rlog("  thread_get_state: kr=0x%x count=%u\n", kr, ts_count);
+    if (kr == KERN_SUCCESS) {
+        rlog("  PC=0x%llx LR=0x%llx SP=0x%llx FP=0x%llx\n",
+            (unsigned long long)ts.__pc, (unsigned long long)ts.__lr,
+            (unsigned long long)ts.__sp, (unsigned long long)ts.__fp);
+        for (int i = 0; i < 29; i++) {
+            uint64_t reg = ts.__x[i];
+            if (reg >= 0xfffffff000000000ULL && reg <= 0xfffffff7ffffffffULL) {
+                rlog("  x%d=0x%llx KTEXT!\n", i, (unsigned long long)reg);
+            } else if (reg >= 0xffffffe000000000ULL) {
+                rlog("  x%d=0x%llx KHEAP!\n", i, (unsigned long long)reg);
+            }
+        }
+    }
+
+    /* Part 2: DYLD info for shared cache */
+    rlog("\n--- Part 2: task_info(TASK_DYLD_INFO) ---\n");
+    struct task_dyld_info dyld_info;
+    mach_msg_type_number_t dyld_info_count = TASK_DYLD_INFO_COUNT;
+    kr = task_info(mach_task_self(), TASK_DYLD_INFO,
+        (task_info_t)&dyld_info, &dyld_info_count);
+    rlog("  task_info(TASK_DYLD_INFO): kr=0x%x\n", kr);
+    if (kr == KERN_SUCCESS) {
+        rlog("  all_image_info_addr: 0x%llx\n",
+            (unsigned long long)dyld_info.all_image_info_addr);
+        rlog("  all_image_info_size: 0x%llx\n",
+            (unsigned long long)dyld_info.all_image_info_size);
+        rlog("  all_image_info_format: %d\n", dyld_info.all_image_info_format);
+
+        /* Scan the dyld_all_image_infos for kernel addresses */
+        if (dyld_info.all_image_info_addr) {
+            uint8_t *info_ptr = (uint8_t*)(uintptr_t)dyld_info.all_image_info_addr;
+            size_t scan_sz = dyld_info.all_image_info_size;
+            if (scan_sz > 4096) scan_sz = 4096;
+            int found = 0;
+            for (size_t off = 0; off + 7 < scan_sz; off += 8) {
+                uint64_t v;
+                memcpy(&v, info_ptr + off, 8);
+                if (v >= 0xfffffff000000000ULL && v <= 0xfffffff7ffffffffULL) {
+                    rlog("    dyld_info+%zu: 0x%llx KTEXT!\n",
+                        off, (unsigned long long)v);
+                    found++;
+                }
+            }
+            if (!found) rlog("    No ktext in dyld_all_image_infos\n");
+
+            /* Get shared cache base from dyld info */
+            struct dyld_all_image_infos *infos =
+                (struct dyld_all_image_infos *)(uintptr_t)dyld_info.all_image_info_addr;
+            rlog("    sharedCacheSlide: 0x%llx\n",
+                (unsigned long long)infos->sharedCacheSlide);
+            rlog("    sharedCacheBaseAddress: 0x%llx\n",
+                (unsigned long long)(uintptr_t)infos->sharedCacheBaseAddress);
+        }
+    }
+
+    /* Part 3: Mach port introspection */
+    rlog("\n--- Part 3: IOSurface Mach port introspection ---\n");
+
+    int w=64, h=64, bpe=4, bpr=64*4, pf=0x42475241, as_=64*64*4;
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nW);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nH);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), nB);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nR);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nP);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nA);
+
+    IOSurfaceRef surf = IOSurfaceCreate(props);
+    mach_port_t (*createMP)(IOSurfaceRef) = dlsym(RTLD_DEFAULT, "IOSurfaceCreateMachPort");
+    if (createMP && surf) {
+        mach_port_t mp = createMP(surf);
+        rlog("  IOSurface Mach port: 0x%x\n", mp);
+
+        /* Get port attributes */
+        mach_port_status_t port_status;
+        mach_msg_type_number_t status_cnt = MACH_PORT_RECEIVE_STATUS_COUNT;
+        kr = mach_port_get_attributes(mach_task_self(), mp,
+            MACH_PORT_RECEIVE_STATUS, (mach_port_info_t)&port_status, &status_cnt);
+        rlog("  port attributes: kr=0x%x\n", kr);
+        if (kr == KERN_SUCCESS) {
+            rlog("    seqno=%u msgcount=%u qlimit=%u\n",
+                port_status.mps_seqno, port_status.mps_msgcount, port_status.mps_qlimit);
+        }
+
+        /* Try mach_port_kobject — was zeroed in r375 but let's confirm */
+        natural_t ktype = 0;
+        mach_vm_address_t kaddr = 0;
+        kr = mach_port_kobject(mach_task_self(), mp, &ktype, (mach_port_t*)&kaddr);
+        rlog("  mach_port_kobject: kr=0x%x type=%u addr=0x%llx\n",
+            kr, ktype, (unsigned long long)kaddr);
+
+        /* Try mach_port_kernel_object */
+        unsigned int kobj_type = 0;
+        unsigned int kobj_addr = 0;
+        kr = mach_port_kernel_object(mach_task_self(), mp, &kobj_type, &kobj_addr);
+        rlog("  mach_port_kernel_object: kr=0x%x type=%u addr=0x%x\n",
+            kr, kobj_type, kobj_addr);
+
+        mach_port_deallocate(mach_task_self(), mp);
+    }
+
+    /* Part 4: Try mach_port_space_info */
+    rlog("\n--- Part 4: Port space info ---\n");
+    ipc_info_space_t space_info;
+    ipc_info_name_array_t table_info = NULL;
+    mach_msg_type_number_t table_cnt = 0;
+    ipc_info_tree_name_array_t tree_info = NULL;
+    mach_msg_type_number_t tree_cnt = 0;
+    kr = mach_port_space_info(mach_task_self(), &space_info,
+        &table_info, &table_cnt, &tree_info, &tree_cnt);
+    rlog("  mach_port_space_info: kr=0x%x\n", kr);
+    if (kr == KERN_SUCCESS) {
+        rlog("    genno_mask=0x%x table_next=%d table_size=%d\n",
+            space_info.iis_genno_mask, space_info.iis_table_next,
+            space_info.iis_table_size);
+        /* Scan table entries for kernel addresses */
+        int kaddr_found = 0;
+        for (uint32_t i = 0; i < table_cnt && i < 1000; i++) {
+            uint64_t obj = (uint64_t)table_info[i].iin_object;
+            if (obj >= 0xfffffff000000000ULL) {
+                rlog("    entry[%u] name=0x%x object=0x%llx KTEXT!\n",
+                    i, table_info[i].iin_name, (unsigned long long)obj);
+                kaddr_found++;
+                if (kaddr_found >= 5) break;
+            } else if (obj >= 0xffffffe000000000ULL) {
+                rlog("    entry[%u] name=0x%x object=0x%llx KHEAP!\n",
+                    i, table_info[i].iin_name, (unsigned long long)obj);
+                kaddr_found++;
+                if (kaddr_found >= 5) break;
+            }
+        }
+        if (!kaddr_found) rlog("    No kernel addresses in port table (%u entries)\n", table_cnt);
+        if (table_info) vm_deallocate(mach_task_self(),
+            (vm_address_t)table_info, table_cnt * sizeof(*table_info));
+        if (tree_info) vm_deallocate(mach_task_self(),
+            (vm_address_t)tree_info, tree_cnt * sizeof(*tree_info));
+    }
+
+    /* Part 5: Try processor_info for per-CPU kernel data */
+    rlog("\n--- Part 5: Processor info ---\n");
+    host_t host = mach_host_self();
+    processor_set_name_port_array_t psets;
+    mach_msg_type_number_t pset_cnt = 0;
+    kr = host_processor_sets(host, &psets, &pset_cnt);
+    rlog("  host_processor_sets: kr=0x%x count=%u\n", kr, pset_cnt);
+
+    processor_port_array_t procs;
+    mach_msg_type_number_t proc_cnt = 0;
+    kr = host_processors(host, &procs, &proc_cnt);
+    rlog("  host_processors: kr=0x%x count=%u\n", kr, proc_cnt);
+    if (kr == KERN_SUCCESS) {
+        for (uint32_t i = 0; i < proc_cnt && i < 8; i++) {
+            processor_basic_info_data_t pbi;
+            mach_msg_type_number_t pbi_cnt = PROCESSOR_BASIC_INFO_COUNT;
+            kr = processor_info(procs[i], PROCESSOR_BASIC_INFO,
+                &host, (processor_info_t)&pbi, &pbi_cnt);
+            if (kr == KERN_SUCCESS) {
+                rlog("    CPU %u: slot=%d type=%d running=%d\n",
+                    i, pbi.slot_num, pbi.cpu_type, pbi.running);
+            }
+        }
+    }
+
+    /* Cleanup */
+    if (surf) CFRelease(surf);
+    CFRelease(props);
+    CFRelease(nW); CFRelease(nH); CFRelease(nB); CFRelease(nR); CFRelease(nP); CFRelease(nA);
+
+    rlog("\n=== r385 complete ===\n");
+    fflush(stdout);
+}
+
 /* r384: Analyze PAC-signed pointers in IOSurfaceClientRef.
  * r383 found PAC-signed pointers at multiple offsets in the client ref.
  * Some have lower 48 bits in 0x19bxxxxxx range (shared cache).
@@ -59671,6 +59875,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 388) {
+            rlog("*** rounds=388: Mach Port + Thread State KASLR Probe ***\n");
+            rlog("  Thread state regs, dyld info, port introspection.\n\n");
+            fflush(stdout);
+            r385_probe();
+            goto done;
+        }
         if (rounds == 387) {
             rlog("*** rounds=387: PAC Pointer Analysis + IOSurface Internals ***\n");
             rlog("  dladdr analysis, private APIs, ObjC introspection.\n\n");
@@ -61972,7 +62183,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
