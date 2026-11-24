@@ -110,6 +110,8 @@ extern kern_return_t mach_vm_remap(vm_map_t target_task,
 extern kern_return_t mach_vm_read_overwrite(vm_map_t target_task,
     mach_vm_address_t address, mach_vm_size_t size,
     mach_vm_address_t data, mach_vm_size_t *outsize);
+extern kern_return_t mach_vm_allocate(vm_map_t target_task,
+    mach_vm_address_t *address, mach_vm_size_t size, int flags);
 #ifndef PROC_PIDTASKINFO
 #define PROC_PIDTASKINFO 4
 struct proc_taskinfo {
