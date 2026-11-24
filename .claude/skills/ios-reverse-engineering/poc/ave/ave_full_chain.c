@@ -6623,6 +6623,350 @@ static void r320_probe(void) {
     fflush(stdout);
 }
 
+static void r321_probe(void) {
+    rlog("\n=== r321: Mach Task/Thread Info + IOKit Registry Deep Scan ===\n");
+    rlog("  Strategy: Extract kernel info from mach APIs and IOKit registry tree\n\n");
+    fflush(stdout);
+    kern_return_t kr;
+
+    /* ---- Part 1: task_info flavors ---- */
+    rlog("--- Part 1: task_info flavors ---\n");
+    fflush(stdout);
+    {
+        /* TASK_BASIC_INFO */
+        struct task_basic_info tbi;
+        mach_msg_type_number_t cnt = TASK_BASIC_INFO_COUNT;
+        kr = task_info(mach_task_self(), TASK_BASIC_INFO, (task_info_t)&tbi, &cnt);
+        rlog("  TASK_BASIC_INFO: kr=0x%x\n", kr);
+        if (kr == 0) {
+            rlog("    suspend_count=%d virtual_size=0x%lx resident_size=0x%lx\n",
+                 tbi.suspend_count, (unsigned long)tbi.virtual_size,
+                 (unsigned long)tbi.resident_size);
+            rlog("    user_time=%d.%06d sys_time=%d.%06d\n",
+                 tbi.user_time.seconds, tbi.user_time.microseconds,
+                 tbi.system_time.seconds, tbi.system_time.microseconds);
+        }
+
+        /* TASK_DYLD_INFO — may contain dyld_all_image_infos address */
+        struct task_dyld_info tdi;
+        cnt = TASK_DYLD_INFO_COUNT;
+        kr = task_info(mach_task_self(), TASK_DYLD_INFO, (task_info_t)&tdi, &cnt);
+        rlog("  TASK_DYLD_INFO: kr=0x%x\n", kr);
+        if (kr == 0) {
+            rlog("    all_image_info_addr=0x%llx\n", tdi.all_image_info_addr);
+            rlog("    all_image_info_size=%llu\n", tdi.all_image_info_size);
+            rlog("    all_image_info_format=%d\n", tdi.all_image_info_format);
+            /* Check if the address leaks any kernel-range info */
+            if ((tdi.all_image_info_addr >> 28) == 0xfffffff0ULL)
+                rlog("    !!! KPTR in dyld info: 0x%llx !!!\n", tdi.all_image_info_addr);
+        }
+
+        /* TASK_EXTMOD_INFO */
+        uint64_t extmod[32] = {0};
+        cnt = 32;
+        kr = task_info(mach_task_self(), 19 /* TASK_EXTMOD_INFO */, (task_info_t)extmod, &cnt);
+        rlog("  TASK_EXTMOD_INFO(19): kr=0x%x cnt=%u\n", kr, cnt);
+        if (kr == 0 && cnt > 0) {
+            for (uint32_t i = 0; i < cnt && i < 8; i++) {
+                rlog("    [%u]=0x%llx\n", i, extmod[i]);
+                if ((extmod[i] >> 28) == 0xfffffff0ULL)
+                    rlog("    !!! KPTR: 0x%llx !!!\n", extmod[i]);
+            }
+        }
+
+        /* TASK_VM_INFO */
+        uint64_t vminfo[64] = {0};
+        cnt = 64;
+        kr = task_info(mach_task_self(), 22 /* TASK_VM_INFO */, (task_info_t)vminfo, &cnt);
+        rlog("  TASK_VM_INFO(22): kr=0x%x cnt=%u\n", kr, cnt);
+        if (kr == 0 && cnt > 0) {
+            for (uint32_t i = 0; i < cnt && i < 16; i++) {
+                if (vminfo[i] != 0) {
+                    rlog("    [%u]=0x%llx\n", i, vminfo[i]);
+                    if ((vminfo[i] >> 28) == 0xfffffff0ULL)
+                        rlog("    !!! KPTR: 0x%llx !!!\n", vminfo[i]);
+                }
+            }
+        }
+
+        /* Try many flavors 1-30 */
+        for (int flavor = 1; flavor <= 30; flavor++) {
+            if (flavor == TASK_BASIC_INFO || flavor == TASK_DYLD_INFO ||
+                flavor == 19 || flavor == 22) continue;
+            uint64_t buf[64] = {0};
+            cnt = 64;
+            kr = task_info(mach_task_self(), flavor, (task_info_t)buf, &cnt);
+            if (kr == 0 && cnt > 0) {
+                int has_kptr = 0;
+                for (uint32_t i = 0; i < cnt; i++) {
+                    if ((buf[i] >> 28) == 0xfffffff0ULL) has_kptr = 1;
+                }
+                if (has_kptr) {
+                    rlog("  flavor=%d cnt=%u HAS KPTR!\n", flavor, cnt);
+                    for (uint32_t i = 0; i < cnt && i < 8; i++)
+                        rlog("    [%u]=0x%llx\n", i, buf[i]);
+                }
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: thread_info + thread_get_state ---- */
+    rlog("\n--- Part 2: thread_info + thread_get_state ---\n");
+    fflush(stdout);
+    {
+        thread_act_array_t threads;
+        mach_msg_type_number_t threadCnt;
+        kr = task_threads(mach_task_self(), &threads, &threadCnt);
+        rlog("  task_threads: kr=0x%x count=%u\n", kr, threadCnt);
+
+        if (kr == 0) {
+            for (uint32_t t = 0; t < threadCnt && t < 5; t++) {
+                /* THREAD_BASIC_INFO */
+                struct thread_basic_info tbi;
+                mach_msg_type_number_t cnt = THREAD_BASIC_INFO_COUNT;
+                kr = thread_info(threads[t], THREAD_BASIC_INFO, (thread_info_t)&tbi, &cnt);
+                rlog("  thread[%u]: info kr=0x%x\n", t, kr);
+
+                /* ARM_THREAD_STATE64 */
+                arm_thread_state64_t state;
+                cnt = ARM_THREAD_STATE64_COUNT;
+                kr = thread_get_state(threads[t], ARM_THREAD_STATE64,
+                    (thread_state_t)&state, &cnt);
+                rlog("  thread[%u]: get_state kr=0x%x cnt=%u\n", t, kr, cnt);
+                if (kr == 0) {
+                    /* Check all registers for kernel addresses */
+                    uint64_t *regs = (uint64_t *)&state;
+                    for (int r = 0; r < (int)(cnt); r++) {
+                        if ((regs[r] >> 28) == 0xfffffff0ULL) {
+                            rlog("    !!! KPTR in reg[%d]: 0x%llx !!!\n", r, regs[r]);
+                        }
+                    }
+                    rlog("    pc=0x%llx lr=0x%llx sp=0x%llx fp=0x%llx\n",
+                         (uint64_t)__darwin_arm_thread_state64_get_pc(state),
+                         (uint64_t)__darwin_arm_thread_state64_get_lr(state),
+                         (uint64_t)__darwin_arm_thread_state64_get_sp(state),
+                         (uint64_t)__darwin_arm_thread_state64_get_fp(state));
+                }
+
+                /* ARM_EXCEPTION_STATE64 */
+                arm_exception_state64_t exc;
+                cnt = ARM_EXCEPTION_STATE64_COUNT;
+                kr = thread_get_state(threads[t], ARM_EXCEPTION_STATE64,
+                    (thread_state_t)&exc, &cnt);
+                rlog("  thread[%u]: exc_state kr=0x%x\n", t, kr);
+                if (kr == 0) {
+                    rlog("    far=0x%llx esr=0x%x exception=0x%x\n",
+                         exc.__far, exc.__esr, exc.__exception);
+                    if ((exc.__far >> 28) == 0xfffffff0ULL)
+                        rlog("    !!! KPTR in FAR: 0x%llx !!!\n", exc.__far);
+                }
+
+                mach_port_deallocate(mach_task_self(), threads[t]);
+            }
+            vm_deallocate(mach_task_self(), (vm_address_t)threads,
+                         threadCnt * sizeof(thread_act_t));
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: host_info / host_statistics ---- */
+    rlog("\n--- Part 3: host_info + statistics ---\n");
+    fflush(stdout);
+    {
+        host_t host = mach_host_self();
+        rlog("  mach_host_self: 0x%x\n", host);
+
+        /* HOST_BASIC_INFO */
+        host_basic_info_data_t hbi;
+        mach_msg_type_number_t cnt = HOST_BASIC_INFO_COUNT;
+        kr = host_info(host, HOST_BASIC_INFO, (host_info_t)&hbi, &cnt);
+        rlog("  HOST_BASIC_INFO: kr=0x%x\n", kr);
+        if (kr == 0) {
+            rlog("    max_cpus=%d avail_cpus=%d memory_size=0x%x\n",
+                 hbi.max_cpus, hbi.avail_cpus, hbi.memory_size);
+            rlog("    cpu_type=%d cpu_subtype=%d\n", hbi.cpu_type, hbi.cpu_subtype);
+        }
+
+        /* VM_STATISTICS64 */
+        vm_statistics64_data_t vms;
+        cnt = HOST_VM_INFO64_COUNT;
+        kr = host_statistics64(host, HOST_VM_INFO64, (host_info64_t)&vms, &cnt);
+        rlog("  HOST_VM_INFO64: kr=0x%x\n", kr);
+        if (kr == 0) {
+            rlog("    free=%u active=%u inactive=%u wire=%u\n",
+                 vms.free_count, vms.active_count,
+                 vms.inactive_count, vms.wire_count);
+            rlog("    zero_fill=%llu reactivations=%llu pageins=%llu pageouts=%llu\n",
+                 vms.zero_fill_count, vms.reactivations,
+                 vms.pageins, vms.pageouts);
+        }
+
+        /* mach_zone_info — almost certainly denied from app */
+        mach_zone_name_t *names = NULL;
+        mach_msg_type_number_t namesCnt = 0;
+        mach_zone_info_t *zinfo = NULL;
+        mach_msg_type_number_t zinfoCnt = 0;
+        host_zone_info_fn zone_fn = (host_zone_info_fn)dlsym(RTLD_DEFAULT, "mach_zone_info");
+        rlog("  mach_zone_info fn: %p\n", zone_fn);
+        if (zone_fn) {
+            kr = zone_fn(host, &names, &namesCnt, &zinfo, &zinfoCnt);
+            rlog("  mach_zone_info: kr=0x%x namesCnt=%u\n", kr, namesCnt);
+            if (kr == 0 && namesCnt > 0) {
+                for (uint32_t i = 0; i < namesCnt && i < 10; i++) {
+                    rlog("    zone[%u]: '%s' cur_size=%llu max_size=%llu elem_size=%llu\n",
+                         i, names[i].mzn_name,
+                         zinfo[i].mzi_cur_size, zinfo[i].mzi_max_size,
+                         zinfo[i].mzi_elem_size);
+                }
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: IOKit registry deep traversal ---- */
+    rlog("\n--- Part 4: IOKit registry deep traversal ---\n");
+    fflush(stdout);
+    {
+        io_iterator_t iter;
+        kr = IORegistryCreateIterator(kIOMasterPortDefault, kIOServicePlane,
+            kIORegistryIterateRecursively, &iter);
+        rlog("  Registry iterator: kr=0x%x\n", kr);
+
+        if (kr == 0) {
+            io_object_t entry;
+            int count = 0;
+            int kptr_found = 0;
+            while ((entry = IOIteratorNext(iter)) != 0 && count < 200) {
+                io_name_t name;
+                IORegistryEntryGetName(entry, name);
+
+                /* Get ALL properties */
+                CFMutableDictionaryRef props = NULL;
+                kr = IORegistryEntryCreateCFProperties(entry, &props, kCFAllocatorDefault, 0);
+                if (kr == 0 && props) {
+                    CFIndex propCnt = CFDictionaryGetCount(props);
+                    CFStringRef *pkeys = (CFStringRef *)malloc(propCnt * sizeof(CFStringRef));
+                    CFTypeRef *pvals = (CFTypeRef *)malloc(propCnt * sizeof(CFTypeRef));
+                    CFDictionaryGetKeysAndValues(props, (const void **)pkeys, (const void **)pvals);
+
+                    for (CFIndex i = 0; i < propCnt; i++) {
+                        CFTypeID tid = CFGetTypeID(pvals[i]);
+                        if (tid == CFNumberGetTypeID()) {
+                            int64_t nv = 0;
+                            CFNumberGetValue((CFNumberRef)pvals[i], kCFNumberSInt64Type, &nv);
+                            uint64_t uv = (uint64_t)nv;
+                            if ((uv >> 28) == 0xfffffff0ULL) {
+                                char kbuf[128] = {0};
+                                CFStringGetCString(pkeys[i], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+                                rlog("  !!! KPTR %s.%s = 0x%llx !!!\n", name, kbuf, uv);
+                                kptr_found++;
+                            }
+                        } else if (tid == CFDataGetTypeID()) {
+                            CFDataRef dval = (CFDataRef)pvals[i];
+                            CFIndex dlen = CFDataGetLength(dval);
+                            if (dlen >= 8 && dlen <= 4096) {
+                                const uint64_t *dp = (const uint64_t *)CFDataGetBytePtr(dval);
+                                for (CFIndex j = 0; j < dlen / 8; j++) {
+                                    if ((dp[j] >> 28) == 0xfffffff0ULL) {
+                                        char kbuf[128] = {0};
+                                        CFStringGetCString(pkeys[i], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+                                        rlog("  !!! KPTR %s.%s[%ld] = 0x%llx !!!\n",
+                                             name, kbuf, (long)j*8, dp[j]);
+                                        kptr_found++;
+                                        if (kptr_found >= 20) break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    free(pkeys);
+                    free(pvals);
+                    CFRelease(props);
+                }
+                IOObjectRelease(entry);
+                count++;
+                if (kptr_found >= 20) break;
+            }
+            IOObjectRelease(iter);
+            rlog("  Traversed %d entries, found %d kernel pointers\n", count, kptr_found);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 5: proc_info for kernel task ---- */
+    rlog("\n--- Part 5: proc_info exploration ---\n");
+    fflush(stdout);
+    {
+        pid_t mypid = getpid();
+        rlog("  pid=%d\n", mypid);
+
+        /* PROC_PIDTASKINFO */
+        struct proc_taskinfo pti;
+        int ret = proc_pidinfo(mypid, PROC_PIDTASKINFO, 0, &pti, sizeof(pti));
+        rlog("  PROC_PIDTASKINFO: ret=%d\n", ret);
+        if (ret > 0) {
+            rlog("    vsize=0x%llx rsize=0x%llx\n",
+                 pti.pti_virtual_size, pti.pti_resident_size);
+            if ((pti.pti_virtual_size >> 28) == 0xfffffff0ULL)
+                rlog("    !!! KPTR in vsize !!!\n");
+        }
+
+        /* Try PROC_PIDREGIONINFO (flavor 7) */
+        uint8_t regbuf[256] = {0};
+        ret = proc_pidinfo(mypid, 7, 0, regbuf, sizeof(regbuf));
+        rlog("  PROC_PIDREGIONINFO(7): ret=%d\n", ret);
+        if (ret > 0) {
+            uint64_t *rp = (uint64_t *)regbuf;
+            for (int i = 0; i < ret / 8 && i < 8; i++) {
+                rlog("    [%d]=0x%llx\n", i, rp[i]);
+                if ((rp[i] >> 28) == 0xfffffff0ULL)
+                    rlog("    !!! KPTR !!!\n");
+            }
+        }
+
+        /* PROC_PIDPATHINFO (flavor 11) */
+        char pathbuf[1024] = {0};
+        ret = proc_pidinfo(mypid, 11, 0, pathbuf, sizeof(pathbuf));
+        rlog("  PROC_PIDPATHINFO(11): ret=%d\n", ret);
+        if (ret > 0) rlog("    path='%s'\n", pathbuf);
+
+        /* Try pid 0 (kernel task) — almost certainly denied */
+        ret = proc_pidinfo(0, PROC_PIDTASKINFO, 0, &pti, sizeof(pti));
+        rlog("  pid=0 PROC_PIDTASKINFO: ret=%d\n", ret);
+        if (ret > 0) {
+            rlog("    kernel vsize=0x%llx rsize=0x%llx\n",
+                 pti.pti_virtual_size, pti.pti_resident_size);
+        }
+
+        /* proc_regionfilename for each of our regions */
+        char fnbuf[512] = {0};
+        mach_vm_address_t addr = 0;
+        mach_vm_size_t sz = 0;
+        vm_region_basic_info_data_64_t info;
+        mach_msg_type_number_t infoCnt;
+        mach_port_t obj;
+        int regions_checked = 0;
+
+        while (regions_checked < 10) {
+            infoCnt = VM_REGION_BASIC_INFO_COUNT_64;
+            kr = mach_vm_region(mach_task_self(), &addr, &sz,
+                VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &infoCnt, &obj);
+            if (kr != 0) break;
+            memset(fnbuf, 0, sizeof(fnbuf));
+            ret = proc_regionfilename(mypid, addr, fnbuf, sizeof(fnbuf));
+            if (ret > 0 && fnbuf[0])
+                rlog("  region 0x%llx: %s\n", addr, fnbuf);
+            addr += sz;
+            regions_checked++;
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r321 complete ===\n");
+    fflush(stdout);
+}
+
 static void r317_probe(void) {
     rlog("\n=== r317: Deep AppleKeyStore + AppleJPEGDriver + CredentialManager ===\n\n");
     fflush(stdout);
@@ -37435,6 +37779,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 321) {
+            rlog("*** rounds=321: Mach Task/Thread Info + IOKit Deep Scan ***\n");
+            rlog("  r320: VT decode clean, IOSurface no kptrs, VM_FLAGS_OVERWRITE works.\n");
+            rlog("  Probe: task_info, thread_get_state, host_info, IOKit registry.\n\n");
+            r321_probe();
             goto done;
         }
         if (rounds == 320) {
