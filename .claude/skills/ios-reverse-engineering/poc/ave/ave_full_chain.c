@@ -98,54 +98,6 @@ extern kern_return_t mach_make_memory_entry_64(
 #include <compression.h>
 #include <stdatomic.h>
 #include <arpa/inet.h>
-/* libproc.h not available in iOS SDK; declare proc_pidinfo manually */
-extern int proc_pidinfo(int pid, int flavor, uint64_t arg, void *buffer, int buffersize);
-/* csops not in public SDK */
-extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
-
-struct proc_taskinfo {
-    uint64_t pti_virtual_size;
-    uint64_t pti_resident_size;
-    uint64_t pti_total_user;
-    uint64_t pti_total_system;
-    uint64_t pti_threads_user;
-    uint64_t pti_threads_system;
-    int32_t pti_policy;
-    int32_t pti_faults;
-    int32_t pti_pageins;
-    int32_t pti_cow_faults;
-    int32_t pti_messages_sent;
-    int32_t pti_messages_received;
-    int32_t pti_syscalls_mach;
-    int32_t pti_syscalls_unix;
-    int32_t pti_csw;
-    int32_t pti_threadnum;
-    int32_t pti_numrunning;
-    int32_t pti_priority;
-};
-struct proc_regioninfo {
-    uint32_t pri_protection;
-    uint32_t pri_max_protection;
-    uint32_t pri_inheritance;
-    uint32_t pri_flags;
-    uint64_t pri_offset;
-    uint32_t pri_behavior;
-    uint32_t pri_user_wired_count;
-    uint32_t pri_user_tag;
-    uint32_t pri_pages_resident;
-    uint32_t pri_pages_shared_now_private;
-    uint32_t pri_pages_swapped_out;
-    uint32_t pri_pages_dirtied;
-    uint32_t pri_ref_count;
-    uint32_t pri_shadow_depth;
-    uint32_t pri_share_mode;
-    uint32_t pri_private_pages_resident;
-    uint32_t pri_shared_pages_resident;
-    uint32_t pri_obj_id;
-    uint32_t pri_depth;
-    uint64_t pri_address;
-    uint64_t pri_size;
-};
 #include <signal.h>
 #include <setjmp.h>
 #include <sched.h>
