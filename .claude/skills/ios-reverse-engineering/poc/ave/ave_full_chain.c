@@ -4538,6 +4538,511 @@ static void r311_probe(void) {
     fflush(stdout);
 }
 
+static void r312_probe(void) {
+    rlog("\n=== r312: IOMobileFramebuffer Deep + IOHID + IOSurface XML ===\n\n");
+    fflush(stdout);
+    kern_return_t kr;
+
+    /* ---- Part 1: IOMobileFramebuffer selector enumeration (all 4 types) ---- */
+    rlog("--- Part 1: IOMobileFramebuffer selector enumeration ---\n");
+    fflush(stdout);
+
+    io_service_t fb_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOMobileFramebuffer"));
+    rlog("  IOMobileFramebuffer service: 0x%x\n", fb_svc);
+
+    if (fb_svc) {
+        for (uint32_t type = 0; type < 4; type++) {
+            io_connect_t fb_conn = 0;
+            kr = IOServiceOpen(fb_svc, mach_task_self(), type, &fb_conn);
+            if (kr != 0) {
+                rlog("  type=%u: open failed kr=0x%x\n", type, kr);
+                continue;
+            }
+            rlog("  type=%u conn=0x%x — enumerating selectors 0-99:\n", type, fb_conn);
+            fflush(stdout);
+
+            int ok_count = 0;
+            for (uint32_t sel = 0; sel < 100; sel++) {
+                uint64_t input[4] = {0, 0, 0, 0};
+                uint64_t output[4] = {0};
+                uint32_t outputCnt = 4;
+
+                kr = IOConnectCallScalarMethod(fb_conn, sel, input, 1, output, &outputCnt);
+
+                if (kr != 0xe00002c1 && kr != 0xe00002bc) {
+                    /* Not NotPrivileged and not Unsupported — interesting */
+                    rlog("    sel=%u: kr=0x%x out=[0x%llx,0x%llx,0x%llx,0x%llx] cnt=%u\n",
+                         sel, kr, output[0], output[1], output[2], output[3], outputCnt);
+                    ok_count++;
+
+                    /* Check for kernel pointers in output */
+                    for (int i = 0; i < 4; i++) {
+                        if ((output[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog("    *** KPTR in sel=%u output[%d]: 0x%016llx ***\n",
+                                 sel, i, output[i]);
+                        }
+                    }
+                }
+            }
+            rlog("    type=%u: %d non-priv/unsup selectors\n", type, ok_count);
+
+            /* Try struct method too */
+            for (uint32_t sel = 0; sel < 20; sel++) {
+                char inbuf[256] = {0};
+                char outbuf[4096] = {0};
+                size_t outsize = sizeof(outbuf);
+
+                kr = IOConnectCallStructMethod(fb_conn, sel, inbuf, 16, outbuf, &outsize);
+                if (kr != 0xe00002c1 && kr != 0xe00002bc && kr != 0xe00002bd) {
+                    rlog("    struct sel=%u: kr=0x%x outsize=%zu\n", sel, kr, outsize);
+                    if (kr == 0 && outsize > 0) {
+                        uint64_t *op = (uint64_t *)outbuf;
+                        for (size_t i = 0; i < outsize/8 && i < 32; i++) {
+                            if (op[i] != 0) {
+                                rlog("      +%zu: 0x%016llx\n", i*8, op[i]);
+                                if ((op[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                    rlog("      *** KPTR ***\n");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            /* Try MapMemory */
+            for (uint32_t memtype = 0; memtype < 8; memtype++) {
+                mach_vm_address_t addr = 0;
+                mach_vm_size_t size = 0;
+                kr = IOConnectMapMemory64(fb_conn, memtype, mach_task_self(),
+                    &addr, &size, kIOMapAnywhere);
+                if (kr == 0) {
+                    rlog("    ** MapMemory type=%u: addr=0x%llx size=0x%llx **\n",
+                         memtype, (unsigned long long)addr, (unsigned long long)size);
+                    /* Scan for kernel pointers */
+                    uint64_t *mp = (uint64_t *)addr;
+                    int kptr_found = 0;
+                    for (size_t i = 0; i < size/8 && i < 65536; i++) {
+                        if ((mp[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            if (kptr_found < 10) {
+                                rlog("      +%zu: 0x%016llx *** KPTR ***\n", i*8, mp[i]);
+                            }
+                            kptr_found++;
+                        }
+                    }
+                    rlog("      Total KPTR: %d\n", kptr_found);
+                } else if (kr != 0xe00002bd) {
+                    rlog("    MapMemory type=%u: kr=0x%x\n", memtype, kr);
+                }
+            }
+
+            /* Try notification port */
+            mach_port_t np = MACH_PORT_NULL;
+            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &np);
+            for (uint32_t ntype = 0; ntype < 4; ntype++) {
+                kr = IOConnectSetNotificationPort(fb_conn, ntype, np, 0);
+                if (kr == 0) {
+                    rlog("    ** NotifPort type=%u: SUCCESS **\n", ntype);
+                }
+            }
+            mach_port_deallocate(mach_task_self(), np);
+
+            IOServiceClose(fb_conn);
+        }
+        IOObjectRelease(fb_svc);
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: IOHIDEventService/Driver selector enumeration ---- */
+    rlog("\n--- Part 2: IOHID selector enumeration (type=2) ---\n");
+    fflush(stdout);
+
+    const char *hid_names[] = {"IOHIDEventService", "IOHIDEventDriver"};
+    for (int h = 0; h < 2; h++) {
+        io_service_t hid_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching(hid_names[h]));
+        if (!hid_svc) {
+            /* Try iterator for multiple instances */
+            io_iterator_t iter = 0;
+            IOServiceGetMatchingServices(kIOMasterPortDefault,
+                IOServiceMatching(hid_names[h]), &iter);
+            if (iter) {
+                hid_svc = IOIteratorNext(iter);
+                IOObjectRelease(iter);
+            }
+        }
+        rlog("  %s service: 0x%x\n", hid_names[h], hid_svc);
+
+        if (hid_svc) {
+            io_connect_t hid_conn = 0;
+            kr = IOServiceOpen(hid_svc, mach_task_self(), 2, &hid_conn);
+            rlog("  %s type=2 open: kr=0x%x conn=0x%x\n", hid_names[h], kr, hid_conn);
+
+            if (kr == 0 && hid_conn) {
+                /* Enumerate selectors 0-49 scalar */
+                int ok_cnt = 0;
+                for (uint32_t sel = 0; sel < 50; sel++) {
+                    uint64_t input[4] = {0};
+                    uint64_t output[4] = {0};
+                    uint32_t outputCnt = 4;
+                    kr = IOConnectCallScalarMethod(hid_conn, sel, input, 0, output, &outputCnt);
+                    if (kr != 0xe00002c1 && kr != 0xe00002bc) {
+                        rlog("    sel=%u: kr=0x%x out=[0x%llx,0x%llx] cnt=%u\n",
+                             sel, kr, output[0], output[1], outputCnt);
+                        ok_cnt++;
+                        for (int i = 0; i < 4; i++) {
+                            if ((output[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                rlog("    *** KPTR sel=%u out[%d]: 0x%016llx ***\n", sel, i, output[i]);
+                            }
+                        }
+                    }
+                }
+                rlog("    %s: %d responsive selectors\n", hid_names[h], ok_cnt);
+
+                /* Struct methods */
+                for (uint32_t sel = 0; sel < 20; sel++) {
+                    char outbuf[4096] = {0};
+                    size_t outsize = sizeof(outbuf);
+                    kr = IOConnectCallStructMethod(hid_conn, sel, NULL, 0, outbuf, &outsize);
+                    if (kr == 0 && outsize > 0) {
+                        rlog("    struct sel=%u: outsize=%zu\n", sel, outsize);
+                        uint64_t *op = (uint64_t *)outbuf;
+                        for (size_t i = 0; i < outsize/8 && i < 16; i++) {
+                            if (op[i] != 0) {
+                                rlog("      +%zu: 0x%016llx\n", i*8, op[i]);
+                                if ((op[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                                    rlog("      *** KPTR ***\n");
+                            }
+                        }
+                    }
+                }
+
+                /* MapMemory */
+                for (uint32_t mt = 0; mt < 8; mt++) {
+                    mach_vm_address_t addr = 0;
+                    mach_vm_size_t size = 0;
+                    kr = IOConnectMapMemory64(hid_conn, mt, mach_task_self(),
+                        &addr, &size, kIOMapAnywhere);
+                    if (kr == 0) {
+                        rlog("    ** HID MapMemory type=%u: addr=0x%llx size=0x%llx **\n",
+                             mt, (unsigned long long)addr, (unsigned long long)size);
+                        /* Scan mapped memory */
+                        uint64_t *mp = (uint64_t *)addr;
+                        int kptr_found = 0;
+                        for (size_t i = 0; i < size/8 && i < 65536; i++) {
+                            if ((mp[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                if (kptr_found < 10)
+                                    rlog("      +%zu: 0x%016llx *** KPTR ***\n", i*8, mp[i]);
+                                kptr_found++;
+                            }
+                        }
+                        if (kptr_found > 0) rlog("      Total KPTR: %d\n", kptr_found);
+                    }
+                }
+
+                IOServiceClose(hid_conn);
+            }
+            IOObjectRelease(hid_svc);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: IOSurface with proper OSSerialize XML dict ---- */
+    rlog("\n--- Part 3: IOSurface selectors with XML dict input ---\n");
+    fflush(stdout);
+
+    io_service_t surf_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    if (surf_svc) {
+        io_connect_t surf_conn = 0;
+        kr = IOServiceOpen(surf_svc, mach_task_self(), 0, &surf_conn);
+        rlog("  IOSurfaceRoot conn=0x%x kr=0x%x\n", surf_conn, kr);
+
+        if (kr == 0 && surf_conn) {
+            /* IOSurface selectors expect OSSerialize XML dict input.
+             * Selector 0 = s_create_surface
+             * Selector 6 = s_lookup_surface
+             * Selector 10 = s_get_value
+             * Selector 11 = s_set_value
+             * We'll craft proper XML for these. */
+
+            /* First create an IOSurface via framework to get an ID */
+            CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int w = 32, h = 32, bpr = 128, alloc = 128*32, pf = 0x42475241; /* BGRA */
+            CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+            CFNumberRef an = CFNumberCreate(NULL, kCFNumberIntType, &alloc);
+            CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), bn);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), an);
+            CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+
+            IOSurfaceRef s312 = IOSurfaceCreate(props);
+            uint32_t sid = s312 ? IOSurfaceGetID(s312) : 0;
+            rlog("  Created IOSurface: %p ID=%u\n", s312, sid);
+
+            CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(an); CFRelease(pfn);
+
+            /* Now try IOKit selector with serialized dict as struct input */
+            /* The input format is a serialized XML plist / OSSerialize blob */
+
+            /* Selector 6 = s_lookup_surface - takes surface ID */
+            {
+                char xml[512];
+                snprintf(xml, sizeof(xml),
+                    "<dict><key>IOSurfaceID</key><integer>%u</integer></dict>", sid);
+                size_t xml_len = strlen(xml) + 1;
+
+                char outbuf[4096] = {0};
+                size_t outsize = sizeof(outbuf);
+
+                kr = IOConnectCallStructMethod(surf_conn, 6, xml, xml_len, outbuf, &outsize);
+                rlog("  sel6 (lookup ID=%u): kr=0x%x outsize=%zu\n", sid, kr, outsize);
+                if (outsize > 0) {
+                    uint64_t *op = (uint64_t *)outbuf;
+                    for (size_t i = 0; i < outsize/8 && i < 64; i++) {
+                        if (op[i] != 0) {
+                            rlog("    +%zu: 0x%016llx", i*8, op[i]);
+                            if ((op[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                                rlog(" *** KPTR ***");
+                            rlog("\n");
+                        }
+                    }
+                }
+            }
+
+            /* Selector 0 = s_create_surface - with minimal dict */
+            {
+                char xml[512];
+                snprintf(xml, sizeof(xml),
+                    "<dict>"
+                    "<key>IOSurfaceWidth</key><integer>16</integer>"
+                    "<key>IOSurfaceHeight</key><integer>16</integer>"
+                    "<key>IOSurfaceBytesPerRow</key><integer>64</integer>"
+                    "<key>IOSurfaceAllocSize</key><integer>1024</integer>"
+                    "<key>IOSurfacePixelFormat</key><integer>%d</integer>"
+                    "</dict>", pf);
+                size_t xml_len = strlen(xml) + 1;
+
+                char outbuf[4096] = {0};
+                size_t outsize = sizeof(outbuf);
+
+                kr = IOConnectCallStructMethod(surf_conn, 0, xml, xml_len, outbuf, &outsize);
+                rlog("  sel0 (create): kr=0x%x outsize=%zu\n", kr, outsize);
+                if (kr == 0 && outsize > 0) {
+                    uint64_t *op = (uint64_t *)outbuf;
+                    for (size_t i = 0; i < outsize/8 && i < 64; i++) {
+                        if (op[i] != 0) {
+                            rlog("    +%zu: 0x%016llx", i*8, op[i]);
+                            if ((op[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                                rlog(" *** KPTR ***");
+                            rlog("\n");
+                        }
+                    }
+                }
+            }
+
+            /* Selector 10 = s_get_value - try getting properties from our surface */
+            {
+                char xml[512];
+                snprintf(xml, sizeof(xml),
+                    "<dict>"
+                    "<key>IOSurfaceID</key><integer>%u</integer>"
+                    "<key>key</key><string>IOSurfaceAllocSize</string>"
+                    "</dict>", sid);
+                size_t xml_len = strlen(xml) + 1;
+
+                char outbuf[4096] = {0};
+                size_t outsize = sizeof(outbuf);
+
+                kr = IOConnectCallStructMethod(surf_conn, 10, xml, xml_len, outbuf, &outsize);
+                rlog("  sel10 (getValue): kr=0x%x outsize=%zu\n", kr, outsize);
+                if (kr == 0 && outsize > 0) {
+                    rlog("    raw: ");
+                    for (size_t i = 0; i < outsize && i < 128; i++)
+                        rlog("%02x", (unsigned char)outbuf[i]);
+                    rlog("\n");
+                }
+            }
+
+            /* Selector 11 = s_set_value - try setting a custom property */
+            {
+                char xml[512];
+                snprintf(xml, sizeof(xml),
+                    "<dict>"
+                    "<key>IOSurfaceID</key><integer>%u</integer>"
+                    "<key>key</key><string>TestKey</string>"
+                    "<key>value</key><integer>42</integer>"
+                    "</dict>", sid);
+                size_t xml_len = strlen(xml) + 1;
+
+                char outbuf[256] = {0};
+                size_t outsize = sizeof(outbuf);
+
+                kr = IOConnectCallStructMethod(surf_conn, 11, xml, xml_len, outbuf, &outsize);
+                rlog("  sel11 (setValue): kr=0x%x outsize=%zu\n", kr, outsize);
+            }
+
+            /* Try all selectors 0-39 with the lookup dict */
+            rlog("\n  All selectors with XML dict (surface ID=%u):\n", sid);
+            for (uint32_t sel = 0; sel < 40; sel++) {
+                if (sel == 0 || sel == 6 || sel == 10 || sel == 11) continue;
+                char xml[256];
+                snprintf(xml, sizeof(xml),
+                    "<dict><key>IOSurfaceID</key><integer>%u</integer></dict>", sid);
+
+                char outbuf[4096] = {0};
+                size_t outsize = sizeof(outbuf);
+
+                kr = IOConnectCallStructMethod(surf_conn, sel, xml, strlen(xml)+1,
+                    outbuf, &outsize);
+                if (kr != 0xe00002bc && kr != 0xe00002c1) {
+                    rlog("    sel=%u: kr=0x%x outsize=%zu\n", sel, kr, outsize);
+                    if (kr == 0 && outsize > 0) {
+                        uint64_t *op = (uint64_t *)outbuf;
+                        for (size_t i = 0; i < outsize/8 && i < 32; i++) {
+                            if (op[i] != 0) {
+                                rlog("      +%zu: 0x%016llx", i*8, op[i]);
+                                if ((op[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                                    rlog(" *** KPTR ***");
+                                rlog("\n");
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (s312) CFRelease(s312);
+            CFRelease(props);
+            IOServiceClose(surf_conn);
+        }
+        IOObjectRelease(surf_svc);
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: IOMobileFramebuffer + IOHID combined MapMemory deep scan ---- */
+    rlog("\n--- Part 4: Framebuffer shared memory race ---\n");
+    fflush(stdout);
+
+    /* Try to get a shared memory region from IOMobileFramebuffer and
+     * race it with display state changes to catch leaked pointers */
+    fb_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOMobileFramebuffer"));
+    if (fb_svc) {
+        io_connect_t fb0 = 0, fb1 = 0;
+        IOServiceOpen(fb_svc, mach_task_self(), 0, &fb0);
+        IOServiceOpen(fb_svc, mach_task_self(), 1, &fb1);
+
+        rlog("  FB connections: type0=0x%x type1=0x%x\n", fb0, fb1);
+
+        /* Try IOConnectCallMethod with async method (method+trap) */
+        if (fb0) {
+            /* Try trap calls - these go through IOUserClient::externalMethod
+             * with a different dispatch path */
+            for (uint32_t trap = 0; trap < 16; trap++) {
+                io_connect_t args[6] = {0};
+                kern_return_t tkr = IOConnectTrap0(fb0, trap);
+                if (tkr != 0xe00002c1 && tkr != 0xe00002bc) {
+                    rlog("    Trap%u on type0: kr=0x%x\n", trap, tkr);
+                }
+            }
+
+            /* Try async methods */
+            mach_port_t wake_port = MACH_PORT_NULL;
+            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wake_port);
+
+            for (uint32_t sel = 0; sel < 10; sel++) {
+                uint64_t ref[8] = {sel, 0};
+                uint64_t input[2] = {0, 0};
+                uint64_t output[4] = {0};
+                uint32_t outputCnt = 4;
+
+                kr = IOConnectCallAsyncScalarMethod(fb0, sel, wake_port, ref, 1,
+                    input, 0, output, &outputCnt);
+                if (kr != 0xe00002c1 && kr != 0xe00002bc) {
+                    rlog("    AsyncSel=%u: kr=0x%x out=[0x%llx,0x%llx]\n",
+                         sel, kr, output[0], output[1]);
+                }
+            }
+            mach_port_deallocate(mach_task_self(), wake_port);
+
+            IOServiceClose(fb0);
+        }
+        if (fb1) IOServiceClose(fb1);
+        IOObjectRelease(fb_svc);
+    }
+    fflush(stdout);
+
+    /* ---- Part 5: system-privilege sandbox probing ---- */
+    rlog("\n--- Part 5: system-privilege capabilities ---\n");
+    fflush(stdout);
+
+    /* sandbox_check said system-privilege is allowed.
+     * This may let us access additional kernel interfaces.
+     * Try accessing restricted Mach host ports and bootstrap services. */
+
+    /* Try host_get_special_port with higher port numbers */
+    mach_port_t host = mach_host_self();
+    for (int port_id = 1; port_id <= 32; port_id++) {
+        mach_port_t sp = MACH_PORT_NULL;
+        kr = host_get_special_port(host, 0, port_id, &sp);
+        if (kr == 0 && sp != MACH_PORT_NULL) {
+            rlog("  host_get_special_port(%d): port=0x%x\n", port_id, sp);
+
+            /* Try to get kobject info */
+            natural_t kotype = 0;
+            mach_vm_address_t kaddr = 0;
+            kr = mach_port_kobject(mach_task_self(), sp, &kotype, (unsigned *)&kaddr);
+            rlog("    kobject: kr=0x%x type=%u addr=0x%llx\n",
+                 kr, kotype, (unsigned long long)kaddr);
+        }
+    }
+
+    /* Try task_for_pid on various pids with system-privilege */
+    rlog("\n  task_for_pid probes (with system-privilege):\n");
+    int pids_to_try[] = {0, 1, getpid()};
+    for (int i = 0; i < 3; i++) {
+        mach_port_t task_port = MACH_PORT_NULL;
+        kr = task_for_pid(mach_task_self(), pids_to_try[i], &task_port);
+        rlog("    task_for_pid(%d): kr=0x%x port=0x%x\n",
+             pids_to_try[i], kr, task_port);
+    }
+
+    /* Try processor_set_default + processor_set_tasks again */
+    mach_port_t pset_default = MACH_PORT_NULL;
+    kr = processor_set_default(host, &pset_default);
+    rlog("\n  processor_set_default: kr=0x%x port=0x%x\n", kr, pset_default);
+    if (kr == 0 && pset_default != MACH_PORT_NULL) {
+        /* Try to get control port */
+        mach_port_t pset_priv = MACH_PORT_NULL;
+        kr = host_processor_set_priv(host, pset_default, &pset_priv);
+        rlog("  host_processor_set_priv: kr=0x%x port=0x%x\n", kr, pset_priv);
+
+        if (kr == 0 && pset_priv != MACH_PORT_NULL) {
+            task_array_t tasks = NULL;
+            mach_msg_type_number_t task_cnt = 0;
+            kr = processor_set_tasks(pset_priv, &tasks, &task_cnt);
+            rlog("  processor_set_tasks: kr=0x%x count=%u\n", kr, task_cnt);
+
+            if (kr == 0 && tasks) {
+                for (uint32_t t = 0; t < task_cnt && t < 20; t++) {
+                    pid_t tpid = 0;
+                    pid_for_task(tasks[t], &tpid);
+                    rlog("    task[%u] port=0x%x pid=%d\n", t, tasks[t], tpid);
+                }
+            }
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r312 complete ===\n");
+    fflush(stdout);
+}
+
 static void r310_probe(void) {
     rlog("\n=== r310: Metal GPU Work + IOSurface Struct Methods + Timing ===\n\n");
     fflush(stdout);
@@ -33333,6 +33838,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 312) {
+            rlog("*** rounds=312: IOMobileFramebuffer + IOHID + IOSurface XML ***\n");
+            rlog("  r311: FB opens 4 types! HID type=2! system-privilege allowed!\n");
+            rlog("  Probe: FB selectors, HID selectors, IOSurface XML dict, races.\n\n");
+            r312_probe();
             goto done;
         }
         if (rounds == 311) {
