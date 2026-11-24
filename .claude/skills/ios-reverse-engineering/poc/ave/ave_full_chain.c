@@ -16594,7 +16594,7 @@ static void r421_probe(void) {
 
             /* Get IOSurface connection */
             io_service_t svc = IOServiceGetMatchingService(
-                kIOMainPortCompat,
+                kIOMasterPortDefault,
                 IOServiceMatching("IOSurfaceRoot"));
             io_connect_t conn = 0;
             kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
@@ -16839,66 +16839,76 @@ static void r421_probe(void) {
     }
     fflush(stdout);
 
-    /* ---- Vector 4: Mach voucher attribute probing ---- */
-    rlog("\n  Vector 4: Mach voucher attribute probing\n");
+    /* ---- Vector 4: Mach voucher + proc_info probing ---- */
+    rlog("\n  Vector 4: Mach voucher + proc_info\n");
     {
-        /* Create a voucher and inspect its attributes */
+        /* Create voucher with user data recipe */
         mach_voucher_t voucher = MACH_PORT_NULL;
-
-        /* Create with ATM (Activity Tracing) recipe */
         mach_voucher_attr_recipe_data_t recipe;
-        recipe.key = MACH_VOUCHER_ATTR_KEY_ATM;
-        recipe.command = MACH_VOUCHER_ATTR_ATM_CREATE;
+        recipe.key = MACH_VOUCHER_ATTR_KEY_USER_DATA;
+        recipe.command = MACH_VOUCHER_ATTR_USER_DATA_STORE;
         recipe.previous_voucher = MACH_PORT_NULL;
         recipe.content_size = 0;
 
         kern_return_t kr = host_create_mach_voucher(mach_host_self(),
             (mach_voucher_attr_raw_recipe_array_t)&recipe,
             sizeof(recipe), &voucher);
-        rlog("    host_create_mach_voucher (ATM): kr=%d voucher=0x%x\n",
+        rlog("    host_create_mach_voucher: kr=%d voucher=0x%x\n",
             kr, voucher);
 
         if (kr == KERN_SUCCESS && voucher != MACH_PORT_NULL) {
-            /* Try extracting attributes */
-            mach_voucher_attr_content_t content;
-            mach_voucher_attr_content_size_t contentSize = 4096;
-            uint8_t contentBuf[4096] = {0};
-
-            kr = mach_voucher_extract_attr_content(voucher,
-                MACH_VOUCHER_ATTR_KEY_ATM,
-                contentBuf, &contentSize);
-            rlog("    extract ATM: kr=%d size=%u\n", kr, contentSize);
-            if (kr == KERN_SUCCESS && contentSize > 0) {
-                uint64_t *cp = (uint64_t *)contentBuf;
-                for (uint32_t i = 0; i < contentSize / 8; i++) {
-                    rlog("      +%u: 0x%016llx", i * 8,
-                        (unsigned long long)cp[i]);
-                    if ((cp[i] >> 32) >= 0xFFFFFFF0ULL)
-                        rlog(" ***KERNEL***");
-                    rlog("\n");
-                }
-            }
-
-            /* Try user data key */
-            recipe.key = MACH_VOUCHER_ATTR_KEY_USER_DATA;
-            recipe.command = MACH_VOUCHER_ATTR_USER_DATA_STORE;
-            mach_voucher_t v2 = MACH_PORT_NULL;
-            kr = host_create_mach_voucher(mach_host_self(),
-                (mach_voucher_attr_raw_recipe_array_t)&recipe,
-                sizeof(recipe), &v2);
-            rlog("    host_create_mach_voucher (USER_DATA): kr=%d\n", kr);
-
-            /* kobject on voucher port */
             unsigned int kotype = 0;
             mach_vm_address_t koaddr = 0;
             kr = mach_port_kobject(mach_task_self(),
                 voucher, &kotype, &koaddr);
             rlog("    voucher kobject: kr=%d type=%u addr=0x%llx\n",
                 kr, kotype, (unsigned long long)koaddr);
-
             mach_port_deallocate(mach_task_self(), voucher);
-            if (v2 != MACH_PORT_NULL)
-                mach_port_deallocate(mach_task_self(), v2);
+        }
+
+        /* proc_pidinfo - try various flavors for kernel data */
+        pid_t myPid = getpid();
+        uint8_t piBuf[4096] = {0};
+
+        /* PROC_PIDTASKINFO = 4 */
+        int ret = proc_pidinfo(myPid, 4, 0, piBuf, sizeof(piBuf));
+        rlog("    proc_pidinfo(TASKINFO): ret=%d\n", ret);
+        if (ret > 0) {
+            uint64_t *pp = (uint64_t *)piBuf;
+            for (int i = 0; i < ret / 8 && i < 16; i++) {
+                if ((pp[i] >> 32) >= 0xFFFFFFF0ULL &&
+                    pp[i] != 0xFFFFFFFFFFFFFFFF)
+                    rlog("      +%d: 0x%016llx ***KERNEL***\n",
+                        i * 8, (unsigned long long)pp[i]);
+            }
+        }
+
+        /* PROC_PIDREGIONPATHINFO = 8 */
+        memset(piBuf, 0, sizeof(piBuf));
+        ret = proc_pidinfo(myPid, 8, 0, piBuf, sizeof(piBuf));
+        rlog("    proc_pidinfo(REGIONPATH): ret=%d\n", ret);
+        if (ret > 0) {
+            uint64_t *pp = (uint64_t *)piBuf;
+            for (int i = 0; i < ret / 8 && i < 32; i++) {
+                if ((pp[i] >> 32) >= 0xFFFFFFF0ULL &&
+                    pp[i] != 0xFFFFFFFFFFFFFFFF)
+                    rlog("      +%d: 0x%016llx ***KERNEL***\n",
+                        i * 8, (unsigned long long)pp[i]);
+            }
+        }
+
+        /* PROC_PIDVNODEPATHINFO = 9 */
+        memset(piBuf, 0, sizeof(piBuf));
+        ret = proc_pidinfo(myPid, 9, 0, piBuf, sizeof(piBuf));
+        rlog("    proc_pidinfo(VNODEPATH): ret=%d\n", ret);
+        if (ret > 0) {
+            uint64_t *pp = (uint64_t *)piBuf;
+            for (int i = 0; i < ret / 8 && i < 32; i++) {
+                if ((pp[i] >> 32) >= 0xFFFFFFF0ULL &&
+                    pp[i] != 0xFFFFFFFFFFFFFFFF)
+                    rlog("      +%d: 0x%016llx ***KERNEL***\n",
+                        i * 8, (unsigned long long)pp[i]);
+            }
         }
     }
     fflush(stdout);
