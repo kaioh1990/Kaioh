@@ -240,38 +240,6 @@ struct my_proc_taskallinfo {
     struct my_proc_taskinfo ptinfo;
 };
 
-struct proc_regioninfo {
-    uint32_t pri_protection;
-    uint32_t pri_max_protection;
-    uint32_t pri_inheritance;
-    uint32_t pri_flags;
-    uint64_t pri_offset;
-    uint32_t pri_behavior;
-    uint32_t pri_user_wired_count;
-    uint32_t pri_user_tag;
-    uint32_t pri_pages_resident;
-    uint32_t pri_pages_shared_now_private;
-    uint32_t pri_pages_swapped_out;
-    uint32_t pri_pages_dirtied;
-    uint32_t pri_ref_count;
-    uint32_t pri_shadow_depth;
-    uint32_t pri_share_mode;
-    uint32_t pri_private_pages_resident;
-    uint32_t pri_shared_pages_resident;
-    uint32_t pri_obj_id;
-    uint32_t pri_depth;
-    uint64_t pri_address;
-    uint64_t pri_size;
-};
-
-struct vnode_info_path {
-    char vip_path[1024];
-};
-
-struct proc_regionwithpathinfo {
-    struct proc_regioninfo prp_prinfo;
-    struct vnode_info_path prp_vip;
-};
 extern kern_return_t mach_vm_region_recurse(vm_map_t target_task,
     uint64_t *address, uint64_t *size, uint32_t *nesting_depth,
     vm_region_recurse_info_t info, mach_msg_type_number_t *infoCnt);
