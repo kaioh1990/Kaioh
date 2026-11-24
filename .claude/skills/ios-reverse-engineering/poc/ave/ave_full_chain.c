@@ -6996,7 +6996,7 @@ static void r321_probe(void) {
         rlog("  pid=%d\n", mypid);
 
         /* PROC_PIDTASKINFO */
-        struct proc_taskinfo pti;
+        struct my_proc_taskinfo pti;
         int ret = proc_pidinfo(mypid, PROC_PIDTASKINFO, 0, &pti, sizeof(pti));
         rlog("  PROC_PIDTASKINFO: ret=%d\n", ret);
         if (ret > 0) {
@@ -12691,7 +12691,7 @@ static void r332_probe(void) {
         rlog("  pid=%d\n", pid);
 
         /* Get FD info (Mach ports are exposed through proc_info on older systems) */
-        struct proc_taskallinfo tai;
+        struct my_proc_taskallinfo tai;
         int ret = proc_pidinfo(pid, PROC_PIDTASKALLINFO, 0, &tai, sizeof(tai));
         if (ret > 0) {
             rlog("  task_allinfo: virtual_size=0x%llx resident=0x%llx\n",
@@ -55943,7 +55943,7 @@ new_modes:
                 }
                 /* 8. proc_pidinfo */
                 {
-                    struct proc_taskinfo pti;
+                    struct my_proc_taskinfo pti;
                     int ret = proc_pidinfo(getpid(), PROC_PIDTASKINFO, 0,
                                            &pti, sizeof(pti));
                     rlog("  proc_pidinfo(TASKINFO): ret=%d virtual_size=0x%llx\n",
