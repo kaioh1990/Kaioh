@@ -110,6 +110,7 @@ extern kern_return_t mach_vm_page_info(
 #include <sys/stat.h>
 #include <sys/sysctl.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
 #include <sys/ioctl.h>
 #include <sys/event.h>
 /* kern_control.h not in iOS SDK — declare manually */
@@ -17026,6 +17027,7 @@ static void *r445_thread_fn(void *arg) {
     rlog("\n=== r451 complete ===\n");
 }
 
+
 static void r450_probe(void) {
     rlog("\n=== r450: Phantom mapping + proc_pidinfo + sysctl + task_info ===\n\n");
     fflush(stdout);
@@ -17358,6 +17360,7 @@ static void r450_probe(void) {
 
     rlog("\n=== r450 complete ===\n");
 }
+
 
 static void r451_probe(void) {
     rlog("\n=== r451: AVE corruption CONTROL experiment ===\n\n");
@@ -80896,7 +80899,7 @@ new_modes:
             goto done;
         }
         if (rounds == 454) {
-            rlog("*** rounds=454: AVE corruption CONTROL experiment ***\n\n");
+            rlog("*** rounds=454: IOSurface shared mem + kinfo_proc + ICMPv6 + kernel probing ***\n\n");
             fflush(stdout);
             r451_probe();
             goto done;
