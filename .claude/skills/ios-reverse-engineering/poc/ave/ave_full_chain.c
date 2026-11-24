@@ -244,10 +244,6 @@ extern kern_return_t mach_vm_region_recurse(vm_map_t target_task,
     uint64_t *address, uint64_t *size, uint32_t *nesting_depth,
     vm_region_recurse_info_t info, mach_msg_type_number_t *infoCnt);
 
-extern kern_return_t host_zone_info(host_t host,
-    mach_zone_name_t **names, mach_msg_type_number_t *namesCnt,
-    mach_zone_info_t **info, mach_msg_type_number_t *infoCnt);
-
 extern kern_return_t mach_vm_region(vm_map_t target_task,
     uint64_t *address, uint64_t *size, vm_region_flavor_t flavor,
     vm_region_info_t info, mach_msg_type_number_t *infoCnt,
@@ -16434,32 +16430,55 @@ static void r407_probe(void) {
     }
     fflush(stdout);
 
-    /* ---- Vector 4: host_zone_info ---- */
-    rlog("\n  Vector 4: host_zone_info\n");
+    /* ---- Vector 4: processor_info ---- */
+    rlog("\n  Vector 4: processor_info\n");
     {
         mach_port_t host = mach_host_self();
-        mach_zone_name_t *names = NULL;
-        mach_msg_type_number_t namesCnt = 0;
-        mach_zone_info_t *info = NULL;
-        mach_msg_type_number_t infoCnt = 0;
+        processor_set_name_array_t psets;
+        mach_msg_type_number_t psetsCnt = 0;
+        kern_return_t kr = host_processor_sets(host, &psets, &psetsCnt);
+        rlog("    host_processor_sets: kr=%d count=%u\n", kr, psetsCnt);
 
-        kern_return_t kr = host_zone_info(host, &names, &namesCnt,
-            &info, &infoCnt);
-        rlog("    host_zone_info: kr=%d namesCnt=%u infoCnt=%u\n",
-            kr, namesCnt, infoCnt);
+        /* Try processor_set_info on each */
+        if (kr == KERN_SUCCESS) {
+            for (unsigned i = 0; i < psetsCnt && i < 4; i++) {
+                processor_set_basic_info_data_t psinfo;
+                mach_msg_type_number_t cnt = PROCESSOR_SET_BASIC_INFO_COUNT;
+                kr = processor_set_info(psets[i], PROCESSOR_SET_BASIC_INFO,
+                    &host, (processor_set_info_t)&psinfo, &cnt);
+                rlog("    pset[%u] info: kr=%d\n", i, kr);
 
-        if (kr == KERN_SUCCESS && namesCnt > 0) {
-            /* Scan zone info for addresses */
-            for (unsigned i = 0; i < namesCnt && i < 20; i++) {
-                rlog("    zone '%s': ", names[i].mzn_name);
-                rlog("count=%lld elem_size=%lld\n",
-                    (long long)info[i].mzi_count,
-                    (long long)info[i].mzi_elem_size);
+                /* Dump raw for kernel-like values */
+                uint64_t *raw = (uint64_t*)&psinfo;
+                for (unsigned j = 0; j < cnt * sizeof(natural_t) / 8 && j < 8; j++) {
+                    uint16_t top = (uint16_t)(raw[j] >> 48);
+                    if (top >= 0xfff0 && top <= 0xfffe) {
+                        rlog("      [%u]: 0x%016llx <KERNEL?>\n",
+                            j, (unsigned long long)raw[j]);
+                    }
+                }
             }
-            vm_deallocate(mach_task_self(), (vm_address_t)names,
-                namesCnt * sizeof(mach_zone_name_t));
-            vm_deallocate(mach_task_self(), (vm_address_t)info,
-                infoCnt * sizeof(mach_zone_info_t));
+        }
+
+        /* Try host_processor_info */
+        natural_t procCount = 0;
+        processor_info_array_t procInfo = NULL;
+        mach_msg_type_number_t procInfoCnt = 0;
+        kr = host_processor_info(host, PROCESSOR_CPU_LOAD_INFO,
+            &procCount, &procInfo, &procInfoCnt);
+        rlog("    host_processor_info: kr=%d count=%u infoCnt=%u\n",
+            kr, procCount, procInfoCnt);
+        if (kr == KERN_SUCCESS && procInfoCnt > 0) {
+            uint64_t *raw = (uint64_t*)procInfo;
+            for (unsigned j = 0; j < procInfoCnt / 2 && j < 20; j++) {
+                uint16_t top = (uint16_t)(raw[j] >> 48);
+                if (top >= 0xfff0 && top <= 0xfffe) {
+                    rlog("      procInfo[%u]: 0x%016llx <KERNEL?>\n",
+                        j, (unsigned long long)raw[j]);
+                }
+            }
+            vm_deallocate(mach_task_self(), (vm_address_t)procInfo,
+                procInfoCnt * sizeof(natural_t));
         }
     }
     fflush(stdout);
