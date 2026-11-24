@@ -15333,7 +15333,8 @@ r356_done:
 static void r358_probe(void) {
     rlog("\n=== r358: Slid Kernel Text Pointer Scan (ALL regions) ===\n\n");
     rlog("  Range: [0xFFFFFFF007004001, 0xFFFFFFF027004000)\n");
-    rlog("  Excluding known unslid constants\n\n");
+    rlog("  Excluding known unslid constants\n");
+    rlog("  Using mach_vm_read for safe page access\n\n");
     fflush(stdout);
 
     static const uint64_t skip[] = {
@@ -15341,7 +15342,8 @@ static void r358_probe(void) {
         0xFFFFFFF037004000ULL, 0xFFFFFFF047004000ULL, 0xFFFFFFF017004000ULL,
         0xFFFFFFF00F004000ULL, 0xFFFFFFF000000000ULL, 0xFFFFFFF800000000ULL,
     };
-    int total_hits = 0, regions_scanned = 0;
+    int total_hits = 0, regions_scanned = 0, pages_failed = 0;
+    uint64_t page_buf[512]; /* 4096 / 8 = 512 qwords per page */
 
     mach_vm_address_t addr = 0;
     while (1) {
@@ -15354,41 +15356,50 @@ static void r358_probe(void) {
         if (kr != KERN_SUCCESS) break;
 
         if ((info.protection & VM_PROT_READ) && sz <= 256*1024*1024) {
-            uint64_t *base = (uint64_t *)(uintptr_t)addr;
-            size_t nqw = (size_t)sz / 8;
             int region_hits = 0;
+            mach_vm_size_t page_sz = 4096;
+            for (mach_vm_address_t pg = addr; pg < addr + sz; pg += page_sz) {
+                mach_vm_size_t out_sz = 0;
+                kr = mach_vm_read_overwrite(mach_task_self(), pg, page_sz,
+                    (mach_vm_address_t)page_buf, &out_sz);
+                if (kr != KERN_SUCCESS || out_sz < page_sz) { pages_failed++; continue; }
 
-            for (size_t i = 0; i < nqw; i++) {
-                uint64_t v = base[i];
-                if (v <= 0xFFFFFFF007004000ULL || v >= 0xFFFFFFF027004000ULL) continue;
-                int is_skip = 0;
-                for (int k = 0; k < (int)(sizeof(skip)/sizeof(skip[0])); k++)
-                    if (v == skip[k]) { is_skip = 1; break; }
-                if (is_skip) continue;
+                size_t nqw = (size_t)out_sz / 8;
+                for (size_t i = 0; i < nqw; i++) {
+                    uint64_t v = page_buf[i];
+                    if (v <= 0xFFFFFFF007004000ULL || v >= 0xFFFFFFF027004000ULL) continue;
+                    int is_skip = 0;
+                    for (int k = 0; k < (int)(sizeof(skip)/sizeof(skip[0])); k++)
+                        if (v == skip[k]) { is_skip = 1; break; }
+                    if (is_skip) continue;
 
-                const char *cls = "SLID_TEXT_CANDIDATE";
-                uint64_t off = v - 0xFFFFFFF007004000ULL;
-                if ((off & 0x3FFF) == 0) cls = "POSSIBLE_SLID_BASE";
-                else if ((v & 0x7) == 0) cls = "POSSIBLE_SLID_FUNC";
+                    const char *cls = "SLID_TEXT_CANDIDATE";
+                    uint64_t off = v - 0xFFFFFFF007004000ULL;
+                    if ((off & 0x3FFF) == 0) cls = "POSSIBLE_SLID_BASE";
+                    else if ((v & 0x7) == 0) cls = "POSSIBLE_SLID_FUNC";
 
-                rlog("  HIT: region=0x%llx+%zu tag=%u val=0x%llx off=+0x%llx [%s]\n",
-                    (unsigned long long)addr, i*8, (unsigned)info.user_tag,
-                    (unsigned long long)v, (unsigned long long)off, cls);
+                    size_t region_off = (size_t)(pg - addr) + i * 8;
+                    rlog("  HIT: region=0x%llx+%zu tag=%u val=0x%llx off=+0x%llx [%s]\n",
+                        (unsigned long long)addr, region_off, (unsigned)info.user_tag,
+                        (unsigned long long)v, (unsigned long long)off, cls);
 
-                if (i > 0) {
-                    uint64_t prev = base[i-1];
-                    if (prev > 0xFFFFFFF007004000ULL && prev < 0xFFFFFFF027004000ULL)
-                        rlog("    VTABLE? prev=0x%llx (consecutive text ptrs)\n", (unsigned long long)prev);
+                    if (i > 0) {
+                        uint64_t prev = page_buf[i-1];
+                        if (prev > 0xFFFFFFF007004000ULL && prev < 0xFFFFFFF027004000ULL)
+                            rlog("    VTABLE? prev=0x%llx (consecutive text ptrs)\n", (unsigned long long)prev);
+                    }
+                    region_hits++;
+                    total_hits++;
+                    if (region_hits >= 20) { rlog("    ... (capped at 20 per region)\n"); goto next_region; }
                 }
-                region_hits++;
-                total_hits++;
-                if (region_hits >= 20) { rlog("    ... (capped at 20 per region)\n"); break; }
             }
+            next_region:
             regions_scanned++;
         }
         addr += sz;
     }
-    rlog("\n  Scanned %d regions, found %d slid text candidates\n", regions_scanned, total_hits);
+    rlog("\n  Scanned %d regions (%d pages unreadable), found %d slid text candidates\n",
+        regions_scanned, pages_failed, total_hits);
 
     if (total_hits == 0) {
         rlog("\n  NO slid text pointers found in userspace-readable memory.\n");
