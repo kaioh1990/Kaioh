@@ -88,6 +88,8 @@ extern kern_return_t bootstrap_look_up(mach_port_t bp, const char *service_name,
 #include <objc/message.h>
 #include <mach-o/dyld.h>
 #include <notify.h>
+#include <libproc.h>
+#include <sys/proc_info.h>
 
 typedef kern_return_t (*host_zone_info_fn)(host_priv_t host,
     mach_zone_name_t **names, mach_msg_type_number_t *namesCnt,
@@ -11944,7 +11946,7 @@ static void r329_ldm_probe(void) {
    r329 crashed on mach_msg receive from securityd. Use send-only probes
    and exception port handler to catch crashes gracefully. */
 
-static void r331_probe(void) {
+static void r331_securityd_probe(void) {
     rlog("\n=== r331: Safe Security Daemon Mach Probe ===\n");
     rlog("  r329: securityd reachable, msg(id=0) send OK, crashed on rpc.\n");
     rlog("  Strategy: Send-only probes, trap crashes, SEP deep dive.\n\n");
@@ -43468,25 +43470,18 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 332) {
+            rlog("*** rounds=332: XPC Service Probe + Reply Capture ***\n");
+            rlog("  r331: securityd/trustd 40/40 send OK, rpc crashes.\n");
+            rlog("  Probe: XPC API, security entitlements, IOKit notifs, proc_info.\n\n");
+            r332_probe();
+            goto done;
+        }
         if (rounds == 331) {
             rlog("*** rounds=331: Safe Security Daemon Mach Probe ***\n");
             rlog("  r329: securityd reachable, msg send OK, crashed on rpc.\n");
             rlog("  Probe: Send-only sweep, safe rpc, SEP deep dive.\n\n");
             r331_probe();
-            goto done;
-        }
-        if (rounds == 331) {
-            rlog("*** rounds=331: Timing Side-Channel + MTE Oracle ***\n");
-            rlog("  r330: kobject=0, host_info clean, Trigon overflow patched.\n");
-            rlog("  Probe: memory entry timing, vm_copy oracle, IOSurface timing, shared cache.\n\n");
-            r331_probe();
-            goto done;
-        }
-        if (rounds == 330) {
-            rlog("*** rounds=330: Trigon-Inspired KASLR Bypass Vectors ***\n");
-            rlog("  r329: TIFF3 OOB, IOSurface header, async IOKit.\n");
-            rlog("  Probe: host_info uninit, mach_port_kobject, PurpleGfxMem, memory entries.\n\n");
-            r330_probe();
             goto done;
         }
         if (rounds == 330) {
