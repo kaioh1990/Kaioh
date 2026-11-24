@@ -16067,17 +16067,16 @@ static void r389_probe(void) {
             if (kr == 0) {
                 rlog("    surf[%d]: region at 0x%llx size=%llu\n", i,
                     (unsigned long long)addr, (unsigned long long)rsize);
-                rlog("      prot=%d/%d share=%d type=%d\n",
-                    info.protection, info.max_protection,
-                    info.share_mode, info.external_pager);
-                rlog("      pages_resident=%d pages_shared=%d\n",
-                    info.pages_resident, info.pages_shared_now_private);
-                rlog("      shadow_depth=%d obj_id=%d\n",
-                    info.shadow_depth, info.obj_id);
-                /* obj_id might be related to kernel object address */
-                if (info.obj_id > 0) {
-                    rlog("      *** obj_id=0x%x — possible kernel info! ***\n", info.obj_id);
-                }
+                rlog("      prot=%d share=%d pager=%d\n",
+                    info.protection, info.share_mode, info.external_pager);
+                rlog("      pages_resident=%d shadow_depth=%d\n",
+                    info.pages_resident, info.shadow_depth);
+                /* Dump raw struct bytes for any hidden fields */
+                uint8_t *raw = (uint8_t*)&info;
+                rlog("      raw info:");
+                for (int b = 0; b < (int)sizeof(info) && b < 64; b++)
+                    rlog(" %02x", raw[b]);
+                rlog("\n");
             }
         }
         IOSurfaceUnlock(surfs[i], 0, NULL);
