@@ -4941,13 +4941,13 @@ static void r312_probe(void) {
 
         /* Try IOConnectCallMethod with async method (method+trap) */
         if (fb0) {
-            /* Try trap calls - these go through IOUserClient::externalMethod
-             * with a different dispatch path */
-            for (uint32_t trap = 0; trap < 16; trap++) {
-                io_connect_t args[6] = {0};
-                kern_return_t tkr = IOConnectTrap0(fb0, trap);
+            /* Try higher selectors 100-119 on type0 */
+            for (uint32_t sel = 100; sel < 120; sel++) {
+                uint64_t output[4] = {0};
+                uint32_t outputCnt = 4;
+                kern_return_t tkr = IOConnectCallScalarMethod(fb0, sel, NULL, 0, output, &outputCnt);
                 if (tkr != 0xe00002c1 && tkr != 0xe00002bc) {
-                    rlog("    Trap%u on type0: kr=0x%x\n", trap, tkr);
+                    rlog("    sel=%u on type0: kr=0x%x out=[0x%llx]\n", sel, tkr, output[0]);
                 }
             }
 
@@ -4996,7 +4996,7 @@ static void r312_probe(void) {
             /* Try to get kobject info */
             natural_t kotype = 0;
             mach_vm_address_t kaddr = 0;
-            kr = mach_port_kobject(mach_task_self(), sp, &kotype, (unsigned *)&kaddr);
+            kr = mach_port_kobject(mach_task_self(), sp, &kotype, &kaddr);
             rlog("    kobject: kr=0x%x type=%u addr=0x%llx\n",
                  kr, kotype, (unsigned long long)kaddr);
         }
