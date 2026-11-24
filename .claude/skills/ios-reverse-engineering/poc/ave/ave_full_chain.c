@@ -17571,8 +17571,8 @@ static void r450_probe(void) {
 }
 
 
-static void r452_probe(void) {
-    rlog("\n=== r452: AVE zone-sweep — test multiple property sizes ===\n\n");
+static void r452_zone_sweep_REMOVED(void) {
+    rlog("\n=== r452: AVE zone-sweep — REMOVED (duplicate) ===\n\n");
     fflush(stdout);
 
     #define R452_SPRAY 40
@@ -81650,12 +81650,6 @@ new_modes:
         }
         if (rounds == 455) {
             rlog("*** rounds=455: DarkSword pre-requisite tests ***\n\n");
-            fflush(stdout);
-            r452_probe();
-            goto done;
-        }
-        if (rounds == 455) {
-            rlog("*** rounds=455: AVE zone-sweep + backing store test ***\n\n");
             fflush(stdout);
             r452_probe();
             goto done;
