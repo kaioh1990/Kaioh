@@ -107,7 +107,6 @@ extern kern_return_t bootstrap_look_up(mach_port_t bp, const char *service_name,
 #include <mach-o/dyld.h>
 #include <mach-o/dyld_images.h>
 #include <notify.h>
-#include <sys/proc_info.h>
 
 typedef kern_return_t (*host_zone_info_fn)(host_priv_t host,
     mach_zone_name_t **names, mach_msg_type_number_t *namesCnt,
@@ -115,6 +114,93 @@ typedef kern_return_t (*host_zone_info_fn)(host_priv_t host,
 extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
 extern int proc_pidinfo(int pid, int flavor, uint64_t arg, void *buffer, int buffersize);
 extern int proc_regionfilename(int pid, uint64_t address, void *buffer, uint32_t buffersize);
+
+#define PROC_PIDTASKALLINFO 2
+#define PROC_PIDREGIONPATHINFO 9
+
+struct proc_taskinfo {
+    uint64_t pti_virtual_size;
+    uint64_t pti_resident_size;
+    uint64_t pti_total_user;
+    uint64_t pti_total_system;
+    uint64_t pti_threads_user;
+    uint64_t pti_threads_system;
+    int32_t  pti_policy;
+    int32_t  pti_faults;
+    int32_t  pti_pageins;
+    int32_t  pti_cow_faults;
+    int32_t  pti_messages_sent;
+    int32_t  pti_messages_received;
+    int32_t  pti_syscalls_mach;
+    int32_t  pti_syscalls_unix;
+    int32_t  pti_csw;
+    int32_t  pti_threadnum;
+    int32_t  pti_numrunning;
+    int32_t  pti_priority;
+};
+
+struct proc_bsdinfo {
+    uint32_t pbi_flags;
+    uint32_t pbi_status;
+    uint32_t pbi_xstatus;
+    uint32_t pbi_pid;
+    uint32_t pbi_ppid;
+    uid_t    pbi_uid;
+    gid_t    pbi_gid;
+    uid_t    pbi_ruid;
+    gid_t    pbi_rgid;
+    uid_t    pbi_svuid;
+    gid_t    pbi_svgid;
+    uint32_t rfu_1;
+    char     pbi_comm[16];
+    char     pbi_name[32];
+    uint32_t pbi_nfiles;
+    uint32_t pbi_pgid;
+    uint32_t pbi_pjobc;
+    uint32_t e_tdev;
+    uint32_t e_tpgid;
+    int32_t  pbi_nice;
+    uint64_t pbi_start_tvsec;
+    uint64_t pbi_start_tvusec;
+};
+
+struct proc_taskallinfo {
+    struct proc_bsdinfo pbsd;
+    struct proc_taskinfo ptinfo;
+};
+
+struct proc_regioninfo {
+    uint32_t pri_protection;
+    uint32_t pri_max_protection;
+    uint32_t pri_inheritance;
+    uint32_t pri_flags;
+    uint64_t pri_offset;
+    uint32_t pri_behavior;
+    uint32_t pri_user_wired_count;
+    uint32_t pri_user_tag;
+    uint32_t pri_pages_resident;
+    uint32_t pri_pages_shared_now_private;
+    uint32_t pri_pages_swapped_out;
+    uint32_t pri_pages_dirtied;
+    uint32_t pri_ref_count;
+    uint32_t pri_shadow_depth;
+    uint32_t pri_share_mode;
+    uint32_t pri_private_pages_resident;
+    uint32_t pri_shared_pages_resident;
+    uint32_t pri_obj_id;
+    uint32_t pri_depth;
+    uint64_t pri_address;
+    uint64_t pri_size;
+};
+
+struct vnode_info_path {
+    char vip_path[1024];
+};
+
+struct proc_regionwithpathinfo {
+    struct proc_regioninfo prp_prinfo;
+    struct vnode_info_path prp_vip;
+};
 extern kern_return_t mach_vm_region_recurse(vm_map_t target_task,
     uint64_t *address, uint64_t *size, uint32_t *nesting_depth,
     vm_region_recurse_info_t info, mach_msg_type_number_t *infoCnt);
