@@ -16374,9 +16374,8 @@ static void r398_probe(void) {
     size_t propMaxA = IOSurfaceGetPropertyMaximum(CFSTR("IOSurfaceAllocSize"));
     rlog("    PropertyMaximum: Width=%zu Height=%zu AllocSize=%zu\n", propMaxW, propMaxH, propMaxA);
 
-    uint32_t seedVal = 0;
-    IOReturn seedRet = IOSurfaceGetSeed(testSurf, &seedVal);
-    rlog("    IOSurfaceGetSeed: ret=0x%x seed=%u (0x%x)\n", seedRet, seedVal, seedVal);
+    uint32_t seedVal = IOSurfaceGetSeed(testSurf);
+    rlog("    IOSurfaceGetSeed: %u (0x%x)\n", seedVal, seedVal);
 
     /* Get surface's IOKit registry entry ID */
     mach_port_t surfPort = IOSurfaceCreateMachPort(testSurf);
