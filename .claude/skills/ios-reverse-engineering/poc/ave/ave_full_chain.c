@@ -16295,24 +16295,35 @@ static void r395_probe(void) {
         char key[32];
         snprintf(key, sizeof(key), "Spray_%d", i);
         CFStringRef cfkey = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
-        CFTypeRef rv = IOSurfaceCopyValue(surfs[neighbor], cfkey);
-        if (rv) {
-            int v = 0;
-            CFNumberGetValue((CFNumberRef)rv, kCFNumberIntType, &v);
-            rlog("    surfs[%d] has Spray_%d: 0x%x\n", neighbor, i, v);
-            found_on_neighbor++;
-            CFRelease(rv);
+
+        g_r395_crashed = 0;
+        if (sigsetjmp(g_r395_jmp, 1) == 0) {
+            CFTypeRef rv = IOSurfaceCopyValue(surfs[neighbor], cfkey);
+            if (rv) {
+                int v = 0;
+                CFNumberGetValue((CFNumberRef)rv, kCFNumberIntType, &v);
+                rlog("    surfs[%d] has Spray_%d: 0x%x\n", neighbor, i, v);
+                found_on_neighbor++;
+                CFRelease(rv);
+            }
+        } else {
+            rlog("    CopyValue surfs[%d] CRASHED: sig %d\n", neighbor, g_r395_crashed);
         }
         CFRelease(cfkey);
     }
     rlog("    Markers found on neighbors: %d/%d\n", found_on_neighbor, R395_NSURFS/2);
 
     /* Also check CopyAllValues on a neighbor to see total property set */
-    CFDictionaryRef allvals = IOSurfaceCopyAllValues(surfs[1]);
-    if (allvals) {
-        CFIndex cnt = CFDictionaryGetCount(allvals);
-        rlog("    surfs[1] total properties: %ld\n", (long)cnt);
-        CFRelease(allvals);
+    g_r395_crashed = 0;
+    if (sigsetjmp(g_r395_jmp, 1) == 0) {
+        CFDictionaryRef allvals = IOSurfaceCopyAllValues(surfs[1]);
+        if (allvals) {
+            CFIndex cnt = CFDictionaryGetCount(allvals);
+            rlog("    surfs[1] total properties: %ld\n", (long)cnt);
+            CFRelease(allvals);
+        }
+    } else {
+        rlog("    CopyAllValues CRASHED: sig %d\n", g_r395_crashed);
     }
     fflush(stdout);
 
