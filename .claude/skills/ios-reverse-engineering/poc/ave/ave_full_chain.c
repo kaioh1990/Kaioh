@@ -16976,6 +16976,290 @@ static void *r445_thread_fn(void *arg) {
     return NULL;
 }
 
+static void r447_probe(void) {
+    rlog("\n=== r447: host_statistics + IOHIDFamily + host_processor_info ===\n\n");
+    fflush(stdout);
+
+    /* Vector A: host_statistics and host_statistics64 — all flavors */
+    rlog("  --- Vector A: Host statistics scan ---\n");
+    {
+        mach_port_t host = mach_host_self();
+
+        /* host_statistics flavors 1-6 */
+        for (int flavor = 1; flavor <= 6; flavor++) {
+            uint64_t buf[256];
+            memset(buf, 0, sizeof(buf));
+            mach_msg_type_number_t count = sizeof(buf) / sizeof(integer_t);
+            kern_return_t kr = host_statistics(host, flavor, (host_info_t)buf, &count);
+            if (kr == KERN_SUCCESS && count > 0) {
+                rlog("    host_statistics flavor=%d: count=%d\n", flavor, count);
+                /* Scan for kernel pointers */
+                for (mach_msg_type_number_t i = 0; i + 1 < count; i += 2) {
+                    uint64_t v;
+                    memcpy(&v, ((integer_t*)buf) + i, 8);
+                    if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        rlog("      *** KPTR at word[%d]: 0x%016llx ***\n",
+                             i, (unsigned long long)v);
+                    }
+                }
+                /* Print first 8 uint64 values */
+                for (int i = 0; i < 8 && i*2 < (int)count; i++) {
+                    uint64_t v;
+                    memcpy(&v, ((integer_t*)buf) + i*2, 8);
+                    if (v != 0) rlog("      u64[%d]=0x%016llx (%llu)\n",
+                             i, (unsigned long long)v, (unsigned long long)v);
+                }
+            } else if (kr != KERN_SUCCESS) {
+                rlog("    host_statistics flavor=%d: kr=%d\n", flavor, kr);
+            }
+        }
+
+        /* host_statistics64 flavors 4,5,6 (HOST_VM_INFO64=4, HOST_EXTMOD_INFO64=5, HOST_EXPIRED_TASK_INFO64=6) */
+        for (int flavor = 4; flavor <= 6; flavor++) {
+            uint64_t buf[256];
+            memset(buf, 0, sizeof(buf));
+            mach_msg_type_number_t count = sizeof(buf) / sizeof(integer_t);
+            kern_return_t kr = host_statistics64(host, flavor, (host_info64_t)buf, &count);
+            if (kr == KERN_SUCCESS && count > 0) {
+                rlog("    host_statistics64 flavor=%d: count=%d\n", flavor, count);
+                /* Print all non-zero uint64 values, check for kptrs */
+                int nonzero = 0;
+                for (int i = 0; i < (int)count/2 && i < 64; i++) {
+                    uint64_t v;
+                    memcpy(&v, ((integer_t*)buf) + i*2, 8);
+                    if (v != 0) {
+                        if (nonzero < 16) rlog("      u64[%d]=0x%016llx\n", i, (unsigned long long)v);
+                        nonzero++;
+                        if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog("      *** KPTR at u64[%d]: 0x%016llx ***\n",
+                                 i, (unsigned long long)v);
+                        }
+                    }
+                }
+                if (nonzero > 16) rlog("      ... (%d more non-zero)\n", nonzero - 16);
+            } else {
+                rlog("    host_statistics64 flavor=%d: kr=%d\n", flavor, kr);
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* Vector B: host_processor_info — all flavors */
+    rlog("\n  --- Vector B: Host processor info ---\n");
+    {
+        mach_port_t host = mach_host_self();
+
+        /* PROCESSOR_CPU_LOAD_INFO=2, PROCESSOR_BASIC_INFO=1, PROCESSOR_SET_BASIC_INFO=5 */
+        for (int flavor = 1; flavor <= 6; flavor++) {
+            natural_t proc_count = 0;
+            processor_info_array_t info_array = NULL;
+            mach_msg_type_number_t info_count = 0;
+            kern_return_t kr = host_processor_info(host, flavor, &proc_count,
+                &info_array, &info_count);
+            if (kr == KERN_SUCCESS && info_array) {
+                rlog("    host_processor_info flavor=%d: proc_count=%u, info_count=%u\n",
+                     flavor, proc_count, info_count);
+                /* Scan raw data for kernel pointers */
+                int kptrs = 0;
+                for (mach_msg_type_number_t i = 0; i + 1 < info_count; i += 2) {
+                    uint64_t v;
+                    memcpy(&v, info_array + i, 8);
+                    if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        rlog("      *** KPTR at word[%d]: 0x%016llx ***\n",
+                             i, (unsigned long long)v);
+                        kptrs++;
+                    }
+                }
+                /* Print first few entries */
+                int per_cpu = (proc_count > 0) ? (int)(info_count / proc_count) : 0;
+                rlog("      Per-CPU words: %d\n", per_cpu);
+                if (per_cpu > 0 && proc_count > 0) {
+                    for (int p = 0; p < 2 && p < (int)proc_count; p++) {
+                        rlog("      CPU %d:", p);
+                        for (int w = 0; w < per_cpu && w < 8; w++) {
+                            rlog(" %d", info_array[p * per_cpu + w]);
+                        }
+                        rlog("\n");
+                    }
+                }
+                if (kptrs == 0) rlog("      No kernel pointers found\n");
+                vm_deallocate(mach_task_self(), (vm_address_t)info_array,
+                    info_count * sizeof(integer_t));
+            } else {
+                rlog("    host_processor_info flavor=%d: kr=%d\n", flavor, kr);
+            }
+        }
+
+        /* Also try processor_set_info */
+        mach_port_t pset;
+        kern_return_t kr = processor_set_default(host, &pset);
+        rlog("    processor_set_default kr=%d, port=0x%x\n", kr, pset);
+        if (kr == KERN_SUCCESS) {
+            /* Try to get processor set info */
+            struct processor_set_basic_info psinfo;
+            mach_msg_type_number_t pcount = PROCESSOR_SET_BASIC_INFO_COUNT;
+            kr = processor_set_info(pset, PROCESSOR_SET_BASIC_INFO,
+                &host, (processor_set_info_t)&psinfo, &pcount);
+            rlog("    processor_set_info kr=%d\n", kr);
+            if (kr == KERN_SUCCESS) {
+                rlog("    PS: processor_count=%d\n", psinfo.processor_count);
+            }
+            mach_port_deallocate(mach_task_self(), pset);
+        }
+    }
+    fflush(stdout);
+
+    /* Vector C: IOHIDFamily user client probe */
+    rlog("\n  --- Vector C: IOHIDFamily user client ---\n");
+    {
+        io_service_t hid_svc = IOServiceGetMatchingService(kIOMainPortCompat,
+            IOServiceMatching("IOHIDSystem"));
+        rlog("    IOHIDSystem service=0x%x\n", hid_svc);
+
+        /* Also try IOHIDResource */
+        io_service_t hid_res = IOServiceGetMatchingService(kIOMainPortCompat,
+            IOServiceMatching("IOHIDResource"));
+        rlog("    IOHIDResource service=0x%x\n", hid_res);
+
+        /* Try IOHIDEventDriver */
+        io_service_t hid_drv = IOServiceGetMatchingService(kIOMainPortCompat,
+            IOServiceMatching("IOHIDEventDriver"));
+        rlog("    IOHIDEventDriver service=0x%x\n", hid_drv);
+
+        /* Try AppleUserHIDEventService */
+        io_service_t hid_ev = IOServiceGetMatchingService(kIOMainPortCompat,
+            IOServiceMatching("AppleUserHIDEventService"));
+        rlog("    AppleUserHIDEventService service=0x%x\n", hid_ev);
+
+        /* Try opening a user client on whatever we found */
+        io_service_t targets[] = {hid_svc, hid_res, hid_drv, hid_ev};
+        const char *names[] = {"IOHIDSystem", "IOHIDResource", "IOHIDEventDriver", "AppleUserHIDEventService"};
+        for (int i = 0; i < 4; i++) {
+            if (targets[i]) {
+                for (uint32_t utype = 0; utype < 3; utype++) {
+                    io_connect_t conn = 0;
+                    kern_return_t kr = IOServiceOpen(targets[i], mach_task_self(), utype, &conn);
+                    rlog("    %s type=%u: open kr=%d (0x%x) conn=0x%x\n",
+                         names[i], utype, kr, kr, conn);
+                    if (kr == KERN_SUCCESS && conn) {
+                        /* Try to get shared memory */
+                        mach_vm_address_t shm_addr = 0;
+                        mach_vm_size_t shm_size = 0;
+                        kern_return_t kr2 = IOConnectMapMemory64(conn, 0, mach_task_self(),
+                            &shm_addr, &shm_size, kIOMapAnywhere);
+                        rlog("      MapMemory(0) kr=%d addr=0x%llx size=0x%llx\n",
+                             kr2, (unsigned long long)shm_addr, (unsigned long long)shm_size);
+                        if (kr2 == KERN_SUCCESS && shm_addr && shm_size > 0) {
+                            /* Scan for kernel pointers! */
+                            int kptr_found = 0;
+                            uint64_t *scan = (uint64_t*)shm_addr;
+                            uint64_t nqwords = shm_size / 8;
+                            if (nqwords > 4096) nqwords = 4096;
+                            for (uint64_t q = 0; q < nqwords; q++) {
+                                if ((scan[q] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                    rlog("      *** KPTR at +%llu: 0x%016llx ***\n",
+                                         (unsigned long long)(q*8), (unsigned long long)scan[q]);
+                                    kptr_found++;
+                                    if (kptr_found >= 20) break;
+                                }
+                            }
+                            if (kptr_found == 0) rlog("      No kernel pointers in shared memory\n");
+                            IOConnectUnmapMemory64(conn, 0, mach_task_self(), shm_addr);
+                        }
+
+                        /* Try memory type 1 */
+                        shm_addr = 0; shm_size = 0;
+                        kr2 = IOConnectMapMemory64(conn, 1, mach_task_self(),
+                            &shm_addr, &shm_size, kIOMapAnywhere);
+                        if (kr2 == KERN_SUCCESS && shm_addr && shm_size > 0) {
+                            rlog("      MapMemory(1) addr=0x%llx size=0x%llx\n",
+                                 (unsigned long long)shm_addr, (unsigned long long)shm_size);
+                            /* Scan */
+                            uint64_t *scan = (uint64_t*)shm_addr;
+                            uint64_t nqwords = shm_size / 8;
+                            if (nqwords > 4096) nqwords = 4096;
+                            int kf = 0;
+                            for (uint64_t q = 0; q < nqwords; q++) {
+                                if ((scan[q] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                    rlog("      *** KPTR(1) at +%llu: 0x%016llx ***\n",
+                                         (unsigned long long)(q*8), (unsigned long long)scan[q]);
+                                    kf++;
+                                    if (kf >= 20) break;
+                                }
+                            }
+                            IOConnectUnmapMemory64(conn, 1, mach_task_self(), shm_addr);
+                        }
+
+                        IOServiceClose(conn);
+                    }
+                }
+                IOObjectRelease(targets[i]);
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* Vector D: Scan accessible IOKit services + try shared memory on each */
+    rlog("\n  --- Vector D: IOKit service enumeration + shared memory scan ---\n");
+    {
+        const char *service_names[] = {
+            "AppleKeyStore", "AppleSEPManager", "AppleCredentialManager",
+            "IOUserEthernetController", "AppleANELoadBalancer",
+            "IOGPUDevice", "AGXAccelerator", "AGXFamilyAccelerator",
+            "AppleMobileFileIntegrity", "AppleSPUProfileDriver",
+            "IOBluetoothHCIController", "IOTimeSyncDomain",
+            "AppleARMPMU", "ApplePMGR", "AppleT8160PMGR",
+            "IOSurfaceRoot"
+        };
+        int nservices = sizeof(service_names) / sizeof(service_names[0]);
+
+        for (int s = 0; s < nservices; s++) {
+            io_service_t svc = IOServiceGetMatchingService(kIOMainPortCompat,
+                IOServiceMatching(service_names[s]));
+            if (svc) {
+                for (uint32_t utype = 0; utype < 2; utype++) {
+                    io_connect_t conn = 0;
+                    kern_return_t kr = IOServiceOpen(svc, mach_task_self(), utype, &conn);
+                    if (kr == KERN_SUCCESS && conn) {
+                        rlog("    %s type=%u: OPENED conn=0x%x\n", service_names[s], utype, conn);
+                        /* Try shared memory types 0-3 */
+                        for (uint32_t mtype = 0; mtype < 4; mtype++) {
+                            mach_vm_address_t shm_addr = 0;
+                            mach_vm_size_t shm_size = 0;
+                            kern_return_t kr2 = IOConnectMapMemory64(conn, mtype,
+                                mach_task_self(), &shm_addr, &shm_size, kIOMapAnywhere);
+                            if (kr2 == KERN_SUCCESS && shm_addr && shm_size > 0) {
+                                rlog("      SharedMem type=%u: addr=0x%llx size=0x%llx\n",
+                                     mtype, (unsigned long long)shm_addr, (unsigned long long)shm_size);
+                                /* SCAN FOR KERNEL POINTERS */
+                                uint64_t *scan = (uint64_t*)shm_addr;
+                                uint64_t nqwords = shm_size / 8;
+                                if (nqwords > 8192) nqwords = 8192;
+                                int kf = 0;
+                                for (uint64_t q = 0; q < nqwords; q++) {
+                                    if ((scan[q] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                        rlog("      *** KPTR at +%llu: 0x%016llx ***\n",
+                                             (unsigned long long)(q*8), (unsigned long long)scan[q]);
+                                        kf++;
+                                        if (kf >= 20) break;
+                                    }
+                                }
+                                IOConnectUnmapMemory64(conn, mtype, mach_task_self(), shm_addr);
+                            }
+                        }
+                        IOServiceClose(conn);
+                    }
+                }
+                IOObjectRelease(svc);
+            }
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r447 complete ===\n");
+    fflush(stdout);
+}
+
 static void r446_probe(void) {
     rlog("\n=== r446: Object ID correlation analysis + memory entry probe ===\n\n");
     fflush(stdout);
@@ -79505,6 +79789,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 450) {
+            rlog("*** rounds=450: host_statistics + IOHIDFamily + IOKit shared memory ***\n\n");
+            fflush(stdout);
+            r447_probe();
+            goto done;
+        }
         if (rounds == 449) {
             rlog("*** rounds=449: Object ID correlation + memory entry probe ***\n\n");
             fflush(stdout);
@@ -82225,7 +82515,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
