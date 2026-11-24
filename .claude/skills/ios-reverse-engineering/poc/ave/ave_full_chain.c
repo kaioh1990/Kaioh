@@ -16462,7 +16462,7 @@ static void r360_probe(void) {
         if (desc) {
             ((void(*)(void*,void*,unsigned long))msgSend)(desc,
                 regSel("setUsage:"), (unsigned long)0x05);
-            void *tex = ((void*(*)(void*,void*,void*,unsigned long,unsigned long))msgSend)(
+            void *tex = ((void*(*)(void*,void*,void*,void*,unsigned long,unsigned long))msgSend)(
                 device,
                 regSel("newTextureWithDescriptor:iosurface:plane:level:"),
                 desc, (void*)gpuSurf, (unsigned long)0, (unsigned long)0);
