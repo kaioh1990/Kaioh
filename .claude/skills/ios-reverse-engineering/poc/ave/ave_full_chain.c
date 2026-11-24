@@ -16761,6 +16761,11 @@ static void r419_probe(void) {
     }
     fflush(stdout);
 
+    /* Restore signal handlers */
+    sigaction(SIGILL, &old_ill, NULL);
+    sigaction(SIGBUS, &old_bus, NULL);
+    sigaction(SIGSEGV, &old_segv, NULL);
+
     rlog("\n=== r419 complete ===\n");
     fflush(stdout);
 }
@@ -17085,12 +17090,7 @@ static void r418_probe(void) {
     }
     fflush(stdout);
 
-    /* Restore signal handlers */
-    sigaction(SIGILL, &old_ill, NULL);
-    sigaction(SIGBUS, &old_bus, NULL);
-    sigaction(SIGSEGV, &old_segv, NULL);
-
-    rlog("\n=== r419 complete ===\n");
+    rlog("\n=== r418 complete ===\n");
     fflush(stdout);
 }
 
