@@ -16683,100 +16683,84 @@ static void r421_probe(void) {
     }
     fflush(stdout);
 
-    /* ---- Vector 2: Prime+Probe with iteration counting ---- */
-    rlog("\n  Vector 2: Prime+Probe iteration counting\n");
+    /* ---- Vector 2: Tight-loop DMP detection ---- */
+    rlog("\n  Vector 2: Tight-loop DMP detection\n");
     {
-        /* Instead of measuring single-access latency, count how many
-           accesses complete in a fixed number of cycles.
-           Use a tight loop with known iteration count. */
-        size_t bufSize = 16 * 1024 * 1024; /* 16MB */
-        volatile uint8_t *buf = (volatile uint8_t *)mmap(NULL, bufSize,
-            PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
-        if (buf != MAP_FAILED) {
-            /* Initialize - touch every page */
-            for (size_t i = 0; i < bufSize; i += 4096)
-                buf[i] = (uint8_t)i;
+        /* Use two separate mmap regions to avoid prefetcher effects.
+           Region A: holds the "pointer" value
+           Region B: the "target" we check for prefetch */
+        size_t regionSize = 64 * 4096; /* 256KB each */
+        volatile uint8_t *regionA = (volatile uint8_t *)mmap(NULL,
+            regionSize, PROT_READ | PROT_WRITE,
+            MAP_ANON | MAP_PRIVATE, -1, 0);
+        volatile uint8_t *regionB = (volatile uint8_t *)mmap(NULL,
+            regionSize, PROT_READ | PROT_WRITE,
+            MAP_ANON | MAP_PRIVATE, -1, 0);
 
-            /* Create a pointer chain for cache-line walking.
-               Each 64-byte cache line holds a pointer to the next. */
-            int stride = 4096; /* page stride */
-            int nPages = bufSize / stride;
-            for (int i = 0; i < nPages - 1; i++) {
-                *(volatile uint64_t *)(buf + i * stride) =
-                    (uint64_t)(buf + (i + 1) * stride);
+        if (regionA != MAP_FAILED && regionB != MAP_FAILED) {
+            /* Touch all pages */
+            for (size_t i = 0; i < regionSize; i += 4096) {
+                regionA[i] = 1;
+                regionB[i] = 2;
             }
-            *(volatile uint64_t *)(buf + (nPages - 1) * stride) =
-                (uint64_t)buf;
 
-            /* Measure: traverse chain, count iterations in fixed time */
-            uint64_t start = mach_absolute_time();
-            volatile uint64_t *ptr = (volatile uint64_t *)buf;
-            int iters = 0;
-            /* Run for approximately 1ms */
-            while (mach_absolute_time() - start < 24000) { /* ~1ms at 24MHz */
-                ptr = (volatile uint64_t *)*ptr;
-                iters++;
-            }
-            uint64_t elapsed = mach_absolute_time() - start;
-            rlog("    Chain walk: %d iterations in %llu ticks\n",
-                iters, (unsigned long long)elapsed);
-            rlog("    Avg: %.2f ticks/access\n",
-                (double)elapsed / iters);
+            /* Use mach_absolute_time with repeated measurement */
+            int N = 1000;
 
-            /* Now: write a known valid userspace pointer into the buffer
-               and see if DMP prefetches along it */
-            volatile uint64_t *srcPage = (volatile uint64_t *)(buf + 8 * 1024 * 1024);
-            volatile uint64_t *tgtPage = (volatile uint64_t *)(buf + 12 * 1024 * 1024);
-
-            /* Baseline: measure tgtPage access after eviction (no DMP) */
-            uint64_t base_total = 0;
-            for (int trial = 0; trial < 50; trial++) {
-                /* Evict tgtPage by traversing chain */
-                ptr = (volatile uint64_t *)buf;
-                for (int i = 0; i < nPages; i++)
-                    ptr = (volatile uint64_t *)*ptr;
-                __asm__ volatile("dsb sy" ::: "memory");
-                /* DON'T write pointer */
-                *srcPage = 0;
-                __asm__ volatile("dsb sy" ::: "memory");
-                for (volatile int d = 0; d < 1000; d++);
-                uint64_t tt0 = mach_absolute_time();
-                volatile uint64_t v = *tgtPage;
+            /* Baseline: no pointer written, measure regionB[0] access */
+            uint64_t base_sum = 0;
+            for (int i = 0; i < N; i++) {
+                /* Evict regionB[0] by touching lots of regionA */
+                for (int j = 0; j < 64; j++)
+                    regionA[j * 4096] = (uint8_t)j;
+                __asm__ volatile("dsb sy; isb" ::: "memory");
+                uint64_t t0 = mach_absolute_time();
+                volatile uint8_t v = regionB[0];
                 (void)v;
-                uint64_t tt1 = mach_absolute_time();
-                base_total += (tt1 - tt0);
+                __asm__ volatile("dsb sy" ::: "memory");
+                uint64_t t1 = mach_absolute_time();
+                base_sum += (t1 - t0);
             }
-            rlog("    Baseline (no ptr): avg %.2f ticks\n",
-                (double)base_total / 50);
 
-            /* DMP test: write tgtPage address into srcPage */
-            uint64_t dmp_total = 0;
-            for (int trial = 0; trial < 50; trial++) {
-                ptr = (volatile uint64_t *)buf;
-                for (int i = 0; i < nPages; i++)
-                    ptr = (volatile uint64_t *)*ptr;
+            /* DMP test: write regionB[0] address into regionA, then access regionA */
+            uint64_t dmp_sum = 0;
+            for (int i = 0; i < N; i++) {
+                /* Evict regionB[0] */
+                for (int j = 0; j < 64; j++)
+                    regionA[j * 4096] = (uint8_t)j;
+                __asm__ volatile("dsb sy; isb" ::: "memory");
+                /* Write pointer to regionB into regionA[0] */
+                *(volatile uint64_t *)regionA = (uint64_t)regionB;
+                /* Read regionA[0] to trigger DMP on the pointer value */
+                volatile uint64_t pv = *(volatile uint64_t *)regionA;
+                (void)pv;
                 __asm__ volatile("dsb sy" ::: "memory");
-                /* Write pointer to trigger DMP */
-                *srcPage = (uint64_t)tgtPage;
-                __asm__ volatile("dsb sy" ::: "memory");
-                /* Wait for DMP */
-                for (volatile int d = 0; d < 1000; d++);
-                uint64_t tt0 = mach_absolute_time();
-                volatile uint64_t v = *tgtPage;
+                /* Small delay for DMP */
+                for (volatile int d = 0; d < 500; d++);
+                /* Measure regionB access */
+                uint64_t t0 = mach_absolute_time();
+                volatile uint8_t v = regionB[0];
                 (void)v;
-                uint64_t tt1 = mach_absolute_time();
-                dmp_total += (tt1 - tt0);
+                __asm__ volatile("dsb sy" ::: "memory");
+                uint64_t t1 = mach_absolute_time();
+                dmp_sum += (t1 - t0);
             }
-            rlog("    DMP (valid ptr): avg %.2f ticks\n",
-                (double)dmp_total / 50);
 
-            if (base_total > dmp_total + dmp_total / 5) {
-                rlog("    *** DMP DETECTED! Baseline > DMP threshold ***\n");
+            rlog("    Baseline avg: %.2f MAT (%llu total)\n",
+                (double)base_sum / N, (unsigned long long)base_sum);
+            rlog("    DMP avg: %.2f MAT (%llu total)\n",
+                (double)dmp_sum / N, (unsigned long long)dmp_sum);
+            rlog("    Ratio: %.3f\n",
+                base_sum > 0 ? (double)dmp_sum / base_sum : 0);
+
+            if (base_sum > dmp_sum + dmp_sum / 10) {
+                rlog("    *** DMP ACTIVE - base > 1.1x DMP ***\n");
             } else {
-                rlog("    DMP not clearly active at this resolution\n");
+                rlog("    DMP effect not measurable at this granularity\n");
             }
 
-            munmap((void *)buf, bufSize);
+            munmap((void *)regionA, regionSize);
+            munmap((void *)regionB, regionSize);
         }
     }
     fflush(stdout);
