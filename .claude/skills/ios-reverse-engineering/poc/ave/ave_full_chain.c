@@ -17016,7 +17016,7 @@ static void r458_opt_probe(void) {
     #define R458O_PAGE_SZ 16384
     #define R458O_PAGES 1
     #define R458O_BUF_SZ (R458O_PAGES * R458O_PAGE_SZ)
-    #define R458O_ITERS 100000
+    #define R458O_ITERS 5000
     #define R458O_REMAP_THREADS 2
     #define R458O_ICMP_SPRAY 200
 
