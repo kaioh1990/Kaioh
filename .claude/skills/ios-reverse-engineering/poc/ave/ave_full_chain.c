@@ -4975,6 +4975,326 @@ static void r313_probe(void) {
     fflush(stdout);
 }
 
+static void r317_probe(void) {
+    rlog("\n=== r317: Deep AppleKeyStore + AppleJPEGDriver + CredentialManager ===\n\n");
+    fflush(stdout);
+    kern_return_t kr;
+
+    /* ---- Part 1: AppleKeyStore deep selector scan ---- */
+    rlog("--- Part 1: AppleKeyStore selector scan (types 0-4, sels 0-30) ---\n");
+    fflush(stdout);
+
+    io_service_t ks_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("AppleKeyStore"));
+    if (ks_svc) {
+        for (uint32_t type = 0; type < 5; type++) {
+            io_connect_t c = 0;
+            kr = IOServiceOpen(ks_svc, mach_task_self(), type, &c);
+            if (kr == 0 && c) {
+                rlog("  type=%u conn=0x%x\n", type, c);
+                for (uint32_t sel = 0; sel < 30; sel++) {
+                    uint64_t scIn[8] = {0};
+                    uint64_t scOut[8] = {0};
+                    uint32_t outCnt = 8;
+                    kr = IOConnectCallScalarMethod(c, sel, scIn, 0, scOut, &outCnt);
+                    if (kr != 0xe00002bc) {
+                        rlog("    sel[%u]: kr=0x%x cnt=%u out=[0x%llx,0x%llx,0x%llx,0x%llx]\n",
+                             sel, kr, outCnt, scOut[0], scOut[1], scOut[2], scOut[3]);
+                    }
+                    /* Also try struct method */
+                    char structOut[256] = {0};
+                    size_t structOutSz = sizeof(structOut);
+                    kr = IOConnectCallStructMethod(c, sel, NULL, 0, structOut, &structOutSz);
+                    if (kr != 0xe00002bc && kr != 0xe00002c2 && structOutSz > 0) {
+                        rlog("    sel[%u](struct): kr=0x%x sz=%zu hdr=[%02x%02x%02x%02x %02x%02x%02x%02x]\n",
+                             sel, kr, structOutSz,
+                             (uint8_t)structOut[0], (uint8_t)structOut[1],
+                             (uint8_t)structOut[2], (uint8_t)structOut[3],
+                             (uint8_t)structOut[4], (uint8_t)structOut[5],
+                             (uint8_t)structOut[6], (uint8_t)structOut[7]);
+                    }
+                }
+                IOServiceClose(c);
+            }
+        }
+        /* Enumerate properties */
+        CFMutableDictionaryRef ks_props = NULL;
+        kr = IORegistryEntryCreateCFProperties(ks_svc, &ks_props, kCFAllocatorDefault, 0);
+        if (kr == 0 && ks_props) {
+            CFIndex cnt = CFDictionaryGetCount(ks_props);
+            rlog("  AppleKeyStore properties: %ld keys\n", (long)cnt);
+            if (cnt > 0 && cnt < 50) {
+                CFStringRef *keys = (CFStringRef *)malloc(cnt * sizeof(CFStringRef));
+                CFDictionaryGetKeysAndValues(ks_props, (const void **)keys, NULL);
+                for (CFIndex i = 0; i < cnt; i++) {
+                    char kbuf[128];
+                    CFStringGetCString(keys[i], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+                    rlog("    key[%ld]: %s\n", (long)i, kbuf);
+                }
+                free(keys);
+            }
+            CFRelease(ks_props);
+        }
+        IOObjectRelease(ks_svc);
+    } else {
+        rlog("  AppleKeyStore: not found\n");
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: AppleJPEGDriver deep probe ---- */
+    rlog("\n--- Part 2: AppleJPEGDriver selector scan ---\n");
+    fflush(stdout);
+
+    io_service_t jpeg_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("AppleJPEGDriver"));
+    if (jpeg_svc) {
+        for (uint32_t type = 0; type < 5; type++) {
+            io_connect_t c = 0;
+            kr = IOServiceOpen(jpeg_svc, mach_task_self(), type, &c);
+            if (kr == 0 && c) {
+                rlog("  type=%u conn=0x%x\n", type, c);
+                for (uint32_t sel = 0; sel < 20; sel++) {
+                    uint64_t scOut[8] = {0};
+                    uint32_t outCnt = 8;
+                    kr = IOConnectCallScalarMethod(c, sel, NULL, 0, scOut, &outCnt);
+                    if (kr != 0xe00002bc) {
+                        rlog("    sel[%u]: kr=0x%x cnt=%u out=[0x%llx,0x%llx]\n",
+                             sel, kr, outCnt, scOut[0], scOut[1]);
+                    }
+                    char structOut[512] = {0};
+                    size_t structOutSz = sizeof(structOut);
+                    kr = IOConnectCallStructMethod(c, sel, NULL, 0, structOut, &structOutSz);
+                    if (kr != 0xe00002bc && kr != 0xe00002c2) {
+                        rlog("    sel[%u](struct): kr=0x%x sz=%zu\n", sel, kr, structOutSz);
+                        if (structOutSz >= 8) {
+                            uint64_t *p = (uint64_t*)structOut;
+                            for (size_t j = 0; j < structOutSz/8 && j < 8; j++) {
+                                if (p[j] > 0xffff000000000000ULL || (p[j] > 0xfffffff000000000ULL)) {
+                                    rlog("      !!! POTENTIAL KPTR at off %zu: 0x%llx !!!\n", j*8, p[j]);
+                                }
+                            }
+                        }
+                    }
+                }
+                IOServiceClose(c);
+            } else if (kr != 0xe00002bc) {
+                rlog("  type=%u: kr=0x%x\n", type, kr);
+            }
+        }
+        IOObjectRelease(jpeg_svc);
+    } else {
+        rlog("  AppleJPEGDriver: not found\n");
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: AppleCredentialManager probe (error 0xe00002e2) ---- */
+    rlog("\n--- Part 3: AppleCredentialManager probe ---\n");
+    fflush(stdout);
+
+    io_service_t cm_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("AppleCredentialManager"));
+    if (cm_svc) {
+        rlog("  found svc=0x%x\n", cm_svc);
+        for (uint32_t type = 0; type < 10; type++) {
+            io_connect_t c = 0;
+            kr = IOServiceOpen(cm_svc, mach_task_self(), type, &c);
+            if (kr == 0 && c) {
+                rlog("  type=%u: OPENED conn=0x%x\n", type, c);
+                for (uint32_t sel = 0; sel < 10; sel++) {
+                    uint64_t scOut[4] = {0};
+                    uint32_t outCnt = 4;
+                    kr = IOConnectCallScalarMethod(c, sel, NULL, 0, scOut, &outCnt);
+                    rlog("    sel[%u]: kr=0x%x out=[0x%llx]\n", sel, kr, scOut[0]);
+                }
+                IOServiceClose(c);
+            } else if (kr != 0xe00002bc) {
+                rlog("  type=%u: kr=0x%x\n", type, kr);
+            }
+        }
+        CFMutableDictionaryRef cm_props = NULL;
+        kr = IORegistryEntryCreateCFProperties(cm_svc, &cm_props, kCFAllocatorDefault, 0);
+        if (kr == 0 && cm_props) {
+            CFIndex cnt = CFDictionaryGetCount(cm_props);
+            rlog("  AppleCredentialManager properties: %ld keys\n", (long)cnt);
+            if (cnt > 0 && cnt < 50) {
+                CFStringRef *keys = (CFStringRef *)malloc(cnt * sizeof(CFStringRef));
+                CFDictionaryGetKeysAndValues(cm_props, (const void **)keys, NULL);
+                for (CFIndex i = 0; i < cnt; i++) {
+                    char kbuf[128];
+                    CFStringGetCString(keys[i], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+                    rlog("    key[%ld]: %s\n", (long)i, kbuf);
+                }
+                free(keys);
+            }
+            CFRelease(cm_props);
+        }
+        IOObjectRelease(cm_svc);
+    } else {
+        rlog("  AppleCredentialManager: not found\n");
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: AppleKeyStore + IOSurface combined — leak attempt ---- */
+    rlog("\n--- Part 4: KeyStore + IOSurface combined probe ---\n");
+    fflush(stdout);
+
+    io_service_t is_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    io_connect_t is_conn = 0;
+    if (is_svc) {
+        kr = IOServiceOpen(is_svc, mach_task_self(), 0, &is_conn);
+        IOObjectRelease(is_svc);
+    }
+
+    io_connect_t ks_conn = 0;
+    ks_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("AppleKeyStore"));
+    if (ks_svc) {
+        IOServiceOpen(ks_svc, mach_task_self(), 0, &ks_conn);
+        IOObjectRelease(ks_svc);
+    }
+
+    if (is_conn && ks_conn) {
+        rlog("  IOSurface=0x%x KeyStore=0x%x\n", is_conn, ks_conn);
+
+        /* Create IOSurface, then race KeyStore operations */
+        uint32_t dict[] = {
+            0x00000000, 0x00000001, /* magic, count */
+            0x00000000, 0x00000020, /* key offset, key size */
+            0x00000020, 0x00000004, /* val offset, val size */
+            0x494f5375, 0x72666163, /* "IOSurfac" */
+            0x65416c6c, 0x6f635369, /* "eAllocSi" */
+            0x7a650000, 0x00000000, /* "ze\0\0" */
+            0x00001000, 0x00000000, /* value: 4096 */
+        };
+
+        char surfOut[1024] = {0};
+        size_t surfOutSz = sizeof(surfOut);
+        kr = IOConnectCallStructMethod(is_conn, 6, dict, sizeof(dict), surfOut, &surfOutSz);
+        rlog("  IOSurface create: kr=0x%x outSz=%zu\n", kr, surfOutSz);
+
+        if (kr == 0 && surfOutSz >= 4) {
+            uint32_t surfID = *(uint32_t*)surfOut;
+            rlog("  surfaceID=%u\n", surfID);
+
+            /* Now try KeyStore selectors with surface data as context */
+            for (uint32_t sel = 0; sel < 20; sel++) {
+                uint64_t scIn[4] = {surfID, 0, 0, 0};
+                uint64_t scOut[8] = {0};
+                uint32_t outCnt = 8;
+                kr = IOConnectCallScalarMethod(ks_conn, sel, scIn, 1, scOut, &outCnt);
+                if (kr != 0xe00002bc && scOut[0] != 0) {
+                    rlog("    ks_sel[%u](surfID=%u): kr=0x%x out=[0x%llx,0x%llx,0x%llx]\n",
+                         sel, surfID, kr, scOut[0], scOut[1], scOut[2]);
+                    if (scOut[0] > 0xffff000000000000ULL) {
+                        rlog("      !!! POTENTIAL KPTR: 0x%llx !!!\n", scOut[0]);
+                    }
+                }
+            }
+        }
+
+        if (is_conn) IOServiceClose(is_conn);
+        if (ks_conn) IOServiceClose(ks_conn);
+    } else {
+        rlog("  Failed to open both: is=%x ks=%x\n", is_conn, ks_conn);
+    }
+    fflush(stdout);
+
+    /* ---- Part 5: AppleAVE2Driver type scan ---- */
+    rlog("\n--- Part 5: AppleAVE2Driver type scan ---\n");
+    fflush(stdout);
+
+    io_service_t ave_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("AppleAVE2Driver"));
+    if (ave_svc) {
+        for (uint32_t type = 0; type < 20; type++) {
+            io_connect_t c = 0;
+            kr = IOServiceOpen(ave_svc, mach_task_self(), type, &c);
+            if (kr == 0 && c) {
+                rlog("  type=%u: OPENED conn=0x%x\n", type, c);
+                IOServiceClose(c);
+            } else if (kr != 0xe00002bc && kr != 0xe00002bd) {
+                rlog("  type=%u: kr=0x%x\n", type, kr);
+            }
+        }
+        CFMutableDictionaryRef ave_props = NULL;
+        kr = IORegistryEntryCreateCFProperties(ave_svc, &ave_props, kCFAllocatorDefault, 0);
+        if (kr == 0 && ave_props) {
+            CFIndex cnt = CFDictionaryGetCount(ave_props);
+            rlog("  AppleAVE2Driver properties: %ld keys\n", (long)cnt);
+            if (cnt > 0 && cnt < 50) {
+                CFStringRef *keys = (CFStringRef *)malloc(cnt * sizeof(CFStringRef));
+                CFDictionaryGetKeysAndValues(ave_props, (const void **)keys, NULL);
+                for (CFIndex i = 0; i < cnt; i++) {
+                    char kbuf[128];
+                    CFStringGetCString(keys[i], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+                    rlog("    key[%ld]: %s\n", (long)i, kbuf);
+                }
+                free(keys);
+            }
+            CFRelease(ave_props);
+        }
+        IOObjectRelease(ave_svc);
+    } else {
+        rlog("  AppleAVE2Driver: not found\n");
+    }
+    fflush(stdout);
+
+    /* ---- Part 6: nvram-get probe (sandbox allows it) ---- */
+    rlog("\n--- Part 6: nvram-get probe ---\n");
+    fflush(stdout);
+
+    io_registry_entry_t nvram = IORegistryEntryFromPath(kIOMasterPortDefault,
+        "IODeviceTree:/options");
+    if (nvram) {
+        rlog("  NVRAM entry: 0x%x\n", nvram);
+        CFMutableDictionaryRef nv_props = NULL;
+        kr = IORegistryEntryCreateCFProperties(nvram, &nv_props, kCFAllocatorDefault, 0);
+        if (kr == 0 && nv_props) {
+            CFIndex cnt = CFDictionaryGetCount(nv_props);
+            rlog("  NVRAM properties: %ld keys\n", (long)cnt);
+            CFStringRef *keys = (CFStringRef *)malloc(cnt * sizeof(CFStringRef));
+            CFTypeRef *vals = (CFTypeRef *)malloc(cnt * sizeof(CFTypeRef));
+            CFDictionaryGetKeysAndValues(nv_props, (const void **)keys, (const void **)vals);
+            for (CFIndex i = 0; i < cnt && i < 40; i++) {
+                char kbuf[256];
+                CFStringGetCString(keys[i], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+                CFTypeID tid = CFGetTypeID(vals[i]);
+                if (tid == CFDataGetTypeID()) {
+                    CFDataRef d = (CFDataRef)vals[i];
+                    CFIndex len = CFDataGetLength(d);
+                    const uint8_t *bytes = CFDataGetBytePtr(d);
+                    if (len >= 8) {
+                        uint64_t v = *(uint64_t*)bytes;
+                        rlog("    %s: data[%ld] hdr=0x%llx\n", kbuf, (long)len, v);
+                        if (v > 0xffff000000000000ULL) {
+                            rlog("      !!! POTENTIAL KPTR: 0x%llx !!!\n", v);
+                        }
+                    } else {
+                        rlog("    %s: data[%ld]\n", kbuf, (long)len);
+                    }
+                } else if (tid == CFStringGetTypeID()) {
+                    char vbuf[128];
+                    CFStringGetCString(vals[i], vbuf, sizeof(vbuf), kCFStringEncodingUTF8);
+                    rlog("    %s: \"%s\"\n", kbuf, vbuf);
+                } else {
+                    rlog("    %s: type=%lu\n", kbuf, (unsigned long)tid);
+                }
+            }
+            free(keys);
+            free(vals);
+            CFRelease(nv_props);
+        }
+        IOObjectRelease(nvram);
+    } else {
+        rlog("  NVRAM: not found\n");
+    }
+    fflush(stdout);
+
+    rlog("\n=== r317 complete ===\n");
+    fflush(stdout);
+}
+
 static volatile int g_ldm_pulse_running = 0;
 static volatile int g_ldm_toggle_count = 0;
 static volatile int g_ldm_anomaly_count = 0;
@@ -35467,6 +35787,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 317) {
+            rlog("*** rounds=317: Deep KeyStore + JPEG + CredentialManager + NVRAM ***\n");
+            rlog("  r316: LDM no programmatic toggle, KeyStore opens all types.\n");
+            rlog("  Probe: KeyStore selectors, JPEG driver, CredMgr, NVRAM dump.\n\n");
+            r317_probe();
             goto done;
         }
         if (rounds == 316) {
