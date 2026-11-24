@@ -99,6 +99,15 @@ extern kern_return_t mach_vm_region(vm_map_t target_task,
     uint64_t *address, uint64_t *size, vm_region_flavor_t flavor,
     vm_region_info_t info, mach_msg_type_number_t *infoCnt,
     mach_port_t *object_name);
+extern kern_return_t mach_vm_remap(vm_map_t target_task,
+    mach_vm_address_t *target_address, mach_vm_size_t size,
+    mach_vm_offset_t mask, int flags, vm_map_t src_task,
+    mach_vm_address_t src_address, boolean_t copy,
+    vm_prot_t *cur_protection, vm_prot_t *max_protection,
+    vm_inherit_t inheritance);
+extern kern_return_t mach_vm_read_overwrite(vm_map_t target_task,
+    mach_vm_address_t address, mach_vm_size_t size,
+    mach_vm_address_t data, mach_vm_size_t *outsize);
 #ifndef PROC_PIDTASKINFO
 #define PROC_PIDTASKINFO 4
 struct proc_taskinfo {
@@ -4981,6 +4990,15 @@ static void r318_probe(void) {
     fflush(stdout);
     kern_return_t kr;
 
+    /* Minimal JPEG header — shared across parts */
+    uint8_t jpeg_hdr[] = {
+        0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46,
+        0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01,
+        0x00, 0x01, 0x00, 0x00, 0xFF, 0xDB, 0x00, 0x43,
+        0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08,
+        0xFF, 0xD9
+    };
+
     /* ---- Part 1: AppleJPEGDriver struct methods with JPEG data ---- */
     rlog("--- Part 1: AppleJPEGDriver struct input scan ---\n");
     fflush(stdout);
@@ -5005,15 +5023,7 @@ static void r318_probe(void) {
             CFRelease(jp);
         }
 
-        /* Try struct methods with minimal JPEG header as input */
-        uint8_t jpeg_hdr[] = {
-            0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46,
-            0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01,
-            0x00, 0x01, 0x00, 0x00, 0xFF, 0xDB, 0x00, 0x43,
-            0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08,
-            0xFF, 0xD9
-        };
-
+        /* Try struct methods with JPEG header as input */
         for (uint32_t type = 0; type < 3; type++) {
             io_connect_t c = 0;
             kr = IOServiceOpen(jpeg_svc, mach_task_self(), type, &c);
