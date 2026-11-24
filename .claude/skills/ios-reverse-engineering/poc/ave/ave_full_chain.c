@@ -16081,38 +16081,49 @@ static void r379_probe(void) {
 
     pid_t mypid = getpid();
 
-    /* PROC_PIDTASKINFO = 4 */
-    struct proc_taskinfo pti;
-    int ret = proc_pidinfo(mypid, 4, 0, &pti, sizeof(pti));
+    /* PROC_PIDTASKINFO = 4, use raw buffer */
+    uint8_t pti_buf[256] = {0};
+    int ret = proc_pidinfo(mypid, 4, 0, pti_buf, sizeof(pti_buf));
     if (ret > 0) {
         rlog("  PROC_PIDTASKINFO (%d bytes):\n", ret);
-        rlog("    virtual_size=0x%llx resident_size=0x%llx\n",
-            pti.pti_virtual_size, pti.pti_resident_size);
-        rlog("    total_user=%llu total_system=%llu\n",
-            pti.pti_total_user, pti.pti_total_system);
-        rlog("    threads=%d pageins=%d\n",
-            pti.pti_threadnum, pti.pti_pageins);
-        /* Scan raw bytes for kptrs */
-        uint8_t *raw = (uint8_t*)&pti;
-        for (int off = 0; off + 7 < (int)sizeof(pti); off += 8) {
+        for (int off = 0; off + 7 < ret; off += 8) {
             uint64_t v;
-            memcpy(&v, raw + off, 8);
-            if (v >= 0xfffffff000000000ULL)
-                rlog("    +%d: 0x%llx ***KPTR***\n", off, (unsigned long long)v);
+            memcpy(&v, pti_buf + off, 8);
+            int is_kptr = (v >= 0xfffffff000000000ULL && v <= 0xffffffffffffffffULL);
+            if (off < 32 || is_kptr)
+                rlog("    +%d: 0x%llx%s\n", off, (unsigned long long)v,
+                    is_kptr ? " ***KPTR***" : "");
         }
+    } else {
+        rlog("  PROC_PIDTASKINFO: ret=%d errno=%d\n", ret, errno);
     }
 
     /* PROC_PIDREGIONINFO = 7 */
-    struct proc_regioninfo pri;
-    ret = proc_pidinfo(mypid, 7, 0, &pri, sizeof(pri));
+    uint8_t pri_buf[256] = {0};
+    ret = proc_pidinfo(mypid, 7, 0, pri_buf, sizeof(pri_buf));
     if (ret > 0) {
-        rlog("  PROC_PIDREGIONINFO (%d bytes): addr=0x%llx size=0x%llx\n",
-            ret, pri.pri_address, pri.pri_size);
-        uint8_t *raw = (uint8_t*)&pri;
-        for (int off = 0; off + 7 < (int)sizeof(pri); off += 8) {
+        rlog("  PROC_PIDREGIONINFO (%d bytes):\n", ret);
+        for (int off = 0; off + 7 < ret; off += 8) {
             uint64_t v;
-            memcpy(&v, raw + off, 8);
-            if (v >= 0xfffffff000000000ULL)
+            memcpy(&v, pri_buf + off, 8);
+            int is_kptr = (v >= 0xfffffff000000000ULL && v <= 0xffffffffffffffffULL);
+            if (off < 32 || is_kptr)
+                rlog("    +%d: 0x%llx%s\n", off, (unsigned long long)v,
+                    is_kptr ? " ***KPTR***" : "");
+        }
+    } else {
+        rlog("  PROC_PIDREGIONINFO: ret=%d errno=%d\n", ret, errno);
+    }
+
+    /* Also try PROC_PIDTBSDINFO=3, PROC_PIDTASKALLINFO=2 */
+    uint8_t allinfo[1024] = {0};
+    ret = proc_pidinfo(mypid, 2, 0, allinfo, sizeof(allinfo));
+    rlog("  PROC_PIDTASKALLINFO: ret=%d\n", ret);
+    if (ret > 0) {
+        for (int off = 0; off + 7 < ret; off += 8) {
+            uint64_t v;
+            memcpy(&v, allinfo + off, 8);
+            if (v >= 0xfffffff000000000ULL && v <= 0xffffffffffffffffULL)
                 rlog("    +%d: 0x%llx ***KPTR***\n", off, (unsigned long long)v);
         }
     }
