@@ -17003,9 +17003,9 @@ static void r449_probe(void) {
     rlog("  PixBuf OK\n"); fflush(stdout);
 
     /* 2: Pre-encode 150 frames (below OOB threshold), flush */
-    rlog("  2: Pre-encode 150 frames...\n"); fflush(stdout);
+    rlog("  2: Pre-encode 10 frames (memory test)...\n"); fflush(stdout);
     g_cb_count = 0;
-    for (int f = 0; f < 150; f++) {
+    for (int f = 0; f < 10; f++) {
         CMTime t = CMTimeMake(f, 30);
         int tv = f & 1;
         CFNumberRef tn = CFNumberCreate(NULL, kCFNumberIntType, &tv);
@@ -17060,7 +17060,7 @@ static void r449_probe(void) {
 
     /* 5: Encode 20 more frames into OOB range (150-170) */
     rlog("  5: OOB encode 150-170...\n"); fflush(stdout);
-    for (int f = 150; f < 170; f++) {
+    for (int f = 10; f < 30; f++) {
         CMTime t = CMTimeMake(f, 30);
         int tv = f & 1;
         CFNumberRef tn = CFNumberCreate(NULL, kCFNumberIntType, &tv);
