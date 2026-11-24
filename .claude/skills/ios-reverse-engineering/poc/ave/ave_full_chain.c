@@ -143,6 +143,27 @@ struct proc_bsdinfo {
     uint64_t pbi_start_tvusec;
 };
 
+struct proc_taskinfo {
+    uint64_t pti_virtual_size;
+    uint64_t pti_resident_size;
+    uint64_t pti_total_user;
+    uint64_t pti_total_system;
+    uint64_t pti_threads_user;
+    uint64_t pti_threads_system;
+    int32_t  pti_policy;
+    int32_t  pti_faults;
+    int32_t  pti_pageins;
+    int32_t  pti_cow_faults;
+    int32_t  pti_messages_sent;
+    int32_t  pti_messages_received;
+    int32_t  pti_syscalls_mach;
+    int32_t  pti_syscalls_unix;
+    int32_t  pti_csw;
+    int32_t  pti_threadnum;
+    int32_t  pti_numrunning;
+    int32_t  pti_priority;
+};
+
 struct proc_taskallinfo {
     struct proc_bsdinfo pbsd;
     struct proc_taskinfo ptinfo;
