@@ -118,27 +118,6 @@ extern int proc_regionfilename(int pid, uint64_t address, void *buffer, uint32_t
 #define PROC_PIDTASKALLINFO 2
 #define PROC_PIDREGIONPATHINFO 9
 
-struct proc_taskinfo {
-    uint64_t pti_virtual_size;
-    uint64_t pti_resident_size;
-    uint64_t pti_total_user;
-    uint64_t pti_total_system;
-    uint64_t pti_threads_user;
-    uint64_t pti_threads_system;
-    int32_t  pti_policy;
-    int32_t  pti_faults;
-    int32_t  pti_pageins;
-    int32_t  pti_cow_faults;
-    int32_t  pti_messages_sent;
-    int32_t  pti_messages_received;
-    int32_t  pti_syscalls_mach;
-    int32_t  pti_syscalls_unix;
-    int32_t  pti_csw;
-    int32_t  pti_threadnum;
-    int32_t  pti_numrunning;
-    int32_t  pti_priority;
-};
-
 struct proc_bsdinfo {
     uint32_t pbi_flags;
     uint32_t pbi_status;
@@ -224,28 +203,10 @@ extern kern_return_t mach_vm_map(vm_map_t target_task,
     int flags, mem_entry_name_port_t object, memory_object_offset_t offset,
     boolean_t copy, vm_prot_t cur_protection, vm_prot_t max_protection,
     vm_inherit_t inheritance);
+/* proc_taskinfo comes from sys/proc_info.h via libproc — if SDK lacks it,
+   define only the flavor constant and use a raw byte buffer instead */
 #ifndef PROC_PIDTASKINFO
 #define PROC_PIDTASKINFO 4
-struct proc_taskinfo {
-    uint64_t pti_virtual_size;
-    uint64_t pti_resident_size;
-    uint64_t pti_total_user;
-    uint64_t pti_total_system;
-    uint64_t pti_threads_user;
-    uint64_t pti_threads_system;
-    int32_t  pti_policy;
-    int32_t  pti_faults;
-    int32_t  pti_pageins;
-    int32_t  pti_cow_faults;
-    int32_t  pti_messages_sent;
-    int32_t  pti_messages_received;
-    int32_t  pti_syscalls_mach;
-    int32_t  pti_syscalls_unix;
-    int32_t  pti_csw;
-    int32_t  pti_threadnum;
-    int32_t  pti_numrunning;
-    int32_t  pti_priority;
-};
 #endif
 
 #ifndef kIOMasterPortDefault
@@ -12466,8 +12427,10 @@ static void r332_probe(void) {
         for (int s = 0; xpc_services[s]; s++) {
             rlog("  Trying XPC: %s\n", xpc_services[s]);
 
-            xpc_connection_t conn = xpc_connection_create_mach_service(
-                xpc_services[s], NULL, 0);
+            typedef xpc_connection_t (*xpc_conn_create_mach_svc_t)(const char *, dispatch_queue_t, uint64_t);
+            xpc_conn_create_mach_svc_t create_fn = (xpc_conn_create_mach_svc_t)dlsym(RTLD_DEFAULT, "xpc_connection_create_mach_service");
+            if (!create_fn) { rlog("    xpc_connection_create_mach_service not available\n"); break; }
+            xpc_connection_t conn = create_fn(xpc_services[s], NULL, 0);
             if (!conn) {
                 rlog("    create failed\n");
                 continue;
@@ -43584,7 +43547,7 @@ new_modes:
             rlog("*** rounds=331: Safe Security Daemon Mach Probe ***\n");
             rlog("  r329: securityd reachable, msg send OK, crashed on rpc.\n");
             rlog("  Probe: Send-only sweep, safe rpc, SEP deep dive.\n\n");
-            r331_probe();
+            r331_securityd_probe();
             goto done;
         }
         if (rounds == 330) {
