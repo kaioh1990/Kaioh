@@ -12913,9 +12913,9 @@ static void r333_probe(void) {
     rlog("\n--- Part 5: IOKit notification ports ---\n");
     fflush(stdout);
     {
-        mach_port_t master_port;
-        kern_return_t kr = host_get_io_master(mach_host_self(), &master_port);
-        rlog("  host_get_io_master: kr=%d port=0x%x\n", kr, master_port);
+        mach_port_t master_port = 0;
+        kern_return_t kr = IOMasterPort(MACH_PORT_NULL, &master_port);
+        rlog("  IOMasterPort: kr=%d port=0x%x\n", kr, master_port);
 
         if (kr == KERN_SUCCESS) {
             io_iterator_t notif_iter = 0;
