@@ -17326,8 +17326,8 @@ static void r445_probe(void) {
                      (unsigned long long)addr, (unsigned long long)size, depth);
                 rlog("    Protection: cur=%d max=%d inherit=%d\n",
                      info.protection, info.max_protection, info.inheritance);
-                rlog("    Shared=%d, reserved=%d, is_submap=%d\n",
-                     info.share_mode, info.reserved, info.is_submap);
+                rlog("    share_mode=%d, is_submap=%d\n",
+                     info.share_mode, info.is_submap);
                 rlog("    Object_id=0x%llx, user_tag=%d\n",
                      (unsigned long long)info.object_id, info.user_tag);
                 rlog("    Offset=0x%llx, pages_resident=%d\n",
