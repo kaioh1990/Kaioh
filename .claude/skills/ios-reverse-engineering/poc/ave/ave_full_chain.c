@@ -91,8 +91,74 @@ extern kern_return_t mach_make_memory_entry_64(
 #include <sys/xattr.h>
 #include <sys/stat.h>
 #include <sys/sysctl.h>
-#include <libproc.h>
-#include <sys/proc_info.h>
+/* proc_pidinfo declarations for iOS (no libproc.h) */
+#define PROC_PIDLISTFDS 1
+#define PROC_PIDREGIONPATHINFO 7
+struct proc_fdinfo {
+    int32_t proc_fd;
+    uint32_t proc_fdtype;
+};
+struct vinfo_stat {
+    uint32_t vst_dev;
+    uint16_t vst_mode;
+    uint16_t vst_nlink;
+    uint64_t vst_ino;
+    uid_t vst_uid;
+    gid_t vst_gid;
+    int64_t vst_atime;
+    int64_t vst_atimensec;
+    int64_t vst_mtime;
+    int64_t vst_mtimensec;
+    int64_t vst_ctime;
+    int64_t vst_ctimensec;
+    int64_t vst_birthtime;
+    int64_t vst_birthtimensec;
+    off_t vst_size;
+    int64_t vst_blocks;
+    int32_t vst_blksize;
+    uint32_t vst_flags;
+    uint32_t vst_gen;
+    uint32_t vst_rdev;
+    int64_t vst_qspare[2];
+};
+struct vnode_info {
+    struct vinfo_stat vi_stat;
+    int vi_type;
+    int vi_pad;
+    fsid_t vi_fsid;
+};
+struct vnode_info_path {
+    struct vnode_info vip_vi;
+    char vip_path[1024];
+};
+struct proc_regioninfo {
+    uint32_t pri_protection;
+    uint32_t pri_max_protection;
+    uint32_t pri_inheritance;
+    uint32_t pri_flags;
+    uint64_t pri_offset;
+    uint32_t pri_behavior;
+    uint32_t pri_user_wired_count;
+    uint32_t pri_user_tag;
+    uint32_t pri_pages_resident;
+    uint32_t pri_pages_shared_now_private;
+    uint32_t pri_pages_swapped_out;
+    uint32_t pri_pages_dirtied;
+    uint32_t pri_ref_count;
+    uint32_t pri_shadow_depth;
+    uint32_t pri_share_mode;
+    uint32_t pri_private_pages_resident;
+    uint32_t pri_shared_pages_resident;
+    uint32_t pri_obj_id;
+    uint32_t pri_depth;
+    uint64_t pri_address;
+    uint64_t pri_size;
+};
+struct proc_regionwithpathinfo {
+    struct proc_regioninfo prp_prinfo;
+    struct vnode_info_path prp_vip;
+};
+extern int proc_pidinfo(int pid, int flavor, uint64_t arg, void *buffer, int buffersize);
 #include <dirent.h>
 #include <fcntl.h>
 #include <errno.h>
