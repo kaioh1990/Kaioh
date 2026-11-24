@@ -16549,69 +16549,102 @@ static void *r419_race_reader(void *arg) {
     return NULL;
 }
 
+static volatile int g_r419_sigill = 0;
+static sigjmp_buf g_r419_jmp;
+static void r419_sighandler(int sig) {
+    g_r419_sigill = sig;
+    siglongjmp(g_r419_jmp, 1);
+}
+
 static void r419_probe(void) {
     rlog("\n=== r419: System Registers + Data Race + Shared Cache ===\n\n");
     fflush(stdout);
+
+    struct sigaction sa419, old_ill, old_bus, old_segv;
+    memset(&sa419, 0, sizeof(sa419));
+    sa419.sa_handler = r419_sighandler;
+    sa419.sa_flags = 0;
+    sigaction(SIGILL, &sa419, &old_ill);
+    sigaction(SIGBUS, &sa419, &old_bus);
+    sigaction(SIGSEGV, &sa419, &old_segv);
 
     /* ---- Vector 1: ARM64 EL0-readable system registers ---- */
     rlog("  Vector 1: ARM64 system registers\n");
     {
 #ifdef __arm64__
-        uint64_t tpidr_el0, tpidrro_el0;
-        uint64_t cntpct, cntvct;
-        uint64_t ctr_el0, dczid_el0;
+        /* Try each register individually with crash protection */
+        struct { const char *name; int id; } regs[] = {
+            {"TPIDR_EL0", 0},
+            {"TPIDRRO_EL0", 1},
+            {"CNTPCT_EL0", 2},
+            {"CNTVCT_EL0", 3},
+            {"CTR_EL0", 4},
+            {"DCZID_EL0", 5}
+        };
 
-        __asm__ volatile("mrs %0, TPIDR_EL0" : "=r"(tpidr_el0));
-        __asm__ volatile("mrs %0, TPIDRRO_EL0" : "=r"(tpidrro_el0));
-        __asm__ volatile("mrs %0, CNTPCT_EL0" : "=r"(cntpct));
-        __asm__ volatile("mrs %0, CNTVCT_EL0" : "=r"(cntvct));
-        __asm__ volatile("mrs %0, CTR_EL0" : "=r"(ctr_el0));
-        __asm__ volatile("mrs %0, DCZID_EL0" : "=r"(dczid_el0));
+        uint64_t regvals[6] = {0};
 
-        rlog("    TPIDR_EL0    = 0x%016llx\n", (unsigned long long)tpidr_el0);
-        rlog("    TPIDRRO_EL0  = 0x%016llx\n", (unsigned long long)tpidrro_el0);
-        rlog("    CNTPCT_EL0   = 0x%016llx\n", (unsigned long long)cntpct);
-        rlog("    CNTVCT_EL0   = 0x%016llx\n", (unsigned long long)cntvct);
-        rlog("    CTR_EL0      = 0x%016llx\n", (unsigned long long)ctr_el0);
-        rlog("    DCZID_EL0    = 0x%016llx\n", (unsigned long long)dczid_el0);
-
-        if ((tpidr_el0 >> 32) >= 0xFFFFFFF0ULL)
-            rlog("    *** TPIDR_EL0 IN KERNEL RANGE ***\n");
-        if ((tpidrro_el0 >> 32) >= 0xFFFFFFF0ULL)
-            rlog("    *** TPIDRRO_EL0 IN KERNEL RANGE ***\n");
-
-        /* Read TPIDRRO for multiple threads to see pattern */
-        rlog("    TPIDRRO across threads:\n");
-        for (int t = 0; t < 3; t++) {
-            __block uint64_t thrTpidrro = 0;
-            dispatch_semaphore_t sem = dispatch_semaphore_create(0);
-            dispatch_async(dispatch_get_global_queue(QOS_CLASS_DEFAULT, 0), ^{
-                __asm__ volatile("mrs %0, TPIDRRO_EL0" : "=r"(thrTpidrro));
-                dispatch_semaphore_signal(sem);
-            });
-            dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);
-            rlog("      thread[%d]: TPIDRRO=0x%016llx\n",
-                t, (unsigned long long)thrTpidrro);
+        for (int r = 0; r < 6; r++) {
+            g_r419_sigill = 0;
+            if (sigsetjmp(g_r419_jmp, 1) == 0) {
+                uint64_t v = 0;
+                switch (r) {
+                    case 0: __asm__ volatile("mrs %0, TPIDR_EL0" : "=r"(v)); break;
+                    case 1: __asm__ volatile("mrs %0, TPIDRRO_EL0" : "=r"(v)); break;
+                    case 2: __asm__ volatile("mrs %0, CNTPCT_EL0" : "=r"(v)); break;
+                    case 3: __asm__ volatile("mrs %0, CNTVCT_EL0" : "=r"(v)); break;
+                    case 4: __asm__ volatile("mrs %0, CTR_EL0" : "=r"(v)); break;
+                    case 5: __asm__ volatile("mrs %0, DCZID_EL0" : "=r"(v)); break;
+                }
+                regvals[r] = v;
+                rlog("    %-16s = 0x%016llx", regs[r].name,
+                    (unsigned long long)v);
+                if ((v >> 32) >= 0xFFFFFFF0ULL)
+                    rlog(" *** KERNEL RANGE ***");
+                rlog("\n");
+            } else {
+                rlog("    %-16s = TRAPPED (sig=%d)\n",
+                    regs[r].name, g_r419_sigill);
+            }
         }
 
-        /* Probe data at TPIDRRO address */
-        if (tpidrro_el0 != 0) {
+        /* If TPIDRRO readable, examine data at that address */
+        uint64_t tpidrro = regvals[1];
+        if (tpidrro != 0) {
             rlog("    Data at TPIDRRO_EL0 (0x%llx):\n",
-                (unsigned long long)tpidrro_el0);
-            mach_vm_size_t outSz = 0;
-            uint64_t tdata[16];
-            kern_return_t kr = mach_vm_read_overwrite(mach_task_self(),
-                tpidrro_el0, 128, (mach_vm_address_t)tdata, &outSz);
-            if (kr == KERN_SUCCESS) {
-                for (int i = 0; i < 16; i++) {
-                    rlog("      +%d: 0x%016llx", i * 8,
-                        (unsigned long long)tdata[i]);
-                    if ((tdata[i] >> 32) >= 0xFFFFFFF0ULL)
-                        rlog(" *** KERNEL ***");
-                    rlog("\n");
+                (unsigned long long)tpidrro);
+            g_r419_sigill = 0;
+            if (sigsetjmp(g_r419_jmp, 1) == 0) {
+                mach_vm_size_t outSz = 0;
+                uint64_t tdata[16];
+                kern_return_t kr = mach_vm_read_overwrite(mach_task_self(),
+                    tpidrro, 128, (mach_vm_address_t)tdata, &outSz);
+                if (kr == KERN_SUCCESS) {
+                    for (int i = 0; i < 16; i++) {
+                        rlog("      +%d: 0x%016llx", i * 8,
+                            (unsigned long long)tdata[i]);
+                        if ((tdata[i] >> 32) >= 0xFFFFFFF0ULL)
+                            rlog(" *** KERNEL ***");
+                        rlog("\n");
+                    }
+                } else {
+                    rlog("      read failed: kr=%d (0x%x)\n", kr, kr);
                 }
-            } else {
-                rlog("      read failed: kr=%d (0x%x)\n", kr, kr);
+            }
+        }
+
+        /* Also check pthread_self() TSD area for kernel leaks */
+        uint64_t pthSelf = (uint64_t)pthread_self();
+        rlog("    pthread_self() = 0x%llx\n", (unsigned long long)pthSelf);
+        g_r419_sigill = 0;
+        if (sigsetjmp(g_r419_jmp, 1) == 0) {
+            /* Scan 256 bytes before and 512 bytes after pthread_self for kernel ptrs */
+            for (int off = -256; off < 512; off += 8) {
+                uint64_t v = *(volatile uint64_t*)(pthSelf + off);
+                if ((v >> 32) >= 0xFFFFFFF0ULL && v != 0xFFFFFFFFFFFFFFFF) {
+                    rlog("      pthread+%d: 0x%016llx *** KERNEL RANGE ***\n",
+                        off, (unsigned long long)v);
+                }
             }
         }
 #endif
@@ -17052,7 +17085,12 @@ static void r418_probe(void) {
     }
     fflush(stdout);
 
-    rlog("\n=== r418 complete ===\n");
+    /* Restore signal handlers */
+    sigaction(SIGILL, &old_ill, NULL);
+    sigaction(SIGBUS, &old_bus, NULL);
+    sigaction(SIGSEGV, &old_segv, NULL);
+
+    rlog("\n=== r419 complete ===\n");
     fflush(stdout);
 }
 
