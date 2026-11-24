@@ -56,6 +56,24 @@ extern kern_return_t mach_vm_read(
 extern kern_return_t mach_vm_deallocate(
     vm_map_t target_task, mach_vm_address_t address,
     mach_vm_size_t size);
+extern kern_return_t mach_vm_allocate(
+    vm_map_t target_task, mach_vm_address_t *address,
+    mach_vm_size_t size, int flags);
+extern kern_return_t mach_vm_protect(
+    vm_map_t target_task, mach_vm_address_t address,
+    mach_vm_size_t size, boolean_t set_maximum,
+    vm_prot_t new_protection);
+extern kern_return_t mach_vm_map(
+    vm_map_t target_task, mach_vm_address_t *address,
+    mach_vm_size_t size, mach_vm_offset_t mask,
+    int flags, mem_entry_name_port_t object,
+    memory_object_offset_t offset, boolean_t copy,
+    vm_prot_t cur_protection, vm_prot_t max_protection,
+    vm_inherit_t inheritance);
+extern kern_return_t mach_vm_read_overwrite(
+    vm_map_t target_task, mach_vm_address_t address,
+    mach_vm_size_t size, mach_vm_address_t data,
+    mach_vm_size_t *outsize);
 extern kern_return_t mach_make_memory_entry_64(
     vm_map_t target_task, memory_object_size_t *size,
     memory_object_offset_t offset, vm_prot_t permission,
@@ -87,8 +105,8 @@ extern kern_return_t bootstrap_look_up(mach_port_t bp, const char *service_name,
 #include <objc/runtime.h>
 #include <objc/message.h>
 #include <mach-o/dyld.h>
+#include <mach-o/dyld_images.h>
 #include <notify.h>
-#include <libproc.h>
 #include <sys/proc_info.h>
 
 typedef kern_return_t (*host_zone_info_fn)(host_priv_t host,
@@ -10605,11 +10623,11 @@ static void r331_timing_probe(void) {
                 if (kr == 0 && entry != MACH_PORT_NULL) {
                     /* Try kobject on the memory entry port */
                     natural_t kotype = 0;
-                    mach_vm_address_t kaddr = 0;
+                    unsigned int kaddr = 0;
                     kern_return_t kr2 = mach_port_kobject(mach_task_self(),
-                        entry, &kotype, (unsigned int *)&kaddr);
-                    rlog("    entry kobject: kr=0x%x type=%u addr=0x%llx\n",
-                         kr2, kotype, (unsigned long long)kaddr);
+                        entry, &kotype, &kaddr);
+                    rlog("    entry kobject: kr=0x%x type=%u addr=0x%x\n",
+                         kr2, kotype, kaddr);
                     mach_port_deallocate(mach_task_self(), entry);
                 }
             }
@@ -10814,20 +10832,19 @@ static void r330_trigon_probe(void) {
         /* Try mach_port_kobject on each */
         for (int i = 0; i < nports; i++) {
             natural_t kotype = 0;
-            mach_vm_address_t kaddr = 0;
+            unsigned int kaddr = 0;
             kern_return_t kr = mach_port_kobject(mach_task_self(),
-                ports[i].port, &kotype, (unsigned int *)&kaddr);
-            rlog("  %s (0x%x): kr=0x%x kotype=%u kaddr=0x%llx\n",
-                 ports[i].name, ports[i].port, kr, kotype, (unsigned long long)kaddr);
+                ports[i].port, &kotype, &kaddr);
+            rlog("  %s (0x%x): kr=0x%x kotype=%u kaddr=0x%x\n",
+                 ports[i].name, ports[i].port, kr, kotype, kaddr);
 
             if (kr == 0 && kaddr != 0) {
-                /* Check if it looks like a kernel address */
-                if (kaddr > 0xfffffff000000000ULL) {
-                    rlog("  !!! KOBJECT KERNEL ADDR: %s = 0x%llx (type=%u) !!!\n",
-                         ports[i].name, (unsigned long long)kaddr, kotype);
+                /* Check if it looks like a kernel address (upper bits) */
+                if (kaddr > 0xffff0000U) {
+                    rlog("  !!! KOBJECT KERNEL ADDR: %s = 0x%x (type=%u) !!!\n",
+                         ports[i].name, kaddr, kotype);
                 }
-                /* Even if obfuscated, the difference between two addresses may reveal slide */
-                rlog("  KOBJECT RAW: %s = 0x%llx\n", ports[i].name, (unsigned long long)kaddr);
+                rlog("  KOBJECT RAW: %s = 0x%x\n", ports[i].name, kaddr);
             }
         }
 
