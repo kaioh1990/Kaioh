@@ -114,6 +114,7 @@ typedef kern_return_t (*host_zone_info_fn)(host_priv_t host,
 extern int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
 extern int proc_pidinfo(int pid, int flavor, uint64_t arg, void *buffer, int buffersize);
 extern int proc_regionfilename(int pid, uint64_t address, void *buffer, uint32_t buffersize);
+extern kern_return_t host_get_io_master(host_t host, mach_port_t *io_master);
 
 #define PROC_PIDTASKALLINFO 2
 #define PROC_PIDREGIONPATHINFO 9
@@ -12870,7 +12871,7 @@ static void r333_probe(void) {
         rlog("  proc_pidinfo self buf_size=%d\n", buf_size);
 
         if (buf_size > 0) {
-            struct proc_taskallinfo tai;
+            struct my_proc_taskallinfo tai;
             int ret = proc_pidinfo(my_pid, PROC_PIDTASKALLINFO, 0, &tai, sizeof(tai));
             rlog("  self: ret=%d pid=%d ppid=%d uid=%d\n", ret,
                  tai.pbsd.pbi_pid, tai.pbsd.pbi_ppid, tai.pbsd.pbi_uid);
@@ -12897,7 +12898,7 @@ static void r333_probe(void) {
 
         /* also try to get info on other pids (1=launchd, 2=kernel_task) */
         for (pid_t p = 0; p <= 5; p++) {
-            struct proc_taskallinfo tai2;
+            struct my_proc_taskallinfo tai2;
             int r2 = proc_pidinfo(p, PROC_PIDTASKALLINFO, 0, &tai2, sizeof(tai2));
             if (r2 > 0) {
                 rlog("  pid=%d: ret=%d ppid=%d uid=%d comm='%.16s'\n", p, r2,
