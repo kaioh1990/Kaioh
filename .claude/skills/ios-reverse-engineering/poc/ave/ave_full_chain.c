@@ -16044,7 +16044,7 @@ static void r378_probe(void) {
     CFMutableDictionaryRef match = IOServiceMatching("IOSurfaceRoot");
     if (match) {
         io_iterator_t iter = 0;
-        if (IOServiceGetMatchingServices(kIOMainPortKey, match, &iter) == KERN_SUCCESS && iter) {
+        if (IOServiceGetMatchingServices(kIOMasterPortDefault, match, &iter) == KERN_SUCCESS && iter) {
             svc = IOIteratorNext(iter);
             IOObjectRelease(iter);
         }
