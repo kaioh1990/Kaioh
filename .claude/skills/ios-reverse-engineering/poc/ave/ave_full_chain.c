@@ -4713,20 +4713,19 @@ static void r313_probe(void) {
         }
 
         /* Try vm_remap to create a second mapping of the surface memory */
-        mach_vm_address_t remap_addr = 0;
+        vm_address_t remap_addr = 0;
         vm_prot_t cur_prot, max_prot;
-        kr = mach_vm_remap(mach_task_self(), &remap_addr, total2, 0,
-            VM_FLAGS_ANYWHERE, mach_task_self(), (mach_vm_address_t)base2,
+        kr = vm_remap(mach_task_self(), &remap_addr, (vm_size_t)total2, 0,
+            VM_FLAGS_ANYWHERE, mach_task_self(), (vm_address_t)base2,
             FALSE, &cur_prot, &max_prot, VM_INHERIT_NONE);
-        rlog("\n  vm_remap of surface: kr=0x%x addr=0x%llx prot=%d/%d\n",
-             kr, (unsigned long long)remap_addr, cur_prot, max_prot);
+        rlog("\n  vm_remap of surface: kr=0x%x addr=0x%lx prot=%d/%d\n",
+             kr, (unsigned long)remap_addr, cur_prot, max_prot);
         if (kr == 0) {
-            /* Write to original, read from remap to confirm shared mapping */
             ((volatile uint64_t *)base2)[0] = 0xDEADBEEF12345678ULL;
             uint64_t readback = ((volatile uint64_t *)remap_addr)[0];
             rlog("  Shared mapping check: wrote 0xDEADBEEF12345678, read 0x%016llx %s\n",
                  readback, readback == 0xDEADBEEF12345678ULL ? "SHARED!" : "NOT SHARED");
-            mach_vm_deallocate(mach_task_self(), remap_addr, total2);
+            vm_deallocate(mach_task_self(), remap_addr, (vm_size_t)total2);
         }
 
         CFRelease(s2);
@@ -4834,8 +4833,8 @@ static void r313_probe(void) {
     rlog("\n--- Part 4: XPC messages to privileged services ---\n");
     fflush(stdout);
 
-    /* Try XPC connections to services we found in r311 */
-    const char *xpc_services[] = {
+    /* Send raw Mach messages to discovered services via bootstrap_look_up */
+    const char *svc_names[] = {
         "com.apple.gpumemd.source",
         "com.apple.iohideventsystem",
         "com.apple.backboard.TouchDeliveryPolicyServer",
@@ -4849,52 +4848,71 @@ static void r313_probe(void) {
     };
 
     for (int i = 0; i < 10; i++) {
-        xpc_connection_t conn = xpc_connection_create_mach_service(
-            xpc_services[i], NULL, 0);
-        if (!conn) {
-            rlog("  %s: create failed\n", xpc_services[i]);
+        mach_port_t svc_port = MACH_PORT_NULL;
+        kr = bootstrap_look_up(bootstrap_port, svc_names[i], &svc_port);
+        if (kr != 0 || svc_port == MACH_PORT_NULL) {
+            rlog("  %s: lookup failed kr=0x%x\n", svc_names[i], kr);
             continue;
         }
+        rlog("  %s: port=0x%x\n", svc_names[i], svc_port);
 
-        xpc_connection_set_event_handler(conn, ^(xpc_object_t event) {
-            /* Handler required but we process synchronously */
-        });
-        xpc_connection_resume(conn);
-
-        /* Send a simple ping/introspection message */
-        xpc_object_t msg = xpc_dictionary_create(NULL, NULL, 0);
-        xpc_dictionary_set_uint64(msg, "type", 1);
-        xpc_dictionary_set_string(msg, "action", "ping");
-
-        xpc_object_t reply = xpc_connection_send_message_with_reply_sync(conn, msg);
-        if (reply) {
-            xpc_type_t rtype = xpc_get_type(reply);
-            if (rtype == XPC_TYPE_DICTIONARY) {
-                char *desc = xpc_copy_description(reply);
-                rlog("  %s: REPLY dict (%zu chars)\n", xpc_services[i],
-                     desc ? strlen(desc) : 0);
-                if (desc) {
-                    /* Print first 200 chars looking for addresses */
-                    size_t len = strlen(desc);
-                    if (len > 200) len = 200;
-                    rlog("    %.200s\n", desc);
-                    free(desc);
-                }
-            } else if (rtype == XPC_TYPE_ERROR) {
-                if (reply == XPC_ERROR_CONNECTION_INVALID) {
-                    rlog("  %s: CONNECTION_INVALID\n", xpc_services[i]);
-                } else if (reply == XPC_ERROR_CONNECTION_INTERRUPTED) {
-                    rlog("  %s: CONNECTION_INTERRUPTED\n", xpc_services[i]);
-                } else {
-                    rlog("  %s: error\n", xpc_services[i]);
-                }
-            } else {
-                rlog("  %s: reply type=%s\n", xpc_services[i],
-                     xpc_type_get_name(rtype));
-            }
+        /* Get kobject info on service port */
+        natural_t kotype = 0;
+        mach_vm_address_t kaddr = 0;
+        kern_return_t kkr = mach_port_kobject(mach_task_self(), svc_port, &kotype, &kaddr);
+        if (kkr == 0) {
+            rlog("    kobject: type=%u addr=0x%llx\n", kotype, (unsigned long long)kaddr);
         }
 
-        xpc_connection_cancel(conn);
+        /* Send a simple Mach message and see if we get a reply with data */
+        mach_port_t reply_port = MACH_PORT_NULL;
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &reply_port);
+
+        struct {
+            mach_msg_header_t hdr;
+            uint64_t data[4];
+        } snd = {0};
+        snd.hdr.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, MACH_MSG_TYPE_MAKE_SEND_ONCE);
+        snd.hdr.msgh_size = sizeof(snd);
+        snd.hdr.msgh_remote_port = svc_port;
+        snd.hdr.msgh_local_port = reply_port;
+        snd.hdr.msgh_id = 0x10000000; /* Generic subsystem ID */
+
+        kr = mach_msg(&snd.hdr, MACH_SEND_MSG | MACH_SEND_TIMEOUT,
+            sizeof(snd), 0, MACH_PORT_NULL, 50, MACH_PORT_NULL);
+
+        if (kr == 0) {
+            struct {
+                mach_msg_header_t hdr;
+                mach_msg_body_t body;
+                uint8_t payload[4096];
+                mach_msg_trailer_t trailer;
+            } rcv = {0};
+            kr = mach_msg(&rcv.hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                0, sizeof(rcv), reply_port, 100, MACH_PORT_NULL);
+            if (kr == 0) {
+                rlog("    REPLY! id=0x%x size=%u\n",
+                     rcv.hdr.msgh_id, rcv.hdr.msgh_size);
+                /* Scan reply payload for kernel pointers */
+                uint64_t *rp = (uint64_t *)&rcv.body;
+                size_t rp_cnt = (rcv.hdr.msgh_size - sizeof(mach_msg_header_t)) / 8;
+                for (size_t j = 0; j < rp_cnt && j < 32; j++) {
+                    if (rp[j] != 0) {
+                        rlog("      +%zu: 0x%016llx", j*8, rp[j]);
+                        if ((rp[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                            rlog(" *** KPTR ***");
+                        rlog("\n");
+                    }
+                }
+            } else {
+                rlog("    send ok, recv timeout/err kr=0x%x\n", kr);
+            }
+        } else {
+            rlog("    send failed kr=0x%x\n", kr);
+        }
+
+        mach_port_deallocate(mach_task_self(), reply_port);
+        mach_port_deallocate(mach_task_self(), svc_port);
     }
     fflush(stdout);
 
