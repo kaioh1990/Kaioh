@@ -9585,6 +9585,392 @@ static void r327_probe(void) {
     fflush(stdout);
 }
 
+/* r328: LDM toggle monitor + securityd/trustd Mach probing + SEP properties
+   Run this, then toggle LDM on the device. 60-second monitoring loop captures
+   Darwin notification state transitions during the toggle. */
+
+static void r328_probe(void) {
+    rlog("\n=== r328: LDM Toggle Monitor + Security Daemon Probe ===\n");
+    rlog("  Strategy: Register notif observers, poll 60s, probe securityd/trustd\n");
+    rlog("  >>> TOGGLE LOCKDOWN MODE ON DEVICE WITHIN 60 SECONDS <<<\n\n");
+    fflush(stdout);
+
+    /* ---- Part 1: Register ALL Darwin notification tokens (persistent) ---- */
+    rlog("--- Part 1: Register persistent Darwin notification observers ---\n");
+    fflush(stdout);
+
+    typedef struct {
+        const char *name;
+        int token;
+        uint64_t last_state;
+    } notif_entry_t;
+
+    notif_entry_t notifs[] = {
+        {"com.apple.security.lockdownmode", -1, 0},
+        {"com.apple.security.lockdownmode.status", -1, 0},
+        {"com.apple.security.lockdownmode.changed", -1, 0},
+        {"com.apple.security.lockdown-mode", -1, 0},
+        {"com.apple.lockdownmode", -1, 0},
+        {"com.apple.lockdownmode.status", -1, 0},
+        {"com.apple.lockdownmode.enabled", -1, 0},
+        {"com.apple.managedconfiguration.lockdownmode", -1, 0},
+        {"com.apple.ManagedConfiguration.LockdownMode", -1, 0},
+        {"com.apple.Security.lockdownmode", -1, 0},
+        {"com.apple.springboard.lockdownmode", -1, 0},
+        {"com.apple.preferences.lockdownmode", -1, 0},
+        {"com.apple.usb.config-changed", -1, 0},
+        {"com.apple.usbd.state-changed", -1, 0},
+        {"com.apple.IOKit.usb", -1, 0},
+        {"com.apple.WebKit.jit-enabled", -1, 0},
+        {"com.apple.jit.policy", -1, 0},
+        {"com.apple.managedconfiguration.profileListChanged", -1, 0},
+        {"com.apple.ManagedConfiguration.profileListChanged", -1, 0},
+        {"com.apple.security.configurationchanged", -1, 0},
+        {"com.apple.security.sandboxviolation", -1, 0},
+        {"com.apple.security.amfi.policy", -1, 0},
+        /* Additional security-relevant notifications */
+        {"com.apple.system.config.network_change", -1, 0},
+        {"com.apple.system.lowpowermode", -1, 0},
+        {"com.apple.system.thermalpressurelevel.change", -1, 0},
+        {"com.apple.mobile.keybagd.lock_status", -1, 0},
+        {"com.apple.mobile.keybagd.first_unlock", -1, 0},
+        {"com.apple.coreaudio.serverRunning", -1, 0},
+        {NULL, -1, 0}
+    };
+
+    int ncount = 0;
+    for (int i = 0; notifs[i].name; i++) {
+        uint32_t st = notify_register_check(notifs[i].name, &notifs[i].token);
+        if (st == 0) {
+            int chk = 0;
+            notify_check(notifs[i].token, &chk); /* clear initial flag */
+            notify_get_state(notifs[i].token, &notifs[i].last_state);
+            ncount++;
+        }
+    }
+    rlog("  Registered %d notification tokens\n", ncount);
+    fflush(stdout);
+
+    /* ---- Part 2: Probe securityd Mach port ---- */
+    rlog("\n--- Part 2: securityd Mach port probe ---\n");
+    fflush(stdout);
+    {
+        mach_port_t bp;
+        task_get_bootstrap_port(mach_task_self(), &bp);
+
+        mach_port_t sec_port = MACH_PORT_NULL;
+        kern_return_t kr = bootstrap_look_up(bp, "com.apple.securityd", &sec_port);
+        if (kr == 0 && sec_port != MACH_PORT_NULL) {
+            rlog("  securityd port=0x%x\n", sec_port);
+
+            /* Try sending a simple MIG message to probe available routines */
+            /* securityd uses XPC-over-Mach, so we try XPC-style probing */
+            /* First, check port type */
+            mach_port_type_t ptype = 0;
+            kr = mach_port_type(mach_task_self(), sec_port, &ptype);
+            rlog("  securityd port type=0x%x (kr=%d)\n", ptype, kr);
+
+            /* Get port info */
+            struct mach_port_status_t {
+                mach_port_rights_t mps_pset;
+                mach_port_seqno_t mps_seqno;
+                mach_port_mscount_t mps_mscount;
+                mach_port_msgcount_t mps_qlimit;
+                mach_port_msgcount_t mps_msgcount;
+                mach_port_rights_t mps_sorights;
+                boolean_t mps_srights;
+                boolean_t mps_pdrequest;
+                boolean_t mps_nsrequest;
+                natural_t mps_flags;
+            } port_status;
+            mach_msg_type_number_t cnt = sizeof(port_status) / sizeof(natural_t);
+            kr = mach_port_get_attributes(mach_task_self(), sec_port,
+                MACH_PORT_RECEIVE_STATUS, (mach_port_info_t)&port_status, &cnt);
+            rlog("  securityd get_attributes kr=0x%x\n", kr);
+
+            /* Send a simple empty message to see what happens */
+            struct {
+                mach_msg_header_t hdr;
+                mach_msg_body_t body;
+                mach_msg_trailer_t trailer;
+            } msg;
+            memset(&msg, 0, sizeof(msg));
+            msg.hdr.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, 0);
+            msg.hdr.msgh_size = sizeof(mach_msg_header_t);
+            msg.hdr.msgh_remote_port = sec_port;
+            msg.hdr.msgh_local_port = MACH_PORT_NULL;
+            msg.hdr.msgh_id = 0; /* Probe with ID 0 */
+
+            kr = mach_msg(&msg.hdr, MACH_SEND_MSG | MACH_SEND_TIMEOUT,
+                msg.hdr.msgh_size, 0, MACH_PORT_NULL, 100, MACH_PORT_NULL);
+            rlog("  securityd msg(id=0) send kr=0x%x\n", kr);
+
+            /* Try with a reply port to get response */
+            mach_port_t reply;
+            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &reply);
+            mach_port_insert_right(mach_task_self(), reply, reply, MACH_MSG_TYPE_MAKE_SEND);
+
+            struct {
+                mach_msg_header_t hdr;
+                char pad[256];
+            } rmsg;
+            memset(&rmsg, 0, sizeof(rmsg));
+            rmsg.hdr.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, MACH_MSG_TYPE_MAKE_SEND);
+            rmsg.hdr.msgh_size = sizeof(mach_msg_header_t);
+            rmsg.hdr.msgh_remote_port = sec_port;
+            rmsg.hdr.msgh_local_port = reply;
+            rmsg.hdr.msgh_id = 1000; /* Common MIG base */
+
+            kr = mach_msg(&rmsg.hdr, MACH_SEND_MSG | MACH_RCV_MSG | MACH_SEND_TIMEOUT | MACH_RCV_TIMEOUT,
+                sizeof(mach_msg_header_t), sizeof(rmsg), reply, 200, MACH_PORT_NULL);
+            rlog("  securityd msg(id=1000) rpc kr=0x%x", kr);
+            if (kr == 0) {
+                rlog(" reply_id=%d reply_size=%d", rmsg.hdr.msgh_id, rmsg.hdr.msgh_size);
+                /* Check for kernel pointers in reply */
+                for (int i = 0; i + 8 <= (int)rmsg.hdr.msgh_size; i += 8) {
+                    uint64_t v;
+                    memcpy(&v, ((uint8_t*)&rmsg) + i, 8);
+                    if ((v >> 28) == 0xfffffffULL && v != 0xffffffffffffffffULL) {
+                        rlog(" !!!KPTR@+%d:0x%llx!!!", i, v);
+                    }
+                }
+            }
+            rlog("\n");
+
+            mach_port_deallocate(mach_task_self(), reply);
+            mach_port_deallocate(mach_task_self(), sec_port);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: Probe trustd Mach port ---- */
+    rlog("\n--- Part 3: trustd Mach port probe ---\n");
+    fflush(stdout);
+    {
+        mach_port_t bp;
+        task_get_bootstrap_port(mach_task_self(), &bp);
+
+        mach_port_t trust_port = MACH_PORT_NULL;
+        kern_return_t kr = bootstrap_look_up(bp, "com.apple.trustd", &trust_port);
+        if (kr == 0 && trust_port != MACH_PORT_NULL) {
+            rlog("  trustd port=0x%x\n", trust_port);
+
+            mach_port_type_t ptype = 0;
+            kr = mach_port_type(mach_task_self(), trust_port, &ptype);
+            rlog("  trustd port type=0x%x (kr=%d)\n", ptype, kr);
+
+            /* Try a range of MIG IDs to find valid handlers */
+            mach_port_t reply;
+            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &reply);
+            mach_port_insert_right(mach_task_self(), reply, reply, MACH_MSG_TYPE_MAKE_SEND);
+
+            int valid_ids = 0;
+            for (int mid = 0; mid < 200; mid += 10) {
+                struct {
+                    mach_msg_header_t hdr;
+                    char pad[256];
+                } rmsg;
+                memset(&rmsg, 0, sizeof(rmsg));
+                rmsg.hdr.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, MACH_MSG_TYPE_MAKE_SEND);
+                rmsg.hdr.msgh_size = sizeof(mach_msg_header_t);
+                rmsg.hdr.msgh_remote_port = trust_port;
+                rmsg.hdr.msgh_local_port = reply;
+                rmsg.hdr.msgh_id = mid;
+
+                kr = mach_msg(&rmsg.hdr, MACH_SEND_MSG | MACH_RCV_MSG | MACH_SEND_TIMEOUT | MACH_RCV_TIMEOUT,
+                    sizeof(mach_msg_header_t), sizeof(rmsg), reply, 100, MACH_PORT_NULL);
+                if (kr == 0) {
+                    rlog("  trustd id=%d: reply_id=%d size=%d", mid, rmsg.hdr.msgh_id, rmsg.hdr.msgh_size);
+                    /* Scan reply for kptrs */
+                    for (int i = 0; i + 8 <= (int)rmsg.hdr.msgh_size; i += 8) {
+                        uint64_t v;
+                        memcpy(&v, ((uint8_t*)&rmsg) + i, 8);
+                        if ((v >> 28) == 0xfffffffULL && v != 0xffffffffffffffffULL) {
+                            rlog(" !!!KPTR@+%d:0x%llx!!!", i, v);
+                        }
+                    }
+                    rlog("\n");
+                    valid_ids++;
+                }
+            }
+            rlog("  trustd: %d valid MIG IDs found (of 20 probed)\n", valid_ids);
+
+            mach_port_deallocate(mach_task_self(), reply);
+            mach_port_deallocate(mach_task_self(), trust_port);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: Read AppleSEPManager properties in detail ---- */
+    rlog("\n--- Part 4: AppleSEPManager property dump ---\n");
+    fflush(stdout);
+    {
+        io_service_t svc = IOServiceGetMatchingService(kIOMainPortDefault,
+            IOServiceMatching("AppleSEPManager"));
+        if (svc) {
+            CFMutableDictionaryRef props = NULL;
+            kern_return_t kr = IORegistryEntryCreateCFProperties(svc, &props,
+                kCFAllocatorDefault, 0);
+            if (kr == 0 && props) {
+                CFIndex cnt = CFDictionaryGetCount(props);
+                rlog("  AppleSEPManager: %ld properties\n", cnt);
+                const void *propKeys[64];
+                const void *propVals[64];
+                if (cnt > 0 && cnt <= 64) {
+                    CFDictionaryGetKeysAndValues(props, propKeys, propVals);
+                    for (CFIndex j = 0; j < cnt; j++) {
+                        char kbuf[256] = {0};
+                        CFStringGetCString(propKeys[j], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+                        CFTypeID tid = CFGetTypeID(propVals[j]);
+                        if (tid == CFStringGetTypeID()) {
+                            char vbuf[256] = {0};
+                            CFStringGetCString(propVals[j], vbuf, sizeof(vbuf), kCFStringEncodingUTF8);
+                            rlog("    '%s' = '%s' (string)\n", kbuf, vbuf);
+                        } else if (tid == CFNumberGetTypeID()) {
+                            long long v = 0;
+                            CFNumberGetValue(propVals[j], kCFNumberLongLongType, &v);
+                            rlog("    '%s' = %lld (0x%llx) (number)\n", kbuf, v, v);
+                        } else if (tid == CFBooleanGetTypeID()) {
+                            rlog("    '%s' = %s (bool)\n", kbuf,
+                                 CFBooleanGetValue(propVals[j]) ? "YES" : "NO");
+                        } else if (tid == CFDataGetTypeID()) {
+                            CFIndex dlen = CFDataGetLength(propVals[j]);
+                            const uint8_t *db = CFDataGetBytePtr(propVals[j]);
+                            rlog("    '%s' = <data %ld bytes>", kbuf, dlen);
+                            if (dlen <= 64) {
+                                rlog(" hex=");
+                                for (CFIndex k = 0; k < dlen; k++)
+                                    rlog("%02x", db[k]);
+                            }
+                            /* Scan data for kernel pointers */
+                            for (CFIndex k = 0; k + 8 <= dlen; k += 8) {
+                                uint64_t v;
+                                memcpy(&v, db + k, 8);
+                                if ((v >> 28) == 0xfffffffULL && v != 0xffffffffffffffffULL) {
+                                    rlog(" !!!KPTR@+%ld:0x%llx!!!", k, v);
+                                }
+                            }
+                            rlog("\n");
+                        } else if (tid == CFDictionaryGetTypeID()) {
+                            rlog("    '%s' = <dict %ld entries>\n", kbuf,
+                                 CFDictionaryGetCount(propVals[j]));
+                        } else if (tid == CFArrayGetTypeID()) {
+                            rlog("    '%s' = <array %ld entries>\n", kbuf,
+                                 CFArrayGetCount(propVals[j]));
+                        } else {
+                            rlog("    '%s' = <type %lu>\n", kbuf, (unsigned long)tid);
+                        }
+                    }
+                }
+                CFRelease(props);
+            }
+
+            /* Also walk the registry tree under AppleSEPManager */
+            io_iterator_t children;
+            kr = IORegistryEntryGetChildIterator(svc, kIOServicePlane, &children);
+            if (kr == 0) {
+                io_object_t child;
+                while ((child = IOIteratorNext(children)) != 0) {
+                    io_name_t name;
+                    IORegistryEntryGetName(child, name);
+                    rlog("  SEP child: '%s'\n", name);
+
+                    /* Get child properties */
+                    CFMutableDictionaryRef cprops = NULL;
+                    if (IORegistryEntryCreateCFProperties(child, &cprops,
+                        kCFAllocatorDefault, 0) == 0 && cprops) {
+                        CFIndex ccnt = CFDictionaryGetCount(cprops);
+                        rlog("    %ld properties\n", ccnt);
+                        const void *cks[32];
+                        const void *cvs[32];
+                        if (ccnt > 0 && ccnt <= 32) {
+                            CFDictionaryGetKeysAndValues(cprops, cks, cvs);
+                            for (CFIndex j = 0; j < ccnt; j++) {
+                                char kb[128] = {0};
+                                CFStringGetCString(cks[j], kb, sizeof(kb), kCFStringEncodingUTF8);
+                                rlog("    '%s'\n", kb);
+                            }
+                        }
+                        CFRelease(cprops);
+                    }
+
+                    /* Try opening the child service */
+                    io_connect_t conn = 0;
+                    kr = IOServiceOpen(child, mach_task_self(), 0, &conn);
+                    if (kr == 0) {
+                        rlog("    !!! CHILD OPENS conn=0x%x !!!\n", conn);
+                        IOServiceClose(conn);
+                    }
+
+                    IOObjectRelease(child);
+                }
+                IOObjectRelease(children);
+            }
+
+            IOObjectRelease(svc);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 5: 60-second Darwin notification monitoring loop ---- */
+    rlog("\n--- Part 5: 60-second notification monitoring loop ---\n");
+    rlog("  Toggle Lockdown Mode NOW in Settings > Privacy & Security\n");
+    fflush(stdout);
+    {
+        struct timespec start, now;
+        clock_gettime(CLOCK_MONOTONIC, &start);
+
+        int changes_detected = 0;
+        int poll_count = 0;
+
+        while (1) {
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            double elapsed = (now.tv_sec - start.tv_sec) + (now.tv_nsec - start.tv_nsec) / 1e9;
+            if (elapsed > 60.0) break;
+
+            for (int i = 0; notifs[i].name; i++) {
+                if (notifs[i].token < 0) continue;
+                int changed = 0;
+                notify_check(notifs[i].token, &changed);
+                if (changed) {
+                    uint64_t new_state = 0;
+                    notify_get_state(notifs[i].token, &new_state);
+                    rlog("  [%.1fs] CHANGE: '%s' state: 0x%llx -> 0x%llx\n",
+                         elapsed, notifs[i].name, notifs[i].last_state, new_state);
+                    notifs[i].last_state = new_state;
+                    changes_detected++;
+                    fflush(stdout);
+                }
+            }
+
+            poll_count++;
+            usleep(50000); /* 50ms poll interval = 20 Hz */
+        }
+
+        rlog("  Monitoring complete: %d polls, %d changes detected\n", poll_count, changes_detected);
+
+        /* Final state dump */
+        rlog("  Final states:\n");
+        for (int i = 0; notifs[i].name; i++) {
+            if (notifs[i].token < 0) continue;
+            uint64_t final_state = 0;
+            notify_get_state(notifs[i].token, &final_state);
+            if (final_state != 0) {
+                rlog("    '%s' = 0x%llx\n", notifs[i].name, final_state);
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* Cleanup tokens */
+    for (int i = 0; notifs[i].name; i++) {
+        if (notifs[i].token >= 0) notify_cancel(notifs[i].token);
+    }
+
+    rlog("\n=== r328 complete ===\n");
+    fflush(stdout);
+}
+
 static void r317_probe(void) {
     rlog("\n=== r317: Deep AppleKeyStore + AppleJPEGDriver + CredentialManager ===\n\n");
     fflush(stdout);
@@ -40403,6 +40789,13 @@ new_modes:
             rlog("*** rounds=328: HENkaku Uninit Buffer + TIFF Parser + GPU Shared ***\n");
             rlog("  r327: LDM recon + console exploit patterns.\n");
             rlog("  Probe: IOKit uninit buffers, TIFF parser, mixed scalar+struct, pre-base scan.\n\n");
+            r328_probe();
+            goto done;
+        }
+        if (rounds == 328) {
+            rlog("*** rounds=328: LDM Toggle Monitor + Security Daemon Probe ***\n");
+            rlog("  r327: All notif tokens registered, securityd/trustd reachable.\n");
+            rlog("  Probe: 60s notif monitor, securityd/trustd Mach, SEP tree.\n\n");
             r328_probe();
             goto done;
         }
