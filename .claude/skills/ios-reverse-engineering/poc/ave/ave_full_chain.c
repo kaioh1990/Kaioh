@@ -106,6 +106,9 @@ extern kern_return_t mach_vm_page_info(
 #include <sys/xattr.h>
 #include <sys/stat.h>
 #include <sys/sysctl.h>
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <sys/kern_control.h>
 /* proc_pidinfo declarations for iOS (no libproc.h) */
 #define PROC_PIDLISTFDS 1
 #define PROC_PIDREGIONPATHINFO 7
@@ -16733,6 +16736,314 @@ static void r428_sighandler(int sig) {
  * Also scan the entire IOSurfaceClientRef structure (448 bytes at the
  * surf pointer itself) for any kernel pointers or interesting data.
  */
+
+static void r432_probe(void) {
+    rlog("\n=== r432: IOConnectTrap + Commpage + NECP + KeyStore Input ===\n\n");
+    fflush(stdout);
+
+    /* Vector A: IOConnectTrap on IOSurface connection */
+    rlog("  --- Vector A: IOSurfaceRoot IOConnectTrap ---\n");
+    {
+        io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("IOSurfaceRoot"));
+        io_connect_t conn = 0;
+        kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+        rlog("    IOSurfaceRoot open: kr=%d conn=0x%x\n", kr, conn);
+
+        if (kr == 0 && conn) {
+            /* Create a surface to get a valid surface ID */
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int tw=32, th=32, tbpr=128, tas=4096, tpf=0x42475241;
+            CFNumberRef tn[5];
+            tn[0] = CFNumberCreate(NULL, kCFNumberIntType, &tw);
+            tn[1] = CFNumberCreate(NULL, kCFNumberIntType, &th);
+            tn[2] = CFNumberCreate(NULL, kCFNumberIntType, &tbpr);
+            tn[3] = CFNumberCreate(NULL, kCFNumberIntType, &tas);
+            tn[4] = CFNumberCreate(NULL, kCFNumberIntType, &tpf);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), tn[0]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), tn[1]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), tn[2]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), tn[3]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), tn[4]);
+            IOSurfaceRef tsurf = IOSurfaceCreate(sp);
+            uint32_t tsid = tsurf ? IOSurfaceGetID(tsurf) : 0;
+            rlog("    Test surface: id=%u\n", tsid);
+            CFRelease(sp);
+            for (int i = 0; i < 5; i++) CFRelease(tn[i]);
+
+            /* Try IOConnectTrap0-6 */
+            /* These are ioctl_trap-style fast paths */
+            rlog("    IOConnectTrap calls:\n");
+            for (int trap = 0; trap <= 6; trap++) {
+                kern_return_t tr;
+                switch (trap) {
+                    case 0: tr = IOConnectTrap0(conn, 0); break;
+                    case 1: tr = IOConnectTrap1(conn, 0, tsid); break;
+                    case 2: tr = IOConnectTrap2(conn, 0, tsid, 0); break;
+                    case 3: tr = IOConnectTrap3(conn, 0, tsid, 0, 0); break;
+                    case 4: tr = IOConnectTrap4(conn, 0, tsid, 0, 0, 0); break;
+                    case 5: tr = IOConnectTrap5(conn, 0, tsid, 0, 0, 0, 0); break;
+                    case 6: tr = IOConnectTrap6(conn, 0, tsid, 0, 0, 0, 0, 0); break;
+                    default: tr = -1;
+                }
+                rlog("      trap%d(sel=0, sid=%u): 0x%x (%d)\n", trap, tsid, tr, tr);
+            }
+
+            /* Try different selectors with trap1 */
+            rlog("    Trap1 with different selectors:\n");
+            for (int sel = 0; sel <= 30; sel++) {
+                kern_return_t tr = IOConnectTrap1(conn, sel, tsid);
+                if (tr != (kern_return_t)0xe00002bc) { /* Skip kIOReturnBadArgument */
+                    rlog("      trap1(sel=%d): 0x%x (%d)\n", sel, tr, tr);
+                }
+            }
+
+            if (tsurf) CFRelease(tsurf);
+            IOServiceClose(conn);
+        }
+        if (svc) IOObjectRelease(svc);
+    }
+    fflush(stdout);
+
+    /* Vector B: Commpage exploration */
+    rlog("\n  --- Vector B: Commpage exploration ---\n");
+    {
+        /* ARM64 commpage is at 0x0000000FFFFFC000 */
+        uint64_t commpage_addrs[] = {
+            0x0000000FFFFFC000ULL,  /* ARM64 standard */
+            0x00000000FFFFFC00ULL,  /* 32-bit compat */
+        };
+        for (int ca = 0; ca < 2; ca++) {
+            vm_offset_t data = 0;
+            mach_msg_type_number_t dataCnt = 0;
+            kern_return_t kr = mach_vm_read(mach_task_self(),
+                commpage_addrs[ca], 4096, &data, &dataCnt);
+            rlog("    commpage 0x%llx: kr=%d size=%u\n",
+                 (unsigned long long)commpage_addrs[ca], kr, dataCnt);
+            if (kr == 0 && dataCnt > 0) {
+                uint64_t *cp = (uint64_t*)data;
+                int kptr_found = 0;
+                rlog("    First 32 qwords:\n");
+                for (int i = 0; i < 32; i++) {
+                    if (cp[i] != 0) {
+                        rlog("      +%d: 0x%016llx", i*8, (unsigned long long)cp[i]);
+                        if ((cp[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog(" *** KPTR ***");
+                            kptr_found++;
+                        }
+                        rlog("\n");
+                    }
+                }
+                /* Full scan for kernel pointers */
+                for (int i = 32; i < (int)(dataCnt / 8); i++) {
+                    if ((cp[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        rlog("      +%d: 0x%016llx *** KPTR ***\n", i*8, (unsigned long long)cp[i]);
+                        kptr_found++;
+                        if (kptr_found >= 20) break;
+                    }
+                }
+                rlog("    Total kernel pointers in commpage: %d\n", kptr_found);
+                mach_vm_deallocate(mach_task_self(), data, dataCnt);
+            }
+        }
+
+        /* Also scan VM regions to find the commpage mapping */
+        rlog("    Scanning for commpage VM region:\n");
+        mach_vm_address_t addr = 0x0000000FFF000000ULL;
+        for (int r = 0; r < 10; r++) {
+            mach_vm_size_t rsize = 0;
+            natural_t depth = 1;
+            struct vm_region_submap_info_64 rinfo;
+            mach_msg_type_number_t rcnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            kern_return_t kr = mach_vm_region_recurse(mach_task_self(), &addr, &rsize,
+                &depth, (vm_region_recurse_info_t)&rinfo, &rcnt);
+            if (kr != 0) break;
+            rlog("      0x%llx-0x%llx sz=0x%llx prot=%d/%d tag=%d\n",
+                 (unsigned long long)addr, (unsigned long long)(addr+rsize),
+                 (unsigned long long)rsize, rinfo.protection, rinfo.max_protection,
+                 rinfo.user_tag);
+            addr += rsize;
+        }
+    }
+    fflush(stdout);
+
+    /* Vector C: NECP file descriptor */
+    rlog("\n  --- Vector C: NECP / network kernel interfaces ---\n");
+    {
+        /* Try opening NECP control socket */
+        int necp_fd = socket(PF_SYSTEM, SOCK_DGRAM, 2 /* SYSPROTO_CONTROL */);
+        rlog("    SYSPROTO_CONTROL socket: fd=%d errno=%d\n", necp_fd, errno);
+        if (necp_fd >= 0) {
+            /* Try connecting to NECP */
+            struct ctl_info info = {0};
+            strlcpy(info.ctl_name, "com.apple.net.necp_control", sizeof(info.ctl_name));
+            int ret = ioctl(necp_fd, CTLIOCGINFO, &info);
+            rlog("    NECP ctl_info: ret=%d id=%u\n", ret, info.ctl_id);
+            if (ret == 0) {
+                struct sockaddr_ctl sc = {0};
+                sc.sc_len = sizeof(sc);
+                sc.sc_family = AF_SYSTEM;
+                sc.ss_sysaddr = 2; /* AF_SYS_CONTROL */
+                sc.sc_id = info.ctl_id;
+                sc.sc_unit = 0;
+                ret = connect(necp_fd, (struct sockaddr*)&sc, sizeof(sc));
+                rlog("    NECP connect: ret=%d errno=%d\n", ret, errno);
+                if (ret == 0) {
+                    /* Try reading data from NECP */
+                    uint8_t buf[4096] = {0};
+                    ssize_t rd = recv(necp_fd, buf, sizeof(buf), MSG_DONTWAIT);
+                    rlog("    NECP recv: %zd\n", rd);
+                    if (rd > 0) {
+                        uint64_t *qp = (uint64_t*)buf;
+                        for (ssize_t i = 0; i < rd / 8; i++) {
+                            if ((qp[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                rlog("      *** KPTR +%zd: 0x%016llx ***\n",
+                                     i*8, (unsigned long long)qp[i]);
+                            }
+                        }
+                    }
+                }
+            }
+            close(necp_fd);
+        }
+
+        /* Try other kernel control sockets */
+        const char *ctl_names[] = {
+            "com.apple.net.utun_control",
+            "com.apple.net.ipsec_control",
+            "com.apple.netsrc",
+            "com.apple.network.statistics",
+            "com.apple.content-filter",
+        };
+        for (int i = 0; i < 5; i++) {
+            int fd = socket(PF_SYSTEM, SOCK_DGRAM, 2);
+            if (fd >= 0) {
+                struct ctl_info ci = {0};
+                strlcpy(ci.ctl_name, ctl_names[i], sizeof(ci.ctl_name));
+                int ret = ioctl(fd, CTLIOCGINFO, &ci);
+                rlog("    '%s': ctl_id=%u (ioctl=%d)\n", ctl_names[i], ci.ctl_id, ret);
+                if (ret == 0 && ci.ctl_id > 0) {
+                    struct sockaddr_ctl sc = {0};
+                    sc.sc_len = sizeof(sc);
+                    sc.sc_family = AF_SYSTEM;
+                    sc.ss_sysaddr = 2;
+                    sc.sc_id = ci.ctl_id;
+                    sc.sc_unit = 0;
+                    ret = connect(fd, (struct sockaddr*)&sc, sizeof(sc));
+                    rlog("    connect: ret=%d errno=%d\n", ret, errno);
+                }
+                close(fd);
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* Vector D: AppleKeyStore with structured input */
+    rlog("\n  --- Vector D: AppleKeyStore with input ---\n");
+    {
+        io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("AppleKeyStore"));
+        io_connect_t conn = 0;
+        kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+
+        if (kr == 0 && conn) {
+            /* Try selectors with scalar inputs */
+            rlog("    Scalar input + output:\n");
+            for (int sel = 0; sel <= 30; sel++) {
+                uint64_t in_sc[4] = {0, 1, 2, 3};
+                uint64_t out[16] = {0};
+                uint32_t outcnt = 16;
+                kern_return_t kr2 = IOConnectCallMethod(conn, sel,
+                    in_sc, 4, NULL, 0, out, &outcnt, NULL, NULL);
+                if (kr2 == 0 && outcnt > 0) {
+                    int nonzero = 0;
+                    for (uint32_t j = 0; j < outcnt; j++) if (out[j] != 0) nonzero++;
+                    if (nonzero > 0) {
+                        rlog("      sel %d: %d nonzero outputs", sel, nonzero);
+                        for (uint32_t j = 0; j < outcnt && j < 4; j++) {
+                            if (out[j] != 0) rlog(" [%u]=0x%llx", j, (unsigned long long)out[j]);
+                        }
+                        rlog("\n");
+                        for (uint32_t j = 0; j < outcnt; j++) {
+                            if ((out[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                                rlog("        *** KPTR [%u]=0x%016llx ***\n",
+                                     j, (unsigned long long)out[j]);
+                        }
+                    }
+                }
+            }
+
+            /* Try struct input + struct output */
+            rlog("    Struct input + output:\n");
+            for (int sel = 0; sel <= 20; sel++) {
+                uint8_t in_buf[256] = {0};
+                /* Fill with a simple pattern */
+                memset(in_buf, 0, sizeof(in_buf));
+                uint8_t out_buf[4096] = {0};
+                size_t out_len = sizeof(out_buf);
+                kern_return_t kr2 = IOConnectCallMethod(conn, sel,
+                    NULL, 0, in_buf, 64, NULL, NULL, out_buf, &out_len);
+                if (kr2 == 0 && out_len > 0) {
+                    uint64_t *qp = (uint64_t*)out_buf;
+                    int nonzero = 0, kptr_cnt = 0;
+                    for (size_t j = 0; j < out_len / 8; j++) {
+                        if (qp[j] != 0) nonzero++;
+                        if ((qp[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) kptr_cnt++;
+                    }
+                    if (nonzero > 0 || kptr_cnt > 0) {
+                        rlog("      sel %d: out_len=%zu nonzero=%d kptrs=%d\n",
+                             sel, out_len, nonzero, kptr_cnt);
+                        int shown = 0;
+                        for (size_t j = 0; j < out_len / 8 && shown < 8; j++) {
+                            if (qp[j] != 0) {
+                                rlog("        +%zu: 0x%016llx\n", j*8, (unsigned long long)qp[j]);
+                                shown++;
+                            }
+                        }
+                    }
+                }
+            }
+
+            IOServiceClose(conn);
+        }
+        if (svc) IOObjectRelease(svc);
+    }
+    fflush(stdout);
+
+    /* Vector E: proc_pidinfo extended flavors */
+    rlog("\n  --- Vector E: proc_pidinfo extended ---\n");
+    {
+        pid_t pid = getpid();
+        /* Try various proc_pidinfo flavors */
+        int flavors[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20};
+        for (int i = 0; i < 20; i++) {
+            uint8_t buf[4096] = {0};
+            int ret = proc_pidinfo(pid, flavors[i], 0, buf, sizeof(buf));
+            if (ret > 0) {
+                uint64_t *qp = (uint64_t*)buf;
+                int kptr_cnt = 0;
+                for (int j = 0; j < ret / 8; j++) {
+                    if ((qp[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) kptr_cnt++;
+                }
+                if (kptr_cnt > 0) {
+                    rlog("    flavor %d: %d bytes, %d KPTR!\n", flavors[i], ret, kptr_cnt);
+                    for (int j = 0; j < ret / 8; j++) {
+                        if ((qp[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                            rlog("      +%d: 0x%016llx *** KPTR ***\n",
+                                 j*8, (unsigned long long)qp[j]);
+                    }
+                } else if (i < 5) {
+                    rlog("    flavor %d: %d bytes, no kptrs\n", flavors[i], ret);
+                }
+            }
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r432 complete ===\n");
+    fflush(stdout);
+}
 
 static void r431_probe(void) {
     rlog("\n=== r431: Deep IOKit Driver Exploration ===\n");
@@ -74663,6 +74974,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 435) {
+            rlog("*** rounds=435: IOConnectTrap + Commpage + NECP + KeyStore ***\n\n");
+            fflush(stdout);
+            r432_probe();
+            goto done;
+        }
         if (rounds == 434) {
             rlog("*** rounds=434: Deep IOKit Driver Exploration ***\n");
             rlog("  AppleJPEGDriver, AppleKeyStore, AVE2 alt types, IOKit iterator\n\n");
@@ -77293,7 +77610,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
