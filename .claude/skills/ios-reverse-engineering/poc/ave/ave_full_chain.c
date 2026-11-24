@@ -15902,6 +15902,209 @@ static void r362_probe(void) {
     fflush(stdout);
 }
 
+/* r384: Analyze PAC-signed pointers in IOSurfaceClientRef.
+ * r383 found PAC-signed pointers at multiple offsets in the client ref.
+ * Some have lower 48 bits in 0x19bxxxxxx range (shared cache).
+ * This probe:
+ * 1. Extract lower 48 bits from all non-zero values
+ * 2. Use dladdr() to identify what they point to
+ * 3. Check if any IOKit-related pointers exist that could be kernel
+ * 4. Try IOSurfaceLookup/IOSurfaceLookupFromMachPort for alternative access
+ */
+static void r384_probe(void) {
+    rlog("\n=== r384: PAC Pointer Analysis + IOSurface Internals ===\n\n");
+    fflush(stdout);
+
+    /* Create a surface */
+    int w=64, h=64, bpe=4, bpr=64*4, pf=0x42475241, as_=64*64*4;
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nW);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nH);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), nB);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nR);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nP);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nA);
+
+    IOSurfaceRef surf = IOSurfaceCreate(props);
+    uint32_t sid = IOSurfaceGetID(surf);
+    uint8_t *cref = (uint8_t*)surf;
+
+    rlog("  Surface: sid=%u base=%p\n", sid, IOSurfaceGetBaseAddress(surf));
+
+    /* Part 1: Analyze all pointers using dladdr */
+    rlog("\n--- Part 1: dladdr analysis of client ref pointers ---\n");
+    Dl_info dli;
+    for (int off = 0; off < 448; off += 8) {
+        uint64_t v;
+        memcpy(&v, cref + off, 8);
+        if (v == 0) continue;
+
+        /* Strip PAC: take lower 48 bits */
+        uint64_t stripped = v & 0x0000FFFFFFFFFFFFULL;
+
+        /* Try dladdr on the stripped pointer */
+        if (stripped >= 0x100000000ULL && stripped < 0x300000000ULL) {
+            /* Looks like a valid userspace pointer */
+            if (dladdr((void*)(uintptr_t)stripped, &dli)) {
+                rlog("    +%3d: 0x%016llx → %s (%s+0x%llx)\n",
+                    off, (unsigned long long)v,
+                    dli.dli_sname ? dli.dli_sname : "???",
+                    dli.dli_fname ? dli.dli_fname : "???",
+                    (unsigned long long)((uintptr_t)stripped - (uintptr_t)dli.dli_saddr));
+            } else {
+                rlog("    +%3d: 0x%016llx → userspace %p (no symbol)\n",
+                    off, (unsigned long long)v, (void*)(uintptr_t)stripped);
+            }
+        } else if (stripped >= 0xfffffff000000000ULL) {
+            rlog("    +%3d: 0x%016llx → KERNEL TEXT (stripped=0x%llx)\n",
+                off, (unsigned long long)v, (unsigned long long)stripped);
+        } else if (stripped >= 0xffffffe000000000ULL) {
+            rlog("    +%3d: 0x%016llx → KERNEL HEAP (stripped=0x%llx)\n",
+                off, (unsigned long long)v, (unsigned long long)stripped);
+        } else {
+            rlog("    +%3d: 0x%016llx (stripped=0x%llx)\n",
+                off, (unsigned long long)v, (unsigned long long)stripped);
+        }
+    }
+
+    /* Part 2: Try IOSurface private APIs */
+    rlog("\n--- Part 2: IOSurface private API probing ---\n");
+
+    /* IOSurfaceLookup — look up surface by ID */
+    IOSurfaceRef (*surfLookup)(uint32_t) = dlsym(RTLD_DEFAULT, "IOSurfaceLookup");
+    if (surfLookup) {
+        IOSurfaceRef found = surfLookup(sid);
+        rlog("  IOSurfaceLookup(%u): %p (orig=%p) same=%d\n",
+            sid, found, surf, (found == surf));
+    } else {
+        rlog("  IOSurfaceLookup: not found\n");
+    }
+
+    /* IOSurfaceGetMachPort */
+    mach_port_t (*getMachPort)(IOSurfaceRef) = dlsym(RTLD_DEFAULT, "IOSurfaceCreateMachPort");
+    if (getMachPort) {
+        mach_port_t mp = getMachPort(surf);
+        rlog("  IOSurfaceCreateMachPort: 0x%x\n", mp);
+    }
+
+    /* Try _IOSurfaceGetKernelAddress or similar private symbols */
+    const char *priv_syms[] = {
+        "_IOSurfaceGetKernelAddress",
+        "IOSurfaceGetKernelAddress",
+        "_IOSurfaceClientGetKernelAddress",
+        "IOSurfaceClientGetKernelAddress",
+        "_IOSurfaceGetRegistryEntryID",
+        "IOSurfaceGetRegistryEntryID",
+        "_IOSurfaceGetRegistryID",
+        "IOSurfaceGetRegistryID",
+        "_IOSurfaceGetGlobalID",
+        "IOSurfaceGetGlobalID",
+        "IOSurfaceGetPropertyMaximum",
+        "_IOSurfaceGetPropertyMaximum",
+        "IOSurfaceClientRelease",
+        "IOSurfaceClientRetain",
+        NULL
+    };
+    rlog("\n  Private symbol search:\n");
+    for (int i = 0; priv_syms[i]; i++) {
+        void *sym = dlsym(RTLD_DEFAULT, priv_syms[i]);
+        if (sym) rlog("    %s: %p\n", priv_syms[i], sym);
+    }
+
+    /* Part 3: Try to get the IOSurface's IOKit registry entry ID */
+    rlog("\n--- Part 3: IOKit registry exploration ---\n");
+
+    uint64_t (*getRegID)(IOSurfaceRef) = dlsym(RTLD_DEFAULT, "IOSurfaceGetRegistryID");
+    if (getRegID) {
+        uint64_t regid = getRegID(surf);
+        rlog("  RegistryID: 0x%llx\n", (unsigned long long)regid);
+    }
+
+    /* Try IORegistryEntryGetRegistryEntryID on the IOSurfaceRoot */
+    io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    if (svc) {
+        uint64_t entryID = 0;
+        kern_return_t kr = IORegistryEntryGetRegistryEntryID(svc, &entryID);
+        rlog("  IOSurfaceRoot registryEntryID: kr=%d id=0x%llx\n",
+            kr, (unsigned long long)entryID);
+        IOObjectRelease(svc);
+    }
+
+    /* Part 4: Scan the entire IOSurface framework for interesting symbols */
+    rlog("\n--- Part 4: IOSurface framework symbol scan ---\n");
+    const char *interesting[] = {
+        "IOSurfaceGetBulkAttachments",
+        "IOSurfaceSetBulkAttachments",
+        "IOSurfaceCopyAllValues",
+        "IOSurfaceGetPropertyAlignment",
+        "IOSurfaceAlignProperty",
+        "IOSurfaceIncrementUseCount",
+        "IOSurfaceDecrementUseCount",
+        "IOSurfaceSetPurgeable",
+        "IOSurfaceIsInUse",
+        "IOSurfaceCreateXPCObject",
+        "IOSurfaceLookupFromXPCObject",
+        "IOSurfaceGetBytesPerElement",
+        "IOSurfaceGetElementWidth",
+        "IOSurfaceGetElementHeight",
+        "IOSurfaceGetNumberOfComponentsOfPlane",
+        "IOSurfaceGetBytesPerElementOfPlane",
+        "IOSurfaceGetBytesPerRowOfPlane",
+        "IOSurfaceGetWidthOfPlane",
+        "IOSurfaceGetHeightOfPlane",
+        "IOSurfaceGetBaseAddressOfPlane",
+        NULL
+    };
+    for (int i = 0; interesting[i]; i++) {
+        void *sym = dlsym(RTLD_DEFAULT, interesting[i]);
+        if (sym) rlog("    %s: %p\n", interesting[i], sym);
+    }
+
+    /* Part 5: Get type info from CFGetTypeID */
+    rlog("\n--- Part 5: Type introspection ---\n");
+    CFTypeID tid = CFGetTypeID(surf);
+    rlog("  IOSurface CFTypeID: %lu\n", (unsigned long)tid);
+    CFStringRef desc = CFCopyTypeIDDescription(tid);
+    if (desc) {
+        char buf[256];
+        CFStringGetCString(desc, buf, sizeof(buf), kCFStringEncodingUTF8);
+        rlog("  Type description: %s\n", buf);
+        CFRelease(desc);
+    }
+
+    /* Get runtime class info via ObjC */
+    Class cls = object_getClass((id)surf);
+    rlog("  ObjC class: %s\n", cls ? class_getName(cls) : "null");
+    if (cls) {
+        unsigned int ivarCount = 0;
+        Ivar *ivars = class_copyIvarList(cls, &ivarCount);
+        rlog("  Instance variables (%u):\n", ivarCount);
+        for (unsigned int i = 0; i < ivarCount && i < 20; i++) {
+            const char *name = ivar_getName(ivars[i]);
+            ptrdiff_t ioff = ivar_getOffset(ivars[i]);
+            const char *type = ivar_getTypeEncoding(ivars[i]);
+            rlog("    +%td: %s (%s)\n", ioff, name ? name : "?", type ? type : "?");
+        }
+        if (ivars) free(ivars);
+    }
+
+    /* Cleanup */
+    CFRelease(surf);
+    CFRelease(props);
+    CFRelease(nW); CFRelease(nH); CFRelease(nB); CFRelease(nR); CFRelease(nP); CFRelease(nA);
+
+    rlog("\n=== r384 complete ===\n");
+    fflush(stdout);
+}
+
 /* r383: Re-map IOSurfaceClientRef layout on iOS 27.1.
  * The earlier layout mapping (from r354-r377) may be incorrect.
  * r382 showed:
@@ -59468,6 +59671,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 387) {
+            rlog("*** rounds=387: PAC Pointer Analysis + IOSurface Internals ***\n");
+            rlog("  dladdr analysis, private APIs, ObjC introspection.\n\n");
+            fflush(stdout);
+            r384_probe();
+            goto done;
+        }
         if (rounds == 386) {
             rlog("*** rounds=386: IOSurfaceClientRef Layout Re-Map ***\n");
             rlog("  Full dump + field matching with distinctive params.\n\n");
@@ -61762,7 +61972,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
