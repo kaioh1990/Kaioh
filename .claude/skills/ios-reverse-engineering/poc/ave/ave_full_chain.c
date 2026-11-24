@@ -17112,22 +17112,22 @@ static void r447_probe(void) {
     /* Vector C: IOHIDFamily user client probe */
     rlog("\n  --- Vector C: IOHIDFamily user client ---\n");
     {
-        io_service_t hid_svc = IOServiceGetMatchingService(kIOMainPortCompat,
+        io_service_t hid_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
             IOServiceMatching("IOHIDSystem"));
         rlog("    IOHIDSystem service=0x%x\n", hid_svc);
 
         /* Also try IOHIDResource */
-        io_service_t hid_res = IOServiceGetMatchingService(kIOMainPortCompat,
+        io_service_t hid_res = IOServiceGetMatchingService(kIOMasterPortDefault,
             IOServiceMatching("IOHIDResource"));
         rlog("    IOHIDResource service=0x%x\n", hid_res);
 
         /* Try IOHIDEventDriver */
-        io_service_t hid_drv = IOServiceGetMatchingService(kIOMainPortCompat,
+        io_service_t hid_drv = IOServiceGetMatchingService(kIOMasterPortDefault,
             IOServiceMatching("IOHIDEventDriver"));
         rlog("    IOHIDEventDriver service=0x%x\n", hid_drv);
 
         /* Try AppleUserHIDEventService */
-        io_service_t hid_ev = IOServiceGetMatchingService(kIOMainPortCompat,
+        io_service_t hid_ev = IOServiceGetMatchingService(kIOMasterPortDefault,
             IOServiceMatching("AppleUserHIDEventService"));
         rlog("    AppleUserHIDEventService service=0x%x\n", hid_ev);
 
@@ -17214,7 +17214,7 @@ static void r447_probe(void) {
         int nservices = sizeof(service_names) / sizeof(service_names[0]);
 
         for (int s = 0; s < nservices; s++) {
-            io_service_t svc = IOServiceGetMatchingService(kIOMainPortCompat,
+            io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
                 IOServiceMatching(service_names[s]));
             if (svc) {
                 for (uint32_t utype = 0; utype < 2; utype++) {
