@@ -17250,8 +17250,8 @@ static void r453_probe(void) {
     rlog("\n=== r453 complete ===\n");
 }
 
-static void r453_probe(void) {
-    rlog("\n=== r453: DarkSword physical TOCTOU race ===\n\n");
+static void r453_darksword_toctou_OLD(void) {
+    rlog("\n=== r453: DarkSword physical TOCTOU race (OLD) ===\n\n");
     fflush(stdout);
 
     #define R453_PAGES 2
