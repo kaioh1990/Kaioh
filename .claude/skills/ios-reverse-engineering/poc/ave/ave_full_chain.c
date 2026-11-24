@@ -14552,57 +14552,81 @@ static void r354_probe(void) {
         }
         fflush(stdout);
 
-        /* Do Metal/AGX work to populate kernel residuals on stack */
+        /* Do Metal/AGX work to populate kernel residuals on stack (pure C via dlsym) */
         {
-            id<MTLDevice> dev = MTLCreateSystemDefaultDevice();
-            if (!dev) {
-                rlog("  No Metal device!\n");
-                goto r354_done;
-            }
-            id<MTLCommandQueue> q = [dev newCommandQueue];
-            /* Create shared buffers to exercise AGX mapping path */
-            id<MTLBuffer> buf1 = [dev newBufferWithLength:(pass == 0 ? 65536 : 131072)
-                                   options:MTLResourceStorageModeShared];
-            id<MTLBuffer> buf2 = [dev newBufferWithLength:(pass == 0 ? 32768 : 65536)
-                                   options:MTLResourceStorageModeShared];
-            /* Fill with pattern */
-            memset([buf1 contents], 0xAA + pass, [buf1 length]);
-            memset([buf2 contents], 0xBB + pass, [buf2 length]);
+            void *metal_lib = dlopen("/System/Library/Frameworks/Metal.framework/Metal", RTLD_LAZY);
+            if (!metal_lib) { rlog("  No Metal!\n"); goto r354_done; }
+            typedef void *(*MTLCreateDev_t)(void);
+            MTLCreateDev_t createDev = (MTLCreateDev_t)dlsym(metal_lib, "MTLCreateSystemDefaultDevice");
+            void *(*msgSend)(void*, void*, ...) = dlsym(RTLD_DEFAULT, "objc_msgSend");
+            void *(*regSel)(const char*) = dlsym(RTLD_DEFAULT, "sel_registerName");
+            if (!createDev || !msgSend || !regSel) { dlclose(metal_lib); goto r354_done; }
 
-            /* Submit blit commands to exercise kernel-side GPU path */
-            for (int i = 0; i < (pass == 0 ? 3 : 5); i++) {
-                id<MTLCommandBuffer> cb = [q commandBuffer];
-                id<MTLBlitCommandEncoder> enc = [cb blitCommandEncoder];
-                size_t copyLen = (pass == 0 ? 16384 : 32768);
-                if (copyLen > [buf1 length]) copyLen = [buf1 length];
-                if (copyLen > [buf2 length]) copyLen = [buf2 length];
-                [enc copyFromBuffer:buf1 sourceOffset:0
-                           toBuffer:buf2 destinationOffset:0 size:copyLen];
-                [enc endEncoding];
-                [cb commit];
-                [cb waitUntilCompleted];
+            void *dev = createDev();
+            if (!dev) { dlclose(metal_lib); goto r354_done; }
+
+            void *cmdQ = ((void*(*)(void*,void*))msgSend)(dev, regSel("newCommandQueue"));
+            size_t buf1sz = (pass == 0) ? 65536 : 131072;
+            size_t buf2sz = (pass == 0) ? 32768 : 65536;
+            void *selNewBuf = regSel("newBufferWithLength:options:");
+            void *buf1 = ((void*(*)(void*,void*,size_t,unsigned long))msgSend)(dev, selNewBuf, buf1sz, 0UL);
+            void *buf2 = ((void*(*)(void*,void*,size_t,unsigned long))msgSend)(dev, selNewBuf, buf2sz, 0UL);
+
+            /* Fill buffers via "contents" selector */
+            void *selContents = regSel("contents");
+            void *b1ptr = ((void*(*)(void*,void*))msgSend)(buf1, selContents);
+            void *b2ptr = ((void*(*)(void*,void*))msgSend)(buf2, selContents);
+            if (b1ptr) memset(b1ptr, 0xAA + pass, buf1sz);
+            if (b2ptr) memset(b2ptr, 0xBB + pass, buf2sz);
+
+            /* Submit blit commands */
+            int iters = (pass == 0) ? 3 : 5;
+            for (int i = 0; i < iters; i++) {
+                void *cb = ((void*(*)(void*,void*))msgSend)(cmdQ, regSel("commandBuffer"));
+                if (!cb) break;
+                void *blit = ((void*(*)(void*,void*))msgSend)(cb, regSel("blitCommandEncoder"));
+                if (blit && buf1 && buf2) {
+                    typedef struct { unsigned long loc; unsigned long len; } NSRange354;
+                    NSRange354 rng = {0, buf2sz};
+                    void *selFill = regSel("fillBuffer:range:value:");
+                    ((void(*)(void*,void*,void*,NSRange354,uint8_t))msgSend)(blit, selFill, buf2, rng, 0xCC + pass);
+                    ((void(*)(void*,void*))msgSend)(blit, regSel("endEncoding"));
+                }
+                ((void(*)(void*,void*))msgSend)(cb, regSel("commit"));
+                ((void(*)(void*,void*))msgSend)(cb, regSel("waitUntilCompleted"));
             }
 
-            /* Also do IOSurface operations to exercise that kernel path */
-            IOSurfaceRef surf = IOSurfaceCreate((__bridge CFDictionaryRef)@{
-                @"IOSurfaceWidth": @(64 + pass * 32),
-                @"IOSurfaceHeight": @(64 + pass * 32),
-                @"IOSurfaceBytesPerElement": @4,
-                @"IOSurfacePixelFormat": @(0x42475241)
-            });
+            /* IOSurface operations to exercise kernel paths */
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int sw = 64 + pass * 32, sh = sw, sbpe = 4, spf = 0x42475241;
+            CFNumberRef snw = CFNumberCreate(NULL, kCFNumberIntType, &sw);
+            CFNumberRef snh = CFNumberCreate(NULL, kCFNumberIntType, &sh);
+            CFNumberRef snb = CFNumberCreate(NULL, kCFNumberIntType, &sbpe);
+            CFNumberRef snp = CFNumberCreate(NULL, kCFNumberIntType, &spf);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), snw);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), snh);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerElement"), snb);
+            CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), snp);
+            CFRelease(snw); CFRelease(snh); CFRelease(snb); CFRelease(snp);
+            IOSurfaceRef surf = IOSurfaceCreate(sp);
+            CFRelease(sp);
             if (surf) {
                 IOSurfaceLock(surf, 0, NULL);
                 memset(IOSurfaceGetBaseAddress(surf), 0xCC + pass, IOSurfaceGetAllocSize(surf));
                 IOSurfaceUnlock(surf, 0, NULL);
-                /* Look up surface to exercise kernel lookup path */
                 uint32_t sid = IOSurfaceGetID(surf);
                 IOSurfaceRef s2 = IOSurfaceLookup(sid);
                 if (s2) CFRelease(s2);
                 CFRelease(surf);
             }
 
-            rlog("  Metal work done (buf sizes: %zu, %zu)\n",
-                (size_t)[buf1 length], (size_t)[buf2 length]);
+            rlog("  Metal work done (buf sizes: %zu, %zu)\n", buf1sz, buf2sz);
+            void *selRelease = regSel("release");
+            if (buf1) ((void(*)(void*,void*))msgSend)(buf1, selRelease);
+            if (buf2) ((void(*)(void*,void*))msgSend)(buf2, selRelease);
+            if (cmdQ) ((void(*)(void*,void*))msgSend)(cmdQ, selRelease);
+            dlclose(metal_lib);
         }
 
         /* Now scan the FULL stack region */
