@@ -100,6 +100,7 @@ extern kern_return_t mach_vm_page_info(
 #include <VideoToolbox/VideoToolbox.h>
 #include <CoreVideo/CoreVideo.h>
 #include <CoreMedia/CoreMedia.h>
+#include <Metal/Metal.h>
 #include <IOKit/IOKitLib.h>
 #include <dlfcn.h>
 #include <os/log.h>
@@ -16756,6 +16757,276 @@ static void r428_sighandler(int sig) {
  * Also scan the entire IOSurfaceClientRef structure (448 bytes at the
  * surf pointer itself) for any kernel pointers or interesting data.
  */
+
+static void r434_probe(void) {
+    rlog("\n=== r434: Metal GPU + Purgeable Recovery + Page Info Flavors ===\n\n");
+    fflush(stdout);
+
+    /* Vector A: Metal GPU render to IOSurface, scan for kernel data */
+    rlog("  --- Vector A: Metal GPU render to IOSurface ---\n");
+    {
+        id<MTLDevice> device = MTLCreateSystemDefaultDevice();
+        rlog("    Metal device: %p name='%s'\n", device,
+             device ? [[device name] UTF8String] : "null");
+
+        if (device) {
+            /* Create IOSurface */
+            int gw = 64, gh = 64, gbpr = 256, gas = 16384, gpf = 0x42475241;
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef gn[5];
+            gn[0] = CFNumberCreate(NULL, kCFNumberIntType, &gw);
+            gn[1] = CFNumberCreate(NULL, kCFNumberIntType, &gh);
+            gn[2] = CFNumberCreate(NULL, kCFNumberIntType, &gbpr);
+            gn[3] = CFNumberCreate(NULL, kCFNumberIntType, &gas);
+            gn[4] = CFNumberCreate(NULL, kCFNumberIntType, &gpf);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), gn[0]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), gn[1]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), gn[2]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), gn[3]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), gn[4]);
+            IOSurfaceRef gsurf = IOSurfaceCreate(sp);
+            CFRelease(sp);
+            for (int i = 0; i < 5; i++) CFRelease(gn[i]);
+
+            if (gsurf) {
+                rlog("    GPU surface: id=%u\n", IOSurfaceGetID(gsurf));
+
+                /* Fill with known pattern */
+                IOSurfaceLock(gsurf, 0, NULL);
+                memset(IOSurfaceGetBaseAddress(gsurf), 0xAA, gas);
+                IOSurfaceUnlock(gsurf, 0, NULL);
+
+                /* Create Metal texture from IOSurface */
+                MTLTextureDescriptor *tdesc = [MTLTextureDescriptor
+                    texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
+                    width:gw height:gh mipmapped:NO];
+                tdesc.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
+                id<MTLTexture> tex = [device newTextureWithDescriptor:tdesc
+                    iosurface:gsurf plane:0];
+                rlog("    Metal texture: %p\n", tex);
+
+                if (tex) {
+                    /* Create a simple render pass that clears to a color */
+                    id<MTLCommandQueue> queue = [device newCommandQueue];
+                    id<MTLCommandBuffer> cmdBuf = [queue commandBuffer];
+
+                    MTLRenderPassDescriptor *rpd = [MTLRenderPassDescriptor renderPassDescriptor];
+                    rpd.colorAttachments[0].texture = tex;
+                    rpd.colorAttachments[0].loadAction = MTLLoadActionClear;
+                    rpd.colorAttachments[0].storeAction = MTLStoreActionStore;
+                    rpd.colorAttachments[0].clearColor = MTLClearColorMake(0.5, 0.25, 0.75, 1.0);
+
+                    id<MTLRenderCommandEncoder> enc = [cmdBuf renderCommandEncoderWithDescriptor:rpd];
+                    [enc endEncoding];
+                    [cmdBuf commit];
+                    [cmdBuf waitUntilCompleted];
+
+                    rlog("    GPU render complete, status=%lu\n",
+                         (unsigned long)[cmdBuf status]);
+
+                    /* Now scan the IOSurface backing store for kernel pointers */
+                    IOSurfaceLock(gsurf, kIOSurfaceLockReadOnly, NULL);
+                    uint64_t *bp = (uint64_t*)IOSurfaceGetBaseAddress(gsurf);
+                    int kptr_found = 0;
+                    for (int i = 0; i < gas / 8; i++) {
+                        if ((bp[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog("    *** KPTR in GPU output +%d: 0x%016llx ***\n",
+                                 i*8, (unsigned long long)bp[i]);
+                            kptr_found++;
+                            if (kptr_found >= 10) break;
+                        }
+                    }
+                    if (kptr_found == 0) {
+                        rlog("    No kernel pointers in GPU-rendered backing store\n");
+                        /* Check if the 0xAA pattern was overwritten (confirms GPU write) */
+                        int changed = 0;
+                        for (int i = 0; i < 16; i++) {
+                            if (bp[i] != 0xAAAAAAAAAAAAAAAAULL) changed++;
+                        }
+                        rlog("    First 128 bytes: %d/16 qwords changed from 0xAA pattern\n", changed);
+                        rlog("    First 4 pixels: 0x%08x 0x%08x 0x%08x 0x%08x\n",
+                             ((uint32_t*)bp)[0], ((uint32_t*)bp)[1],
+                             ((uint32_t*)bp)[2], ((uint32_t*)bp)[3]);
+                    }
+
+                    /* Check shared data AFTER GPU operation */
+                    void *shrp = *(void**)((char*)gsurf + 8);
+                    if (shrp) {
+                        uint64_t *sq = (uint64_t*)shrp;
+                        int shr_kptr = 0;
+                        for (int i = 0; i < 32; i++) {
+                            if ((sq[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                rlog("    *** KPTR in shared data post-GPU +%d: 0x%016llx ***\n",
+                                     i*8, (unsigned long long)sq[i]);
+                                shr_kptr++;
+                            }
+                        }
+                        if (shr_kptr == 0)
+                            rlog("    No kernel pointers in shared data post-GPU\n");
+                    }
+
+                    /* Scan IOSurface properties after GPU use */
+                    CFDictionaryRef allP = IOSurfaceCopyAllValues(gsurf);
+                    if (allP) {
+                        CFIndex pcnt = CFDictionaryGetCount(allP);
+                        rlog("    Post-GPU properties: %ld keys\n", (long)pcnt);
+                        CFRelease(allP);
+                    }
+
+                    IOSurfaceUnlock(gsurf, kIOSurfaceLockReadOnly, NULL);
+                }
+
+                CFRelease(gsurf);
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* Vector B: Purgeable page recovery — set volatile, pressure, check for kernel data */
+    rlog("\n  --- Vector B: Purgeable page recovery ---\n");
+    {
+        /* Create a large IOSurface, set purgeable, force memory pressure */
+        int pw = 512, ph = 512, pbpr = 2048, pas = pw * ph * 4, ppf = 0x42475241;
+        CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef pn[5];
+        pn[0] = CFNumberCreate(NULL, kCFNumberIntType, &pw);
+        pn[1] = CFNumberCreate(NULL, kCFNumberIntType, &ph);
+        pn[2] = CFNumberCreate(NULL, kCFNumberIntType, &pbpr);
+        pn[3] = CFNumberCreate(NULL, kCFNumberIntType, &pas);
+        pn[4] = CFNumberCreate(NULL, kCFNumberIntType, &ppf);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), pn[0]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), pn[1]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), pn[2]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), pn[3]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), pn[4]);
+        IOSurfaceRef psurf = IOSurfaceCreate(sp);
+        CFRelease(sp);
+        for (int i = 0; i < 5; i++) CFRelease(pn[i]);
+
+        if (psurf) {
+            /* Fill with known pattern */
+            IOSurfaceLock(psurf, 0, NULL);
+            uint64_t *pb = (uint64_t*)IOSurfaceGetBaseAddress(psurf);
+            for (int i = 0; i < pas / 8; i++) pb[i] = 0xDEADDEADDEADDEADULL;
+            IOSurfaceUnlock(psurf, 0, NULL);
+
+            /* Set purgeable (volatile) */
+            uint32_t old_state = 0;
+            IOReturn ior = IOSurfaceSetPurgeable(psurf, kIOSurfacePurgeableVolatile, &old_state);
+            rlog("    SetPurgeable(volatile): ret=0x%x old_state=%u\n", ior, old_state);
+
+            /* Apply memory pressure — allocate lots of memory */
+            rlog("    Applying memory pressure...\n");
+            #define PRESSURE_ALLOCS 100
+            void *pressure_bufs[PRESSURE_ALLOCS];
+            int alloc_ok = 0;
+            for (int i = 0; i < PRESSURE_ALLOCS; i++) {
+                pressure_bufs[i] = mmap(NULL, 1024*1024, PROT_READ|PROT_WRITE,
+                    MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+                if (pressure_bufs[i] != MAP_FAILED) {
+                    memset(pressure_bufs[i], i & 0xFF, 1024*1024);
+                    alloc_ok++;
+                }
+            }
+            rlog("    Allocated %d x 1MB pressure buffers\n", alloc_ok);
+
+            /* Set back to non-volatile */
+            uint32_t new_state = 0;
+            ior = IOSurfaceSetPurgeable(psurf, kIOSurfacePurgeableNonVolatile, &new_state);
+            rlog("    SetPurgeable(non-volatile): ret=0x%x state=%u\n", ior, new_state);
+            /* state=1 means pages were purged, 0 means still intact */
+
+            if (new_state != 0) {
+                rlog("    *** PAGES WERE PURGED! Scanning for kernel data ***\n");
+                IOSurfaceLock(psurf, kIOSurfaceLockReadOnly, NULL);
+                pb = (uint64_t*)IOSurfaceGetBaseAddress(psurf);
+                int kptr_cnt = 0, changed = 0;
+                for (int i = 0; i < pas / 8; i++) {
+                    if (pb[i] != 0xDEADDEADDEADDEADULL && pb[i] != 0) {
+                        changed++;
+                        if ((pb[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog("      *** KPTR +%d: 0x%016llx ***\n",
+                                 i*8, (unsigned long long)pb[i]);
+                            kptr_cnt++;
+                            if (kptr_cnt >= 20) break;
+                        }
+                    }
+                }
+                rlog("    %d qwords changed, %d kernel pointers\n", changed, kptr_cnt);
+                /* Show first few non-dead values */
+                int shown = 0;
+                for (int i = 0; i < pas / 8 && shown < 10; i++) {
+                    if (pb[i] != 0xDEADDEADDEADDEADULL && pb[i] != 0) {
+                        rlog("      +%d: 0x%016llx\n", i*8, (unsigned long long)pb[i]);
+                        shown++;
+                    }
+                }
+                IOSurfaceUnlock(psurf, kIOSurfaceLockReadOnly, NULL);
+            } else {
+                rlog("    Pages still intact (not purged)\n");
+                /* Check if our pattern is still there */
+                IOSurfaceLock(psurf, kIOSurfaceLockReadOnly, NULL);
+                pb = (uint64_t*)IOSurfaceGetBaseAddress(psurf);
+                int intact = 0;
+                for (int i = 0; i < 100; i++) {
+                    if (pb[i] == 0xDEADDEADDEADDEADULL) intact++;
+                }
+                rlog("    Pattern intact: %d/100 first qwords\n", intact);
+                IOSurfaceUnlock(psurf, kIOSurfaceLockReadOnly, NULL);
+            }
+
+            /* Cleanup pressure */
+            for (int i = 0; i < PRESSURE_ALLOCS; i++) {
+                if (pressure_bufs[i] != MAP_FAILED)
+                    munmap(pressure_bufs[i], 1024*1024);
+            }
+            CFRelease(psurf);
+        }
+    }
+    fflush(stdout);
+
+    /* Vector C: mach_vm_page_info additional flavors */
+    rlog("\n  --- Vector C: mach_vm_page_info flavors 2-10 ---\n");
+    {
+        /* Use a stack variable page for testing */
+        volatile uint64_t stack_var = 0x4141414141414141ULL;
+        mach_vm_address_t test_addr = (mach_vm_address_t)&stack_var & ~0x3FFFULL;
+
+        for (int flav = 1; flav <= 10; flav++) {
+            uint64_t buf[32] = {0};
+            mach_msg_type_number_t cnt = 32;
+            kern_return_t kr = mach_vm_page_info(mach_task_self(), test_addr,
+                flav, buf, &cnt);
+            if (kr == 0) {
+                rlog("    flavor %d: cnt=%u", flav, cnt);
+                int kptr_cnt = 0;
+                for (unsigned i = 0; i < cnt; i++) {
+                    if ((buf[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) kptr_cnt++;
+                }
+                if (kptr_cnt > 0) {
+                    rlog(" *** %d KPTR ***\n", kptr_cnt);
+                    for (unsigned i = 0; i < cnt; i++) {
+                        if ((buf[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                            rlog("      [%u]: 0x%016llx\n", i, (unsigned long long)buf[i]);
+                    }
+                } else {
+                    rlog("\n");
+                    for (unsigned i = 0; i < cnt && i < 8; i++) {
+                        if (buf[i] != 0) rlog("      [%u]: 0x%016llx\n", i, (unsigned long long)buf[i]);
+                    }
+                }
+            } else if (flav <= 3) {
+                rlog("    flavor %d: kr=%d\n", flav, kr);
+            }
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r434 complete ===\n");
+    fflush(stdout);
+}
 
 static void r433_probe(void) {
     rlog("\n=== r433: VM Page Info + Memory Entry + NetSrc ===\n\n");
@@ -75301,6 +75572,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 437) {
+            rlog("*** rounds=437: Metal GPU + Purgeable Recovery + Page Info Flavors ***\n\n");
+            fflush(stdout);
+            r434_probe();
+            goto done;
+        }
         if (rounds == 436) {
             rlog("*** rounds=436: VM Page Info + Memory Entry + NetSrc ***\n\n");
             fflush(stdout);
@@ -77943,7 +78220,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
