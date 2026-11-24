@@ -22,6 +22,7 @@ Install Sileo package manager on iPhone Duo (A20 Pro, iOS 27.1) via a kernel exp
 **Key architectural facts:**
 - **SPTM** protects page tables and code-signing. Does NOT protect proc/ucred/task credential structures.
 - **MIE** is heap-level memory safety via Enhanced Memory Tagging Extension (A19/M5+). A20 Pro has MIE.
+- **Lockdown Mode is OFF** — this means MIE/MTE is NOT active in PDF rendering / Preview / Quick Look. Standard memory corruption works in CoreGraphics.
 - **kalloc_type isolation**: Objects grouped by type signature, not just size (iOS 15+).
 - **Kernel R/W alone suffices** for credential patching to get root. No SPTM bypass needed.
 
@@ -151,7 +152,103 @@ Attempted and failed:
 
 ---
 
+## NEW PRIMARY ATTACK VECTOR: CoreGraphics PDF/Font Parsing
+
+### Critical Intel (November 2026)
+
+Two CoreGraphics vulnerabilities were patched in iOS 27.2 (November 20, 2026) and are **LIVE on our iOS 27.1 device**:
+
+| CVE | Component | Description |
+|-----|-----------|-------------|
+| **CVE-2026-112611** | CoreGraphics | PDF and font parsing bug, credited to Calif.io |
+| **CVE-2026-113950** | CoreGraphics | PDF and font parsing bug, credited to Calif.io |
+
+These were used in **Calif.io's October 2026 jailbreak** — a real, working exploit chain.
+
+### Why This Is The Path Forward
+
+1. **MTE/MIE is NOT active** in the PDF rendering path (Lockdown Mode is OFF on our device). Standard memory corruption works — no tag-matching dance needed.
+2. **CoreGraphics is accessible from any app** — load a crafted PDF via `CGPDFDocument` / `CGContextDrawPDFPage`, no entitlements needed.
+3. **Can also be triggered via AirDrop** — the receiving device renders a PDF preview through Quick Look / CoreGraphics.
+4. **Font parsing** (CFF charstrings, TrueType glyph outlines, OpenType tables inside PDFs) is historically one of the richest exploit surfaces in iOS.
+5. **These bugs were used in a real jailbreak** — meaning they provide sufficient primitives for a full chain.
+
+### Calif.io's Documented Methodology (from Coruna research)
+
+Based on their public research, modern iOS exploit chains:
+1. Use **non-memory logic bugs or type confusions** to read memory first (info leak)
+2. **Leak pointer tags or target un-tagged memory regions** to map address space
+3. Achieve **arbitrary R/W with valid matching tags**
+
+Since Lockdown Mode is off, step 2 is simplified — no tag leaking needed.
+
+### Research Tasks for This Vector
+
+**HIGH PRIORITY — do these first:**
+1. Search for ANY public details on CVE-2026-112611 and CVE-2026-113950 (Apple security notes, blog posts, conference talks, commit diffs)
+2. Check Apple's iOS 27.2 security release notes for exact descriptions of these CVEs
+3. Look for CoreGraphics / ImageIO commits between iOS 27.1 and 27.2 builds
+4. Research Calif.io's public disclosures and blog posts from October-November 2026
+5. Study CFF (Compact Font Format) charstring interpreter in CoreGraphics — historically the #1 font parsing attack surface
+6. Study TrueType/OpenType table parsing in CoreGraphics (cmap, glyf, head, hhea, hmtx, loca, maxp, name, post tables)
+
+**IMPLEMENTATION:**
+1. Add CGPDFDocument rendering to the test app (load PDF from app bundle, render it)
+2. Craft malformed PDFs with:
+   - Corrupt CFF charstring operands (stack overflows, type confusion)
+   - Malformed TrueType glyph tables (out-of-bounds reads/writes)
+   - Invalid ICC color profiles
+   - Nested font streams with conflicting metadata
+3. Monitor for crashes, then analyze crash logs for exploitability
+
+### How to Trigger PDF Parsing From Our App
+
+```c
+// Load a crafted PDF from the app bundle
+CFURLRef pdfURL = CFBundleCopyResourceURL(CFBundleGetMainBundle(), 
+    CFSTR("malformed"), CFSTR("pdf"), NULL);
+CGPDFDocumentRef doc = CGPDFDocumentCreateWithURL(pdfURL);
+if (doc) {
+    CGPDFPageRef page = CGPDFDocumentGetPage(doc, 1);
+    // Create a bitmap context and render — this triggers font/glyph parsing
+    CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+    CGContextRef ctx = CGBitmapContextCreate(NULL, 256, 256, 8, 1024, cs,
+        kCGImageAlphaPremultipliedLast);
+    CGContextDrawPDFPage(ctx, page);
+    // If we get here without crashing, check context contents for leaked data
+    void *data = CGBitmapContextGetData(ctx);
+    // Scan rendered output for kernel pointers or unexpected values
+    CGContextRelease(ctx);
+    CGColorSpaceRelease(cs);
+    CGPDFDocumentRelease(doc);
+}
+CFRelease(pdfURL);
+```
+
+### Revised Exploit Chain Architecture
+
+```
+1. CoreGraphics PDF/Font Bug        → Type confusion or OOB in font parser
+   (CVE-2026-112611 / 113950)         (info leak + write primitive)
+2. KASLR Bypass                     → Leaked kernel pointer from step 1
+3. Kernel R/W                       → Target proc/ucred via corrupted primitive
+4. Credential Patching              → Set uid=0, disable sandbox
+5. Post-exploitation                → Remount rootfs, install Sileo
+```
+
+This replaces the previous IOKit-based chain which was blocked at the KASLR bypass step.
+
+---
+
+## Previous Approach (IOKit — deprioritized but not abandoned)
+
+The IOKit research below is kept for reference. If the CoreGraphics vector doesn't pan out, the NTL OOB write and AppleKeyStore leads remain available.
+
+---
+
 ## Immediate TODO (Priority Order)
+
+### 0. (NEW) Research CoreGraphics CVEs and build PDF fuzzing into the app
 
 ### 1. Fix r506 compile errors (rounds=511)
 The function at line ~30324 uses Objective-C syntax that won't compile in a .c file:
