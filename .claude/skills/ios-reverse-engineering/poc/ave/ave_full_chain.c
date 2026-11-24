@@ -15922,78 +15922,79 @@ static void r373_probe(void) {
 
     kern_return_t kr;
 
-    /* host_zone_info — declare manually since header may not export it */
-    extern kern_return_t host_zone_info(
-        host_priv_t host, mach_zone_name_t **names,
-        mach_msg_type_number_t *namesCnt,
-        mach_zone_info_t **info,
-        mach_msg_type_number_t *infoCnt);
-
-    mach_zone_name_t *names = NULL;
-    mach_msg_type_number_t nameCnt = 0;
-    mach_zone_info_t *info = NULL;
-    mach_msg_type_number_t infoCnt = 0;
-
-    kr = host_zone_info(host, &names, &nameCnt, &info, &infoCnt);
-    rlog("  host_zone_info: kr=0x%x nameCnt=%u infoCnt=%u\n", kr, nameCnt, infoCnt);
-    if (kr == KERN_SUCCESS && nameCnt > 0 && infoCnt > 0) {
-        rlog("  First 10 zones:\n");
-        for (unsigned i = 0; i < nameCnt && i < 10; i++) {
-            rlog("    [%u] %s: cur=%llu max=%llu elem=%llu\n",
-                i, names[i].mzn_name,
-                (unsigned long long)info[i].mzi_count,
-                (unsigned long long)info[i].mzi_max_size,
-                (unsigned long long)info[i].mzi_elem_size);
-            uint64_t fields[] = {info[i].mzi_count, info[i].mzi_cur_size,
-                                 info[i].mzi_max_size, info[i].mzi_elem_size,
-                                 info[i].mzi_alloc_size, info[i].mzi_sum_size};
-            for (int f = 0; f < 6; f++) {
-                if ((fields[f] >> 36) == 0xFFFFFFF0 || (fields[f] >> 36) == 0xFFFFFFF1) {
-                    rlog("    *** KTEXT in field %d: 0x%llx ***\n", f, (unsigned long long)fields[f]);
+    /* Try host_zone_info via dlsym (removed from iOS SDK) */
+    typedef kern_return_t (*hzi_t)(host_priv_t, mach_zone_name_t**,
+        mach_msg_type_number_t*, mach_zone_info_t**, mach_msg_type_number_t*);
+    hzi_t hzi_fn = (hzi_t)dlsym(RTLD_DEFAULT, "host_zone_info");
+    if (hzi_fn) {
+        mach_zone_name_t *names = NULL;
+        mach_msg_type_number_t nameCnt = 0;
+        mach_zone_info_t *info = NULL;
+        mach_msg_type_number_t infoCnt = 0;
+        kr = hzi_fn(host, &names, &nameCnt, &info, &infoCnt);
+        rlog("  host_zone_info: kr=0x%x nameCnt=%u infoCnt=%u\n", kr, nameCnt, infoCnt);
+        if (kr == KERN_SUCCESS && nameCnt > 0 && infoCnt > 0) {
+            rlog("  First 10 zones:\n");
+            for (unsigned i = 0; i < nameCnt && i < 10; i++) {
+                rlog("    [%u] %s: cur=%llu max=%llu elem=%llu\n",
+                    i, names[i].mzn_name,
+                    (unsigned long long)info[i].mzi_count,
+                    (unsigned long long)info[i].mzi_max_size,
+                    (unsigned long long)info[i].mzi_elem_size);
+                uint64_t fields[] = {info[i].mzi_count, info[i].mzi_cur_size,
+                                     info[i].mzi_max_size, info[i].mzi_elem_size,
+                                     info[i].mzi_alloc_size, info[i].mzi_sum_size};
+                for (int f = 0; f < 6; f++) {
+                    if ((fields[f] >> 36) == 0xFFFFFFF0 || (fields[f] >> 36) == 0xFFFFFFF1) {
+                        rlog("    *** KTEXT in field %d: 0x%llx ***\n", f, (unsigned long long)fields[f]);
+                    }
+                }
+            }
+            for (unsigned i = 0; i < nameCnt; i++) {
+                if (strstr(names[i].mzn_name, "IOSurface") ||
+                    strstr(names[i].mzn_name, "kalloc") ||
+                    strstr(names[i].mzn_name, "ipc")) {
+                    rlog("  ZONE: %s elem=%llu cur=%llu\n",
+                        names[i].mzn_name,
+                        (unsigned long long)info[i].mzi_elem_size,
+                        (unsigned long long)info[i].mzi_cur_size);
                 }
             }
         }
-        for (unsigned i = 0; i < nameCnt; i++) {
-            if (strstr(names[i].mzn_name, "IOSurface") ||
-                strstr(names[i].mzn_name, "kalloc.448") ||
-                strstr(names[i].mzn_name, "kalloc.512") ||
-                strstr(names[i].mzn_name, "ipc.ports") ||
-                strstr(names[i].mzn_name, "ipc_port")) {
-                rlog("  ZONE: %s elem=%llu cur=%llu\n",
-                    names[i].mzn_name,
-                    (unsigned long long)info[i].mzi_elem_size,
-                    (unsigned long long)info[i].mzi_cur_size);
-            }
-        }
+    } else {
+        rlog("  host_zone_info: not available (removed from iOS)\n");
     }
 
-    /* mach_memory_info — takes additional params on newer SDKs */
-    extern kern_return_t mach_memory_info(
-        host_priv_t host,
-        mach_zone_name_t **names, mach_msg_type_number_t *namesCnt,
-        mach_zone_info_t **info, mach_msg_type_number_t *infoCnt,
-        mach_memory_info_t **meminfo, mach_msg_type_number_t *meminfoCnt);
-
-    mach_zone_name_t *mnames = NULL;
-    mach_msg_type_number_t mnameCnt = 0;
-    mach_zone_info_t *minfo = NULL;
-    mach_msg_type_number_t minfoCnt = 0;
-    mach_memory_info_t *meminfo = NULL;
-    mach_msg_type_number_t meminfoCnt = 0;
-    kr = mach_memory_info(host, &mnames, &mnameCnt, &minfo, &minfoCnt, &meminfo, &meminfoCnt);
-    rlog("  mach_memory_info: kr=0x%x cnt=%u\n", kr, meminfoCnt);
-    if (kr == KERN_SUCCESS && meminfoCnt > 0) {
-        int kptr_found = 0;
-        for (unsigned i = 0; i < meminfoCnt && i < 500; i++) {
-            uint64_t addr = meminfo[i].site;
-            if ((addr >> 36) == 0xFFFFFFF0 || (addr >> 36) == 0xFFFFFFF1) {
-                rlog("  *** mach_memory_info[%u].site = 0x%llx [KTEXT!] ***\n",
-                    i, (unsigned long long)addr);
-                kptr_found++;
-                if (kptr_found >= 20) break;
+    /* Try mach_memory_info via dlsym */
+    typedef kern_return_t (*mmi_t)(host_priv_t,
+        mach_zone_name_t**, mach_msg_type_number_t*,
+        mach_zone_info_t**, mach_msg_type_number_t*,
+        mach_memory_info_t**, mach_msg_type_number_t*);
+    mmi_t mmi_fn = (mmi_t)dlsym(RTLD_DEFAULT, "mach_memory_info");
+    if (mmi_fn) {
+        mach_zone_name_t *mnames = NULL;
+        mach_msg_type_number_t mnameCnt = 0;
+        mach_zone_info_t *minfo = NULL;
+        mach_msg_type_number_t minfoCnt = 0;
+        mach_memory_info_t *meminfo = NULL;
+        mach_msg_type_number_t meminfoCnt = 0;
+        kr = mmi_fn(host, &mnames, &mnameCnt, &minfo, &minfoCnt, &meminfo, &meminfoCnt);
+        rlog("  mach_memory_info: kr=0x%x cnt=%u\n", kr, meminfoCnt);
+        if (kr == KERN_SUCCESS && meminfoCnt > 0) {
+            int kptr_found = 0;
+            for (unsigned i = 0; i < meminfoCnt && i < 500; i++) {
+                uint64_t addr = meminfo[i].site;
+                if ((addr >> 36) == 0xFFFFFFF0 || (addr >> 36) == 0xFFFFFFF1) {
+                    rlog("  *** mach_memory_info[%u].site = 0x%llx [KTEXT!] ***\n",
+                        i, (unsigned long long)addr);
+                    kptr_found++;
+                    if (kptr_found >= 20) break;
+                }
             }
+            if (!kptr_found) rlog("  (no ktext pointers in memory info)\n");
         }
-        if (!kptr_found) rlog("  (no ktext pointers in memory info)\n");
+    } else {
+        rlog("  mach_memory_info: not available\n");
     }
 
     /* ---- Part 2: Sysctls ---- */
