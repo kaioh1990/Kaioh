@@ -16464,6 +16464,357 @@ static void r410_probe(void) {
 }
 
 /*
+ * r412: AppleAVE2Driver + ANEDriverRoot + DCP endpoint deep scan.
+ *
+ * AppleAVE2Driver found at service 1181. ANEDriverRoot opens types 1,4.
+ * Both HW accelerators map command buffers that may contain kernel ptrs.
+ */
+static volatile int g_r412_crashed = 0;
+static sigjmp_buf g_r412_jmp;
+static void r412_sighandler(int sig) {
+    g_r412_crashed = sig;
+    siglongjmp(g_r412_jmp, 1);
+}
+
+static void scan_mapped_memory(io_connect_t conn, const char *label,
+    int maxType, volatile int *crashed, sigjmp_buf jmp) {
+    for (int mt = 0; mt < maxType; mt++) {
+        mach_vm_address_t addr = 0;
+        mach_vm_size_t sz = 0;
+        kern_return_t kr = IOConnectMapMemory64(conn, mt,
+            mach_task_self(), &addr, &sz, kIOMapAnywhere);
+        if (kr != KERN_SUCCESS || !addr || !sz) continue;
+
+        rlog("    %s map[%d] addr=0x%llx sz=0x%llx\n",
+            label, mt, (unsigned long long)addr, (unsigned long long)sz);
+
+        *crashed = 0;
+        if (sigsetjmp(jmp, 1) == 0) {
+            uint64_t scanSz = sz < 262144 ? sz : 262144;
+            int found = 0;
+            for (uint64_t o = 0; o + 7 < scanSz; o += 8) {
+                uint64_t v = *(volatile uint64_t*)((uint8_t*)addr + o);
+                uint16_t top = (uint16_t)(v >> 48);
+                if (top >= 0xfff0 && top <= 0xfffe &&
+                    v != 0xffffffffffffffff) {
+                    rlog("      +%llu: 0x%016llx <KERNEL!!!>\n",
+                        (unsigned long long)o, (unsigned long long)v);
+                    found++;
+                    if (found > 30) break;
+                }
+                /* Also check for physical addresses (0x8/0x9 top nibble) */
+                if ((v >> 60) >= 0x8 && (v >> 60) <= 0xB &&
+                    (v & 0xFFF) == 0 && v != 0) {
+                    rlog("      +%llu: 0x%016llx <PHYS?>\n",
+                        (unsigned long long)o, (unsigned long long)v);
+                    found++;
+                }
+            }
+            if (found == 0) rlog("      (clean)\n");
+        } else {
+            rlog("      (CRASHED)\n");
+        }
+        IOConnectUnmapMemory64(conn, mt, mach_task_self(), addr);
+    }
+}
+
+static void scan_struct_methods(io_connect_t conn, const char *label,
+    int maxSel) {
+    for (int sel = 0; sel < maxSel; sel++) {
+        uint8_t in[256], out[4096];
+        memset(in, 0, sizeof(in));
+        memset(out, 0xDD, sizeof(out));
+        size_t outSz = sizeof(out);
+
+        kern_return_t kr = IOConnectCallStructMethod(conn, sel,
+            in, 8, out, &outSz);
+        if (kr == KERN_SUCCESS && outSz > 0 && outSz < sizeof(out)) {
+            rlog("    %s struct sel=%d outSz=%zu:", label, sel, outSz);
+            int shown = 0;
+            for (size_t j = 0; j + 7 < outSz && shown < 12; j += 8) {
+                uint64_t v = *(uint64_t*)(out + j);
+                if (v != 0 && v != 0xDDDDDDDDDDDDDDDDULL) {
+                    rlog(" [%zu]=0x%llx", j, (unsigned long long)v);
+                    shown++;
+                    uint16_t top = (uint16_t)(v >> 48);
+                    if (top >= 0xfff0 && top <= 0xfffe &&
+                        v != 0xffffffffffffffff)
+                        rlog("<K!>");
+                }
+            }
+            rlog("\n");
+        }
+    }
+}
+
+static void scan_scalar_methods(io_connect_t conn, const char *label,
+    int maxSel) {
+    for (int sel = 0; sel < maxSel; sel++) {
+        uint64_t in[8] = {0}, out[16];
+        uint32_t outCnt = 16;
+        memset(out, 0xCC, sizeof(out));
+
+        kern_return_t kr = IOConnectCallScalarMethod(conn, sel,
+            in, 0, out, &outCnt);
+        if (kr == KERN_SUCCESS && outCnt > 0) {
+            rlog("    %s scalar sel=%d outCnt=%u:", label, sel, outCnt);
+            for (uint32_t j = 0; j < outCnt && j < 16; j++) {
+                if (out[j] != 0xCCCCCCCCCCCCCCCCULL) {
+                    rlog(" 0x%llx", (unsigned long long)out[j]);
+                    uint16_t top = (uint16_t)(out[j] >> 48);
+                    if (top >= 0xfff0 && top <= 0xfffe &&
+                        out[j] != 0xffffffffffffffff)
+                        rlog("<K!>");
+                }
+            }
+            rlog("\n");
+        }
+
+        /* Also try with 1 input scalar */
+        outCnt = 16;
+        memset(out, 0xCC, sizeof(out));
+        in[0] = 0;
+        kr = IOConnectCallScalarMethod(conn, sel, in, 1, out, &outCnt);
+        if (kr == KERN_SUCCESS && outCnt > 0) {
+            int hasNonZero = 0;
+            for (uint32_t j = 0; j < outCnt; j++)
+                if (out[j] != 0 && out[j] != 0xCCCCCCCCCCCCCCCCULL)
+                    hasNonZero = 1;
+            if (hasNonZero) {
+                rlog("    %s scalar(1in) sel=%d:", label, sel);
+                for (uint32_t j = 0; j < outCnt && j < 8; j++)
+                    if (out[j] != 0xCCCCCCCCCCCCCCCCULL)
+                        rlog(" 0x%llx", (unsigned long long)out[j]);
+                rlog("\n");
+            }
+        }
+    }
+}
+
+static void r412_probe(void) {
+    rlog("\n=== r412: AppleAVE2Driver + ANE + DCP Deep Scan ===\n\n");
+    fflush(stdout);
+
+    struct sigaction sa412, old_bus412, old_segv412;
+    memset(&sa412, 0, sizeof(sa412));
+    sa412.sa_handler = r412_sighandler;
+    sa412.sa_flags = 0;
+    sigaction(SIGBUS, &sa412, &old_bus412);
+    sigaction(SIGSEGV, &sa412, &old_segv412);
+
+    /* ---- Vector 1: AppleAVE2Driver ---- */
+    rlog("  Vector 1: AppleAVE2Driver\n");
+    {
+        io_service_t svc = IOServiceGetMatchingService(kIOMainPortDefault,
+            IOServiceMatching("AppleAVE2Driver"));
+        if (svc) {
+            rlog("    Found AppleAVE2Driver!\n");
+
+            for (int uct = 0; uct < 8; uct++) {
+                io_connect_t conn = 0;
+                kern_return_t kr = IOServiceOpen(svc, mach_task_self(), uct, &conn);
+                if (kr == KERN_SUCCESS) {
+                    char lbl[64];
+                    snprintf(lbl, sizeof(lbl), "AVE2[%d]", uct);
+                    rlog("    type=%d conn=0x%x\n", uct, conn);
+
+                    scan_scalar_methods(conn, lbl, 64);
+                    scan_struct_methods(conn, lbl, 64);
+                    scan_mapped_memory(conn, lbl, 32,
+                        &g_r412_crashed, g_r412_jmp);
+
+                    IOServiceClose(conn);
+                } else if (uct < 4) {
+                    rlog("    type=%d: kr=0x%x\n", uct, kr);
+                }
+            }
+            IOObjectRelease(svc);
+        } else {
+            rlog("    NOT FOUND\n");
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector 2: ANEDriverRoot (types 1,4 opened before) ---- */
+    rlog("\n  Vector 2: ANEDriverRoot\n");
+    {
+        io_service_t svc = IOServiceGetMatchingService(kIOMainPortDefault,
+            IOServiceMatching("H1xANELoadBalancer"));
+        if (!svc) svc = IOServiceGetMatchingService(kIOMainPortDefault,
+            IOServiceMatching("ANEDriverRoot"));
+        if (svc) {
+            rlog("    Found ANE driver!\n");
+
+            for (int uct = 0; uct < 8; uct++) {
+                io_connect_t conn = 0;
+                kern_return_t kr = IOServiceOpen(svc, mach_task_self(), uct, &conn);
+                if (kr == KERN_SUCCESS) {
+                    char lbl[64];
+                    snprintf(lbl, sizeof(lbl), "ANE[%d]", uct);
+                    rlog("    type=%d conn=0x%x\n", uct, conn);
+
+                    scan_scalar_methods(conn, lbl, 64);
+                    scan_struct_methods(conn, lbl, 64);
+                    scan_mapped_memory(conn, lbl, 32,
+                        &g_r412_crashed, g_r412_jmp);
+
+                    IOServiceClose(conn);
+                }
+            }
+            IOObjectRelease(svc);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector 3: H11ANE / H11ANE1 ---- */
+    rlog("\n  Vector 3: H11ANE instances\n");
+    {
+        const char *names[] = {"H11ANEIn", NULL};
+        for (int i = 0; names[i]; i++) {
+            io_iterator_t iter;
+            kern_return_t kr = IOServiceGetMatchingServices(kIOMainPortDefault,
+                IOServiceMatching(names[i]), &iter);
+            if (kr != KERN_SUCCESS) continue;
+
+            io_service_t svc;
+            int idx = 0;
+            while ((svc = IOIteratorNext(iter)) != 0) {
+                io_name_t svcName;
+                IORegistryEntryGetName(svc, svcName);
+
+                for (int uct = 0; uct < 8; uct++) {
+                    io_connect_t conn = 0;
+                    kr = IOServiceOpen(svc, mach_task_self(), uct, &conn);
+                    if (kr == KERN_SUCCESS) {
+                        char lbl[64];
+                        snprintf(lbl, sizeof(lbl), "%s[%d]", svcName, uct);
+                        rlog("    %s type=%d conn=0x%x\n", svcName, uct, conn);
+
+                        scan_scalar_methods(conn, lbl, 32);
+                        scan_struct_methods(conn, lbl, 32);
+                        scan_mapped_memory(conn, lbl, 16,
+                            &g_r412_crashed, g_r412_jmp);
+
+                        IOServiceClose(conn);
+                    }
+                }
+                IOObjectRelease(svc);
+                idx++;
+            }
+            IOObjectRelease(iter);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector 4: DCPEndpointV2 services ---- */
+    rlog("\n  Vector 4: DCP endpoints (first 10)\n");
+    {
+        io_iterator_t iter;
+        kern_return_t kr = IOServiceGetMatchingServices(kIOMainPortDefault,
+            IOServiceMatching("DCPEndpointV2"), &iter);
+        if (kr == KERN_SUCCESS) {
+            io_service_t svc;
+            int idx = 0;
+            while ((svc = IOIteratorNext(iter)) != 0 && idx < 10) {
+                io_name_t svcName;
+                IORegistryEntryGetName(svc, svcName);
+
+                for (int uct = 0; uct < 4; uct++) {
+                    io_connect_t conn = 0;
+                    kr = IOServiceOpen(svc, mach_task_self(), uct, &conn);
+                    if (kr == KERN_SUCCESS) {
+                        char lbl[64];
+                        snprintf(lbl, sizeof(lbl), "%s[%d]", svcName, uct);
+                        rlog("    %s type=%d conn=0x%x\n", svcName, uct, conn);
+
+                        scan_mapped_memory(conn, lbl, 8,
+                            &g_r412_crashed, g_r412_jmp);
+
+                        IOServiceClose(conn);
+                    }
+                }
+                IOObjectRelease(svc);
+                idx++;
+            }
+            rlog("    (scanned %d DCP endpoints)\n", idx);
+            IOObjectRelease(iter);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector 5: IOSurface Mach port notification ---- */
+    rlog("\n  Vector 5: IOSurface port notification scan\n");
+    {
+        /* Create a surface and get its notification port */
+        unsigned pf = 'BGRA';
+        const void *keys[] = {
+            kIOSurfaceWidth, kIOSurfaceHeight,
+            kIOSurfaceBytesPerRow, kIOSurfacePixelFormat,
+            kIOSurfaceAllocSize
+        };
+        int w = 64, h = 64, bpr = 256, as = 16384;
+        CFNumberRef vals[] = {
+            CFNumberCreate(NULL, kCFNumberIntType, &w),
+            CFNumberCreate(NULL, kCFNumberIntType, &h),
+            CFNumberCreate(NULL, kCFNumberIntType, &bpr),
+            CFNumberCreate(NULL, kCFNumberIntType, &pf),
+            CFNumberCreate(NULL, kCFNumberIntType, &as)
+        };
+        CFDictionaryRef props = CFDictionaryCreate(NULL, keys,
+            (const void**)vals, 5,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        IOSurfaceRef surf = IOSurfaceCreate(props);
+
+        if (surf) {
+            mach_port_t surfPort = IOSurfaceCreateMachPort(surf);
+            rlog("    Surface port: 0x%x\n", surfPort);
+
+            if (surfPort != MACH_PORT_NULL) {
+                /* Try to get port info */
+                unsigned int ktype = 0;
+                mach_vm_address_t kaddr = 0xDEAD;
+                kern_return_t kr = mach_port_kobject(mach_task_self(),
+                    surfPort, &ktype, (mach_port_t*)&kaddr);
+                rlog("    kobject: kr=%d type=%u addr=0x%llx\n",
+                    kr, ktype, (unsigned long long)kaddr);
+
+                /* Request notification on the port */
+                mach_port_t notifyPort = MACH_PORT_NULL;
+                mach_port_allocate(mach_task_self(),
+                    MACH_PORT_RIGHT_RECEIVE, &notifyPort);
+                mach_port_t prevPort = MACH_PORT_NULL;
+                kr = mach_port_request_notification(mach_task_self(),
+                    surfPort, MACH_NOTIFY_DEAD_NAME, 0,
+                    notifyPort, MACH_MSG_TYPE_MAKE_SEND_ONCE, &prevPort);
+                rlog("    dead name notification: kr=%d prev=0x%x\n",
+                    kr, prevPort);
+
+                /* Check kobject on notify port */
+                ktype = 0; kaddr = 0xDEAD;
+                kr = mach_port_kobject(mach_task_self(),
+                    notifyPort, &ktype, (mach_port_t*)&kaddr);
+                rlog("    notify kobject: kr=%d type=%u addr=0x%llx\n",
+                    kr, ktype, (unsigned long long)kaddr);
+
+                mach_port_deallocate(mach_task_self(), notifyPort);
+                mach_port_deallocate(mach_task_self(), surfPort);
+            }
+
+            CFRelease(surf);
+        }
+        CFRelease(props);
+        for (int i = 0; i < 5; i++) CFRelease(vals[i]);
+    }
+    fflush(stdout);
+
+    sigaction(SIGBUS, &old_bus412, NULL);
+    sigaction(SIGSEGV, &old_segv412, NULL);
+
+    rlog("\n=== r412 complete ===\n");
+    fflush(stdout);
+}
+
+/*
  * r411: IOSurface-backed VT + Metal GPU + service name enumeration +
  *       AppleJPEGDriver/IOMobileFramebuffer deep scan + os_log kernel leak.
  */
@@ -68121,6 +68472,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 415) {
+            rlog("*** rounds=415: AppleAVE2Driver + ANE + DCP Deep Scan ***\n");
+            rlog("  Direct AVE2 driver open, ANE types 1/4, DCP endpoints, IOSurface port.\n\n");
+            fflush(stdout);
+            r412_probe();
+            goto done;
+        }
         if (rounds == 414) {
             rlog("*** rounds=414: IOSurface-backed VT + Metal GPU + Deep Driver Scan ***\n");
             rlog("  IOSurface-backed CVPixelBuffer, full service enum, JPEG/FB/AGX deep scan.\n\n");
@@ -70611,7 +70969,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
