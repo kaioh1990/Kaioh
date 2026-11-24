@@ -111,6 +111,7 @@ extern kern_return_t mach_vm_page_info(
 #include <sys/sysctl.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/icmp6.h>
 #include <sys/ioctl.h>
 #include <sys/event.h>
 /* kern_control.h not in iOS SDK — declare manually */
