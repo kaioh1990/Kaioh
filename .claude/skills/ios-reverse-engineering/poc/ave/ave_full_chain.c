@@ -17075,7 +17075,7 @@ static void r449_probe(void) {
             &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
         int tag_val = (frame % 2 == 0) ? 0 : 1;
         CFNumberRef tag = CFNumberCreate(NULL, kCFNumberIntType, &tag_val);
-        CFDictionarySetValue(frame_props, kVTEncodeFrameOptionKey_MVHEVCVideoLayerID, tag);
+        CFDictionarySetValue(frame_props, CFSTR("MVHEVCVideoLayerID"), tag);
         CFRelease(tag);
 
         OSStatus est = VTCompressionSessionEncodeFrame(enc, pb, pts, kCMTimeInvalid,
