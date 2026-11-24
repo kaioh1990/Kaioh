@@ -15996,61 +15996,9 @@ static void r375_probe(void) {
         rlog("\n");
     }
 
-    /* ---- Part 3: Mach message padding scan ---- */
-    rlog("\n--- Part 3: Mach message reply padding scan ---\n");
+    /* Part 3: Skipped (raw mach_msg crashes with wrong MIG format) */
+    rlog("\n--- Part 3: Skipped (raw mach_msg unsafe) ---\n");
     fflush(stdout);
-
-    /* Send a simple request to host_self and check reply buffer */
-    struct {
-        mach_msg_header_t hdr;
-        uint8_t pad[4096];
-    } msg_buf;
-    memset(&msg_buf, 0xAA, sizeof(msg_buf));
-
-    /* host_info is a simple MIG call that returns a reply */
-    mach_msg_header_t *hdr = &msg_buf.hdr;
-    hdr->msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, MACH_MSG_TYPE_MAKE_SEND_ONCE);
-    hdr->msgh_size = sizeof(mach_msg_header_t) + 16;
-    hdr->msgh_remote_port = host;
-    hdr->msgh_local_port = mig_get_reply_port();
-    hdr->msgh_id = 200; /* host_info */
-
-    /* Write host_info request body */
-    uint32_t *body = (uint32_t*)(hdr + 1);
-    body[0] = HOST_BASIC_INFO; /* flavor */
-    body[1] = HOST_BASIC_INFO_COUNT; /* count */
-
-    kr = mach_msg(hdr,
-        MACH_SEND_MSG | MACH_RCV_MSG,
-        hdr->msgh_size, sizeof(msg_buf),
-        hdr->msgh_local_port, 1000, MACH_PORT_NULL);
-
-    rlog("  mach_msg: kr=0x%x reply_id=%d reply_size=%u\n",
-        kr, hdr->msgh_id, hdr->msgh_size);
-
-    if (kr == KERN_SUCCESS) {
-        /* Scan the ENTIRE buffer for kernel pointers */
-        int kptr_found = 0;
-        for (size_t off = 0; off + 8 <= sizeof(msg_buf); off += 4) {
-            uint64_t v; memcpy(&v, (uint8_t*)&msg_buf + off, 8);
-            if ((v >> 36) == 0xFFFFFFF0 || (v >> 36) == 0xFFFFFFF1) {
-                rlog("  *** MSG +0x%zx: 0x%llx [KTEXT!] ***\n", off, (unsigned long long)v);
-                kptr_found++;
-            } else if ((v >> 40) == 0xFFFFFF && v != 0xFFFFFFFFFFFFFFFF
-                       && v != 0xAAAAAAAAAAAAAAAAULL) {
-                rlog("  MSG +0x%zx: 0x%llx [KHEAP?]\n", off, (unsigned long long)v);
-                kptr_found++;
-            }
-            if (kptr_found >= 20) break;
-        }
-        /* Check how much was actually written (vs our 0xAA fill) */
-        int last_written = 0;
-        for (int off = sizeof(msg_buf) - 1; off >= 0; off--) {
-            if (((uint8_t*)&msg_buf)[off] != 0xAA) { last_written = off; break; }
-        }
-        rlog("  Last non-0xAA byte at offset: %d (msg_size=%u)\n",
-            last_written, hdr->msgh_size);
-    }
 
     /* ---- Part 4: Register residue scan after syscalls ---- */
     rlog("\n--- Part 4: Register residue after syscalls ---\n");
