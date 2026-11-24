@@ -15902,6 +15902,249 @@ static void r362_probe(void) {
     fflush(stdout);
 }
 
+/* r373: Syscall-level KASLR leak hunting.
+ * 1) host_zone_info / mach_memory_info — zone metadata addresses.
+ * 2) Sysctls: kern.slide, kern.bootargs, kern.version, machdep.*, etc.
+ * 3) task_info(TASK_DYLD_INFO) + proc_info for kernel-related leaks.
+ * 4) host_processor_info, host_statistics for memory layout leaks.
+ * 5) thread_get_state for exception ports/kernel addresses in registers.
+ */
+static void r373_probe(void) {
+    rlog("\n=== r373: Syscall-Level KASLR Leak Hunting ===\n\n");
+    fflush(stdout);
+
+    /* ---- Part 1: Mach host info calls ---- */
+    rlog("--- Part 1: Mach host info calls ---\n");
+    fflush(stdout);
+
+    mach_port_t host = mach_host_self();
+    rlog("  mach_host_self = %u\n", host);
+
+    /* host_zone_info */
+    mach_zone_name_t *names = NULL;
+    mach_msg_type_number_t nameCnt = 0;
+    mach_zone_info_t *info = NULL;
+    mach_msg_type_number_t infoCnt = 0;
+    kern_return_t kr;
+
+    kr = host_zone_info(host, &names, &nameCnt, &info, &infoCnt);
+    rlog("  host_zone_info: kr=0x%x nameCnt=%u infoCnt=%u\n", kr, nameCnt, infoCnt);
+    if (kr == KERN_SUCCESS && nameCnt > 0 && infoCnt > 0) {
+        rlog("  First 10 zones:\n");
+        for (unsigned i = 0; i < nameCnt && i < 10; i++) {
+            rlog("    [%u] %s: cur=%llu max=%llu elem=%llu\n",
+                i, names[i].mzn_name,
+                (unsigned long long)info[i].mzi_count,
+                (unsigned long long)info[i].mzi_max_size,
+                (unsigned long long)info[i].mzi_elem_size);
+            /* Check if any numeric field looks like a kptr */
+            uint64_t fields[] = {info[i].mzi_count, info[i].mzi_cur_size,
+                                 info[i].mzi_max_size, info[i].mzi_elem_size,
+                                 info[i].mzi_alloc_size, info[i].mzi_sum_size};
+            for (int f = 0; f < 6; f++) {
+                if ((fields[f] >> 36) == 0xFFFFFFF0 || (fields[f] >> 36) == 0xFFFFFFF1) {
+                    rlog("    *** KTEXT in field %d: 0x%llx ***\n", f, (unsigned long long)fields[f]);
+                }
+            }
+        }
+        /* Look for IOSurface-related zones */
+        for (unsigned i = 0; i < nameCnt; i++) {
+            if (strstr(names[i].mzn_name, "IOSurface") ||
+                strstr(names[i].mzn_name, "kalloc.448") ||
+                strstr(names[i].mzn_name, "kalloc.512") ||
+                strstr(names[i].mzn_name, "ipc.ports") ||
+                strstr(names[i].mzn_name, "ipc_port")) {
+                rlog("  ZONE: %s elem=%llu cur=%llu\n",
+                    names[i].mzn_name,
+                    (unsigned long long)info[i].mzi_elem_size,
+                    (unsigned long long)info[i].mzi_cur_size);
+            }
+        }
+    }
+
+    /* mach_memory_info */
+    mach_memory_info_t *meminfo = NULL;
+    mach_msg_type_number_t meminfoCnt = 0;
+    kr = mach_memory_info(host, (mach_memory_info_array_t*)&meminfo, &meminfoCnt);
+    rlog("  mach_memory_info: kr=0x%x cnt=%u\n", kr, meminfoCnt);
+    if (kr == KERN_SUCCESS && meminfoCnt > 0) {
+        int kptr_found = 0;
+        for (unsigned i = 0; i < meminfoCnt && i < 500; i++) {
+            uint64_t addr = meminfo[i].site;
+            if ((addr >> 36) == 0xFFFFFFF0 || (addr >> 36) == 0xFFFFFFF1) {
+                rlog("  *** mach_memory_info[%u].site = 0x%llx [KTEXT!] ***\n",
+                    i, (unsigned long long)addr);
+                kptr_found++;
+                if (kptr_found >= 20) break;
+            }
+        }
+        if (!kptr_found) rlog("  (no ktext pointers in memory info)\n");
+    }
+
+    /* ---- Part 2: Sysctls ---- */
+    rlog("\n--- Part 2: Sysctl probing ---\n");
+    fflush(stdout);
+
+    const char *sysctl_names[] = {
+        "kern.slide",
+        "kern.bootargs",
+        "kern.version",
+        "kern.osversion",
+        "kern.uuid",
+        "kern.bootsessionuuid",
+        "machdep.cpu.brand_string",
+        "hw.cachelinesize",
+        "hw.memsize",
+        "hw.physicalcpu",
+        "kern.maxproc",
+        "kern.hostid",
+        "kern.osrelease",
+        "kern.secure_kernel",
+        "vm.swapusage",
+        NULL
+    };
+
+    for (int i = 0; sysctl_names[i]; i++) {
+        char buf[256] = {0};
+        size_t len = sizeof(buf);
+        int ret = sysctlbyname(sysctl_names[i], buf, &len, NULL, 0);
+        if (ret == 0 && len > 0) {
+            if (len <= 8) {
+                uint64_t v = 0;
+                memcpy(&v, buf, len);
+                rlog("  %s = 0x%llx (%llu) [%zu bytes]\n",
+                    sysctl_names[i], (unsigned long long)v, (unsigned long long)v, len);
+                if ((v >> 36) == 0xFFFFFFF0 || (v >> 36) == 0xFFFFFFF1) {
+                    rlog("  *** KTEXT POINTER! ***\n");
+                }
+            } else {
+                /* String value */
+                buf[len < 255 ? len : 255] = '\0';
+                rlog("  %s = \"%s\" [%zu bytes]\n", sysctl_names[i], buf, len);
+            }
+        } else {
+            rlog("  %s: errno=%d (unavailable)\n", sysctl_names[i], errno);
+        }
+    }
+
+    /* Try numeric sysctl OIDs for hidden kernel info */
+    rlog("\n  Probing numeric OIDs (kern subtree):\n");
+    for (int oid2 = 1; oid2 <= 100; oid2++) {
+        int mib[2] = {1 /* CTL_KERN */, oid2};
+        uint64_t val = 0;
+        size_t vlen = sizeof(val);
+        if (sysctl(mib, 2, &val, &vlen, NULL, 0) == 0 && vlen > 0 && vlen <= 8) {
+            if ((val >> 36) == 0xFFFFFFF0 || (val >> 36) == 0xFFFFFFF1) {
+                rlog("  *** kern.%d = 0x%llx [KTEXT!] ***\n", oid2, (unsigned long long)val);
+            } else if ((val >> 40) == 0xFFFFFF) {
+                rlog("  kern.%d = 0x%llx [KHEAP?]\n", oid2, (unsigned long long)val);
+            }
+        }
+    }
+
+    /* ---- Part 3: task_info ---- */
+    rlog("\n--- Part 3: task_info probing ---\n");
+    fflush(stdout);
+
+    /* TASK_DYLD_INFO */
+    struct task_dyld_info dinfo;
+    mach_msg_type_number_t dcnt = TASK_DYLD_INFO_COUNT;
+    kr = task_info(mach_task_self(), TASK_DYLD_INFO, (task_info_t)&dinfo, &dcnt);
+    if (kr == KERN_SUCCESS) {
+        rlog("  TASK_DYLD_INFO: all_image_info_addr=0x%llx size=%llu format=%d\n",
+            dinfo.all_image_info_addr, dinfo.all_image_info_size,
+            dinfo.all_image_info_format);
+        if ((dinfo.all_image_info_addr >> 36) == 0xFFFFFFF0)
+            rlog("  *** KTEXT in dyld info! ***\n");
+    }
+
+    /* TASK_VM_INFO */
+    task_vm_info_data_t vminfo;
+    mach_msg_type_number_t vmcnt = TASK_VM_INFO_COUNT;
+    kr = task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&vminfo, &vmcnt);
+    if (kr == KERN_SUCCESS) {
+        rlog("  TASK_VM_INFO: vsize=%llu rsize=%llu max=%llu\n",
+            (unsigned long long)vminfo.virtual_size,
+            (unsigned long long)vminfo.resident_size,
+            (unsigned long long)vminfo.resident_size_peak);
+        rlog("    min_addr=0x%llx max_addr=0x%llx\n",
+            (unsigned long long)vminfo.min_address,
+            (unsigned long long)vminfo.max_address);
+        /* Check if max_address leaks kernel info */
+        if ((vminfo.max_address >> 36) == 0xFFFFFFF0)
+            rlog("  *** KTEXT in max_address! ***\n");
+    }
+
+    /* TASK_EXTMOD_INFO */
+    task_extmod_info_data_t extmod;
+    mach_msg_type_number_t emcnt = TASK_EXTMOD_INFO_COUNT;
+    kr = task_info(mach_task_self(), TASK_EXTMOD_INFO, (task_info_t)&extmod, &emcnt);
+    rlog("  TASK_EXTMOD_INFO: kr=0x%x\n", kr);
+
+    /* ---- Part 4: thread_get_state ---- */
+    rlog("\n--- Part 4: Thread state probing ---\n");
+    fflush(stdout);
+
+    thread_port_t thread = mach_thread_self();
+    arm_thread_state64_t ts;
+    mach_msg_type_number_t tscnt = ARM_THREAD_STATE64_COUNT;
+    kr = thread_get_state(thread, ARM_THREAD_STATE64, (thread_state_t)&ts, &tscnt);
+    if (kr == KERN_SUCCESS) {
+        rlog("  PC=0x%llx LR=0x%llx SP=0x%llx FP=0x%llx\n",
+            (unsigned long long)__darwin_arm_thread_state64_get_pc(ts),
+            (unsigned long long)__darwin_arm_thread_state64_get_lr(ts),
+            (unsigned long long)__darwin_arm_thread_state64_get_sp(ts),
+            (unsigned long long)__darwin_arm_thread_state64_get_fp(ts));
+    }
+
+    /* ARM_DEBUG_STATE */
+    arm_debug_state64_t dbg;
+    mach_msg_type_number_t dbgcnt = ARM_DEBUG_STATE64_COUNT;
+    kr = thread_get_state(thread, ARM_DEBUG_STATE64, (thread_state_t)&dbg, &dbgcnt);
+    rlog("  ARM_DEBUG_STATE64: kr=0x%x\n", kr);
+    if (kr == KERN_SUCCESS) {
+        for (int i = 0; i < 16; i++) {
+            if (dbg.__bvr[i] || dbg.__bcr[i]) {
+                rlog("    bvr[%d]=0x%llx bcr[%d]=0x%llx\n",
+                    i, dbg.__bvr[i], i, dbg.__bcr[i]);
+                if ((dbg.__bvr[i] >> 36) == 0xFFFFFFF0)
+                    rlog("    *** KTEXT in debug register! ***\n");
+            }
+        }
+    }
+
+    /* ---- Part 5: host_statistics and processor info ---- */
+    rlog("\n--- Part 5: Host statistics ---\n");
+    fflush(stdout);
+
+    host_basic_info_data_t hinfo;
+    mach_msg_type_number_t hcnt = HOST_BASIC_INFO_COUNT;
+    kr = host_info(host, HOST_BASIC_INFO, (host_info_t)&hinfo, &hcnt);
+    if (kr == KERN_SUCCESS) {
+        rlog("  max_cpus=%d avail_cpus=%d memsize=%llu\n",
+            hinfo.max_cpus, hinfo.avail_cpus, (unsigned long long)hinfo.max_mem);
+    }
+
+    /* Try to get processor set info */
+    processor_set_name_port_t pset;
+    kr = processor_set_default(host, &pset);
+    rlog("  processor_set_default: kr=0x%x pset=%u\n", kr, pset);
+    if (kr == KERN_SUCCESS && pset) {
+        struct processor_set_load_info loadinfo;
+        mach_msg_type_number_t licnt = PROCESSOR_SET_LOAD_INFO_COUNT;
+        kr = processor_set_statistics(pset, PROCESSOR_SET_LOAD_INFO,
+            (processor_set_info_t)&loadinfo, &licnt);
+        rlog("  processor_set_statistics: kr=0x%x\n", kr);
+        if (kr == KERN_SUCCESS) {
+            rlog("    task_count=%d thread_count=%d\n",
+                loadinfo.task_count, loadinfo.thread_count);
+        }
+    }
+
+    rlog("\n=== r373 complete ===\n");
+    fflush(stdout);
+}
+
 /* r372: IOConnectMapMemory + IOConnectCallMethod systematic scan.
  * 1) Get IOKit connection (io_connect_t) for IOSurface user client.
  * 2) Try IOConnectMapMemory with types 0-15 — look for kernel metadata mappings.
@@ -56739,6 +56982,14 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 376) {
+            rlog("*** rounds=376: Syscall-Level KASLR Leak Hunting ***\n");
+            rlog("  host_zone_info, mach_memory_info, sysctls, task_info,\n");
+            rlog("  thread_get_state, host_statistics for kernel pointer leaks.\n\n");
+            fflush(stdout);
+            r373_probe();
+            goto done;
+        }
         if (rounds == 375) {
             rlog("*** rounds=375: IOKit Connection Scan ***\n");
             rlog("  IOConnectMapMemory + IOConnectCallMethod for all selectors.\n");
@@ -58950,7 +59201,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -68792,7 +69043,7 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
             if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227 || rounds == 228) goto r220_block;
 
