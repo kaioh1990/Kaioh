@@ -14265,15 +14265,20 @@ static void r336_probe(void) {
     for (int frame = 0; frame < OVERFLOW_ENCODE_COUNT; frame++) {
         /* Create a pixel buffer for encoding */
         CVPixelBufferRef pixbuf = NULL;
-        NSDictionary *pbattrs = @{
-            (id)kCVPixelBufferWidthKey: @1920,
-            (id)kCVPixelBufferHeightKey: @1080,
-            (id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_420YpCbCr8BiPlanarFullRange),
-            (id)kCVPixelBufferIOSurfacePropertiesKey: @{}
-        };
+        CFMutableDictionaryRef pbattrs = CFDictionaryCreateMutable(
+            kCFAllocatorDefault, 0,
+            &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+        CFDictionaryRef iosurfProps = CFDictionaryCreate(
+            kCFAllocatorDefault, NULL, NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+        CFDictionarySetValue(pbattrs, kCVPixelBufferIOSurfacePropertiesKey, iosurfProps);
+        CFRelease(iosurfProps);
         CVReturn cvr = CVPixelBufferCreate(kCFAllocatorDefault, 1920, 1080,
             kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
-            (__bridge CFDictionaryRef)pbattrs, &pixbuf);
+            pbattrs, &pixbuf);
+        CFRelease(pbattrs);
 
         if (cvr != 0 || !pixbuf) {
             encode_err++;
