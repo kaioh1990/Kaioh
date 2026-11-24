@@ -83379,12 +83379,7 @@ new_modes:
             r458_opt_probe();
             goto done;
         }
-        if (rounds == 461) {
-            rlog("*** rounds=461: Kernel pointer leak + arbitrary R/W ***\n\n");
-            fflush(stdout);
-            r457_probe();
-            goto done;
-        }
+        /* rounds=461 removed — r457_probe was disabled (#if 0) */
         if (rounds == 460) {
             rlog("*** rounds=460: Cross-surface UAF escalation ***\n\n");
             fflush(stdout);
