@@ -16148,13 +16148,13 @@ static void r393_probe(void) {
  * CopyValue through stale pointer crashed in r382. We need to map the
  * exact offsets the framework reads to construct a fake client ref.
  */
-static volatile int g_r393_crashed = 0;
+static volatile int g_r392_crashed = 0;
 static volatile int g_r392_offset = -1;
-static sigjmp_buf g_r393_jmp;
+static sigjmp_buf g_r392_jmp;
 
 static void r392_sighandler(int sig) {
-    g_r393_crashed = sig;
-    siglongjmp(g_r393_jmp, 1);
+    g_r392_crashed = sig;
+    siglongjmp(g_r392_jmp, 1);
 }
 
 static void r392_probe(void) {
