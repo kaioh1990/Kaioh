@@ -9585,12 +9585,12 @@ static void r327_probe(void) {
     fflush(stdout);
 }
 
-/* r328: LDM toggle monitor + securityd/trustd Mach probing + SEP properties
+/* r329: LDM toggle monitor + securityd/trustd Mach probing + SEP properties
    Run this, then toggle LDM on the device. 60-second monitoring loop captures
    Darwin notification state transitions during the toggle. */
 
-static void r328_probe(void) {
-    rlog("\n=== r328: LDM Toggle Monitor + Security Daemon Probe ===\n");
+static void r329_probe(void) {
+    rlog("\n=== r329: LDM Toggle Monitor + Security Daemon Probe ===\n");
     rlog("  Strategy: Register notif observers, poll 60s, probe securityd/trustd\n");
     rlog("  >>> TOGGLE LOCKDOWN MODE ON DEVICE WITHIN 60 SECONDS <<<\n\n");
     fflush(stdout);
@@ -9967,7 +9967,7 @@ static void r328_probe(void) {
         if (notifs[i].token >= 0) notify_cancel(notifs[i].token);
     }
 
-    rlog("\n=== r328 complete ===\n");
+    rlog("\n=== r329 complete ===\n");
     fflush(stdout);
 }
 
@@ -40792,11 +40792,11 @@ new_modes:
             r328_probe();
             goto done;
         }
-        if (rounds == 328) {
-            rlog("*** rounds=328: LDM Toggle Monitor + Security Daemon Probe ***\n");
-            rlog("  r327: All notif tokens registered, securityd/trustd reachable.\n");
+        if (rounds == 329) {
+            rlog("*** rounds=329: LDM Toggle Monitor + Security Daemon Probe ***\n");
+            rlog("  r328: HENkaku uninit buffer + TIFF parser + GPU shared.\n");
             rlog("  Probe: 60s notif monitor, securityd/trustd Mach, SEP tree.\n\n");
-            r328_probe();
+            r329_probe();
             goto done;
         }
         if (rounds == 327) {
