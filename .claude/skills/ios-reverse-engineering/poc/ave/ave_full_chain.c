@@ -4975,6 +4975,579 @@ static void r313_probe(void) {
     fflush(stdout);
 }
 
+static void r315_probe(void) {
+    rlog("\n=== r315: Metal GPU + AGX + IOSurface-Metal Interop ===\n\n");
+    fflush(stdout);
+    kern_return_t kr;
+    int kptr_found = 0;
+
+    /* ---- Part 1: Metal device + capabilities ---- */
+    rlog("--- Part 1: Metal device capabilities ---\n");
+    fflush(stdout);
+
+    /* Use Objective-C runtime to call Metal APIs */
+    id (*objc_msg)(id, SEL, ...) = (id (*)(id, SEL, ...))dlsym(RTLD_DEFAULT, "objc_msgSend");
+    Class MTLCreateSystemDefaultDevice_cls = NULL;
+
+    /* MTLCreateSystemDefaultDevice() */
+    id (*create_device)(void) = (id (*)(void))dlsym(RTLD_DEFAULT, "MTLCreateSystemDefaultDevice");
+    id device = NULL;
+    if (create_device) {
+        device = create_device();
+        rlog("  MTLCreateSystemDefaultDevice: %p\n", device);
+    } else {
+        rlog("  MTLCreateSystemDefaultDevice: NOT FOUND\n");
+    }
+
+    if (device) {
+        SEL nameSel = sel_registerName("name");
+        SEL descSel = sel_registerName("description");
+        SEL maxBufSel = sel_registerName("maxBufferLength");
+        SEL regSizeSel = sel_registerName("registryID");
+
+        id name = objc_msg(device, nameSel);
+        rlog("  Device name: %p\n", name);
+
+        /* Get registryID - this is an IOKit registry entry ID */
+        uint64_t (*msg_u64)(id, SEL) = (uint64_t (*)(id, SEL))dlsym(RTLD_DEFAULT, "objc_msgSend");
+        uint64_t regID = msg_u64(device, regSizeSel);
+        rlog("  registryID: 0x%llx\n", regID);
+
+        NSUInteger (*msg_nsu)(id, SEL) = (NSUInteger (*)(id, SEL))dlsym(RTLD_DEFAULT, "objc_msgSend");
+        NSUInteger maxBuf = msg_nsu(device, maxBufSel);
+        rlog("  maxBufferLength: %zu\n", (size_t)maxBuf);
+
+        /* Check if the registryID leaks kernel info */
+        if ((regID & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+            rlog("  *** KPTR in registryID: 0x%llx ***\n", regID);
+            kptr_found++;
+        }
+
+        /* ---- Part 2: Metal buffer creation + memory inspection ---- */
+        rlog("\n--- Part 2: Metal buffer creation ---\n");
+        fflush(stdout);
+
+        SEL newBufSel = sel_registerName("newBufferWithLength:options:");
+
+        /* Create buffers with different storage modes */
+        int modes[] = {0, 1, 2, 3}; /* Shared, Private, Managed, Memoryless */
+        const char *mode_names[] = {"Shared", "Private", "Managed", "Memoryless"};
+
+        for (int m = 0; m < 4; m++) {
+            id (*msg_buf)(id, SEL, NSUInteger, NSUInteger) =
+                (id (*)(id, SEL, NSUInteger, NSUInteger))dlsym(RTLD_DEFAULT, "objc_msgSend");
+            id buf = msg_buf(device, newBufSel, 16384, modes[m] << 4);
+            if (buf) {
+                SEL contentsSel = sel_registerName("contents");
+                SEL gpuAddrSel = sel_registerName("gpuAddress");
+                SEL lengthSel = sel_registerName("length");
+
+                void *contents = (void *)msg_nsu(buf, contentsSel);
+                uint64_t gpuAddr = msg_u64(buf, gpuAddrSel);
+                NSUInteger length = msg_nsu(buf, lengthSel);
+
+                rlog("  %s: buf=%p contents=%p gpuAddr=0x%llx len=%zu\n",
+                     mode_names[m], buf, contents, gpuAddr, (size_t)length);
+
+                /* Check gpuAddress for kernel pointer patterns */
+                if ((gpuAddr & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                    rlog("  *** KPTR in gpuAddress: 0x%llx ***\n", gpuAddr);
+                    kptr_found++;
+                }
+                /* Also check if gpuAddress is in an interesting range */
+                if (gpuAddr > 0x100000000ULL) {
+                    rlog("    gpuAddr is HIGH (potential GART mapping)\n");
+                }
+
+                /* Scan shared buffer contents for kernel pointers */
+                if (contents && modes[m] == 0) {
+                    uint64_t *p = (uint64_t *)contents;
+                    for (size_t j = 0; j < length/8; j++) {
+                        if ((p[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog("  *** KPTR in buf[%zu]: 0x%016llx ***\n", j*8, p[j]);
+                            kptr_found++;
+                        }
+                    }
+                }
+            } else {
+                rlog("  %s: FAILED\n", mode_names[m]);
+            }
+        }
+        fflush(stdout);
+
+        /* ---- Part 3: IOSurface-Metal interop ---- */
+        rlog("\n--- Part 3: IOSurface-Metal texture interop ---\n");
+        fflush(stdout);
+
+        /* Create an IOSurface and wrap it as a Metal texture.
+         * The GPU and CPU share the same physical backing.
+         * Write a pattern from GPU side, read from CPU side,
+         * and check if the GPU's view has different metadata. */
+
+        CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int sw = 64, sh = 64, sbpr = 256, salloc = 256*64, spf = 0x42475241;
+        CFNumberRef snw = CFNumberCreate(NULL, kCFNumberIntType, &sw);
+        CFNumberRef snh = CFNumberCreate(NULL, kCFNumberIntType, &sh);
+        CFNumberRef snb = CFNumberCreate(NULL, kCFNumberIntType, &sbpr);
+        CFNumberRef sna = CFNumberCreate(NULL, kCFNumberIntType, &salloc);
+        CFNumberRef snp = CFNumberCreate(NULL, kCFNumberIntType, &spf);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), snw);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), snh);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), snb);
+        CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), sna);
+        CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), snp);
+
+        IOSurfaceRef surf = IOSurfaceCreate(sp);
+        CFRelease(snw); CFRelease(snh); CFRelease(snb); CFRelease(sna); CFRelease(snp);
+        CFRelease(sp);
+
+        if (surf) {
+            uint32_t surfID = IOSurfaceGetID(surf);
+            void *surfBase = IOSurfaceGetBaseAddress(surf);
+            rlog("  IOSurface: ID=%u base=%p\n", surfID, surfBase);
+
+            /* Create Metal texture descriptor */
+            Class texDescCls = objc_getClass("MTLTextureDescriptor");
+            SEL tex2DSel = sel_registerName("texture2DDescriptorWithPixelFormat:width:height:mipmapped:");
+            id (*msg_td)(Class, SEL, NSUInteger, NSUInteger, NSUInteger, BOOL) =
+                (id (*)(Class, SEL, NSUInteger, NSUInteger, NSUInteger, BOOL))dlsym(RTLD_DEFAULT, "objc_msgSend");
+            /* MTLPixelFormatBGRA8Unorm = 80 */
+            id texDesc = msg_td(texDescCls, tex2DSel, 80, 64, 64, NO);
+            rlog("  TextureDescriptor: %p\n", texDesc);
+
+            if (texDesc) {
+                /* newTextureWithDescriptor:iosurface:plane:level: */
+                SEL newTexIOSurfSel = sel_registerName("newTextureWithDescriptor:iosurface:plane:level:");
+                id (*msg_tex)(id, SEL, id, IOSurfaceRef, NSUInteger, NSUInteger) =
+                    (id (*)(id, SEL, id, IOSurfaceRef, NSUInteger, NSUInteger))dlsym(RTLD_DEFAULT, "objc_msgSend");
+                id tex = msg_tex(device, newTexIOSurfSel, texDesc, surf, 0, 0);
+                rlog("  Metal texture from IOSurface: %p\n", tex);
+
+                if (tex) {
+                    uint64_t texGpuAddr = msg_u64(tex, sel_registerName("gpuResourceID"));
+                    rlog("  Texture gpuResourceID: 0x%llx\n", texGpuAddr);
+
+                    /* Check this for kernel address patterns */
+                    if ((texGpuAddr & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        rlog("  *** KPTR in texture gpuResourceID ***\n");
+                        kptr_found++;
+                    }
+                }
+            }
+
+            CFRelease(surf);
+        }
+        fflush(stdout);
+
+        /* ---- Part 4: AGX driver probing ---- */
+        rlog("\n--- Part 4: AGX/GPU driver connections ---\n");
+        fflush(stdout);
+
+        const char *gpu_drivers[] = {
+            "AGXAccelerator",
+            "AGXDeviceUserClient",
+            "AGXG16XFamilyUserClient",
+            "AGXFamilyUserClient",
+            "IOGPUDevice",
+            "IOGPUDeviceUserClient",
+            "AGXShared",
+            "IOAccelDevice",
+            "IOAccelSharedUserClient",
+            "IOAccelDevice2",
+            "IOAccelCommandQueue",
+        };
+
+        for (int i = 0; i < 11; i++) {
+            io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching(gpu_drivers[i]));
+            if (svc) {
+                io_connect_t conn = 0;
+                kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+                rlog("  %s: svc=0x%x open=%d(0x%x) conn=0x%x\n",
+                     gpu_drivers[i], svc, kr, kr, conn);
+
+                if (conn) {
+                    /* Try a few selectors to see what's available */
+                    for (uint32_t sel = 0; sel < 10; sel++) {
+                        uint64_t out[4] = {0};
+                        uint32_t outCnt = 4;
+                        kr = IOConnectCallScalarMethod(conn, sel, NULL, 0, out, &outCnt);
+                        if (kr != 0xe00002bc && kr != 0xe00002c2) {
+                            rlog("    sel[%u]: kr=0x%x out=[0x%llx,0x%llx]\n",
+                                 sel, kr, out[0], out[1]);
+                        }
+                        /* Check output for kernel pointers */
+                        for (int j = 0; j < 4; j++) {
+                            if ((out[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                rlog("    *** KPTR sel[%u] out[%d]: 0x%016llx ***\n",
+                                     sel, j, out[j]);
+                                kptr_found++;
+                            }
+                        }
+                    }
+                    IOServiceClose(conn);
+                }
+                IOObjectRelease(svc);
+            } else {
+                rlog("  %s: not found\n", gpu_drivers[i]);
+            }
+        }
+        fflush(stdout);
+
+        /* ---- Part 5: Metal command buffer + compute pipeline ---- */
+        rlog("\n--- Part 5: Metal compute shader memory scan ---\n");
+        fflush(stdout);
+
+        /* Create a compute shader that writes the GPU's view of memory addresses
+         * into a results buffer we can read back on CPU side */
+
+        SEL newCmdQSel = sel_registerName("newCommandQueue");
+        id cmdQ = objc_msg(device, newCmdQSel);
+        rlog("  Command queue: %p\n", cmdQ);
+
+        if (cmdQ) {
+            /* Create a source buffer (Shared) with known pattern */
+            id (*msg_buf2)(id, SEL, NSUInteger, NSUInteger) =
+                (id (*)(id, SEL, NSUInteger, NSUInteger))dlsym(RTLD_DEFAULT, "objc_msgSend");
+            id srcBuf = msg_buf2(device, sel_registerName("newBufferWithLength:options:"),
+                                 4096, 0 /* MTLResourceStorageModeShared */);
+            id dstBuf = msg_buf2(device, sel_registerName("newBufferWithLength:options:"),
+                                 4096, 0);
+
+            if (srcBuf && dstBuf) {
+                void *srcPtr = (void *)msg_nsu(srcBuf, sel_registerName("contents"));
+                void *dstPtr = (void *)msg_nsu(dstBuf, sel_registerName("contents"));
+                uint64_t srcGpu = msg_u64(srcBuf, sel_registerName("gpuAddress"));
+                uint64_t dstGpu = msg_u64(dstBuf, sel_registerName("gpuAddress"));
+
+                rlog("  srcBuf: cpu=%p gpu=0x%llx\n", srcPtr, srcGpu);
+                rlog("  dstBuf: cpu=%p gpu=0x%llx\n", dstPtr, dstGpu);
+
+                /* Fill source with marker pattern */
+                memset(srcPtr, 0xAA, 4096);
+                memset(dstPtr, 0, 4096);
+
+                /* Create a simple compute shader via Metal Shading Language string */
+                const char *shaderSrc =
+                    "#include <metal_stdlib>\n"
+                    "using namespace metal;\n"
+                    "kernel void scan(device uint64_t *src [[buffer(0)]],\n"
+                    "                 device uint64_t *dst [[buffer(1)]],\n"
+                    "                 uint tid [[thread_position_in_grid]]) {\n"
+                    "    if (tid == 0) {\n"
+                    "        dst[0] = (uint64_t)src;\n"   /* GPU pointer to src */
+                    "        dst[1] = (uint64_t)dst;\n"   /* GPU pointer to dst */
+                    "        dst[2] = (uint64_t)&src;\n"  /* Address of pointer var */
+                    "    }\n"
+                    "    if (tid < 256) {\n"
+                    "        dst[tid + 8] = src[tid];\n"  /* Copy src to dst */
+                    "    }\n"
+                    "}\n";
+
+                SEL newLibSel = sel_registerName("newLibraryWithSource:options:error:");
+                id (*msg_lib)(id, SEL, id, id, id*) =
+                    (id (*)(id, SEL, id, id, id*))dlsym(RTLD_DEFAULT, "objc_msgSend");
+                id nsStr = ((id (*)(Class, SEL, const char*))dlsym(RTLD_DEFAULT, "objc_msgSend"))(
+                    objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), shaderSrc);
+                id err = nil;
+                id lib = msg_lib(device, newLibSel, nsStr, nil, &err);
+                rlog("  Shader library: %p err=%p\n", lib, err);
+
+                if (lib) {
+                    SEL newFuncSel = sel_registerName("newFunctionWithName:");
+                    id funcName = ((id (*)(Class, SEL, const char*))dlsym(RTLD_DEFAULT, "objc_msgSend"))(
+                        objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), "scan");
+                    id func = objc_msg(lib, newFuncSel, funcName);
+                    rlog("  Compute function: %p\n", func);
+
+                    if (func) {
+                        SEL newPipeSel = sel_registerName("newComputePipelineStateWithFunction:error:");
+                        id (*msg_pipe)(id, SEL, id, id*) =
+                            (id (*)(id, SEL, id, id*))dlsym(RTLD_DEFAULT, "objc_msgSend");
+                        id pipeline = msg_pipe(device, newPipeSel, func, &err);
+                        rlog("  Pipeline: %p err=%p\n", pipeline, err);
+
+                        if (pipeline) {
+                            SEL cmdBufSel = sel_registerName("commandBuffer");
+                            id cmdBuf = objc_msg(cmdQ, cmdBufSel);
+
+                            SEL encSel = sel_registerName("computeCommandEncoder");
+                            id enc = objc_msg(cmdBuf, encSel);
+
+                            if (enc) {
+                                /* setComputePipelineState: */
+                                ((void (*)(id, SEL, id))dlsym(RTLD_DEFAULT, "objc_msgSend"))(
+                                    enc, sel_registerName("setComputePipelineState:"), pipeline);
+
+                                /* setBuffer:offset:atIndex: */
+                                SEL setBufSel = sel_registerName("setBuffer:offset:atIndex:");
+                                ((void (*)(id, SEL, id, NSUInteger, NSUInteger))dlsym(RTLD_DEFAULT, "objc_msgSend"))(
+                                    enc, setBufSel, srcBuf, 0, 0);
+                                ((void (*)(id, SEL, id, NSUInteger, NSUInteger))dlsym(RTLD_DEFAULT, "objc_msgSend"))(
+                                    enc, setBufSel, dstBuf, 0, 1);
+
+                                /* dispatchThreads */
+                                typedef struct { NSUInteger w, h, d; } MTLSize;
+                                SEL dispSel = sel_registerName("dispatchThreads:threadsPerThreadgroup:");
+                                MTLSize grid = {256, 1, 1};
+                                MTLSize tg = {256, 1, 1};
+                                ((void (*)(id, SEL, MTLSize, MTLSize))dlsym(RTLD_DEFAULT, "objc_msgSend"))(
+                                    enc, dispSel, grid, tg);
+
+                                ((void (*)(id, SEL))dlsym(RTLD_DEFAULT, "objc_msgSend"))(
+                                    enc, sel_registerName("endEncoding"));
+
+                                ((void (*)(id, SEL))dlsym(RTLD_DEFAULT, "objc_msgSend"))(
+                                    cmdBuf, sel_registerName("commit"));
+                                ((void (*)(id, SEL))dlsym(RTLD_DEFAULT, "objc_msgSend"))(
+                                    cmdBuf, sel_registerName("waitUntilCompleted"));
+
+                                /* Read back results */
+                                uint64_t *res = (uint64_t *)dstPtr;
+                                rlog("  GPU results:\n");
+                                rlog("    dst[0] (GPU ptr to src): 0x%016llx\n", res[0]);
+                                rlog("    dst[1] (GPU ptr to dst): 0x%016llx\n", res[1]);
+                                rlog("    dst[2] (addr of ptr var): 0x%016llx\n", res[2]);
+
+                                for (int j = 0; j < 3; j++) {
+                                    if ((res[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                        rlog("    *** KPTR in GPU result[%d]: 0x%016llx ***\n",
+                                             j, res[j]);
+                                        kptr_found++;
+                                    }
+                                }
+
+                                /* Check if any interesting values in copied data */
+                                for (int j = 8; j < 32; j++) {
+                                    if (res[j] != 0xAAAAAAAAAAAAAAAAULL && res[j] != 0) {
+                                        rlog("    dst[%d]: 0x%016llx (unexpected)\n", j, res[j]);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        fflush(stdout);
+    }
+
+    /* ---- Part 6: IOKit registry entry properties for GPU ---- */
+    rlog("\n--- Part 6: GPU IOKit registry properties ---\n");
+    fflush(stdout);
+
+    io_iterator_t iter = 0;
+    kr = IOServiceGetMatchingServices(kIOMasterPortDefault,
+        IOServiceMatching("IOGPUDevice"), &iter);
+    if (kr == 0 && iter) {
+        io_service_t gpu_svc;
+        while ((gpu_svc = IOIteratorNext(iter))) {
+            io_name_t className;
+            IOObjectGetClass(gpu_svc, className);
+            rlog("  GPU service: %s (0x%x)\n", className, gpu_svc);
+
+            /* Get all properties */
+            CFMutableDictionaryRef props = NULL;
+            kr = IORegistryEntryCreateCFProperties(gpu_svc, &props,
+                kCFAllocatorDefault, 0);
+            if (kr == 0 && props) {
+                CFIndex cnt = CFDictionaryGetCount(props);
+                rlog("  Properties: %ld keys\n", (long)cnt);
+
+                /* Extract specific interesting keys */
+                const char *interesting_keys[] = {
+                    "IORegistryEntryID",
+                    "gpu-core-count",
+                    "gpu-id",
+                    "IODeviceMemoryRangeCount",
+                    "IOPCITunnelCompatible",
+                    "AGXMemorySize",
+                    "AGXFirmwareVersion",
+                    "gpu-firmware-version",
+                };
+                for (int k = 0; k < 8; k++) {
+                    CFStringRef key = CFStringCreateWithCString(NULL,
+                        interesting_keys[k], kCFStringEncodingUTF8);
+                    CFTypeRef val = CFDictionaryGetValue(props, key);
+                    if (val) {
+                        CFTypeID tid = CFGetTypeID(val);
+                        if (tid == CFNumberGetTypeID()) {
+                            int64_t nval = 0;
+                            CFNumberGetValue(val, kCFNumberSInt64Type, &nval);
+                            rlog("    %s: %lld (0x%llx)\n",
+                                 interesting_keys[k], nval, nval);
+                            if ((nval & 0xFFFFFF0000000000LL) == 0xFFFFFFF000000000LL) {
+                                rlog("    *** KPTR in %s ***\n", interesting_keys[k]);
+                                kptr_found++;
+                            }
+                        } else if (tid == CFDataGetTypeID()) {
+                            CFIndex dlen = CFDataGetLength(val);
+                            const UInt8 *dptr = CFDataGetBytePtr(val);
+                            rlog("    %s: data[%ld]", interesting_keys[k], (long)dlen);
+                            if (dlen <= 32) {
+                                for (CFIndex d = 0; d < dlen; d++)
+                                    rlog(" %02x", dptr[d]);
+                            }
+                            rlog("\n");
+                        } else if (tid == CFStringGetTypeID()) {
+                            char sbuf[128];
+                            CFStringGetCString(val, sbuf, sizeof(sbuf), kCFStringEncodingUTF8);
+                            rlog("    %s: %s\n", interesting_keys[k], sbuf);
+                        }
+                    }
+                    CFRelease(key);
+                }
+
+                /* Enumerate ALL keys and check numeric values for KPTR */
+                CFIndex nkeys = CFDictionaryGetCount(props);
+                const void **keys = malloc(nkeys * sizeof(void*));
+                const void **vals = malloc(nkeys * sizeof(void*));
+                CFDictionaryGetKeysAndValues(props, keys, vals);
+
+                for (CFIndex k = 0; k < nkeys; k++) {
+                    if (CFGetTypeID(vals[k]) == CFNumberGetTypeID()) {
+                        int64_t nv = 0;
+                        CFNumberGetValue(vals[k], kCFNumberSInt64Type, &nv);
+                        if ((nv & 0xFFFFFF0000000000LL) == 0xFFFFFFF000000000LL) {
+                            char kbuf[128];
+                            CFStringGetCString(keys[k], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+                            rlog("    *** KPTR in key '%s': 0x%llx ***\n", kbuf, nv);
+                            kptr_found++;
+                        }
+                    }
+                }
+                free(keys);
+                free(vals);
+
+                CFRelease(props);
+            }
+            IOObjectRelease(gpu_svc);
+        }
+        IOObjectRelease(iter);
+    }
+    fflush(stdout);
+
+    /* ---- Part 7: Lockdown Mode state detection ---- */
+    rlog("\n--- Part 7: Lockdown Mode state + transition surface ---\n");
+    fflush(stdout);
+
+    /* Check Lockdown Mode status via various indicators */
+
+    /* 1. Check via ManagedConfiguration if available */
+    void *mc_handle = dlopen("/System/Library/PrivateFrameworks/ManagedConfiguration.framework/ManagedConfiguration", RTLD_LAZY);
+    rlog("  ManagedConfiguration: %p\n", mc_handle);
+
+    /* 2. Check lockdown mode via sysctl */
+    int ldm_val = 0;
+    size_t ldm_sz = sizeof(ldm_val);
+    int ldm_ret = sysctlbyname("kern.lockdown_mode", &ldm_val, &ldm_sz, NULL, 0);
+    rlog("  kern.lockdown_mode: ret=%d val=%d\n", ldm_ret, ldm_val);
+
+    /* 3. Check security-related sysctls that change with LDM */
+    const char *ldm_sysctls[] = {
+        "security.mac.lockdown_mode",
+        "security.lockdown",
+        "kern.secure_kernel",
+        "kern.bootargs",
+        "hw.optional.arm.FEAT_PAuth",
+        "hw.optional.arm.FEAT_MTE",
+        "security.mac.sandbox.sentinel",
+        "kern.bootsessionuuid",
+    };
+    for (int i = 0; i < 8; i++) {
+        char buf[256] = {0};
+        size_t bsz = sizeof(buf);
+        int ret = sysctlbyname(ldm_sysctls[i], buf, &bsz, NULL, 0);
+        if (ret == 0) {
+            if (bsz <= 8) {
+                int64_t v = 0;
+                memcpy(&v, buf, bsz < 8 ? bsz : 8);
+                rlog("  %s: %lld (0x%llx) [%zu bytes]\n",
+                     ldm_sysctls[i], v, v, bsz);
+            } else {
+                buf[bsz < 255 ? bsz : 255] = 0;
+                rlog("  %s: '%s' [%zu bytes]\n", ldm_sysctls[i], buf, bsz);
+            }
+        } else {
+            rlog("  %s: FAILED (errno=%d)\n", ldm_sysctls[i], errno);
+        }
+    }
+
+    /* 4. Check LDM-related IOKit properties */
+    io_service_t plat_expert = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOPlatformExpertDevice"));
+    if (plat_expert) {
+        const char *ldm_keys[] = {
+            "lockdown-mode",
+            "security-domain",
+            "security-mode",
+            "effective-security-mode",
+            "reduced-security-mode",
+        };
+        for (int k = 0; k < 5; k++) {
+            CFStringRef key = CFStringCreateWithCString(NULL, ldm_keys[k], kCFStringEncodingUTF8);
+            CFTypeRef val = IORegistryEntryCreateCFProperty(plat_expert, key, kCFAllocatorDefault, 0);
+            if (val) {
+                CFTypeID tid = CFGetTypeID(val);
+                if (tid == CFBooleanGetTypeID()) {
+                    rlog("  IOPlatform.%s: %s\n", ldm_keys[k],
+                         CFBooleanGetValue(val) ? "true" : "false");
+                } else if (tid == CFNumberGetTypeID()) {
+                    int64_t nv = 0;
+                    CFNumberGetValue(val, kCFNumberSInt64Type, &nv);
+                    rlog("  IOPlatform.%s: %lld\n", ldm_keys[k], nv);
+                } else if (tid == CFDataGetTypeID()) {
+                    CFIndex dlen = CFDataGetLength(val);
+                    rlog("  IOPlatform.%s: data[%ld]\n", ldm_keys[k], (long)dlen);
+                } else if (tid == CFStringGetTypeID()) {
+                    char sb[128];
+                    CFStringGetCString(val, sb, sizeof(sb), kCFStringEncodingUTF8);
+                    rlog("  IOPlatform.%s: %s\n", ldm_keys[k], sb);
+                }
+                CFRelease(val);
+            }
+            CFRelease(key);
+        }
+        IOObjectRelease(plat_expert);
+    }
+
+    /* 5. Try to access LDM configuration APIs via ObjC runtime */
+    Class MCProfileConnection = objc_getClass("MCProfileConnection");
+    if (MCProfileConnection) {
+        SEL sharedSel = sel_registerName("sharedConnection");
+        id mc = objc_msg(MCProfileConnection, sharedSel);
+        rlog("  MCProfileConnection.sharedConnection: %p\n", mc);
+        if (mc) {
+            SEL ldmSel = sel_registerName("isLockdownModeEnabled");
+            BOOL (*msg_bool)(id, SEL) = (BOOL (*)(id, SEL))dlsym(RTLD_DEFAULT, "objc_msgSend");
+            BOOL ldmEnabled = msg_bool(mc, ldmSel);
+            rlog("  isLockdownModeEnabled: %d\n", ldmEnabled);
+        }
+    } else {
+        rlog("  MCProfileConnection: not found\n");
+    }
+
+    /* 6. Check for LDM-related Mach services */
+    const char *ldm_svcs[] = {
+        "com.apple.security.lockdown",
+        "com.apple.lockdownd",
+        "com.apple.managedconfiguration.profiled",
+        "com.apple.security.configurationprofiles",
+    };
+    for (int i = 0; i < 4; i++) {
+        mach_port_t svc = MACH_PORT_NULL;
+        kr = bootstrap_look_up(bootstrap_port, ldm_svcs[i], &svc);
+        rlog("  %s: kr=0x%x port=0x%x\n", ldm_svcs[i], kr, svc);
+        if (svc) mach_port_deallocate(mach_task_self(), svc);
+    }
+    fflush(stdout);
+
+    rlog("\n  Total KPTR: %d\n", kptr_found);
+    rlog("\n=== r315 complete ===\n");
+    fflush(stdout);
+}
+
 static void r314_probe(void) {
     rlog("\n=== r314: Dyld Slide + VT OOB + IOSurface Spray KASLR ===\n\n");
     fflush(stdout);
@@ -34595,6 +35168,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 315) {
+            rlog("*** rounds=315: Metal GPU + AGX + Lockdown Mode State ***\n");
+            rlog("  r314: shared cache slide=0x1a908000, VT OOB blocked (-12900).\n");
+            rlog("  Probe: Metal compute, AGX drivers, GPU addresses, LDM state.\n\n");
+            r315_probe();
             goto done;
         }
         if (rounds == 314) {
