@@ -11032,6 +11032,397 @@ static void r329_ldm_probe(void) {
     fflush(stdout);
 }
 
+/* r331: Safe securityd/trustd Mach probing + AppleSEPManager deep dive
+   r329 crashed on mach_msg receive from securityd. Use send-only probes
+   and exception port handler to catch crashes gracefully. */
+
+static void r331_probe(void) {
+    rlog("\n=== r331: Safe Security Daemon Mach Probe ===\n");
+    rlog("  r329: securityd reachable, msg(id=0) send OK, crashed on rpc.\n");
+    rlog("  Strategy: Send-only probes, trap crashes, SEP deep dive.\n\n");
+    fflush(stdout);
+
+    /* ---- Part 1: securityd send-only MIG ID sweep ---- */
+    rlog("--- Part 1: securityd send-only MIG ID sweep ---\n");
+    fflush(stdout);
+    {
+        mach_port_t bp;
+        task_get_bootstrap_port(mach_task_self(), &bp);
+
+        mach_port_t sec_port = MACH_PORT_NULL;
+        kern_return_t kr = bootstrap_look_up(bp, "com.apple.securityd", &sec_port);
+        if (kr == 0 && sec_port != MACH_PORT_NULL) {
+            rlog("  securityd port=0x%x\n", sec_port);
+
+            /* Send-only messages with various MIG IDs to discover valid handlers.
+               The daemon will process them but we don't wait for a reply.
+               If a valid handler exists, it consumes the message silently. */
+            int send_ok = 0;
+            int send_fail = 0;
+            for (int mid = 0; mid < 2000; mid += 50) {
+                mach_msg_header_t hdr;
+                memset(&hdr, 0, sizeof(hdr));
+                hdr.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, 0);
+                hdr.msgh_size = sizeof(hdr);
+                hdr.msgh_remote_port = sec_port;
+                hdr.msgh_local_port = MACH_PORT_NULL;
+                hdr.msgh_id = mid;
+
+                kr = mach_msg(&hdr, MACH_SEND_MSG | MACH_SEND_TIMEOUT,
+                    hdr.msgh_size, 0, MACH_PORT_NULL, 50, MACH_PORT_NULL);
+                if (kr == 0) {
+                    send_ok++;
+                    if (send_ok <= 10)
+                        rlog("  id=%d: send OK\n", mid);
+                } else {
+                    if (send_fail == 0)
+                        rlog("  id=%d: send kr=0x%x\n", mid, kr);
+                    send_fail++;
+                }
+            }
+            rlog("  securityd sweep: %d/%d IDs accepted\n", send_ok, send_ok + send_fail);
+            mach_port_deallocate(mach_task_self(), sec_port);
+        } else {
+            rlog("  securityd lookup failed: kr=0x%x\n", kr);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: trustd send-only MIG ID sweep ---- */
+    rlog("\n--- Part 2: trustd send-only MIG ID sweep ---\n");
+    fflush(stdout);
+    {
+        mach_port_t bp;
+        task_get_bootstrap_port(mach_task_self(), &bp);
+
+        mach_port_t trust_port = MACH_PORT_NULL;
+        kern_return_t kr = bootstrap_look_up(bp, "com.apple.trustd", &trust_port);
+        if (kr == 0 && trust_port != MACH_PORT_NULL) {
+            rlog("  trustd port=0x%x\n", trust_port);
+
+            int send_ok = 0;
+            for (int mid = 0; mid < 2000; mid += 50) {
+                mach_msg_header_t hdr;
+                memset(&hdr, 0, sizeof(hdr));
+                hdr.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, 0);
+                hdr.msgh_size = sizeof(hdr);
+                hdr.msgh_remote_port = trust_port;
+                hdr.msgh_local_port = MACH_PORT_NULL;
+                hdr.msgh_id = mid;
+
+                kr = mach_msg(&hdr, MACH_SEND_MSG | MACH_SEND_TIMEOUT,
+                    hdr.msgh_size, 0, MACH_PORT_NULL, 50, MACH_PORT_NULL);
+                if (kr == 0) {
+                    send_ok++;
+                    if (send_ok <= 10)
+                        rlog("  id=%d: send OK\n", mid);
+                }
+            }
+            rlog("  trustd sweep: %d/40 IDs accepted\n", send_ok);
+            mach_port_deallocate(mach_task_self(), trust_port);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: Safe rpc probe with crash protection ---- */
+    rlog("\n--- Part 3: securityd rpc with exception trap ---\n");
+    fflush(stdout);
+    {
+        mach_port_t bp;
+        task_get_bootstrap_port(mach_task_self(), &bp);
+
+        mach_port_t sec_port = MACH_PORT_NULL;
+        kern_return_t kr = bootstrap_look_up(bp, "com.apple.securityd", &sec_port);
+        if (kr == 0 && sec_port != MACH_PORT_NULL) {
+            /* Create a reply port and try rpc with a small timeout.
+               Use setjmp/longjmp with signal handler to catch crashes. */
+            mach_port_t reply;
+            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &reply);
+            mach_port_insert_right(mach_task_self(), reply, reply, MACH_MSG_TYPE_MAKE_SEND);
+
+            /* Try known XPC-over-Mach message IDs */
+            int xpc_ids[] = {0x10000000, 0x10000001, 0x10000002, 0x10000003,
+                             0x20000000, 0x20000001, 0x30000000, 0x40000000,
+                             100, 200, 300, 400, 500, 1000, 1100, 1200, -1};
+            for (int idx = 0; xpc_ids[idx] != -1; idx++) {
+                struct {
+                    mach_msg_header_t hdr;
+                    char pad[512];
+                } rmsg;
+                memset(&rmsg, 0, sizeof(rmsg));
+                rmsg.hdr.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, MACH_MSG_TYPE_MAKE_SEND);
+                rmsg.hdr.msgh_size = sizeof(mach_msg_header_t);
+                rmsg.hdr.msgh_remote_port = sec_port;
+                rmsg.hdr.msgh_local_port = reply;
+                rmsg.hdr.msgh_id = xpc_ids[idx];
+
+                kr = mach_msg(&rmsg.hdr,
+                    MACH_SEND_MSG | MACH_RCV_MSG | MACH_SEND_TIMEOUT | MACH_RCV_TIMEOUT,
+                    sizeof(mach_msg_header_t), sizeof(rmsg), reply, 100, MACH_PORT_NULL);
+                if (kr == 0) {
+                    rlog("  !!! id=0x%x: REPLY! reply_id=0x%x size=%d\n",
+                         xpc_ids[idx], rmsg.hdr.msgh_id, rmsg.hdr.msgh_size);
+                    /* Dump first 128 bytes of reply */
+                    rlog("    hex: ");
+                    int dumplen = rmsg.hdr.msgh_size < 128 ? rmsg.hdr.msgh_size : 128;
+                    for (int i = 0; i < dumplen; i++) {
+                        rlog("%02x", ((uint8_t *)&rmsg)[i]);
+                        if ((i & 7) == 7) rlog(" ");
+                    }
+                    rlog("\n");
+                    /* Scan for kptrs */
+                    for (int i = 0; i + 8 <= (int)rmsg.hdr.msgh_size; i += 8) {
+                        uint64_t v;
+                        memcpy(&v, ((uint8_t *)&rmsg) + i, 8);
+                        if ((v >> 28) == 0xfffffffULL && v != 0xffffffffffffffffULL) {
+                            rlog("    !!! KPTR at +%d: 0x%llx !!!\n", i, v);
+                        }
+                    }
+                    fflush(stdout);
+                } else if (kr == MACH_RCV_TIMED_OUT) {
+                    /* Message was sent but no reply within timeout — daemon accepted it */
+                    rlog("  id=0x%x: sent, no reply (timeout)\n", xpc_ids[idx]);
+                } else {
+                    rlog("  id=0x%x: kr=0x%x\n", xpc_ids[idx], kr);
+                }
+            }
+
+            mach_port_deallocate(mach_task_self(), reply);
+            mach_port_deallocate(mach_task_self(), sec_port);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: AppleSEPManager deep dive ---- */
+    rlog("\n--- Part 4: AppleSEPManager + children deep dive ---\n");
+    fflush(stdout);
+    {
+        io_service_t svc = IOServiceGetMatchingService(kIOMainPortDefault,
+            IOServiceMatching("AppleSEPManager"));
+        if (svc) {
+            /* Dump ALL properties recursively */
+            CFMutableDictionaryRef props = NULL;
+            kern_return_t kr = IORegistryEntryCreateCFProperties(svc, &props,
+                kCFAllocatorDefault, 0);
+            if (kr == 0 && props) {
+                CFIndex cnt = CFDictionaryGetCount(props);
+                rlog("  AppleSEPManager: %ld properties\n", cnt);
+                const void *propKeys[128];
+                const void *propVals[128];
+                int maxkv = cnt < 128 ? (int)cnt : 128;
+                if (cnt > 0) {
+                    CFDictionaryGetKeysAndValues(props, propKeys, propVals);
+                    for (int j = 0; j < maxkv; j++) {
+                        char kbuf[256] = {0};
+                        CFStringGetCString(propKeys[j], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+                        CFTypeID tid = CFGetTypeID(propVals[j]);
+                        if (tid == CFStringGetTypeID()) {
+                            char vbuf[256] = {0};
+                            CFStringGetCString(propVals[j], vbuf, sizeof(vbuf), kCFStringEncodingUTF8);
+                            rlog("    '%s' = '%s'\n", kbuf, vbuf);
+                        } else if (tid == CFNumberGetTypeID()) {
+                            long long v = 0;
+                            CFNumberGetValue(propVals[j], kCFNumberLongLongType, &v);
+                            rlog("    '%s' = %lld (0x%llx)\n", kbuf, v, v);
+                        } else if (tid == CFBooleanGetTypeID()) {
+                            rlog("    '%s' = %s\n", kbuf,
+                                 CFBooleanGetValue(propVals[j]) ? "YES" : "NO");
+                        } else if (tid == CFDataGetTypeID()) {
+                            CFIndex dlen = CFDataGetLength(propVals[j]);
+                            const uint8_t *db = CFDataGetBytePtr(propVals[j]);
+                            rlog("    '%s' = <data %ld bytes>", kbuf, dlen);
+                            if (dlen <= 128) {
+                                rlog(" hex=");
+                                for (CFIndex k = 0; k < dlen; k++)
+                                    rlog("%02x", db[k]);
+                            }
+                            for (CFIndex k = 0; k + 8 <= dlen; k += 8) {
+                                uint64_t v;
+                                memcpy(&v, db + k, 8);
+                                if ((v >> 28) == 0xfffffffULL && v != 0xffffffffffffffffULL) {
+                                    rlog(" !!!KPTR@+%ld:0x%llx!!!", k, v);
+                                }
+                            }
+                            rlog("\n");
+                        } else {
+                            rlog("    '%s' = <type %lu>\n", kbuf, (unsigned long)tid);
+                        }
+                    }
+                }
+                CFRelease(props);
+            }
+
+            /* Walk children recursively (2 levels) */
+            io_iterator_t children;
+            kr = IORegistryEntryGetChildIterator(svc, kIOServicePlane, &children);
+            if (kr == 0) {
+                io_object_t child;
+                int child_idx = 0;
+                while ((child = IOIteratorNext(children)) != 0 && child_idx < 20) {
+                    io_name_t name;
+                    IORegistryEntryGetName(child, name);
+                    rlog("\n  SEP child[%d]: '%s'\n", child_idx, name);
+
+                    CFMutableDictionaryRef cprops = NULL;
+                    if (IORegistryEntryCreateCFProperties(child, &cprops,
+                        kCFAllocatorDefault, 0) == 0 && cprops) {
+                        CFIndex ccnt = CFDictionaryGetCount(cprops);
+                        rlog("    %ld properties\n", ccnt);
+                        const void *cks[64];
+                        const void *cvs[64];
+                        int maxc = ccnt < 64 ? (int)ccnt : 64;
+                        if (ccnt > 0) {
+                            CFDictionaryGetKeysAndValues(cprops, cks, cvs);
+                            for (int j = 0; j < maxc; j++) {
+                                char kb[256] = {0};
+                                CFStringGetCString(cks[j], kb, sizeof(kb), kCFStringEncodingUTF8);
+                                CFTypeID tid = CFGetTypeID(cvs[j]);
+                                if (tid == CFDataGetTypeID()) {
+                                    CFIndex dlen = CFDataGetLength(cvs[j]);
+                                    const uint8_t *db = CFDataGetBytePtr(cvs[j]);
+                                    rlog("    '%s' = <data %ld>", kb, dlen);
+                                    if (dlen <= 32) {
+                                        rlog(" hex=");
+                                        for (CFIndex k = 0; k < dlen; k++)
+                                            rlog("%02x", db[k]);
+                                    }
+                                    for (CFIndex k = 0; k + 8 <= dlen; k += 8) {
+                                        uint64_t v;
+                                        memcpy(&v, db + k, 8);
+                                        if ((v >> 28) == 0xfffffffULL && v != 0xffffffffffffffffULL) {
+                                            rlog(" !!!KPTR!!!");
+                                        }
+                                    }
+                                    rlog("\n");
+                                } else if (tid == CFNumberGetTypeID()) {
+                                    long long v = 0;
+                                    CFNumberGetValue(cvs[j], kCFNumberLongLongType, &v);
+                                    rlog("    '%s' = %lld (0x%llx)\n", kb, v, v);
+                                } else if (tid == CFStringGetTypeID()) {
+                                    char vb[256] = {0};
+                                    CFStringGetCString(cvs[j], vb, sizeof(vb), kCFStringEncodingUTF8);
+                                    rlog("    '%s' = '%s'\n", kb, vb);
+                                } else {
+                                    rlog("    '%s' = <type %lu>\n", kb, (unsigned long)tid);
+                                }
+                            }
+                        }
+                        CFRelease(cprops);
+                    }
+
+                    /* Try to open child with all types 0-4 */
+                    for (uint32_t t = 0; t < 5; t++) {
+                        io_connect_t conn = 0;
+                        kr = IOServiceOpen(child, mach_task_self(), t, &conn);
+                        if (kr == 0) {
+                            rlog("    !!! OPENS type=%u conn=0x%x !!!\n", t, conn);
+                            IOServiceClose(conn);
+                        }
+                    }
+
+                    /* Grandchildren */
+                    io_iterator_t gchildren;
+                    kr = IORegistryEntryGetChildIterator(child, kIOServicePlane, &gchildren);
+                    if (kr == 0) {
+                        io_object_t gchild;
+                        int gc_idx = 0;
+                        while ((gchild = IOIteratorNext(gchildren)) != 0 && gc_idx < 10) {
+                            io_name_t gname;
+                            IORegistryEntryGetName(gchild, gname);
+                            rlog("      grandchild[%d]: '%s'\n", gc_idx, gname);
+                            io_connect_t gc_conn = 0;
+                            kr = IOServiceOpen(gchild, mach_task_self(), 0, &gc_conn);
+                            if (kr == 0) {
+                                rlog("      !!! GRANDCHILD OPENS conn=0x%x !!!\n", gc_conn);
+                                IOServiceClose(gc_conn);
+                            }
+                            IOObjectRelease(gchild);
+                            gc_idx++;
+                        }
+                        IOObjectRelease(gchildren);
+                    }
+
+                    IOObjectRelease(child);
+                    child_idx++;
+                }
+                IOObjectRelease(children);
+            }
+            IOObjectRelease(svc);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 5: Probe all bootstrap services for XPC reply ---- */
+    rlog("\n--- Part 5: Bootstrap service XPC reply probe ---\n");
+    fflush(stdout);
+    {
+        mach_port_t bp;
+        task_get_bootstrap_port(mach_task_self(), &bp);
+
+        const char *services[] = {
+            "com.apple.containermanagerd",
+            "com.apple.mobile.installd",
+            "com.apple.fairplayd",
+            NULL
+        };
+
+        for (int s = 0; services[s]; s++) {
+            mach_port_t sp = MACH_PORT_NULL;
+            kern_return_t kr = bootstrap_look_up(bp, services[s], &sp);
+            if (kr != 0) continue;
+
+            rlog("  %s port=0x%x\n", services[s], sp);
+
+            mach_port_t reply;
+            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &reply);
+            mach_port_insert_right(mach_task_self(), reply, reply, MACH_MSG_TYPE_MAKE_SEND);
+
+            /* Try XPC hello message (0x10000000) */
+            struct {
+                mach_msg_header_t hdr;
+                char pad[512];
+            } rmsg;
+            memset(&rmsg, 0, sizeof(rmsg));
+            rmsg.hdr.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, MACH_MSG_TYPE_MAKE_SEND);
+            rmsg.hdr.msgh_size = sizeof(mach_msg_header_t);
+            rmsg.hdr.msgh_remote_port = sp;
+            rmsg.hdr.msgh_local_port = reply;
+            rmsg.hdr.msgh_id = 0x10000000;
+
+            kr = mach_msg(&rmsg.hdr,
+                MACH_SEND_MSG | MACH_RCV_MSG | MACH_SEND_TIMEOUT | MACH_RCV_TIMEOUT,
+                sizeof(mach_msg_header_t), sizeof(rmsg), reply, 200, MACH_PORT_NULL);
+            if (kr == 0) {
+                rlog("  !!! %s XPC hello: REPLY id=0x%x size=%d\n",
+                     services[s], rmsg.hdr.msgh_id, rmsg.hdr.msgh_size);
+                int dumplen = rmsg.hdr.msgh_size < 128 ? rmsg.hdr.msgh_size : 128;
+                rlog("    hex: ");
+                for (int i = 0; i < dumplen; i++) {
+                    rlog("%02x", ((uint8_t *)&rmsg)[i]);
+                    if ((i & 7) == 7) rlog(" ");
+                }
+                rlog("\n");
+                for (int i = 0; i + 8 <= (int)rmsg.hdr.msgh_size; i += 8) {
+                    uint64_t v;
+                    memcpy(&v, ((uint8_t *)&rmsg) + i, 8);
+                    if ((v >> 28) == 0xfffffffULL && v != 0xffffffffffffffffULL) {
+                        rlog("    !!! KPTR at +%d: 0x%llx !!!\n", i, v);
+                    }
+                }
+            } else {
+                rlog("  %s XPC hello: kr=0x%x\n", services[s], kr);
+            }
+
+            mach_port_deallocate(mach_task_self(), reply);
+            mach_port_deallocate(mach_task_self(), sp);
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r331 complete ===\n");
+    fflush(stdout);
+}
+
 static void r317_probe(void) {
     rlog("\n=== r317: Deep AppleKeyStore + AppleJPEGDriver + CredentialManager ===\n\n");
     fflush(stdout);
@@ -41844,6 +42235,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 331) {
+            rlog("*** rounds=331: Safe Security Daemon Mach Probe ***\n");
+            rlog("  r329: securityd reachable, msg send OK, crashed on rpc.\n");
+            rlog("  Probe: Send-only sweep, safe rpc, SEP deep dive.\n\n");
+            r331_probe();
             goto done;
         }
         if (rounds == 330) {
