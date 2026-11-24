@@ -15902,6 +15902,165 @@ static void r362_probe(void) {
     fflush(stdout);
 }
 
+/* r390: Collect many object_ids to analyze kernel heap layout.
+ * object_id from mach_vm_region_recurse is kernel-sourced.
+ * On older iOS, it was derived from vm_object_t (truncated pointer).
+ * If we can collect enough of these, we might deduce kernel heap base.
+ * Also scan ALL our process's VM regions for object_ids.
+ */
+static void r390_probe(void) {
+    rlog("\n=== r390: VM Object ID Collection + Heap Analysis ===\n\n");
+    fflush(stdout);
+
+    /* Phase 1: Create many IOSurfaces and collect their object_ids */
+    rlog("  Phase 1: IOSurface object_ids (20 surfaces)\n");
+
+    int w=64, h=64, bpe=4, bpr=64*4, pf=0x42475241, as_=64*64*4;
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nW);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nH);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), nB);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nR);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nP);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nA);
+
+    int32_t obj_ids[20];
+    IOSurfaceRef surfs[20];
+    for (int i = 0; i < 20; i++) {
+        surfs[i] = IOSurfaceCreate(props);
+        IOSurfaceLock(surfs[i], 0, NULL);
+        void *base = IOSurfaceGetBaseAddress(surfs[i]);
+        int32_t oid = 0;
+        if (base) {
+            mach_vm_address_t addr = (mach_vm_address_t)(uintptr_t)base;
+            mach_vm_size_t rsize = 0;
+            uint32_t depth = 0;
+            vm_region_submap_info_data_64_t sinfo;
+            mach_msg_type_number_t scnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            kern_return_t kr = mach_vm_region_recurse(mach_task_self(), &addr, &rsize,
+                &depth, (vm_region_recurse_info_t)&sinfo, &scnt);
+            if (kr == 0) {
+                oid = sinfo.object_id;
+            }
+        }
+        obj_ids[i] = oid;
+        rlog("    surf[%02d]: base=%p obj_id=0x%08x (%d)\n", i, base, (uint32_t)oid, oid);
+        IOSurfaceUnlock(surfs[i], 0, NULL);
+    }
+
+    /* Analyze object_id pattern */
+    rlog("\n  Object ID analysis:\n");
+    int32_t min_oid = obj_ids[0], max_oid = obj_ids[0];
+    for (int i = 1; i < 20; i++) {
+        if (obj_ids[i] < min_oid) min_oid = obj_ids[i];
+        if (obj_ids[i] > max_oid) max_oid = obj_ids[i];
+    }
+    rlog("    Range: 0x%08x to 0x%08x (span=%d)\n",
+        (uint32_t)min_oid, (uint32_t)max_oid, max_oid - min_oid);
+    for (int i = 1; i < 20; i++) {
+        rlog("    diff[%02d-%02d]: %d\n", i, i-1, obj_ids[i] - obj_ids[i-1]);
+    }
+
+    /* Phase 2: Scan ALL VM regions in our process */
+    rlog("\n  Phase 2: Full process VM region scan\n");
+    mach_vm_address_t addr = 0;
+    int region_count = 0;
+    int interesting_count = 0;
+
+    while (region_count < 500) {
+        mach_vm_size_t rsize = 0;
+        uint32_t depth = 0;
+        vm_region_submap_info_data_64_t sinfo;
+        mach_msg_type_number_t scnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+        kern_return_t kr = mach_vm_region_recurse(mach_task_self(), &addr, &rsize,
+            &depth, (vm_region_recurse_info_t)&sinfo, &scnt);
+        if (kr != 0) break;
+
+        region_count++;
+
+        /* Log every region with a non-zero object_id */
+        if (sinfo.object_id != 0) {
+            interesting_count++;
+            if (interesting_count <= 50) {
+                rlog("    0x%012llx size=%-10llu prot=%d share=%d obj_id=0x%08x offset=0x%llx\n",
+                    (unsigned long long)addr, (unsigned long long)rsize,
+                    sinfo.protection, sinfo.share_mode,
+                    (uint32_t)sinfo.object_id, (unsigned long long)sinfo.offset);
+            }
+        }
+
+        addr += rsize;
+        if (addr == 0) break;
+    }
+    rlog("    Total regions: %d, with object_id: %d\n", region_count, interesting_count);
+
+    /* Phase 3: Check if object_ids are consistent across repeated queries */
+    rlog("\n  Phase 3: Object ID stability test\n");
+    IOSurfaceLock(surfs[0], 0, NULL);
+    void *base0 = IOSurfaceGetBaseAddress(surfs[0]);
+    if (base0) {
+        for (int trial = 0; trial < 5; trial++) {
+            mach_vm_address_t a = (mach_vm_address_t)(uintptr_t)base0;
+            mach_vm_size_t rs = 0;
+            uint32_t d = 0;
+            vm_region_submap_info_data_64_t si;
+            mach_msg_type_number_t sc = VM_REGION_SUBMAP_INFO_COUNT_64;
+            mach_vm_region_recurse(mach_task_self(), &a, &rs, &d,
+                (vm_region_recurse_info_t)&si, &sc);
+            rlog("    trial %d: obj_id=0x%08x offset=0x%llx\n",
+                trial, (uint32_t)si.object_id, (unsigned long long)si.offset);
+        }
+    }
+    IOSurfaceUnlock(surfs[0], 0, NULL);
+
+    /* Phase 4: Try to find the kernel text region's object_id by probing
+     * mach_vm_region on task_for_pid(0) — probably denied but worth trying */
+    rlog("\n  Phase 4: Kernel task VM region (expected to fail)\n");
+    mach_port_t kernel_task = 0;
+    kern_return_t kr = task_for_pid(mach_task_self(), 0, &kernel_task);
+    rlog("    task_for_pid(0): kr=0x%x task=0x%x\n", kr, kernel_task);
+
+    /* Phase 5: Try mach_make_memory_entry_64 to get a memory entry for surface */
+    rlog("\n  Phase 5: Memory entry for IOSurface backing\n");
+    IOSurfaceLock(surfs[0], 0, NULL);
+    base0 = IOSurfaceGetBaseAddress(surfs[0]);
+    if (base0) {
+        mach_vm_size_t size = 16384;
+        mach_port_t entry = 0;
+        memory_object_size_t esize = size;
+        kr = mach_make_memory_entry_64(mach_task_self(),
+            &esize, (mach_vm_address_t)(uintptr_t)base0,
+            VM_PROT_READ | VM_PROT_WRITE, &entry, 0);
+        rlog("    mach_make_memory_entry_64: kr=0x%x entry=0x%x size=%llu\n",
+            kr, entry, (unsigned long long)esize);
+        if (kr == 0 && entry) {
+            /* Get the port's kobject type */
+            unsigned int kotype = 0;
+            mach_vm_address_t koaddr = 0;
+            kr = mach_port_kobject(mach_task_self(), entry, &kotype, &koaddr);
+            rlog("    entry kobject: kr=0x%x type=%u addr=0x%llx\n",
+                kr, kotype, (unsigned long long)koaddr);
+            mach_port_deallocate(mach_task_self(), entry);
+        }
+    }
+    IOSurfaceUnlock(surfs[0], 0, NULL);
+
+    /* Cleanup */
+    for (int i = 0; i < 20; i++) CFRelease(surfs[i]);
+    CFRelease(props);
+    CFRelease(nW); CFRelease(nH); CFRelease(nB); CFRelease(nR); CFRelease(nP); CFRelease(nA);
+
+    rlog("\n=== r390 complete ===\n");
+    fflush(stdout);
+}
+
 /* r389: IOSurface Lock/Unlock memory mapping + physical address probing.
  * IOSurfaceLock maps the backing store into userspace. Check if:
  * 1. The mapped memory contains kernel residue
@@ -60746,6 +60905,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 393) {
+            rlog("*** rounds=393: VM Object ID Collection + Heap Analysis ***\n");
+            rlog("  Collect object_ids from many surfaces and VM regions.\n\n");
+            fflush(stdout);
+            r390_probe();
+            goto done;
+        }
         if (rounds == 392) {
             rlog("*** rounds=392: IOSurface Lock Memory + Physical Probing ***\n");
             rlog("  VM region info, backing store analysis, physical mem layout.\n\n");
@@ -63082,7 +63248,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
