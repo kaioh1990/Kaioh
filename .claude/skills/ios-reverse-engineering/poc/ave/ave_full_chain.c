@@ -15928,16 +15928,29 @@ static void r385_probe(void) {
         (thread_state_t)&ts, &ts_count);
     rlog("  thread_get_state: kr=0x%x count=%u\n", kr, ts_count);
     if (kr == KERN_SUCCESS) {
-        rlog("  PC=0x%llx LR=0x%llx SP=0x%llx FP=0x%llx\n",
-            (unsigned long long)ts.__pc, (unsigned long long)ts.__lr,
-            (unsigned long long)ts.__sp, (unsigned long long)ts.__fp);
-        for (int i = 0; i < 29; i++) {
-            uint64_t reg = ts.__x[i];
-            if (reg >= 0xfffffff000000000ULL && reg <= 0xfffffff7ffffffffULL) {
-                rlog("  x%d=0x%llx KTEXT!\n", i, (unsigned long long)reg);
-            } else if (reg >= 0xffffffe000000000ULL) {
-                rlog("  x%d=0x%llx KHEAP!\n", i, (unsigned long long)reg);
+        /* On PAC-aware SDKs, fields are opaque — dump raw bytes instead */
+        uint8_t *ts_raw = (uint8_t*)&ts;
+        size_t ts_size = sizeof(ts);
+        rlog("  thread_state size=%zu bytes, scanning for kptrs:\n", ts_size);
+        int found_kptr = 0;
+        for (size_t off = 0; off + 7 < ts_size; off += 8) {
+            uint64_t v;
+            memcpy(&v, ts_raw + off, 8);
+            if (v >= 0xfffffff000000000ULL && v <= 0xfffffff7ffffffffULL) {
+                rlog("    +%zu: 0x%llx KTEXT!\n", off, (unsigned long long)v);
+                found_kptr++;
+            } else if (v >= 0xffffffe000000000ULL && v < 0xfffffff000000000ULL) {
+                rlog("    +%zu: 0x%llx KHEAP!\n", off, (unsigned long long)v);
+                found_kptr++;
             }
+        }
+        if (!found_kptr) rlog("    No kernel addresses in thread state\n");
+        /* Also dump first 10 register-sized values */
+        rlog("  First 10 qwords:\n");
+        for (int i = 0; i < 10 && (size_t)(i*8) < ts_size; i++) {
+            uint64_t v;
+            memcpy(&v, ts_raw + i*8, 8);
+            rlog("    [%d] 0x%016llx\n", i, (unsigned long long)v);
         }
     }
 
