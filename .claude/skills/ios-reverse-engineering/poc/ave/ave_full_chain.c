@@ -5027,10 +5027,10 @@ static void r315_probe(void) {
         SEL newBufSel = sel_registerName("newBufferWithLength:options:");
 
         /* Create buffers with different storage modes */
-        int modes[] = {0, 1}; /* Shared, Private only (Managed/Memoryless crash on iOS) */
-        const char *mode_names[] = {"Shared", "Private"};
+        int modes[] = {0}; /* Shared only — Private crashes on this device */
+        const char *mode_names[] = {"Shared"};
 
-        for (int m = 0; m < 2; m++) {
+        for (int m = 0; m < 1; m++) {
             id (*msg_buf)(id, SEL, unsigned long, unsigned long) =
                 (id (*)(id, SEL, unsigned long, unsigned long))dlsym(RTLD_DEFAULT, "objc_msgSend");
             id buf = msg_buf(device, newBufSel, 16384, modes[m] << 4);
