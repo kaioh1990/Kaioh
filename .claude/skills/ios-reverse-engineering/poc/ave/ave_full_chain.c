@@ -243,6 +243,24 @@ struct my_proc_taskallinfo {
 extern kern_return_t mach_vm_region_recurse(vm_map_t target_task,
     uint64_t *address, uint64_t *size, uint32_t *nesting_depth,
     vm_region_recurse_info_t info, mach_msg_type_number_t *infoCnt);
+
+typedef struct {
+    char mzn_name[80];
+} mach_zone_name_t;
+typedef struct {
+    uint64_t mzi_count;
+    uint64_t mzi_cur_size;
+    uint64_t mzi_max_size;
+    uint64_t mzi_elem_size;
+    uint64_t mzi_alloc_size;
+    uint64_t mzi_sum_size;
+    uint64_t mzi_exhaustible;
+    uint64_t mzi_collectable;
+} mach_zone_info_t;
+extern kern_return_t host_zone_info(host_t host,
+    mach_zone_name_t **names, mach_msg_type_number_t *namesCnt,
+    mach_zone_info_t **info, mach_msg_type_number_t *infoCnt);
+
 extern kern_return_t mach_vm_region(vm_map_t target_task,
     uint64_t *address, uint64_t *size, vm_region_flavor_t flavor,
     vm_region_info_t info, mach_msg_type_number_t *infoCnt,
