@@ -9714,7 +9714,7 @@ static void r328_probe(void) {
     fflush(stdout);
 }
 
-/* r329: Trigon-inspired KASLR bypass — host_info, PurpleGfxMem, mach_port_kobject
+/* r330: Trigon-inspired KASLR bypass — host_info, PurpleGfxMem, mach_port_kobject
    Trigon (CVE-2023-32434): Used PurpleGfxMem IOSurface + mach_make_memory_entry_64
    overflow to map kernel physical memory. On arm64e/SPTM this is blocked, BUT:
    1) host_statistics64 may have uninitialized memory leaks
@@ -9724,8 +9724,8 @@ static void r328_probe(void) {
    5) mach_make_memory_entry_64 behavior with IOSurface may differ
    6) host_processor_info per-CPU structures may have uninitialized data */
 
-static void r329_trigon_probe(void) {
-    rlog("\n=== r329-trigon: Trigon-Inspired KASLR Bypass Vectors ===\n");
+static void r330_probe(void) {
+    rlog("\n=== r330: Trigon-Inspired KASLR Bypass Vectors ===\n");
     rlog("  Strategy: host_info leaks, mach_port_kobject, PurpleGfxMem, memory entries\n");
     rlog("  Inspiration: Trigon (CVE-2023-32434), Calif MIE bypass, Project Zero KASLR\n\n");
     fflush(stdout);
@@ -10232,7 +10232,7 @@ static void r329_trigon_probe(void) {
     }
     fflush(stdout);
 
-    rlog("\n=== r329 complete ===\n");
+    rlog("\n=== r330 complete ===\n");
     fflush(stdout);
 }
 
@@ -41844,6 +41844,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 330) {
+            rlog("*** rounds=330: Trigon-Inspired KASLR Bypass Vectors ***\n");
+            rlog("  r329: TIFF3 OOB, IOSurface header, async IOKit.\n");
+            rlog("  Probe: host_info uninit, mach_port_kobject, PurpleGfxMem, memory entries.\n\n");
+            r330_probe();
             goto done;
         }
         if (rounds == 329) {
