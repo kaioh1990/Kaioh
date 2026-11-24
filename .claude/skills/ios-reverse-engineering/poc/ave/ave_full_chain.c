@@ -244,7 +244,9 @@ extern kern_return_t mach_vm_region_recurse(vm_map_t target_task,
     uint64_t *address, uint64_t *size, uint32_t *nesting_depth,
     vm_region_recurse_info_t info, mach_msg_type_number_t *infoCnt);
 
-/* host_zone_info types already in mach headers */
+extern kern_return_t host_zone_info(host_t host,
+    mach_zone_name_t **names, mach_msg_type_number_t *namesCnt,
+    mach_zone_info_t **info, mach_msg_type_number_t *infoCnt);
 
 extern kern_return_t mach_vm_region(vm_map_t target_task,
     uint64_t *address, uint64_t *size, vm_region_flavor_t flavor,
