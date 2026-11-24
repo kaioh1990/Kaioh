@@ -4985,9 +4985,7 @@ static void r315_probe(void) {
     rlog("--- Part 1: Metal device capabilities ---\n");
     fflush(stdout);
 
-    /* Use Objective-C runtime to call Metal APIs */
     id (*objc_msg)(id, SEL, ...) = (id (*)(id, SEL, ...))dlsym(RTLD_DEFAULT, "objc_msgSend");
-    Class MTLCreateSystemDefaultDevice_cls = NULL;
 
     /* MTLCreateSystemDefaultDevice() */
     id (*create_device)(void) = (id (*)(void))dlsym(RTLD_DEFAULT, "MTLCreateSystemDefaultDevice");
@@ -5001,7 +4999,6 @@ static void r315_probe(void) {
 
     if (device) {
         SEL nameSel = sel_registerName("name");
-        SEL descSel = sel_registerName("description");
         SEL maxBufSel = sel_registerName("maxBufferLength");
         SEL regSizeSel = sel_registerName("registryID");
 
@@ -5013,8 +5010,8 @@ static void r315_probe(void) {
         uint64_t regID = msg_u64(device, regSizeSel);
         rlog("  registryID: 0x%llx\n", regID);
 
-        NSUInteger (*msg_nsu)(id, SEL) = (NSUInteger (*)(id, SEL))dlsym(RTLD_DEFAULT, "objc_msgSend");
-        NSUInteger maxBuf = msg_nsu(device, maxBufSel);
+        unsigned long (*msg_nsu)(id, SEL) = (unsigned long (*)(id, SEL))dlsym(RTLD_DEFAULT, "objc_msgSend");
+        unsigned long maxBuf = msg_nsu(device, maxBufSel);
         rlog("  maxBufferLength: %zu\n", (size_t)maxBuf);
 
         /* Check if the registryID leaks kernel info */
@@ -5034,8 +5031,8 @@ static void r315_probe(void) {
         const char *mode_names[] = {"Shared", "Private", "Managed", "Memoryless"};
 
         for (int m = 0; m < 4; m++) {
-            id (*msg_buf)(id, SEL, NSUInteger, NSUInteger) =
-                (id (*)(id, SEL, NSUInteger, NSUInteger))dlsym(RTLD_DEFAULT, "objc_msgSend");
+            id (*msg_buf)(id, SEL, unsigned long, unsigned long) =
+                (id (*)(id, SEL, unsigned long, unsigned long))dlsym(RTLD_DEFAULT, "objc_msgSend");
             id buf = msg_buf(device, newBufSel, 16384, modes[m] << 4);
             if (buf) {
                 SEL contentsSel = sel_registerName("contents");
@@ -5044,7 +5041,7 @@ static void r315_probe(void) {
 
                 void *contents = (void *)msg_nsu(buf, contentsSel);
                 uint64_t gpuAddr = msg_u64(buf, gpuAddrSel);
-                NSUInteger length = msg_nsu(buf, lengthSel);
+                unsigned long length = msg_nsu(buf, lengthSel);
 
                 rlog("  %s: buf=%p contents=%p gpuAddr=0x%llx len=%zu\n",
                      mode_names[m], buf, contents, gpuAddr, (size_t)length);
@@ -5110,17 +5107,17 @@ static void r315_probe(void) {
             /* Create Metal texture descriptor */
             Class texDescCls = objc_getClass("MTLTextureDescriptor");
             SEL tex2DSel = sel_registerName("texture2DDescriptorWithPixelFormat:width:height:mipmapped:");
-            id (*msg_td)(Class, SEL, NSUInteger, NSUInteger, NSUInteger, BOOL) =
-                (id (*)(Class, SEL, NSUInteger, NSUInteger, NSUInteger, BOOL))dlsym(RTLD_DEFAULT, "objc_msgSend");
+            id (*msg_td)(Class, SEL, unsigned long, unsigned long, unsigned long, BOOL) =
+                (id (*)(Class, SEL, unsigned long, unsigned long, unsigned long, BOOL))dlsym(RTLD_DEFAULT, "objc_msgSend");
             /* MTLPixelFormatBGRA8Unorm = 80 */
-            id texDesc = msg_td(texDescCls, tex2DSel, 80, 64, 64, NO);
+            id texDesc = msg_td(texDescCls, tex2DSel, 80, 64, 64, 0);
             rlog("  TextureDescriptor: %p\n", texDesc);
 
             if (texDesc) {
                 /* newTextureWithDescriptor:iosurface:plane:level: */
                 SEL newTexIOSurfSel = sel_registerName("newTextureWithDescriptor:iosurface:plane:level:");
-                id (*msg_tex)(id, SEL, id, IOSurfaceRef, NSUInteger, NSUInteger) =
-                    (id (*)(id, SEL, id, IOSurfaceRef, NSUInteger, NSUInteger))dlsym(RTLD_DEFAULT, "objc_msgSend");
+                id (*msg_tex)(id, SEL, id, IOSurfaceRef, unsigned long, unsigned long) =
+                    (id (*)(id, SEL, id, IOSurfaceRef, unsigned long, unsigned long))dlsym(RTLD_DEFAULT, "objc_msgSend");
                 id tex = msg_tex(device, newTexIOSurfSel, texDesc, surf, 0, 0);
                 rlog("  Metal texture from IOSurface: %p\n", tex);
 
@@ -5208,8 +5205,8 @@ static void r315_probe(void) {
 
         if (cmdQ) {
             /* Create a source buffer (Shared) with known pattern */
-            id (*msg_buf2)(id, SEL, NSUInteger, NSUInteger) =
-                (id (*)(id, SEL, NSUInteger, NSUInteger))dlsym(RTLD_DEFAULT, "objc_msgSend");
+            id (*msg_buf2)(id, SEL, unsigned long, unsigned long) =
+                (id (*)(id, SEL, unsigned long, unsigned long))dlsym(RTLD_DEFAULT, "objc_msgSend");
             id srcBuf = msg_buf2(device, sel_registerName("newBufferWithLength:options:"),
                                  4096, 0 /* MTLResourceStorageModeShared */);
             id dstBuf = msg_buf2(device, sel_registerName("newBufferWithLength:options:"),
@@ -5250,8 +5247,8 @@ static void r315_probe(void) {
                     (id (*)(id, SEL, id, id, id*))dlsym(RTLD_DEFAULT, "objc_msgSend");
                 id nsStr = ((id (*)(Class, SEL, const char*))dlsym(RTLD_DEFAULT, "objc_msgSend"))(
                     objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), shaderSrc);
-                id err = nil;
-                id lib = msg_lib(device, newLibSel, nsStr, nil, &err);
+                id err = NULL;
+                id lib = msg_lib(device, newLibSel, nsStr, NULL, &err);
                 rlog("  Shader library: %p err=%p\n", lib, err);
 
                 if (lib) {
@@ -5282,13 +5279,13 @@ static void r315_probe(void) {
 
                                 /* setBuffer:offset:atIndex: */
                                 SEL setBufSel = sel_registerName("setBuffer:offset:atIndex:");
-                                ((void (*)(id, SEL, id, NSUInteger, NSUInteger))dlsym(RTLD_DEFAULT, "objc_msgSend"))(
+                                ((void (*)(id, SEL, id, unsigned long, unsigned long))dlsym(RTLD_DEFAULT, "objc_msgSend"))(
                                     enc, setBufSel, srcBuf, 0, 0);
-                                ((void (*)(id, SEL, id, NSUInteger, NSUInteger))dlsym(RTLD_DEFAULT, "objc_msgSend"))(
+                                ((void (*)(id, SEL, id, unsigned long, unsigned long))dlsym(RTLD_DEFAULT, "objc_msgSend"))(
                                     enc, setBufSel, dstBuf, 0, 1);
 
                                 /* dispatchThreads */
-                                typedef struct { NSUInteger w, h, d; } MTLSize;
+                                typedef struct { unsigned long w, h, d; } MTLSize;
                                 SEL dispSel = sel_registerName("dispatchThreads:threadsPerThreadgroup:");
                                 MTLSize grid = {256, 1, 1};
                                 MTLSize tg = {256, 1, 1};
