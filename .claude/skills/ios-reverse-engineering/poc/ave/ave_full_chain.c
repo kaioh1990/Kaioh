@@ -4975,6 +4975,324 @@ static void r313_probe(void) {
     fflush(stdout);
 }
 
+static volatile int g_ldm_pulse_running = 0;
+static volatile int g_ldm_toggle_count = 0;
+static volatile int g_ldm_anomaly_count = 0;
+
+static void *ldm_monitor_thread(void *arg) {
+    (void)arg;
+    id (*objc_msg)(id, SEL, ...) = (id (*)(id, SEL, ...))dlsym(RTLD_DEFAULT, "objc_msgSend");
+
+    while (g_ldm_pulse_running) {
+        int sk_val = 0;
+        size_t sk_sz = sizeof(sk_val);
+        sysctlbyname("kern.secure_kernel", &sk_val, &sk_sz, NULL, 0);
+
+        int pauth_val = 0;
+        size_t pa_sz = sizeof(pauth_val);
+        sysctlbyname("hw.optional.arm.FEAT_PAuth", &pauth_val, &pa_sz, NULL, 0);
+
+        int mte_val = 0;
+        size_t mt_sz = sizeof(mte_val);
+        sysctlbyname("hw.optional.arm.FEAT_MTE", &mte_val, &mt_sz, NULL, 0);
+
+        if (sk_val != 1 || pauth_val != 1) {
+            rlog("  !!! ANOMALY: kern.secure_kernel=%d FEAT_PAuth=%d FEAT_MTE=%d toggle=%d !!!\n",
+                 sk_val, pauth_val, mte_val, g_ldm_toggle_count);
+            g_ldm_anomaly_count++;
+            fflush(stdout);
+        }
+
+        io_service_t plat = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("IOPlatformExpertDevice"));
+        if (plat) {
+            CFStringRef smk = CFStringCreateWithCString(NULL, "security-mode", kCFStringEncodingUTF8);
+            CFTypeRef smv = IORegistryEntryCreateCFProperty(plat, smk, kCFAllocatorDefault, 0);
+            if (smv) {
+                if (CFGetTypeID(smv) == CFNumberGetTypeID()) {
+                    int64_t nv = 0;
+                    CFNumberGetValue(smv, kCFNumberSInt64Type, &nv);
+                    if (nv != 0) {
+                        rlog("  !!! security-mode changed: %lld at toggle=%d !!!\n",
+                             nv, g_ldm_toggle_count);
+                        g_ldm_anomaly_count++;
+                    }
+                }
+                CFRelease(smv);
+            }
+            CFRelease(smk);
+            IOObjectRelease(plat);
+        }
+
+        usleep(500);
+    }
+    return NULL;
+}
+
+static void r316_probe(void) {
+    rlog("\n=== r316: Lockdown Mode Pulsing + Transition Race ===\n\n");
+    fflush(stdout);
+    kern_return_t kr;
+
+    id (*objc_msg)(id, SEL, ...) = (id (*)(id, SEL, ...))dlsym(RTLD_DEFAULT, "objc_msgSend");
+
+    /* ---- Part 1: Baseline LDM state ---- */
+    rlog("--- Part 1: Baseline Lockdown Mode state ---\n");
+    fflush(stdout);
+
+    void *mc_handle = dlopen("/System/Library/PrivateFrameworks/ManagedConfiguration.framework/ManagedConfiguration", RTLD_LAZY);
+    rlog("  ManagedConfiguration: %p\n", mc_handle);
+
+    Class mcpc = objc_getClass("MCProfileConnection");
+    id conn = NULL;
+    signed char ldm_initial = -1;
+    if (mcpc) {
+        conn = objc_msg((id)mcpc, sel_registerName("sharedConnection"));
+        rlog("  MCProfileConnection: %p\n", conn);
+        if (conn) {
+            signed char (*msg_b)(id, SEL) = (signed char (*)(id, SEL))dlsym(RTLD_DEFAULT, "objc_msgSend");
+            ldm_initial = msg_b(conn, sel_registerName("isLockdownModeEnabled"));
+            rlog("  isLockdownModeEnabled: %d\n", ldm_initial);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: Enumerate LDM toggle methods ---- */
+    rlog("\n--- Part 2: LDM toggle method discovery ---\n");
+    fflush(stdout);
+
+    const char *toggle_sels[] = {
+        "setLockdownModeEnabled:",
+        "enableLockdownMode",
+        "disableLockdownMode",
+        "setLockdownModeEnabled:error:",
+        "requestLockdownModeChange:",
+        "toggleLockdownMode",
+        "setLockdownModeEnabled:withPasscode:",
+        "setLockdownModeEnabled:options:",
+        "_setLockdownModeEnabled:",
+        "lockdownModeSetEnabled:",
+    };
+    SEL found_toggle = NULL;
+    for (int i = 0; i < 10; i++) {
+        SEL s = sel_registerName(toggle_sels[i]);
+        if (conn) {
+            signed char (*resp)(id, SEL, SEL) = (signed char (*)(id, SEL, SEL))dlsym(RTLD_DEFAULT, "objc_msgSend");
+            signed char responds = resp(conn, sel_registerName("respondsToSelector:"), s);
+            rlog("  %s: %s\n", toggle_sels[i], responds ? "YES" : "no");
+            if (responds && !found_toggle) found_toggle = s;
+        }
+    }
+    fflush(stdout);
+
+    /* Also check MCLockdownMode class */
+    Class mcldm = objc_getClass("MCLockdownMode");
+    rlog("  MCLockdownMode class: %p\n", mcldm);
+    if (mcldm) {
+        const char *cls_sels[] = {
+            "isEnabled",
+            "setEnabled:",
+            "toggle",
+            "enable",
+            "disable",
+            "sharedInstance",
+        };
+        for (int i = 0; i < 6; i++) {
+            SEL s = sel_registerName(cls_sels[i]);
+            signed char (*resp)(id, SEL, SEL) = (signed char (*)(id, SEL, SEL))dlsym(RTLD_DEFAULT, "objc_msgSend");
+            signed char responds = resp((id)mcldm, sel_registerName("respondsToSelector:"), s);
+            rlog("    MCLockdownMode.%s: %s\n", cls_sels[i], responds ? "YES" : "no");
+        }
+    }
+
+    /* Check for lockdownd XPC service */
+    void *xpc_h = dlopen("/usr/lib/libxpc.dylib", RTLD_LAZY);
+    rlog("  libxpc: %p\n", xpc_h);
+
+    /* Check CFPreferences for LDM */
+    Class nsd = objc_getClass("NSUserDefaults");
+    if (nsd) {
+        id defaults = objc_msg((id)nsd, sel_registerName("standardUserDefaults"));
+        if (defaults) {
+            id ldmKey = ((id (*)(Class, SEL, const char*))dlsym(RTLD_DEFAULT, "objc_msgSend"))(
+                objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"),
+                "LDMGlobalEnabled");
+            id val = objc_msg(defaults, sel_registerName("objectForKey:"), ldmKey);
+            rlog("  NSUserDefaults.LDMGlobalEnabled: %p\n", val);
+        }
+    }
+
+    /* Try cfprefsd for lockdown mode pref */
+    void *cf = dlopen("/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation", RTLD_LAZY);
+    CFStringRef (*cfCopyPref)(CFStringRef, CFStringRef) =
+        (CFStringRef (*)(CFStringRef, CFStringRef))dlsym(RTLD_DEFAULT, "CFPreferencesCopyValue");
+    if (cfCopyPref) {
+        CFStringRef ldmPrefKey = CFSTR("LDMGlobalEnabled");
+        CFStringRef appIDs[] = {
+            CFSTR("com.apple.security"),
+            CFSTR("com.apple.managedconfiguration"),
+            CFSTR("com.apple.lockdownmode"),
+            CFSTR(".GlobalPreferences"),
+            CFSTR("kCFPreferencesAnyApplication"),
+        };
+        for (int i = 0; i < 5; i++) {
+            CFTypeRef pval = cfCopyPref(ldmPrefKey, appIDs[i]);
+            if (pval) {
+                char pbuf[64] = {0};
+                if (CFGetTypeID(pval) == CFBooleanGetTypeID()) {
+                    snprintf(pbuf, sizeof(pbuf), "%s", CFBooleanGetValue(pval) ? "true" : "false");
+                } else if (CFGetTypeID(pval) == CFNumberGetTypeID()) {
+                    int64_t nv = 0;
+                    CFNumberGetValue(pval, kCFNumberSInt64Type, &nv);
+                    snprintf(pbuf, sizeof(pbuf), "%lld", nv);
+                }
+                char aid[128];
+                CFStringGetCString(appIDs[i], aid, sizeof(aid), kCFStringEncodingUTF8);
+                rlog("  CFPref[%s].LDMGlobalEnabled: %s\n", aid, pbuf);
+                CFRelease(pval);
+            }
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: LDM toggle attempt ---- */
+    rlog("\n--- Part 3: LDM toggle attempt ---\n");
+    fflush(stdout);
+
+    if (found_toggle && conn) {
+        rlog("  Attempting toggle via: %s\n", sel_getName(found_toggle));
+
+        /* Start monitor thread */
+        pthread_t mon;
+        g_ldm_pulse_running = 1;
+        g_ldm_toggle_count = 0;
+        g_ldm_anomaly_count = 0;
+        pthread_create(&mon, NULL, ldm_monitor_thread, NULL);
+
+        /* Pulse: try toggling LDM rapidly */
+        for (int pulse = 0; pulse < 100; pulse++) {
+            signed char target = (pulse % 2 == 0) ? 1 : 0;
+            ((void (*)(id, SEL, signed char))dlsym(RTLD_DEFAULT, "objc_msgSend"))(
+                conn, found_toggle, target);
+            g_ldm_toggle_count = pulse + 1;
+
+            if (pulse < 10 || pulse % 10 == 0) {
+                signed char (*msg_b)(id, SEL) = (signed char (*)(id, SEL))dlsym(RTLD_DEFAULT, "objc_msgSend");
+                signed char cur = msg_b(conn, sel_registerName("isLockdownModeEnabled"));
+                rlog("    pulse[%d]: target=%d actual=%d\n", pulse, target, cur);
+                fflush(stdout);
+            }
+            usleep(1000);
+        }
+
+        g_ldm_pulse_running = 0;
+        pthread_join(mon, NULL);
+
+        rlog("  Pulse complete: %d toggles, %d anomalies\n",
+             g_ldm_toggle_count, g_ldm_anomaly_count);
+
+        /* Restore original state */
+        if (ldm_initial >= 0) {
+            ((void (*)(id, SEL, signed char))dlsym(RTLD_DEFAULT, "objc_msgSend"))(
+                conn, found_toggle, ldm_initial);
+            rlog("  Restored LDM to: %d\n", ldm_initial);
+        }
+    } else {
+        rlog("  No toggle method found — cannot pulse LDM programmatically\n");
+        rlog("  User must toggle LDM manually in Settings for transition probing\n");
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: Sandbox transition probing ---- */
+    rlog("\n--- Part 4: Sandbox/security state during LDM transition ---\n");
+    fflush(stdout);
+
+    typedef int (*sb_check_fn_t)(pid_t, const char*, int, ...);
+    sb_check_fn_t sbc316 = (sb_check_fn_t)dlsym(RTLD_DEFAULT, "sandbox_check");
+    const char *sandbox_ops[] = {
+        "nvram-get", "nvram-set", "nvram-delete",
+        "system-privilege", "process-exec",
+        "file-read-data", "file-write-data",
+        "mach-lookup", "iokit-open",
+        "system-socket", "network-outbound",
+    };
+    if (sbc316) {
+        for (int i = 0; i < 11; i++) {
+            int r = sbc316(getpid(), sandbox_ops[i], 0x0001);
+            rlog("  sandbox_check(%s): %d\n", sandbox_ops[i], r);
+        }
+    } else {
+        rlog("  sandbox_check: dlsym failed\n");
+    }
+    fflush(stdout);
+
+    /* ---- Part 5: IOKit driver availability scan during/after LDM ---- */
+    rlog("\n--- Part 5: IOKit driver availability ---\n");
+    fflush(stdout);
+
+    const char *ldm_sensitive_drivers[] = {
+        "AppleJPEGDriver",
+        "AppleAVE2Driver",
+        "AppleAVE2UserClient",
+        "IOSurfaceRoot",
+        "AppleSPU",
+        "AppleSEPManager",
+        "AppleSEPKeyStore",
+        "AppleCredentialManager",
+        "AppleKeyStore",
+        "IOUserEthernetController",
+        "AppleVXD393UserClient",
+        "AppleVXD394UserClient",
+    };
+    for (int i = 0; i < 12; i++) {
+        io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching(ldm_sensitive_drivers[i]));
+        if (svc) {
+            io_connect_t c = 0;
+            kr = IOServiceOpen(svc, mach_task_self(), 0, &c);
+            rlog("  %s: svc=0x%x open=0x%x conn=0x%x\n",
+                 ldm_sensitive_drivers[i], svc, kr, c);
+            if (c) IOServiceClose(c);
+            IOObjectRelease(svc);
+        } else {
+            rlog("  %s: not found\n", ldm_sensitive_drivers[i]);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 6: Check AppleSEPKeyStore for LDM key operations ---- */
+    rlog("\n--- Part 6: SEP/KeyStore probe ---\n");
+    fflush(stdout);
+
+    io_service_t ks_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("AppleKeyStore"));
+    if (ks_svc) {
+        io_connect_t ks_conn = 0;
+        for (uint32_t type = 0; type < 5; type++) {
+            kr = IOServiceOpen(ks_svc, mach_task_self(), type, &ks_conn);
+            rlog("  AppleKeyStore type=%u: kr=0x%x conn=0x%x\n", type, kr, ks_conn);
+            if (ks_conn) {
+                for (uint32_t sel = 0; sel < 5; sel++) {
+                    uint64_t out[4] = {0};
+                    uint32_t outCnt = 4;
+                    kr = IOConnectCallScalarMethod(ks_conn, sel, NULL, 0, out, &outCnt);
+                    if (kr != 0xe00002bc && kr != 0xe00002c2 && kr != 0xe00002c1) {
+                        rlog("    sel[%u]: kr=0x%x out=[0x%llx]\n", sel, kr, out[0]);
+                    }
+                }
+                IOServiceClose(ks_conn);
+            }
+        }
+        IOObjectRelease(ks_svc);
+    } else {
+        rlog("  AppleKeyStore: not found\n");
+    }
+    fflush(stdout);
+
+    rlog("\n=== r316 complete ===\n");
+    fflush(stdout);
+}
+
 static void r315_probe(void) {
     rlog("\n=== r315: Metal GPU + AGX + IOSurface-Metal Interop ===\n\n");
     fflush(stdout);
@@ -35162,6 +35480,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 316) {
+            rlog("*** rounds=316: Lockdown Mode Pulsing + Transition Race ***\n");
+            rlog("  r315: Metal Shared buffers work, AGX NotReady, LDM=OFF.\n");
+            rlog("  Probe: LDM toggle methods, pulsing race, SEP/KeyStore.\n\n");
+            r316_probe();
             goto done;
         }
         if (rounds == 315) {
