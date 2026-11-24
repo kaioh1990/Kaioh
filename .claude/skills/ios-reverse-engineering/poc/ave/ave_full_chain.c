@@ -5027,10 +5027,10 @@ static void r315_probe(void) {
         SEL newBufSel = sel_registerName("newBufferWithLength:options:");
 
         /* Create buffers with different storage modes */
-        int modes[] = {0, 1, 2, 3}; /* Shared, Private, Managed, Memoryless */
-        const char *mode_names[] = {"Shared", "Private", "Managed", "Memoryless"};
+        int modes[] = {0, 1}; /* Shared, Private only (Managed/Memoryless crash on iOS) */
+        const char *mode_names[] = {"Shared", "Private"};
 
-        for (int m = 0; m < 4; m++) {
+        for (int m = 0; m < 2; m++) {
             id (*msg_buf)(id, SEL, unsigned long, unsigned long) =
                 (id (*)(id, SEL, unsigned long, unsigned long))dlsym(RTLD_DEFAULT, "objc_msgSend");
             id buf = msg_buf(device, newBufSel, 16384, modes[m] << 4);
@@ -5065,8 +5065,8 @@ static void r315_probe(void) {
             } else {
                 rlog("  %s: FAILED\n", mode_names[m]);
             }
+            fflush(stdout);
         }
-        fflush(stdout);
 
         /* ---- Part 3: IOSurface-Metal interop (SKIPPED - crash-prone) ---- */
         rlog("\n--- Part 3: IOSurface-Metal texture interop (SKIPPED) ---\n");
