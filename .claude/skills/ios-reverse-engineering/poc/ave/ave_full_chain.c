@@ -6152,18 +6152,6 @@ kptr_scan_done:
     fflush(stdout);
 }
 
-/* r320: VT decode callback captures output pixel buffer */
-static CVPixelBufferRef g_decoded_pb = NULL;
-static void vt_decode_callback(void *ctx, void *srcRef, OSStatus status,
-                               VTDecodeInfoFlags flags, CVImageBufferRef ib,
-                               CMTime pts, CMTime dur) {
-    rlog("  [VT callback] status=%d flags=0x%x ib=%p\n", (int)status, (int)flags, ib);
-    if (ib && status == 0) {
-        g_decoded_pb = (CVPixelBufferRef)ib;
-        CVPixelBufferRetain(g_decoded_pb);
-    }
-}
-
 static void r320_probe(void) {
     rlog("\n=== r320: VT Decode Output Capture + IOSurface HW Path Leak ===\n");
     rlog("  Strategy: Capture VT decoded frame, inspect IOSurface for HW decoder residue\n\n");
@@ -6239,7 +6227,7 @@ static void r320_probe(void) {
 
                         g_decoded_pb = NULL;
                         VTDecompressionOutputCallbackRecord cb = {
-                            .decompressionOutputCallback = vt_decode_callback,
+                            .decompressionOutputCallback = decode_cb,
                             .decompressionOutputRefCon = NULL
                         };
                         VTDecompressionSessionRef vtSess = NULL;
@@ -6426,7 +6414,7 @@ static void r320_probe(void) {
                                 /* Decode 5 times rapidly */
                                 for (int iter = 0; iter < 5; iter++) {
                                     g_decoded_pb = NULL;
-                                    VTDecompressionOutputCallbackRecord cb2 = {vt_decode_callback, NULL};
+                                    VTDecompressionOutputCallbackRecord cb2 = {decode_cb, NULL};
 
                                     CFMutableDictionaryRef da = CFDictionaryCreateMutable(NULL, 0,
                                         &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
