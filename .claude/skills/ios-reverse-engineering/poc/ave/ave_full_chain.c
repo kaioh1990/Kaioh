@@ -17020,16 +17020,12 @@ static void r439_probe(void) {
                         info[i].mzi_elem_size != 0 || info[i].mzi_alloc_size != 0) {
                         non_zero++;
                         if (non_zero <= 10) {
-                            rlog("      zone[%u] '%s': elem=%llu alloc=%llu cur=%llu max=%llu "
-                                 "free=%llu collect=%llu exhaust=%llu\n",
+                            rlog("      zone[%u] '%s': elem=%llu alloc=%llu cur=%llu max=%llu\n",
                                  i, names[i].mzn_name,
                                  (unsigned long long)info[i].mzi_elem_size,
                                  (unsigned long long)info[i].mzi_alloc_size,
                                  (unsigned long long)info[i].mzi_cur_size,
-                                 (unsigned long long)info[i].mzi_max_size,
-                                 (unsigned long long)info[i].mzi_free_size,
-                                 (unsigned long long)info[i].mzi_collectable,
-                                 (unsigned long long)info[i].mzi_exhaustible);
+                                 (unsigned long long)info[i].mzi_max_size);
                         }
                     }
                 }
