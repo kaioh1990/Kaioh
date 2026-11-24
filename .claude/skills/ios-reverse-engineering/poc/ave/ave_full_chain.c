@@ -14872,26 +14872,8 @@ static void r352_probe(void) {
             }
         }
 
-        /* processor_set_info */
-        processor_set_name_t pset;
-        kr = host_processor_set_priv(host, &pset);
-        if (kr == 0) {
-            uint64_t pinfo[32];
-            memset(pinfo, 0, sizeof(pinfo));
-            mach_msg_type_number_t pcnt = sizeof(pinfo)/sizeof(natural_t);
-            kr = processor_set_info(pset, 1, &host, (processor_set_info_t)pinfo, &pcnt);
-            if (kr == 0) {
-                for (uint32_t i = 0; i < pcnt/2 && i < 16; i++) {
-                    if (IS_KPTR352(pinfo[i])) {
-                        rlog("  *** KPTR pset_info[%u]=0x%llx ***\n",
-                            i, (unsigned long long)pinfo[i]);
-                    }
-                }
-            }
-            rlog("  processor_set_info: kr=0x%x cnt=%u\n", kr, pcnt);
-        } else {
-            rlog("  host_processor_set_priv: kr=0x%x\n", kr);
-        }
+        /* processor_set_info — needs host_priv which sandbox blocks */
+        rlog("  (processor_set_info: skipped, requires host_priv)\n");
 
         /* vm_allocate + vm_read to scan our own task's memory map edge */
         mach_vm_address_t scan_addr = 0;
