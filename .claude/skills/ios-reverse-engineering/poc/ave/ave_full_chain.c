@@ -14384,61 +14384,58 @@ static void r341_probe(void) {
     /* Use the first page as a lock/waiter coordination page */
     uint32_t *probe_locks = (uint32_t *)probe_base;
 
-    /* Baseline: time empty ulock_wake (no waiters) */
+    /* Baseline: time empty ulock_wake (no waiters) via syscall 516 */
     uint64_t baseline_sum = 0;
     int baseline_n = 0;
     for (int i = 0; i < 50; i++) {
-        uint32_t *addr = &probe_locks[i * (4096 / sizeof(uint32_t))];
+        volatile uint32_t *addr = &probe_locks[i * (4096 / sizeof(uint32_t))];
         *addr = 0;
         uint64_t t0 = mach_absolute_time();
-        __ulock_wake(UL_COMPARE_AND_WAIT_SHARED, addr, 0);
+        syscall(516, UL_COMPARE_AND_WAIT_SHARED | ULF_NO_ERRNO, addr, 0, 0, 0);
         uint64_t t1 = mach_absolute_time();
         if (i >= 10) { baseline_sum += (t1 - t0); baseline_n++; }
     }
     double baseline_avg = (baseline_n > 0) ? (double)baseline_sum / baseline_n : 1.0;
     rlog("  Baseline (empty): %.1f ticks (n=%d)\n", baseline_avg, baseline_n);
 
-    /* Step 2: Create waiter pile-up on a probe address, then time */
-    /* Scan 32 different probe addresses at different page offsets */
+    /* Step 2: Create waiter pile-up on probe addresses, then time */
     #define R341_SCAN_ADDRS  32
     double scan_times[R341_SCAN_ADDRS];
     memset(scan_times, 0, sizeof(scan_times));
 
     for (int s = 0; s < R341_SCAN_ADDRS; s++) {
-        uint32_t *probe_addr = &probe_locks[(s + 64) * (4096 / sizeof(uint32_t))];
-        *probe_addr = 1;
+        volatile uint32_t *probe_addr = &probe_locks[(s + 64) * (4096 / sizeof(uint32_t))];
+        *probe_addr = 0; /* waiters wait while *addr == 0 */
 
-        /* Pile up waiters */
+        /* Pile up waiters via pthreads */
+        pthread_t waiter_tids[R341_WAITERS];
+        struct snitch_waiter_arg waiter_args[R341_WAITERS];
         for (int w = 0; w < R341_WAITERS; w++) {
-            dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-                __ulock_wait(UL_COMPARE_AND_WAIT_SHARED, probe_addr, 1, 500000);
-            });
+            waiter_args[w].addr = probe_addr;
+            waiter_args[w].done = 0;
+            pthread_create(&waiter_tids[w], NULL, snitch_waiter_thread, &waiter_args[w]);
         }
         usleep(50000); /* Let waiters pile up */
 
-        /* Time the wake */
+        /* Time the wake (syscall 516) */
         double time_sum = 0;
         for (int r = 0; r < R341_ROUNDS; r++) {
             uint64_t t0 = mach_absolute_time();
-            __ulock_wake(UL_COMPARE_AND_WAIT_SHARED | UL_WAKE_ALL, probe_addr, 0);
+            syscall(516, UL_COMPARE_AND_WAIT | ULF_NO_ERRNO, probe_addr, 0, 0, 0);
             uint64_t t1 = mach_absolute_time();
             time_sum += (double)(t1 - t0);
-            usleep(10000);
-            *probe_addr = 1; /* Reset for next round */
-            /* Re-pile waiters */
-            for (int w = 0; w < R341_WAITERS; w++) {
-                dispatch_async(dispatch_get_global_queue(QOS_CLASS_BACKGROUND, 0), ^{
-                    __ulock_wait(UL_COMPARE_AND_WAIT_SHARED, probe_addr, 1, 500000);
-                });
-            }
-            usleep(30000);
         }
         scan_times[s] = time_sum / R341_ROUNDS;
 
-        /* Wake all waiters to clean up */
-        *probe_addr = 0;
-        __ulock_wake(UL_COMPARE_AND_WAIT_SHARED | UL_WAKE_ALL, probe_addr, 0);
+        /* Wake all and cleanup */
+        *probe_addr = 1; /* Change value so waiters wake */
+        for (int w = 0; w < R341_WAITERS; w++) {
+            syscall(516, UL_COMPARE_AND_WAIT | ULF_NO_ERRNO, probe_addr, 0, 0, 0);
+        }
         usleep(10000);
+        for (int w = 0; w < R341_WAITERS; w++) {
+            pthread_join(waiter_tids[w], NULL);
+        }
     }
 
     /* Report scan results */
