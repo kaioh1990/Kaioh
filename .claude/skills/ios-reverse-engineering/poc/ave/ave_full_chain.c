@@ -16978,54 +16978,6 @@ static void *r445_thread_fn(void *arg) {
 }
 
 
-                     is_kptr ? " *** KPTR ***" : "");
-            }
-        }
-
-        /* task_for_pid(0) */
-        mach_port_t kport = MACH_PORT_NULL;
-        kr = task_for_pid(mach_task_self(), 0, &kport);
-        rlog("    task_for_pid(0): kr=0x%x port=0x%x\n", kr, kport);
-
-        /* task_for_pid(1) */
-        mach_port_t lport = MACH_PORT_NULL;
-        kr = task_for_pid(mach_task_self(), 1, &lport);
-        rlog("    task_for_pid(1): kr=0x%x port=0x%x\n", kr, lport);
-
-        /* processor_set_tasks */
-        mach_port_t pset = MACH_PORT_NULL, pset_priv = MACH_PORT_NULL;
-        kr = processor_set_default(mach_host_self(), &pset);
-        rlog("    processor_set_default: kr=0x%x pset=0x%x\n", kr, pset);
-        if (kr == KERN_SUCCESS) {
-            kr = host_processor_set_priv(mach_host_self(), pset, &pset_priv);
-            rlog("    host_processor_set_priv: kr=0x%x pset_priv=0x%x\n", kr, pset_priv);
-            if (kr == KERN_SUCCESS && pset_priv != MACH_PORT_NULL) {
-                task_array_t tasks = NULL;
-                mach_msg_type_number_t task_cnt = 0;
-                kr = processor_set_tasks(pset_priv, &tasks, &task_cnt);
-                rlog("    processor_set_tasks: kr=0x%x count=%u\n", kr, task_cnt);
-            }
-        }
-
-        /* host_kernel_version */
-        kernel_version_t kver;
-        kr = host_kernel_version(mach_host_self(), kver);
-        rlog("    host_kernel_version: kr=%d\n", kr);
-        if (kr == KERN_SUCCESS) {
-            rlog("    kernel: %.200s\n", kver);
-        }
-
-        /* Try mach_vm_read on a kernel address — will fail but log error */
-        mach_vm_address_t kbase_guess = 0xFFFFFFF007004000ULL;
-        vm_offset_t data_out = 0;
-        mach_msg_type_number_t data_cnt = 0;
-        kr = mach_vm_read(mach_task_self(), kbase_guess, 8, &data_out, &data_cnt);
-        rlog("    mach_vm_read(0x%llx): kr=0x%x\n", (unsigned long long)kbase_guess, kr);
-    }
-    fflush(stdout);
-
-    rlog("\n=== r451 complete ===\n");
-}
 
 
 static void r450_probe(void) {
