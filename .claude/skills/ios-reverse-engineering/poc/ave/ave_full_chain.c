@@ -8065,6 +8065,271 @@ static void r324_probe(void) {
     fflush(stdout);
 }
 
+/* ---- r325: Mach exception port controlled faults + IOSurfaceRoot selectors ---- */
+
+static mach_port_t g_exc_port = MACH_PORT_NULL;
+static volatile int g_exc_received = 0;
+static volatile uint64_t g_exc_code = 0;
+static volatile uint64_t g_exc_subcode = 0;
+
+static void *exception_handler_thread(void *arg) {
+    while (1) {
+        struct {
+            mach_msg_header_t hdr;
+            mach_msg_body_t body;
+            mach_msg_port_descriptor_t thread;
+            mach_msg_port_descriptor_t task;
+            NDR_record_t NDR;
+            exception_type_t exception;
+            mach_msg_type_number_t codeCnt;
+            int64_t code[2];
+            mach_msg_trailer_t trailer;
+        } exc_msg;
+
+        kern_return_t kr = mach_msg(&exc_msg.hdr, MACH_RCV_MSG, 0,
+            sizeof(exc_msg), g_exc_port, 1000, MACH_PORT_NULL);
+
+        if (kr == 0) {
+            g_exc_code = (uint64_t)exc_msg.code[0];
+            g_exc_subcode = (uint64_t)exc_msg.code[1];
+            g_exc_received = 1;
+
+            /* Reply to let the thread continue (or crash) */
+            struct {
+                mach_msg_header_t hdr;
+                NDR_record_t NDR;
+                kern_return_t retcode;
+            } reply;
+            reply.hdr.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_MOVE_SEND_ONCE, 0);
+            reply.hdr.msgh_size = sizeof(reply);
+            reply.hdr.msgh_remote_port = exc_msg.hdr.msgh_remote_port;
+            reply.hdr.msgh_local_port = MACH_PORT_NULL;
+            reply.hdr.msgh_id = exc_msg.hdr.msgh_id + 100;
+            reply.NDR = NDR_record;
+            reply.retcode = KERN_FAILURE; /* Don't handle — let signal handler take over */
+            mach_msg(&reply.hdr, MACH_SEND_MSG, sizeof(reply), 0,
+                MACH_PORT_NULL, 0, MACH_PORT_NULL);
+        }
+        if (kr == MACH_RCV_TIMED_OUT) continue;
+        if (kr != 0 && kr != MACH_RCV_TIMED_OUT) break;
+    }
+    return NULL;
+}
+
+static void r325_probe(void) {
+    rlog("\n=== r325: Exception Port Faults + IOSurfaceRoot Selectors ===\n");
+    rlog("  Strategy: Use Mach exception port to capture fault info from IOKit calls\n\n");
+    fflush(stdout);
+    kern_return_t kr;
+
+    /* ---- Part 1: IOSurfaceRoot full selector sweep ---- */
+    rlog("--- Part 1: IOSurfaceRoot selector sweep ---\n");
+    fflush(stdout);
+    {
+        io_service_t svc = IOServiceGetMatchingService(kIOMainPortDefault,
+            IOServiceMatching("IOSurfaceRoot"));
+        if (!svc) {
+            rlog("  IOSurfaceRoot: not found\n");
+        } else {
+            /* Try different connection types */
+            for (uint32_t ctype = 0; ctype < 5; ctype++) {
+                io_connect_t conn = 0;
+                kr = IOServiceOpen(svc, mach_task_self(), ctype, &conn);
+                if (kr != 0) {
+                    if (ctype == 0) rlog("  Type %u: kr=0x%x (failed)\n", ctype, kr);
+                    continue;
+                }
+                rlog("  Type %u: conn=0x%x\n", ctype, conn);
+
+                int kptr_hits = 0;
+                for (uint32_t sel = 0; sel < 40; sel++) {
+                    uint8_t out[1024];
+                    memset(out, 0, sizeof(out));
+                    size_t outSz = 1024;
+                    uint64_t scalarOut[8];
+                    uint32_t scalarOutCnt = 8;
+
+                    kr = IOConnectCallMethod(conn, sel,
+                        NULL, 0, NULL, 0,
+                        scalarOut, &scalarOutCnt, out, &outSz);
+
+                    if (kr == 0) {
+                        int hasData = 0;
+                        for (uint32_t i = 0; i < scalarOutCnt; i++)
+                            if (scalarOut[i]) hasData = 1;
+                        for (size_t i = 0; i < outSz; i++)
+                            if (out[i]) { hasData = 1; break; }
+
+                        if (hasData) {
+                            rlog("  T%u sel=%u: outSz=%zu scalars=%u\n",
+                                 ctype, sel, outSz, scalarOutCnt);
+                            for (uint32_t i = 0; i < scalarOutCnt; i++) {
+                                if (scalarOut[i]) {
+                                    rlog("    s[%u]=0x%llx\n", i, scalarOut[i]);
+                                    if ((scalarOut[i] >> 28) == 0xfffffffULL) {
+                                        rlog("    !!! KPTR: 0x%llx !!!\n", scalarOut[i]);
+                                        kptr_hits++;
+                                    }
+                                }
+                            }
+                            uint64_t *qw = (uint64_t *)out;
+                            for (size_t i = 0; i < outSz / 8; i++) {
+                                if ((qw[i] >> 28) == 0xfffffffULL &&
+                                    qw[i] != 0xffffffffffffffffULL) {
+                                    rlog("    !!! KPTR struct[%zu]: 0x%llx !!!\n", i * 8, qw[i]);
+                                    kptr_hits++;
+                                }
+                            }
+                        }
+                    } else if (kr != 0xe00002c2 && kr != 0xe00002bc) {
+                        /* Log unusual errors (not NotPermitted/BadArg) */
+                        rlog("  T%u sel=%u: kr=0x%x\n", ctype, sel, kr);
+                    }
+                }
+                if (kptr_hits) rlog("  T%u: %d KPTR HITS!\n", ctype, kptr_hits);
+                IOServiceClose(conn);
+            }
+            IOObjectRelease(svc);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 2: Set up exception handler + probe IOKit-triggered faults ---- */
+    rlog("\n--- Part 2: Mach exception handler setup ---\n");
+    fflush(stdout);
+    {
+        kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &g_exc_port);
+        rlog("  exc port: kr=0x%x port=0x%x\n", kr, g_exc_port);
+        if (kr == 0) {
+            mach_port_insert_right(mach_task_self(), g_exc_port, g_exc_port,
+                MACH_MSG_TYPE_MAKE_SEND);
+            kr = task_set_exception_ports(mach_task_self(),
+                EXC_MASK_BAD_ACCESS | EXC_MASK_BAD_INSTRUCTION,
+                g_exc_port,
+                (exception_behavior_t)(EXCEPTION_DEFAULT | MACH_EXCEPTION_CODES),
+                ARM_THREAD_STATE64);
+            rlog("  task_set_exception_ports: kr=0x%x\n", kr);
+
+            /* Start exception handler thread */
+            pthread_t exc_thread;
+            pthread_create(&exc_thread, NULL, exception_handler_thread, NULL);
+            pthread_detach(exc_thread);
+            rlog("  Exception handler thread started\n");
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 3: Enumerate all IOKit services and check openability ---- */
+    rlog("\n--- Part 3: Enumerate IOKit services ---\n");
+    fflush(stdout);
+    {
+        io_iterator_t iter;
+        kr = IOServiceGetMatchingServices(kIOMainPortDefault,
+            IOServiceMatching("IOService"), &iter);
+        rlog("  IOServiceGetMatchingServices: kr=0x%x\n", kr);
+
+        if (kr == 0) {
+            io_service_t svc;
+            int count = 0;
+            int openable = 0;
+            while ((svc = IOIteratorNext(iter)) != 0 && count < 100) {
+                io_name_t name;
+                IORegistryEntryGetName(svc, name);
+
+                /* Try to open with type 0 */
+                io_connect_t conn = 0;
+                kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+                if (kr == 0) {
+                    openable++;
+                    rlog("  OPEN: %s conn=0x%x\n", name, conn);
+
+                    /* Quick check sel 0-5 for data */
+                    for (uint32_t sel = 0; sel < 5; sel++) {
+                        uint64_t scOut[4];
+                        uint32_t scOutCnt = 4;
+                        uint8_t sout[256];
+                        size_t soutSz = 256;
+                        kern_return_t kr2 = IOConnectCallMethod(conn, sel,
+                            NULL, 0, NULL, 0,
+                            scOut, &scOutCnt, sout, &soutSz);
+                        if (kr2 == 0) {
+                            int hasData = 0;
+                            for (uint32_t i = 0; i < scOutCnt; i++)
+                                if (scOut[i]) hasData = 1;
+                            for (size_t i = 0; i < soutSz; i++)
+                                if (sout[i]) { hasData = 1; break; }
+                            if (hasData) {
+                                rlog("    sel=%u outSz=%zu DATA:", sel, soutSz);
+                                for (uint32_t i = 0; i < scOutCnt; i++)
+                                    if (scOut[i]) rlog(" s%u=0x%llx", i, scOut[i]);
+                                rlog("\n");
+                                /* Check kptrs */
+                                for (uint32_t i = 0; i < scOutCnt; i++) {
+                                    if ((scOut[i] >> 28) == 0xfffffffULL)
+                                        rlog("    !!! KPTR scalar: 0x%llx !!!\n", scOut[i]);
+                                }
+                                uint64_t *qw = (uint64_t *)sout;
+                                for (size_t i = 0; i < soutSz / 8; i++) {
+                                    if ((qw[i] >> 28) == 0xfffffffULL &&
+                                        qw[i] != 0xffffffffffffffffULL)
+                                        rlog("    !!! KPTR struct: 0x%llx !!!\n", qw[i]);
+                                }
+                            }
+                        }
+                    }
+                    IOServiceClose(conn);
+                }
+                IOObjectRelease(svc);
+                count++;
+            }
+            IOObjectRelease(iter);
+            rlog("  Enumerated: %d services, %d openable\n", count, openable);
+        }
+    }
+    fflush(stdout);
+
+    /* ---- Part 4: vm_region walking — check for unexpected mappings ---- */
+    rlog("\n--- Part 4: VM region walking ---\n");
+    fflush(stdout);
+    {
+        mach_vm_address_t addr = 0;
+        mach_vm_size_t size = 0;
+        uint32_t depth = 0;
+        struct vm_region_submap_info_64 info;
+        mach_msg_type_number_t infoCnt;
+        int regions = 0;
+        int kptr_regions = 0;
+
+        while (regions < 500) {
+            infoCnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+            depth = 100;
+            kr = mach_vm_region_recurse(mach_task_self(), &addr, &size,
+                &depth, (vm_region_recurse_info_t)&info, &infoCnt);
+            if (kr != 0) break;
+
+            /* Check for regions with unusual attributes that might indicate kernel-mapped memory */
+            if (info.share_mode == SM_TRUESHARED || info.share_mode == SM_SHARED_ALIASED) {
+                rlog("  SHARED: 0x%llx-0x%llx sz=0x%llx prot=%d/%d mode=%d obj=0x%x\n",
+                     addr, addr + size, size, info.protection, info.max_protection,
+                     info.share_mode, info.object_id);
+                /* The object_id is key — it's the VM object identifier */
+                if ((uint64_t)info.object_id >> 28 == 0xfffffffULL) {
+                    rlog("    !!! KPTR in object_id: 0x%x !!!\n", info.object_id);
+                    kptr_regions++;
+                }
+            }
+
+            addr += size;
+            regions++;
+        }
+        rlog("  Walked %d regions, %d with potential kernel addresses\n", regions, kptr_regions);
+    }
+    fflush(stdout);
+
+    rlog("\n=== r325 complete ===\n");
+    fflush(stdout);
+}
+
 static void r317_probe(void) {
     rlog("\n=== r317: Deep AppleKeyStore + AppleJPEGDriver + CredentialManager ===\n\n");
     fflush(stdout);
@@ -38877,6 +39142,13 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 325) {
+            rlog("*** rounds=325: IOSurfaceRoot Sweep + IOKit Enumerate + VM Region Walk ***\n");
+            rlog("  r324: AKS all zero, IOSurfaceRoot opens, exc port works.\n");
+            rlog("  Probe: IOSurfaceRoot selectors, all IOKit openable, VM region walk.\n\n");
+            r325_probe();
             goto done;
         }
         if (rounds == 324) {
