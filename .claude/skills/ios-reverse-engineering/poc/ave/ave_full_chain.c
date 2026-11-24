@@ -15902,6 +15902,228 @@ static void r362_probe(void) {
     fflush(stdout);
 }
 
+/* r389: IOSurface Lock/Unlock memory mapping + physical address probing.
+ * IOSurfaceLock maps the backing store into userspace. Check if:
+ * 1. The mapped memory contains kernel residue
+ * 2. The base address reveals physical memory layout
+ * 3. Multiple surfaces' backing stores reveal allocation patterns
+ * Also try: pmap-related sysctls, vm_page_size, physmem
+ */
+static void r389_probe(void) {
+    rlog("\n=== r389: IOSurface Lock Memory Mapping + Physical Probing ===\n\n");
+    fflush(stdout);
+
+    /* Phase 1: Lock surface and examine backing store in detail */
+    rlog("  Phase 1: IOSurface Lock/Map examination\n");
+
+    int w=256, h=256, bpe=4, bpr=256*4, pf=0x42475241, as_=256*256*4;
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nW);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nH);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), nB);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nR);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nP);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nA);
+
+    /* Create surfaces with different sizes to see varied mapping behaviors */
+    IOSurfaceRef surfs[5];
+    int sizes[] = {4096, 16384, 65536, 262144, 1048576};
+    for (int i = 0; i < 5; i++) {
+        int sw = 64, sh = sizes[i] / 256;
+        if (sh < 1) sh = 1;
+        int sbpr = 64 * 4;
+        CFNumberRef nsw = CFNumberCreate(NULL, kCFNumberIntType, &sw);
+        CFNumberRef nsh = CFNumberCreate(NULL, kCFNumberIntType, &sh);
+        CFNumberRef nsbpr = CFNumberCreate(NULL, kCFNumberIntType, &sbpr);
+        CFNumberRef nsas = CFNumberCreate(NULL, kCFNumberIntType, &sizes[i]);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nsw);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nsh);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nsbpr);
+        CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nsas);
+
+        surfs[i] = IOSurfaceCreate(props);
+        rlog("    surf[%d]: sid=%u size=%d\n", i, IOSurfaceGetID(surfs[i]), sizes[i]);
+
+        /* Lock and get base address */
+        kern_return_t kr = IOSurfaceLock(surfs[i], 0, NULL);
+        void *base = IOSurfaceGetBaseAddress(surfs[i]);
+        size_t allocSize = IOSurfaceGetAllocSize(surfs[i]);
+        rlog("      Lock: kr=%d base=%p allocSize=%zu\n", kr, base, allocSize);
+
+        if (base && allocSize > 0) {
+            /* Scan first 256 bytes for kernel-range pointers */
+            int found_kptr = 0;
+            size_t scanLen = allocSize < 4096 ? allocSize : 4096;
+            for (size_t off = 0; off + 8 <= scanLen; off += 8) {
+                uint64_t v;
+                memcpy(&v, (uint8_t*)base + off, 8);
+                if ((v & 0xFFFFFFF000000000ULL) == 0xFFFFFFF000000000ULL) {
+                    rlog("      KPTR at +%zu: 0x%016llx\n", off, (unsigned long long)v);
+                    found_kptr++;
+                }
+            }
+            if (!found_kptr) {
+                /* Check if memory is zeroed or has pattern */
+                uint64_t first8;
+                memcpy(&first8, base, 8);
+                rlog("      First 8 bytes: 0x%016llx (no KPTRs in first %zu)\n",
+                    (unsigned long long)first8, scanLen);
+            }
+
+            /* Write a pattern and read back to verify mapping works */
+            memset(base, 0x41, 64);
+            uint8_t readback[8];
+            memcpy(readback, base, 8);
+            rlog("      Write test: wrote 0x41, read back: 0x%02x%02x%02x%02x\n",
+                readback[0], readback[1], readback[2], readback[3]);
+        }
+
+        IOSurfaceUnlock(surfs[i], 0, NULL);
+        CFRelease(nsw); CFRelease(nsh); CFRelease(nsbpr); CFRelease(nsas);
+    }
+
+    /* Phase 2: Check if base addresses reveal physical memory layout */
+    rlog("\n  Phase 2: Base address analysis\n");
+    for (int i = 0; i < 5; i++) {
+        IOSurfaceLock(surfs[i], 0, NULL);
+        void *base = IOSurfaceGetBaseAddress(surfs[i]);
+        rlog("    surf[%d]: base=0x%016llx\n", i, (unsigned long long)(uintptr_t)base);
+        IOSurfaceUnlock(surfs[i], 0, NULL);
+    }
+    for (int i = 1; i < 5; i++) {
+        IOSurfaceLock(surfs[i], 0, NULL);
+        IOSurfaceLock(surfs[i-1], 0, NULL);
+        void *b1 = IOSurfaceGetBaseAddress(surfs[i]);
+        void *b0 = IOSurfaceGetBaseAddress(surfs[i-1]);
+        intptr_t diff = (intptr_t)b1 - (intptr_t)b0;
+        rlog("    diff[%d-%d]: %ld bytes\n", i, i-1, (long)diff);
+        IOSurfaceUnlock(surfs[i], 0, NULL);
+        IOSurfaceUnlock(surfs[i-1], 0, NULL);
+    }
+
+    /* Phase 3: Physical memory info via sysctls */
+    rlog("\n  Phase 3: Physical memory sysctls\n");
+
+    uint64_t physmem = 0;
+    size_t sz = sizeof(physmem);
+    if (sysctlbyname("hw.physmem", &physmem, &sz, NULL, 0) == 0) {
+        rlog("    hw.physmem: %llu (%.1f GB)\n", (unsigned long long)physmem, physmem / 1073741824.0);
+    }
+    uint64_t memsize = 0;
+    sz = sizeof(memsize);
+    if (sysctlbyname("hw.memsize", &memsize, &sz, NULL, 0) == 0) {
+        rlog("    hw.memsize: %llu (%.1f GB)\n", (unsigned long long)memsize, memsize / 1073741824.0);
+    }
+    int pagesize = 0;
+    sz = sizeof(pagesize);
+    if (sysctlbyname("hw.pagesize", &pagesize, &sz, NULL, 0) == 0) {
+        rlog("    hw.pagesize: %d\n", pagesize);
+    }
+    uint64_t usermem = 0;
+    sz = sizeof(usermem);
+    if (sysctlbyname("hw.usermem", &usermem, &sz, NULL, 0) == 0) {
+        rlog("    hw.usermem: %llu\n", (unsigned long long)usermem);
+    }
+
+    /* Try to get vm stats */
+    mach_msg_type_number_t cnt = HOST_VM_INFO64_COUNT;
+    vm_statistics64_data_t vmstat;
+    kern_return_t kr = host_statistics64(mach_host_self(), HOST_VM_INFO64,
+        (host_info64_t)&vmstat, &cnt);
+    if (kr == 0) {
+        rlog("    VM stats:\n");
+        rlog("      free_count: %llu pages\n", (unsigned long long)vmstat.free_count);
+        rlog("      active_count: %llu\n", (unsigned long long)vmstat.active_count);
+        rlog("      inactive_count: %llu\n", (unsigned long long)vmstat.inactive_count);
+        rlog("      wire_count: %llu\n", (unsigned long long)vmstat.wire_count);
+        rlog("      compressor_page_count: %llu\n", (unsigned long long)vmstat.compressor_page_count);
+        rlog("      total_uncompressed_in_compressor: %llu\n",
+            (unsigned long long)vmstat.total_uncompressed_pages_in_compressor);
+    } else {
+        rlog("    host_statistics64: kr=0x%x\n", kr);
+    }
+
+    /* Phase 4: Try mach_vm_region on our surface mappings to get VM info */
+    rlog("\n  Phase 4: VM region info for surface mappings\n");
+    for (int i = 0; i < 3; i++) {
+        IOSurfaceLock(surfs[i], 0, NULL);
+        void *base = IOSurfaceGetBaseAddress(surfs[i]);
+        if (base) {
+            mach_vm_address_t addr = (mach_vm_address_t)(uintptr_t)base;
+            mach_vm_size_t rsize = 0;
+            vm_region_extended_info_data_t info;
+            mach_msg_type_number_t infoCnt = VM_REGION_EXTENDED_INFO_COUNT;
+            mach_port_t objName = 0;
+            kr = mach_vm_region(mach_task_self(), &addr, &rsize,
+                VM_REGION_EXTENDED_INFO,
+                (vm_region_info_t)&info, &infoCnt, &objName);
+            if (kr == 0) {
+                rlog("    surf[%d]: region at 0x%llx size=%llu\n", i,
+                    (unsigned long long)addr, (unsigned long long)rsize);
+                rlog("      prot=%d/%d share=%d type=%d\n",
+                    info.protection, info.max_protection,
+                    info.share_mode, info.external_pager);
+                rlog("      pages_resident=%d pages_shared=%d\n",
+                    info.pages_resident, info.pages_shared_now_private);
+                rlog("      shadow_depth=%d obj_id=%d\n",
+                    info.shadow_depth, info.obj_id);
+                /* obj_id might be related to kernel object address */
+                if (info.obj_id > 0) {
+                    rlog("      *** obj_id=0x%x — possible kernel info! ***\n", info.obj_id);
+                }
+            }
+        }
+        IOSurfaceUnlock(surfs[i], 0, NULL);
+    }
+
+    /* Phase 5: Try mach_vm_region_recurse for deeper info */
+    rlog("\n  Phase 5: VM region recurse\n");
+    IOSurfaceLock(surfs[0], 0, NULL);
+    void *base0 = IOSurfaceGetBaseAddress(surfs[0]);
+    if (base0) {
+        mach_vm_address_t addr = (mach_vm_address_t)(uintptr_t)base0;
+        mach_vm_size_t rsize = 0;
+        uint32_t depth = 0;
+        vm_region_submap_info_data_64_t sinfo;
+        mach_msg_type_number_t scnt = VM_REGION_SUBMAP_INFO_COUNT_64;
+        kr = mach_vm_region_recurse(mach_task_self(), &addr, &rsize,
+            &depth, (vm_region_recurse_info_t)&sinfo, &scnt);
+        if (kr == 0) {
+            rlog("    region: addr=0x%llx size=%llu depth=%u\n",
+                (unsigned long long)addr, (unsigned long long)rsize, depth);
+            rlog("    prot=%d/%d offset=%llu\n",
+                sinfo.protection, sinfo.max_protection,
+                (unsigned long long)sinfo.offset);
+            rlog("    share_mode=%d type=%d obj_id=%d\n",
+                sinfo.share_mode, sinfo.external_pager, sinfo.object_id);
+            if (sinfo.object_id > 0) {
+                rlog("    *** object_id=0x%x — possible kernel info! ***\n", sinfo.object_id);
+            }
+            /* The offset field is key — it may be a physical address or kernel-VA offset */
+            if (sinfo.offset > 0) {
+                rlog("    *** offset=0x%llx — physical or kernel offset? ***\n",
+                    (unsigned long long)sinfo.offset);
+            }
+        }
+    }
+    IOSurfaceUnlock(surfs[0], 0, NULL);
+
+    /* Cleanup */
+    for (int i = 0; i < 5; i++) CFRelease(surfs[i]);
+    CFRelease(props);
+    CFRelease(nW); CFRelease(nH); CFRelease(nB); CFRelease(nR); CFRelease(nP); CFRelease(nA);
+
+    rlog("\n=== r389 complete ===\n");
+    fflush(stdout);
+}
+
 /* r388: XPC serialization + IOConnectCallMethod kernel data leak.
  * Try IOSurfaceCreateXPCObject to see if XPC includes kernel addresses.
  * Also try IOConnectCallMethod with known IOSurface selectors using
@@ -60525,6 +60747,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 392) {
+            rlog("*** rounds=392: IOSurface Lock Memory + Physical Probing ***\n");
+            rlog("  VM region info, backing store analysis, physical mem layout.\n\n");
+            fflush(stdout);
+            r389_probe();
+            goto done;
+        }
         if (rounds == 391) {
             rlog("*** rounds=391: XPC Serialization + IOKit Direct Calls ***\n");
             rlog("  IOSurfaceCreateXPCObject, IOConnectCallMethod selectors.\n\n");
@@ -62854,7 +63083,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
