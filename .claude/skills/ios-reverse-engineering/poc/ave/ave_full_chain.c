@@ -31847,11 +31847,14 @@ static void r508_7c_only(void) {
         sigaction(SIGBUS, &sa_old_bus, NULL);
         fflush(stdout);
 
-        if (discovered_offset == 0 && (r508_fault_addr >> 48) != 0x3FF0) {
-            rlog("  Skipping canary test — no offset discovered\n\n");
+        int got_valid_crash = (r508_fault_caught && ((r508_fault_addr >> 48) == 0x3FF0));
+        rlog("  fault_caught=%d fault_addr=0x%016llx offset=0x%llx valid=%d\n",
+            r508_fault_caught, (unsigned long long)r508_fault_addr,
+            (unsigned long long)discovered_offset, got_valid_crash);
+        if (!got_valid_crash) {
+            rlog("  Skipping canary test — no valid 1.0-pattern crash\n\n");
             continue;
         }
-        /* offset=0 is valid when FAR=exactly 1.0 (str at [x22] with no displacement) */
 
         /* Sub-test B: canary targeting with discovered offset */
         static volatile uint32_t canary = 0xCAFEBABE;
