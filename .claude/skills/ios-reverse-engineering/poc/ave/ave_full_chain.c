@@ -31722,8 +31722,8 @@ static void r508_7c_only(void) {
 
     /* Test multiple NOUT with VPR=2, single function + dup.
        Small NOUT means tiny dup chain. We need minimum that hits str. */
-    int nout_scan[] = {128, 256, 512};
-    int nscan = 3;
+    int nout_scan[] = {128, 256};
+    int nscan = 2;
     int best_nout = 0;
     uint64_t best_offset = 0;
     int VPR = 2;
