@@ -31840,7 +31840,7 @@ static void r508_7c_only(void) {
                 uint64_t off = far & 0xFFFF;
                 rlog("  NOUT=%d: CRASH FAR=0x%016llx offset=0x%llx *** HIT ***\n",
                     NOUT, (unsigned long long)far, (unsigned long long)off);
-                if (best_nout == 0) {
+                if (best_nout == 0 || (off == 0 && best_offset != 0)) {
                     best_nout = NOUT;
                     best_offset = off;
                 }
