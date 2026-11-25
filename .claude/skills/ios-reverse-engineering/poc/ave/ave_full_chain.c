@@ -31722,16 +31722,18 @@ static void r508_7c_only(void) {
     sa_new.sa_flags = SA_SIGINFO;
     sigemptyset(&sa_new.sa_mask);
 
-    /* Test multiple NOUT values, smallest first (fastest eval) */
-    int nout_tests[] = {64, 128, 256, 512};
-    int ntests = 4;
+    /* Test NOUT=2816 (known to hit str wzr,[x22,#0x76c]) with SMALL VPR
+       to minimise PostScript evaluations (nvert = VPR * 2). */
+    int nout_tests[] = {2816, 2816, 2816};
+    int vpr_tests[]  = {2,    4,    8};
+    int ntests = 3;
 
     for (int ti = 0; ti < ntests; ti++) {
         int NOUT = nout_tests[ti];
-        int VPR = 64;
+        int VPR = vpr_tests[ti];
         int nvert = VPR * 2;
 
-        rlog("--- Test NOUT=%d VPR=%d DeviceCMYK ---\n", NOUT, VPR);
+        rlog("--- Test NOUT=%d VPR=%d nvert=%d DeviceCMYK ---\n", NOUT, VPR, nvert);
 
         /* Sub-test A: uniform 1.0 to find str offset */
         r508_fault_caught = 0;
