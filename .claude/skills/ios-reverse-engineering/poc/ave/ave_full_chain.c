@@ -31722,11 +31722,13 @@ static void r508_7c_only(void) {
     sa_new.sa_flags = SA_SIGINFO;
     sigemptyset(&sa_new.sa_mask);
 
-    /* VPR=2 NOUT=2816: only 4 vertices, fast eval, avoids jetsam.
-       VPR=2 gives str offset=0 (FAR=1.0 exactly with uniform input). */
-    int nout_tests[] = {2816};
-    int vpr_tests[]  = {2};
-    int ntests = 1;
+    /* Scan NOUT values with VPR=2 to find minimum that hits str.
+       The baseline test (uniform 1.0) crashes immediately, so it's fast.
+       Canary test only runs if baseline shows the right FAR pattern.
+       Skip canary for NOUT>=2048 to avoid jetsam (2816 dup is too expensive). */
+    int nout_tests[] = {512, 768, 1024, 1536, 2048};
+    int vpr_tests[]  = {2,   2,   2,    2,    2};
+    int ntests = 5;
 
     for (int ti = 0; ti < ntests; ti++) {
         int NOUT = nout_tests[ti];
